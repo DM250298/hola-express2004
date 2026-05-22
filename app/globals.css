@@ -298,6 +298,122 @@
   top: 0;
 }
 
+/* ─── Ticket térmico de venta (80mm) ──────────────────────────────── */
+.ticket-termico {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4mm 5mm 7mm;
+  background: #fff;
+  color: #000;
+  font-family: var(--font-bricolage), system-ui, sans-serif;
+  font-size: 9pt;
+  line-height: 1.35;
+}
+.ticket-marca {
+  text-align: center;
+  font-size: 17pt;
+  font-weight: 800;
+  letter-spacing: 0.3pt;
+  text-transform: uppercase;
+}
+.ticket-sub {
+  text-align: center;
+  font-size: 7.5pt;
+  margin-top: 0.3mm;
+}
+.ticket-sep {
+  border: 0;
+  border-top: 1px dashed #000;
+  margin: 2.6mm 0;
+}
+.ticket-sep-fuerte {
+  border-top-style: solid;
+  border-top-width: 1.5px;
+}
+.ticket-meta {
+  text-align: center;
+  font-size: 8pt;
+}
+.ticket-meta-num {
+  font-weight: 800;
+  font-size: 9.5pt;
+}
+.ticket-pendiente {
+  text-align: center;
+  font-weight: 800;
+  font-size: 8.5pt;
+  border: 1.5px solid #000;
+  border-radius: 1.5mm;
+  padding: 1.2mm;
+}
+.ticket-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 2mm;
+  margin-bottom: 1.4mm;
+}
+.ticket-item-cant {
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ticket-item-nombre {
+  flex: 1;
+  word-break: break-word;
+}
+.ticket-item-unit {
+  display: block;
+  font-size: 7pt;
+}
+.ticket-item-precio {
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.ticket-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 800;
+}
+.ticket-total-label {
+  font-size: 11pt;
+  letter-spacing: 0.5pt;
+}
+.ticket-total-monto {
+  font-size: 16pt;
+  font-variant-numeric: tabular-nums;
+}
+.ticket-fila {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8.5pt;
+}
+.ticket-fila-fuerte {
+  font-weight: 800;
+  font-size: 9.5pt;
+  margin-top: 0.8mm;
+}
+.ticket-fila span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+.ticket-titulo-bloque {
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.6pt;
+  margin-bottom: 0.8mm;
+}
+.ticket-gracias {
+  text-align: center;
+  font-weight: 800;
+  font-size: 10.5pt;
+}
+.ticket-pie {
+  text-align: center;
+  font-size: 7pt;
+  margin-top: 0.8mm;
+}
+
 /* Cuando estamos imprimiendo, ocultar todo lo demás y dejar solo las
    etiquetas / comprobantes térmicos. */
 @media print {
@@ -336,6 +452,10 @@
   }
   .imprimir-termico {
     width: 80mm;
+  }
+  /* El ticket de venta usa la página de 80mm. */
+  .ticket-termico {
+    page: informe;
   }
   /* Los productos vendidos se ven en pantalla pero no se imprimen. */
   .comprobante-productos {

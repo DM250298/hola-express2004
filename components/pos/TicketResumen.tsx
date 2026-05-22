@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { TicketTermico } from './TicketTermico'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { etiquetaMedioFallback } from '@/lib/utils/iconosMedioPago'
@@ -18,6 +19,8 @@ interface Props {
   onCambioAbierto: (v: boolean) => void
   venta: VentaCompleta | null
   vuelto: number | null
+  /** Nombre del cajero que registró la venta — se imprime en el ticket. */
+  nombreCajero: string
 }
 
 export function TicketResumen({
@@ -25,6 +28,7 @@ export function TicketResumen({
   onCambioAbierto,
   venta,
   vuelto,
+  nombreCajero,
 }: Props) {
   const { data: medios } = useMediosPago()
 
@@ -42,8 +46,18 @@ export function TicketResumen({
   }
 
   return (
-    <Dialog open={abierto} onOpenChange={onCambioAbierto}>
-      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
+    <>
+      {/* Ticket térmico oculto — se vuelve visible al imprimir (80mm). */}
+      {abierto && (
+        <TicketTermico
+          venta={venta}
+          vuelto={vuelto}
+          nombreCajero={nombreCajero}
+        />
+      )}
+
+      <Dialog open={abierto} onOpenChange={onCambioAbierto}>
+        <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Ticket de venta</DialogTitle>
 
         {/* Header de confirmación */}
@@ -154,6 +168,7 @@ export function TicketResumen({
           </Button>
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+    </>
   )
 }

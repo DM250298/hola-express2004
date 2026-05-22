@@ -508,6 +508,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         onCambioAbierto={setTicketAbierto}
         venta={ultimaVenta}
         vuelto={ultimoVuelto}
+        nombreCajero={nombreUsuario}
       />
 
       <CierreCaja
