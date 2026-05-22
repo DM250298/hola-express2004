@@ -1,26 +1,354 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-bricolage);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-bricolage);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Colores de marca Hola! */
+  --color-marca-dorado: #f9b44c;
+  --color-marca-cacao: #391511;
+  --color-marca-rojo: #c43e2c;
+  --color-marca-crema: #f9d2a2;
+  --color-marca-cafe: #6f3a2a;
+  --color-marca-arena: #c8a58a;
+  --color-marca-ocre: #e4a42a;
+  --color-marca-palido: #ebd5a1;
+  --color-marca-rojo-oscuro: #9e2f25;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+:root {
+  /* Paleta base — cálida y marca-coherente */
+  --background: oklch(0.99 0.005 75);        /* casi blanco con tinte crema */
+  --foreground: oklch(0.18 0.05 32);         /* cacao oscuro */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.05 32);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.05 32);
+
+  /* Primary = amarillo dorado #f9b44c */
+  --primary: oklch(0.78 0.16 78);
+  --primary-foreground: oklch(0.18 0.05 32);
+
+  /* Secondary = crema suave #f9d2a2 */
+  --secondary: oklch(0.89 0.07 75);
+  --secondary-foreground: oklch(0.18 0.05 32);
+
+  --muted: oklch(0.95 0.02 75);
+  --muted-foreground: oklch(0.50 0.04 40);
+  --accent: oklch(0.89 0.07 75);
+  --accent-foreground: oklch(0.18 0.05 32);
+
+  /* Destructive = rojo intenso #c43e2c */
+  --destructive: oklch(0.50 0.18 28);
+
+  --border: oklch(0.88 0.03 75);
+  --input: oklch(0.88 0.03 75);
+  --ring: oklch(0.78 0.16 78);
+
+  /* Charts */
+  --chart-1: oklch(0.78 0.16 78);   /* dorado */
+  --chart-2: oklch(0.50 0.18 28);   /* rojo */
+  --chart-3: oklch(0.65 0.10 55);   /* café */
+  --chart-4: oklch(0.40 0.06 32);   /* cacao medio */
+  --chart-5: oklch(0.89 0.07 75);   /* crema */
+
+  --radius: 0.625rem;
+
+  /* Sidebar — fondo cacao oscuro */
+  --sidebar: oklch(0.18 0.05 32);
+  --sidebar-foreground: oklch(0.96 0.02 75);
+  --sidebar-primary: oklch(0.78 0.16 78);
+  --sidebar-primary-foreground: oklch(0.18 0.05 32);
+  --sidebar-accent: oklch(0.78 0.16 78 / 0.15);
+  --sidebar-accent-foreground: oklch(0.96 0.02 75);
+  --sidebar-border: oklch(1 0 0 / 0.08);
+  --sidebar-ring: oklch(0.78 0.16 78);
+}
+
+.dark {
+  --background: oklch(0.14 0.04 32);
+  --foreground: oklch(0.96 0.02 75);
+  --card: oklch(0.20 0.05 32);
+  --card-foreground: oklch(0.96 0.02 75);
+  --popover: oklch(0.20 0.05 32);
+  --popover-foreground: oklch(0.96 0.02 75);
+  --primary: oklch(0.78 0.16 78);
+  --primary-foreground: oklch(0.18 0.05 32);
+  --secondary: oklch(0.26 0.04 35);
+  --secondary-foreground: oklch(0.96 0.02 75);
+  --muted: oklch(0.26 0.04 35);
+  --muted-foreground: oklch(0.65 0.04 45);
+  --accent: oklch(0.26 0.04 35);
+  --accent-foreground: oklch(0.96 0.02 75);
+  --destructive: oklch(0.55 0.20 28);
+  --border: oklch(1 0 0 / 0.10);
+  --input: oklch(1 0 0 / 0.15);
+  --ring: oklch(0.78 0.16 78);
+  --chart-1: oklch(0.78 0.16 78);
+  --chart-2: oklch(0.55 0.20 28);
+  --chart-3: oklch(0.65 0.10 55);
+  --chart-4: oklch(0.40 0.06 32);
+  --chart-5: oklch(0.89 0.07 75);
+  --sidebar: oklch(0.14 0.04 32);
+  --sidebar-foreground: oklch(0.96 0.02 75);
+  --sidebar-primary: oklch(0.78 0.16 78);
+  --sidebar-primary-foreground: oklch(0.18 0.05 32);
+  --sidebar-accent: oklch(0.78 0.16 78 / 0.15);
+  --sidebar-accent-foreground: oklch(0.96 0.02 75);
+  --sidebar-border: oklch(1 0 0 / 0.08);
+  --sidebar-ring: oklch(0.78 0.16 78);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─── Etiquetas térmicas 58mm ─────────────────────────────────────── */
+/* En pantalla las mostramos como preview compacto.
+   En impresión cada etiqueta ocupa una página de 58mm × auto. */
+
+.etiqueta-termica {
+  width: 58mm;
+  box-sizing: border-box;
+  padding: 2mm 3mm;
+  font-family: 'Courier New', 'Liberation Mono', monospace;
+  color: #000;
+  background: #fff;
+  line-height: 1.15;
+  border: 1px dashed #888;
+}
+
+.etiqueta-producto {
+  font-size: 11pt;
+  font-weight: 800;
+  line-height: 1.1;
+  word-break: break-word;
+  margin-bottom: 1mm;
+}
+
+.etiqueta-codigo {
+  font-size: 8pt;
+  letter-spacing: 0.5px;
+  margin-bottom: 1.5mm;
+}
+
+.etiqueta-vence-label {
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  border-top: 1px solid #000;
+  padding-top: 1mm;
+  margin-top: 1mm;
+}
+
+.etiqueta-vence-fecha {
+  font-size: 18pt;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin: 0.5mm 0 1mm 0;
+}
+
+.etiqueta-pie {
+  font-size: 7pt;
+  border-top: 1px dashed #000;
+  padding-top: 1mm;
+  margin-top: 1mm;
+}
+
+/* ─── Etiqueta de precio para góndola ─────────────────────────────── */
+.etiqueta-precio-nombre {
+  font-size: 10pt;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: center;
+  word-break: break-word;
+  margin-bottom: 1mm;
+}
+.etiqueta-precio-monto {
+  font-size: 30pt;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1;
+  letter-spacing: -1px;
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+  padding: 1mm 0;
+  margin: 1mm 0;
+}
+.etiqueta-precio-codigo {
+  font-size: 8pt;
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+/* ─── Comprobante térmico 80mm (cierre de turno) ──────────────────── */
+.comprobante-termico {
+  width: 80mm;
+  box-sizing: border-box;
+  padding: 3mm 4mm;
+  font-family: 'Courier New', 'Liberation Mono', monospace;
+  color: #000;
+  background: #fff;
+  font-size: 9pt;
+  line-height: 1.35;
+  page: informe;
+}
+.comprobante-titulo {
+  font-size: 12pt;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1.1;
+}
+.comprobante-subtitulo {
+  font-size: 8pt;
+  text-align: center;
+  margin-bottom: 1.5mm;
+}
+.comprobante-sep {
+  border-top: 1px dashed #000;
+  margin: 1.5mm 0;
+}
+.comprobante-fila {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+}
+.comprobante-fila > span:last-child {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.comprobante-seccion {
+  font-size: 7.5pt;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin: 1mm 0 0.5mm;
+}
+.comprobante-total {
+  font-size: 11pt;
+  font-weight: 800;
+}
+.comprobante-firma {
+  margin-top: 6mm;
+}
+.comprobante-firma-linea {
+  border-top: 1px solid #000;
+  margin-top: 7mm;
+  padding-top: 0.5mm;
+  font-size: 7.5pt;
+  text-align: center;
+}
+
+/* En pantalla las áreas de impresión quedan fuera de vista (sin usar
+   estilos inline, para que @media print pueda reposicionarlas). */
+.etiquetas-imprimir,
+.imprimir-termico {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+}
+
+/* Cuando estamos imprimiendo, ocultar todo lo demás y dejar solo las
+   etiquetas / comprobantes térmicos. */
+@media print {
+  /* Etiquetas térmicas → 58mm. Comprobante de cierre → 80mm (página con
+     nombre, aplicada vía `page: informe` en .comprobante-termico). */
+  @page {
+    size: 58mm auto;
+    margin: 0;
+  }
+  @page informe {
+    size: 80mm auto;
+    margin: 0;
+  }
+  html, body {
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .etiquetas-imprimir,
+  .etiquetas-imprimir *,
+  .imprimir-termico,
+  .imprimir-termico * {
+    visibility: visible;
+  }
+  .etiquetas-imprimir,
+  .imprimir-termico {
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .etiquetas-imprimir {
+    width: 58mm;
+  }
+  .imprimir-termico {
+    width: 80mm;
+  }
+  /* Los productos vendidos se ven en pantalla pero no se imprimen. */
+  .comprobante-productos {
+    display: none;
+  }
+  .etiqueta-termica {
+    border: none;
+    page-break-after: always;
+    break-after: page;
+    padding: 3mm;
+  }
+  .etiqueta-termica:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
 }
