@@ -65,15 +65,37 @@ async function fetchProductosRemoto(
   })
 }
 
+/** ¿Los filtros representan el catálogo activo completo (sin acotar)? */
+function esCatalogoCompleto(f: FiltrosProducto): boolean {
+  return (
+    f.activo === true &&
+    !f.busqueda &&
+    f.categoria_id == null &&
+    f.proveedor_id == null &&
+    !f.tipo &&
+    !f.unidad
+  )
+}
+
 /**
  * Lista de productos. Si no hay conexión (POS offline), cae al snapshot
  * guardado en IndexedDB y aplica los filtros en memoria.
+ *
+ * Cada vez que se trae el catálogo activo completo con conexión, se refresca
+ * el snapshot offline en segundo plano — así el POS siempre tiene una copia
+ * fresca para vender sin internet.
  */
 export async function getProductos(
   filtros: FiltrosProducto = {}
 ): Promise<ProductoConRelaciones[]> {
   try {
-    return await fetchProductosRemoto(filtros)
+    const data = await fetchProductosRemoto(filtros)
+    if (esCatalogoCompleto(filtros)) {
+      guardarCatalogo(data).catch(() => {
+        // Si IndexedDB no está disponible, se ignora.
+      })
+    }
+    return data
   } catch (error) {
     if (esErrorDeRed(error)) {
       const catalogo = await leerCatalogo()

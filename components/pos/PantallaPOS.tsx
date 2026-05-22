@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   Keyboard,
   Loader2,
@@ -33,7 +33,6 @@ import { TicketResumen } from './TicketResumen'
 import { OverlayAtajos } from './OverlayAtajos'
 import { IndicadorConexion } from './IndicadorConexion'
 import { SelectorCliente, type ClienteSeleccionado } from './SelectorCliente'
-import { snapshotCatalogoOffline } from '@/lib/queries/productos'
 import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
@@ -89,14 +88,6 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const buscadorRef = useRef<BuscadorProductoRef>(null)
   const [ultimaVenta, setUltimaVenta] = useState<VentaCompleta | null>(null)
   const [ultimoVuelto, setUltimoVuelto] = useState<number | null>(null)
-
-  // FASE 2 — offline: guardar un snapshot del catálogo en IndexedDB para que
-  // el buscador del POS pueda seguir funcionando si se cae internet.
-  useEffect(() => {
-    snapshotCatalogoOffline().catch(() => {
-      // Sin conexión al abrir el POS: se usará el snapshot que ya hubiera.
-    })
-  }, [])
 
   // Helpers de órdenes
   const ordenActiva =
