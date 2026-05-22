@@ -1,30 +1,53 @@
 /*
  * Service Worker — Hola Express POS (FASE 2 · offline)
  *
- * Cachea el "app shell" para que el punto de venta siga cargando aunque se
- * caiga internet. No toca las llamadas a Supabase: esas las maneja la cola
- * offline de la aplicación.
+ * Hace que el punto de venta cargue aunque no haya internet.
  *
- * Estrategias:
- *   • Navegaciones (documentos) → red primero, con caída a la copia en caché.
- *   • Recursos estáticos        → stale-while-revalidate.
+ *  • install  → se activa de inmediato.
+ *  • activate → limpia versiones viejas y PRECACHEA el shell del POS y el
+ *               dashboard (el usuario está online y autenticado en ese
+ *               momento, así que se guarda la versión real de cada página).
+ *  • fetch    → navegaciones: red primero, con caída a la copia guardada;
+ *               estáticos (chunks, imágenes): stale-while-revalidate.
+ *
+ * No toca las llamadas a Supabase — esas las maneja la cola offline de la app.
  */
 
-const CACHE = 'hola-express-v1'
+const CACHE = 'hola-express-v2'
+
+// Documentos del "app shell" que se precachean al activar el SW.
+const PRECACHE_DOCS = ['/', '/pos']
 
 self.addEventListener('install', () => {
-  // Activar de inmediato la versión nueva sin esperar.
+  // Activar la versión nueva sin esperar a que se cierren las pestañas.
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
+      // 1. Borrar caches de versiones anteriores.
       const nombres = await caches.keys()
       await Promise.all(
         nombres.filter((n) => n !== CACHE).map((n) => caches.delete(n))
       )
+
+      // 2. Tomar control de las pestañas ya abiertas.
       await self.clients.claim()
+
+      // 3. Precachear el shell. Se hace con `credentials` para que el POS
+      //    se guarde ya autenticado. Si no hay conexión, se ignora.
+      const cache = await caches.open(CACHE)
+      await Promise.all(
+        PRECACHE_DOCS.map(async (url) => {
+          try {
+            const res = await fetch(url, { credentials: 'same-origin' })
+            if (res && res.ok) await cache.put(url, res.clone())
+          } catch {
+            // sin conexión al activar — se cacheará en el primer uso online
+          }
+        })
+      )
     })()
   )
 })
@@ -44,28 +67,33 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname === '/sw.js') return
 
   if (req.mode === 'navigate') {
-    event.respondWith(navegacionRedPrimero(req))
+    event.respondWith(navegacion(req))
     return
   }
 
   event.respondWith(staleWhileRevalidate(req))
 })
 
-/** Documentos: intentar red; si falla, servir la última copia cacheada. */
-async function navegacionRedPrimero(req) {
+/**
+ * Documentos: red primero (para tener siempre la versión fresca online).
+ * Sin conexión, sirve la mejor copia guardada disponible.
+ */
+async function navegacion(req) {
   const cache = await caches.open(CACHE)
   try {
     const res = await fetch(req)
     if (res && res.ok) cache.put(req, res.clone())
     return res
   } catch {
-    const cacheado = await cache.match(req)
+    const url = new URL(req.url)
+    const cacheado =
+      (await cache.match(req)) ||
+      (await cache.match(url.pathname)) ||
+      (await cache.match('/pos')) ||
+      (await cache.match('/'))
     if (cacheado) return cacheado
-    // Caída al POS si esa ruta puntual no estaba cacheada.
-    const pos = await cache.match('/pos')
-    if (pos) return pos
     return new Response(
-      'Sin conexión y sin una copia guardada de esta página.',
+      'Sin conexión. Abrí la app con internet al menos una vez.',
       { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
     )
   }
