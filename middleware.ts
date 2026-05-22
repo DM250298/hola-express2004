@@ -1,6 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { PERMISOS_POR_ROL_LEGACY } from '@/lib/permisos'
+import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 
 const RUTAS_PUBLICAS = ['/login']
 
@@ -93,6 +93,17 @@ export async function middleware(request: NextRequest) {
         .eq('codigo', rol)
         .maybeSingle()
       if (rolData?.permisos) permisos = rolData.permisos as string[]
+
+      // Quien no tiene permiso de dashboard (ej. el cajero) entra directo a
+      // su área de trabajo — nunca al dashboard.
+      if (pathname === '/' && !permisos.includes('dashboard')) {
+        const destino = rutaInicial(permisos)
+        if (destino !== '/') {
+          const url = request.nextUrl.clone()
+          url.pathname = destino
+          return NextResponse.redirect(url)
+        }
+      }
 
       const rutasPermitidas = permisos
         .map((p) => PERMISO_RUTA[p])

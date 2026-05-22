@@ -64,13 +64,67 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'reportes',
   ],
   cajero: [
-    'dashboard',
     'proyectos',
     'pos',
     'ventas',
     'inventario',
     'recepcion',
   ],
+}
+
+/** Permiso → ruta del módulo. Para resolver la pantalla de inicio. */
+const RUTA_POR_PERMISO: Record<string, string> = {
+  dashboard: '/',
+  pos: '/pos',
+  ventas: '/ventas',
+  clientes: '/clientes',
+  inventario: '/inventario',
+  vencimientos: '/vencimientos',
+  compras: '/compras',
+  etiquetas: '/etiquetas',
+  pedidos: '/pedidos',
+  recepcion: '/recepcion',
+  finanzas: '/finanzas',
+  contabilidad: '/contabilidad',
+  rrhh: '/rrhh',
+  terminales: '/terminales',
+  proyectos: '/proyectos',
+  reportes: '/reportes',
+  configuracion: '/configuracion',
+}
+
+/** Orden de prioridad para elegir la pantalla de inicio según el rol. */
+const PRIORIDAD_INICIO: string[] = [
+  'dashboard',
+  'pos',
+  'ventas',
+  'inventario',
+  'vencimientos',
+  'pedidos',
+  'recepcion',
+  'compras',
+  'etiquetas',
+  'clientes',
+  'finanzas',
+  'contabilidad',
+  'rrhh',
+  'proyectos',
+  'terminales',
+  'reportes',
+  'configuracion',
+]
+
+/**
+ * Ruta a la que debe entrar un usuario al iniciar sesión, según sus permisos.
+ * El admin/encargado (con permiso `dashboard`) entra al dashboard; el cajero,
+ * que no lo tiene, entra directo a su área de trabajo (el POS).
+ */
+export function rutaInicial(permisos: string[] | undefined | null): string {
+  const lista = permisos ?? []
+  for (const clave of PRIORIDAD_INICIO) {
+    if (lista.includes(clave)) return RUTA_POR_PERMISO[clave]
+  }
+  return '/'
 }
 
 /** ¿El usuario (sus permisos) incluye la clave dada? */
