@@ -63,17 +63,22 @@ export interface DispositivoPoint {
 
 /** Lista los dispositivos Point asociados a la cuenta de Mercado Pago. */
 export async function listarDispositivos(): Promise<DispositivoPoint[]> {
-  const data = await mpFetch<{ devices?: DispositivoPoint[] }>(
-    '/point/integration-api/devices'
-  )
-  return data.devices ?? []
+  // API actual de Point: /terminals/v1/list devuelve { data: { terminals: [] } }.
+  const data = await mpFetch<{
+    data?: { terminals?: DispositivoPoint[] }
+    // Fallback al endpoint viejo por si alguna cuenta aún lo usa.
+    devices?: DispositivoPoint[]
+  }>('/terminals/v1/list')
+  return data.data?.terminals ?? data.devices ?? []
 }
 
 /** Pone un dispositivo en modo integrado ('PDV') para aceptar cobros del sistema. */
 export async function ponerModoIntegrado(deviceId: string): Promise<void> {
-  await mpFetch(`/point/integration-api/devices/${deviceId}`, {
+  await mpFetch('/terminals/v1/setup', {
     method: 'PATCH',
-    body: JSON.stringify({ operating_mode: 'PDV' }),
+    body: JSON.stringify({
+      terminals: [{ id: deviceId, operating_mode: 'PDV' }],
+    }),
   })
 }
 
