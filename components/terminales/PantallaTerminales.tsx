@@ -7,6 +7,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  TestTube,
   Trash2,
   Wifi,
 } from 'lucide-react'
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { ModalTerminal } from './ModalTerminal'
+import { ModalProbarCobro } from './ModalProbarCobro'
 import {
   useActivarModoPdv,
   useDeleteTerminal,
@@ -37,6 +39,8 @@ export function PantallaTerminales() {
   const activarPdv = useActivarModoPdv()
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editar, setEditar] = useState<TerminalRow | null>(null)
+  const [cobroAbierto, setCobroAbierto] = useState(false)
+  const [terminalCobro, setTerminalCobro] = useState<TerminalRow | null>(null)
 
   function nombreCuenta(id: number | null): string {
     if (id == null) return '—'
@@ -129,7 +133,7 @@ export function PantallaTerminales() {
                   <TableHead className="text-[#391511] font-semibold">
                     Cuenta
                   </TableHead>
-                  <TableHead className="text-right w-44 text-[#391511] font-semibold" />
+                  <TableHead className="text-right w-64 text-[#391511] font-semibold" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -157,6 +161,21 @@ export function PantallaTerminales() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {t.device_id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setTerminalCobro(t)
+                              setCobroAbierto(true)
+                            }}
+                            title="Enviar un cobro de prueba a la terminal"
+                            className="h-7 px-2 text-[10px] font-semibold border-[#2f8f4e] text-[#2f8f4e] hover:bg-[#2f8f4e]/10 gap-1"
+                          >
+                            <TestTube className="h-3 w-3" />
+                            Probar cobro
+                          </Button>
+                        )}
                         {t.device_id && (
                           <Button
                             variant="outline"
@@ -209,6 +228,12 @@ export function PantallaTerminales() {
         abierto={modalAbierto}
         onCambioAbierto={setModalAbierto}
         terminal={editar}
+      />
+
+      <ModalProbarCobro
+        abierto={cobroAbierto}
+        onCambioAbierto={setCobroAbierto}
+        terminal={terminalCobro}
       />
     </div>
   )

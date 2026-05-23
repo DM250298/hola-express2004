@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
-import { crearIntencionPago } from '@/lib/mercadopago/point'
+import { crearOrdenPago } from '@/lib/mercadopago/point'
 
 /**
- * Crea una intención de pago en una terminal Point.
+ * Crea una orden de cobro en una terminal Point.
  * Body: { device_id: string, monto: number (pesos), referencia?: string }
  */
 export async function POST(request: Request) {
@@ -40,8 +40,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const intencion = await crearIntencionPago(deviceId, monto, referencia)
-    return NextResponse.json({ intencion })
+    const orden = await crearOrdenPago(deviceId, monto, referencia)
+    return NextResponse.json({ orden })
   } catch (error) {
     return NextResponse.json(
       {

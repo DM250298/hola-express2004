@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import {
-  cancelarIntencionPago,
-  consultarIntencionPago,
+  cancelarOrdenPago,
+  consultarOrdenPago,
 } from '@/lib/mercadopago/point'
 
 interface Ctx {
@@ -17,7 +17,7 @@ async function verificarSesion(): Promise<boolean> {
   return !!user
 }
 
-/** Consulta el estado de una intención de pago (polling desde el POS). */
+/** Consulta el estado de una orden (polling desde el POS). */
 export async function GET(_request: Request, ctx: Ctx) {
   if (!(await verificarSesion())) {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 })
@@ -25,8 +25,8 @@ export async function GET(_request: Request, ctx: Ctx) {
   const { id } = await ctx.params
 
   try {
-    const intencion = await consultarIntencionPago(id)
-    return NextResponse.json({ intencion })
+    const orden = await consultarOrdenPago(id)
+    return NextResponse.json({ orden })
   } catch (error) {
     return NextResponse.json(
       {
@@ -40,26 +40,15 @@ export async function GET(_request: Request, ctx: Ctx) {
   }
 }
 
-/**
- * Cancela una intención de pago pendiente.
- * Requiere ?device_id= en la query (la API de Mercado Pago lo necesita).
- */
-export async function DELETE(request: Request, ctx: Ctx) {
+/** Cancela una orden pendiente en la terminal. */
+export async function DELETE(_request: Request, ctx: Ctx) {
   if (!(await verificarSesion())) {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 })
   }
   const { id } = await ctx.params
-  const deviceId = new URL(request.url).searchParams.get('device_id') ?? ''
-
-  if (!deviceId) {
-    return NextResponse.json(
-      { error: 'Falta el identificador de la terminal.' },
-      { status: 400 }
-    )
-  }
 
   try {
-    await cancelarIntencionPago(deviceId, id)
+    await cancelarOrdenPago(id)
     return NextResponse.json({ ok: true })
   } catch (error) {
     return NextResponse.json(

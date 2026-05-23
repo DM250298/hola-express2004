@@ -1,10 +1,12 @@
 /**
- * Cliente de la Point Integration API de Mercado Pago (FASE 6).
+ * Cliente de la API de Mercado Pago Point (Orders + Terminals).
  *
  * SOLO SERVIDOR. Usa el Access Token (secreto) — nunca debe importarse desde
  * un componente cliente. Lo consumen las route handlers de `app/api/terminales`.
  *
- * Docs: https://www.mercadopago.com.ar/developers — Point / Integration API.
+ * Docs:
+ *   - Terminals (listar / setear modo)  https://api.mercadopago.com/terminals/v1/
+ *   - Orders (cobros)                    https://api.mercadopago.com/v1/orders
  */
 
 const MP_BASE = 'https://api.mercadopago.com'
@@ -17,6 +19,15 @@ function accessToken(): string {
     )
   }
   return t
+}
+
+/** Genera una clave de idempotencia para los POST que la requieren. */
+function nuevaIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID()
+  }
+  // Fallback razonable; el formato exacto no importa, solo que sea único.
+  return `idem-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 /** Llama a la API de Mercado Pago y normaliza errores. */
@@ -44,14 +55,22 @@ async function mpFetch<T>(
 
   if (!res.ok) {
     let msg = `Mercado Pago respondió ${res.status}.`
-    if (data && typeof data === 'object' && 'message' in data) {
-      msg = String((data as { message: unknown }).message)
+    if (data && typeof data === 'object') {
+      const d = data as { message?: unknown; errors?: unknown }
+      if (typeof d.message === 'string') {
+        msg = d.message
+      } else if (Array.isArray(d.errors) && d.errors.length > 0) {
+        const e = d.errors[0] as { message?: unknown }
+        if (typeof e.message === 'string') msg = e.message
+      }
     }
     throw new Error(msg)
   }
 
   return data as T
 }
+
+// ─── Terminals ───────────────────────────────────────────────────────────────
 
 export interface DispositivoPoint {
   id: string
@@ -63,10 +82,8 @@ export interface DispositivoPoint {
 
 /** Lista los dispositivos Point asociados a la cuenta de Mercado Pago. */
 export async function listarDispositivos(): Promise<DispositivoPoint[]> {
-  // API actual de Point: /terminals/v1/list devuelve { data: { terminals: [] } }.
   const data = await mpFetch<{
     data?: { terminals?: DispositivoPoint[] }
-    // Fallback al endpoint viejo por si alguna cuenta aún lo usa.
     devices?: DispositivoPoint[]
   }>('/terminals/v1/list')
   return data.data?.terminals ?? data.devices ?? []
@@ -82,57 +99,80 @@ export async function ponerModoIntegrado(deviceId: string): Promise<void> {
   })
 }
 
-export interface IntencionPago {
+// ─── Orders (cobros) ─────────────────────────────────────────────────────────
+
+export interface OrdenPago {
   id: string
-  device_id?: string
-  /** Monto en centavos. */
-  amount?: number
-  state?: string
   status?: string
-  payment?: { id?: string | number } | null
+  status_detail?: string
+  type?: string
+  total_amount?: string | number
+  external_reference?: string
+  config?: {
+    point?: { terminal_id?: string }
+  }
+  transactions?: {
+    payments?: Array<{
+      id?: string | number
+      amount?: string | number
+      status?: string
+      payment_method?: { id?: string; type?: string }
+    }>
+  }
 }
 
+/** Estados finales de una orden (ya no cambian). */
+export const ESTADOS_FINALES_ORDEN = new Set([
+  'processed',
+  'failed',
+  'canceled',
+  'expired',
+  'refunded',
+])
+
 /**
- * Crea una intención de pago en una terminal. El monto se envía en pesos y
- * acá se convierte a centavos, como espera la API.
+ * Crea una orden de cobro en una terminal Point.
+ * El monto se envía en pesos (string con 2 decimales, como pide la API).
  */
-export async function crearIntencionPago(
+export async function crearOrdenPago(
   deviceId: string,
   montoPesos: number,
   referencia: string
-): Promise<IntencionPago> {
-  const amount = Math.round(montoPesos * 100)
-  return mpFetch<IntencionPago>(
-    `/point/integration-api/devices/${deviceId}/payment-intents`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        amount,
-        additional_info: {
-          external_reference: referencia,
-          print_on_terminal: true,
+): Promise<OrdenPago> {
+  const referenciaSegura = referencia.slice(0, 64) || 'cobro_hola_express'
+  return mpFetch<OrdenPago>('/v1/orders', {
+    method: 'POST',
+    headers: { 'X-Idempotency-Key': nuevaIdempotencyKey() },
+    body: JSON.stringify({
+      type: 'point',
+      external_reference: referenciaSegura,
+      expiration_time: 'PT5M',
+      transactions: {
+        payments: [{ amount: montoPesos.toFixed(2) }],
+      },
+      config: {
+        point: {
+          terminal_id: deviceId,
+          print_on_terminal: 'no_ticket',
         },
-      }),
-    }
-  )
+      },
+      description: 'Cobro Hola Express',
+    }),
+  })
 }
 
-/** Consulta el estado de una intención de pago (polling). */
-export async function consultarIntencionPago(
-  intencionId: string
-): Promise<IntencionPago> {
-  return mpFetch<IntencionPago>(
-    `/point/integration-api/payment-intents/${intencionId}`
-  )
+/** Consulta el estado actual de una orden (polling). */
+export async function consultarOrdenPago(
+  ordenId: string
+): Promise<OrdenPago> {
+  return mpFetch<OrdenPago>(`/v1/orders/${ordenId}`)
 }
 
-/** Cancela una intención de pago pendiente en la terminal. */
-export async function cancelarIntencionPago(
-  deviceId: string,
-  intencionId: string
-): Promise<void> {
-  await mpFetch(
-    `/point/integration-api/devices/${deviceId}/payment-intents/${intencionId}`,
-    { method: 'DELETE' }
-  )
+/** Cancela una orden pendiente en la terminal. */
+export async function cancelarOrdenPago(ordenId: string): Promise<void> {
+  await mpFetch(`/v1/orders/${ordenId}/cancel`, {
+    method: 'POST',
+    headers: { 'X-Idempotency-Key': nuevaIdempotencyKey() },
+    body: '{}',
+  })
 }

@@ -87,3 +87,76 @@ export async function activarModoPdv(deviceId: string): Promise<void> {
     throw new Error(data?.error ?? 'No se pudo activar el modo PDV.')
   }
 }
+
+// ─── Cobros vía terminal (Orders de Mercado Pago) ────────────────────────────
+
+export interface OrdenPagoCliente {
+  id: string
+  status?: string
+  status_detail?: string
+  total_amount?: string | number
+  transactions?: {
+    payments?: Array<{
+      id?: string | number
+      amount?: string | number
+      status?: string
+      payment_method?: { id?: string; type?: string }
+    }>
+  }
+}
+
+/** Crea una orden de cobro en una terminal. */
+export async function crearCobroTerminal(args: {
+  deviceId: string
+  monto: number
+  referencia?: string
+}): Promise<OrdenPagoCliente> {
+  const res = await fetch('/api/terminales/cobro', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      device_id: args.deviceId,
+      monto: args.monto,
+      referencia: args.referencia ?? '',
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data?.error ?? 'No se pudo enviar el cobro a la terminal.')
+  }
+  return data.orden as OrdenPagoCliente
+}
+
+/** Consulta el estado actual de una orden de cobro. */
+export async function consultarCobroTerminal(
+  ordenId: string
+): Promise<OrdenPagoCliente> {
+  const res = await fetch(
+    `/api/terminales/cobro/${encodeURIComponent(ordenId)}`
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data?.error ?? 'No se pudo consultar el estado del cobro.')
+  }
+  return data.orden as OrdenPagoCliente
+}
+
+/** Cancela una orden pendiente en la terminal. */
+export async function cancelarCobroTerminal(ordenId: string): Promise<void> {
+  const res = await fetch(
+    `/api/terminales/cobro/${encodeURIComponent(ordenId)}`,
+    { method: 'DELETE' }
+  )
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data?.error ?? 'No se pudo cancelar el cobro.')
+  }
+}
+
+export const ESTADOS_FINALES_ORDEN = new Set([
+  'processed',
+  'failed',
+  'canceled',
+  'expired',
+  'refunded',
+])
