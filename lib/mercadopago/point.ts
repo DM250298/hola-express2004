@@ -197,3 +197,49 @@ export async function cancelarOrdenPago(ordenId: string): Promise<void> {
     body: '{}',
   })
 }
+
+interface OrdenBusqueda {
+  id?: string
+  status?: string
+  config?: { point?: { terminal_id?: string } }
+}
+
+/**
+ * Busca órdenes recientes en estado no final asociadas a una terminal y las
+ * cancela. Se usa para limpiar órdenes "colgadas" cuando MP responde
+ * `already_queued_order_on_terminal` al intentar crear una nueva.
+ *
+ * Devuelve la cantidad de órdenes canceladas.
+ */
+export async function liberarOrdenesPendientes(
+  deviceId: string
+): Promise<number> {
+  const ahora = new Date()
+  const desde = new Date(ahora.getTime() - 3 * 24 * 60 * 60 * 1000)
+  const fmt = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, '.000Z')
+  const begin = fmt(desde)
+  const end = fmt(ahora)
+
+  let canceladas = 0
+  try {
+    const res = await mpFetch<{ data?: OrdenBusqueda[] }>(
+      `/v1/orders?begin_date=${encodeURIComponent(begin)}&end_date=${encodeURIComponent(end)}&limit=50`
+    )
+    for (const o of res.data ?? []) {
+      if (!o.id) continue
+      if (o.status && ESTADOS_FINALES_ORDEN.has(o.status)) continue
+      const terminalDeOrden = o.config?.point?.terminal_id
+      if (terminalDeOrden && terminalDeOrden !== deviceId) continue
+      try {
+        await cancelarOrdenPago(o.id)
+        canceladas += 1
+      } catch {
+        // La orden puede estar ya finalizada; ignorar.
+      }
+    }
+  } catch {
+    // Si el search falla, no podemos hacer mucho — el usuario tendrá que
+    // cancelar manualmente desde la maquinita.
+  }
+  return canceladas
+}
