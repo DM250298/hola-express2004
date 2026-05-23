@@ -56,12 +56,33 @@ async function mpFetch<T>(
   if (!res.ok) {
     let msg = `Mercado Pago respondió ${res.status}.`
     if (data && typeof data === 'object') {
-      const d = data as { message?: unknown; errors?: unknown }
-      if (typeof d.message === 'string') {
+      const d = data as {
+        message?: unknown
+        errors?: unknown
+        cause?: unknown
+      }
+      if (Array.isArray(d.errors) && d.errors.length > 0) {
+        const e = d.errors[0] as {
+          code?: unknown
+          message?: unknown
+          details?: unknown
+        }
+        const partes = [
+          typeof e.code === 'string' || typeof e.code === 'number'
+            ? String(e.code)
+            : null,
+          typeof e.message === 'string' ? e.message : null,
+          e.details
+            ? typeof e.details === 'string'
+              ? e.details
+              : JSON.stringify(e.details)
+            : null,
+        ].filter(Boolean)
+        msg = partes.join(' · ') || msg
+      } else if (typeof d.message === 'string') {
         msg = d.message
-      } else if (Array.isArray(d.errors) && d.errors.length > 0) {
-        const e = d.errors[0] as { message?: unknown }
-        if (typeof e.message === 'string') msg = e.message
+      } else {
+        msg = JSON.stringify(data).slice(0, 400)
       }
     }
     throw new Error(msg)
@@ -146,7 +167,7 @@ export async function crearOrdenPago(
     body: JSON.stringify({
       type: 'point',
       external_reference: referenciaSegura,
-      expiration_time: 'PT5M',
+      expiration_time: 'PT16M',
       transactions: {
         payments: [{ amount: montoPesos.toFixed(2) }],
       },
