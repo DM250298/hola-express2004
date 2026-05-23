@@ -1,7 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import { CreditCard, Info, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  CreditCard,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+  Wifi,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -13,7 +21,11 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { ModalTerminal } from './ModalTerminal'
-import { useTerminales, useDeleteTerminal } from '@/lib/hooks/useTerminales'
+import {
+  useActivarModoPdv,
+  useDeleteTerminal,
+  useTerminales,
+} from '@/lib/hooks/useTerminales'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import { cn } from '@/lib/utils'
 import type { TerminalRow } from '@/types/database'
@@ -22,6 +34,7 @@ export function PantallaTerminales() {
   const { data: terminales, isLoading, isError } = useTerminales()
   const { data: cuentas } = useCuentas(false)
   const eliminar = useDeleteTerminal()
+  const activarPdv = useActivarModoPdv()
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editar, setEditar] = useState<TerminalRow | null>(null)
 
@@ -116,7 +129,7 @@ export function PantallaTerminales() {
                   <TableHead className="text-[#391511] font-semibold">
                     Cuenta
                   </TableHead>
-                  <TableHead className="text-right w-24 text-[#391511] font-semibold" />
+                  <TableHead className="text-right w-44 text-[#391511] font-semibold" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -144,6 +157,25 @@ export function PantallaTerminales() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {t.device_id && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              activarPdv.mutate(t.device_id as string)
+                            }
+                            disabled={activarPdv.isPending}
+                            title="Pasar la terminal a modo integrado (PDV) en Mercado Pago"
+                            className="h-7 px-2 text-[10px] font-semibold border-[#f9b44c] text-[#6f3a2a] hover:bg-[#f9b44c]/15 gap-1"
+                          >
+                            {activarPdv.isPending ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Wifi className="h-3 w-3" />
+                            )}
+                            Activar PDV
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"

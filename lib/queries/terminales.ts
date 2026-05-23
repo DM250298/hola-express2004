@@ -74,3 +74,16 @@ export async function getDispositivosPoint(): Promise<DispositivoPoint[]> {
   }
   return (data?.dispositivos ?? []) as DispositivoPoint[]
 }
+
+/** Cambia el modo de operación de una terminal a "integrado / PDV". */
+export async function activarModoPdv(deviceId: string): Promise<void> {
+  const res = await fetch('/api/terminales/activar-pdv', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device_id: deviceId }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data?.error ?? 'No se pudo activar el modo PDV.')
+  }
+}

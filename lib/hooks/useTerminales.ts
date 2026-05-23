@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  activarModoPdv,
   createTerminal,
   deleteTerminal,
   getDispositivosPoint,
@@ -66,5 +67,18 @@ export function useDeleteTerminal() {
       toast.success('Terminal eliminada')
     },
     onError: (e: Error) => toast.error(`No se pudo eliminar: ${e.message}`),
+  })
+}
+
+export function useActivarModoPdv() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (deviceId: string) => activarModoPdv(deviceId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dispositivos-point'] })
+      toast.success('Terminal puesta en modo integrado (PDV)')
+    },
+    onError: (e: Error) =>
+      toast.error(`No se pudo activar el modo PDV: ${e.message}`),
   })
 }
