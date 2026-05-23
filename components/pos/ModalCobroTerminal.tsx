@@ -31,8 +31,9 @@ import { useMediosPagoActivos } from '@/lib/hooks/useMediosPago'
 import {
   cancelarCobroTerminal,
   consultarCobroTerminal,
-  crearCobroTerminal,
+  crearCobroTerminalSeguro,
   ESTADOS_FINALES_ORDEN,
+  olvidarOrdenPendiente,
 } from '@/lib/queries/terminales'
 import { formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -105,7 +106,7 @@ export function ModalCobroTerminal({
 
   const enviar = useMutation({
     mutationFn: () =>
-      crearCobroTerminal({
+      crearCobroTerminalSeguro({
         deviceId: terminalElegida!.device_id as string,
         monto: total,
         referencia: `venta_pos_${Date.now()}`,
@@ -147,9 +148,21 @@ export function ModalCobroTerminal({
     }
   }, [aprobado, yaAvisoExito, medioPago, onAprobado])
 
+  // Cuando la orden llega a un estado final, dejar de seguirla localmente.
+  useEffect(() => {
+    if (estadoFinal && terminalElegida?.device_id) {
+      olvidarOrdenPendiente(terminalElegida.device_id)
+    }
+  }, [estadoFinal, terminalElegida?.device_id])
+
   const cancelar = useMutation({
     mutationFn: () => cancelarCobroTerminal(ordenId as string),
-    onSuccess: () => setOrdenId(null),
+    onSuccess: () => {
+      if (terminalElegida?.device_id) {
+        olvidarOrdenPendiente(terminalElegida.device_id)
+      }
+      setOrdenId(null)
+    },
   })
 
   const puedeEnviar =
@@ -167,7 +180,7 @@ export function ModalCobroTerminal({
     cancelar.reset()
   }
 
-  function manejarCierre(v: boolean) {
+  async function manejarCierre(v: boolean) {
     if (!v) {
       if (procesandoVenta) return // no cerrar mientras se registra
       if (ordenId && !estadoFinal) {
@@ -178,7 +191,11 @@ export function ModalCobroTerminal({
         ) {
           return
         }
-        cancelar.mutate()
+        try {
+          await cancelar.mutateAsync()
+        } catch {
+          // Si la cancelación falla, igual seguimos cerrando.
+        }
       }
       reiniciar()
     }

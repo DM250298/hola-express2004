@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   CheckCircle2,
@@ -21,8 +21,9 @@ import {
 import {
   cancelarCobroTerminal,
   consultarCobroTerminal,
-  crearCobroTerminal,
+  crearCobroTerminalSeguro,
   ESTADOS_FINALES_ORDEN,
+  olvidarOrdenPendiente,
 } from '@/lib/queries/terminales'
 import { formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -55,7 +56,7 @@ export function ModalProbarCobro({
 
   const enviar = useMutation({
     mutationFn: () =>
-      crearCobroTerminal({
+      crearCobroTerminalSeguro({
         deviceId: terminal!.device_id as string,
         monto: Number(monto),
         referencia: `test_${Date.now()}`,
@@ -89,9 +90,17 @@ export function ModalProbarCobro({
     !!orden?.status && ESTADOS_FINALES_ORDEN.has(orden.status)
   const aprobado = orden?.status === PROCESSED
 
+  // Cuando la orden llega a un estado final, dejar de seguirla localmente.
+  useEffect(() => {
+    if (estadoFinal && terminal?.device_id) {
+      olvidarOrdenPendiente(terminal.device_id)
+    }
+  }, [estadoFinal, terminal?.device_id])
+
   const cancelar = useMutation({
     mutationFn: () => cancelarCobroTerminal(ordenId as string),
     onSuccess: () => {
+      if (terminal?.device_id) olvidarOrdenPendiente(terminal.device_id)
       setOrdenId(null)
     },
   })
@@ -110,7 +119,7 @@ export function ModalProbarCobro({
     cancelar.reset()
   }
 
-  function manejarCierre(v: boolean) {
+  async function manejarCierre(v: boolean) {
     if (!v) {
       if (ordenId && !estadoFinal) {
         if (
@@ -120,7 +129,11 @@ export function ModalProbarCobro({
         ) {
           return
         }
-        cancelar.mutate()
+        try {
+          await cancelar.mutateAsync()
+        } catch {
+          // Si la cancelación falla (orden ya finalizada/expirada), igual seguimos.
+        }
       }
       reiniciar()
     }

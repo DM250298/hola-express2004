@@ -160,3 +160,78 @@ export const ESTADOS_FINALES_ORDEN = new Set([
   'expired',
   'refunded',
 ])
+
+// ─── Tracking local de órdenes pendientes ────────────────────────────────────
+//
+// Si el navegador se cierra o el modal se aborta a mitad de un cobro, la
+// orden puede quedar "encolada" del lado de Mercado Pago. Guardamos el id de
+// la orden en localStorage por terminal para poder cancelarla después.
+
+function claveOrden(deviceId: string): string {
+  return `he_orden_pendiente_${deviceId}`
+}
+
+export function guardarOrdenPendiente(
+  deviceId: string,
+  ordenId: string
+): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(claveOrden(deviceId), ordenId)
+  } catch {
+    // ignore
+  }
+}
+
+export function olvidarOrdenPendiente(deviceId: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(claveOrden(deviceId))
+  } catch {
+    // ignore
+  }
+}
+
+export function obtenerOrdenPendiente(deviceId: string): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem(claveOrden(deviceId))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Crea un cobro en la terminal, con limpieza automática si quedó una orden
+ * vieja encolada de un intento previo.
+ */
+export async function crearCobroTerminalSeguro(args: {
+  deviceId: string
+  monto: number
+  referencia?: string
+}): Promise<OrdenPagoCliente> {
+  try {
+    const orden = await crearCobroTerminal(args)
+    guardarOrdenPendiente(args.deviceId, orden.id)
+    return orden
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : ''
+    if (!/already_queued/i.test(msg)) {
+      throw error
+    }
+    // Hay una orden previa colgada. Intentar cancelarla y reintentar.
+    const ordenVieja = obtenerOrdenPendiente(args.deviceId)
+    if (ordenVieja) {
+      try {
+        await cancelarCobroTerminal(ordenVieja)
+      } catch {
+        // ignore — quizá ya está finalizada o expirada
+      }
+      olvidarOrdenPendiente(args.deviceId)
+    }
+    // Reintento limpio.
+    const orden = await crearCobroTerminal(args)
+    guardarOrdenPendiente(args.deviceId, orden.id)
+    return orden
+  }
+}
