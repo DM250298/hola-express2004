@@ -141,10 +141,18 @@ export async function consultarCobroTerminal(
   return data.orden as OrdenPagoCliente
 }
 
-/** Cancela una orden pendiente en la terminal. */
-export async function cancelarCobroTerminal(ordenId: string): Promise<void> {
+/**
+ * Cancela una orden pendiente. Si se pasa `deviceId`, el servidor también
+ * libera la cola del dispositivo via el endpoint legacy — esto es lo que
+ * realmente saca el monto de la pantalla de la maquinita.
+ */
+export async function cancelarCobroTerminal(
+  ordenId: string,
+  deviceId?: string
+): Promise<void> {
+  const qs = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''
   const res = await fetch(
-    `/api/terminales/cobro/${encodeURIComponent(ordenId)}`,
+    `/api/terminales/cobro/${encodeURIComponent(ordenId)}${qs}`,
     { method: 'DELETE' }
   )
   const data = await res.json().catch(() => ({}))

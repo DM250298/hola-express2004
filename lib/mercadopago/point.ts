@@ -167,7 +167,9 @@ export async function crearOrdenPago(
     body: JSON.stringify({
       type: 'point',
       external_reference: referenciaSegura,
-      expiration_time: 'PT16M',
+      // Vence rápido (2 min): si la cancel API devuelve 404 sobre órdenes
+      // huérfanas, MP libera la cola sola y la maquinita queda usable.
+      expiration_time: 'PT2M',
       transactions: {
         payments: [{ amount: montoPesos.toFixed(2) }],
       },
@@ -196,6 +198,35 @@ export async function cancelarOrdenPago(ordenId: string): Promise<void> {
     headers: { 'X-Idempotency-Key': nuevaIdempotencyKey() },
     body: '{}',
   })
+}
+
+/**
+ * Libera la terminal cancelando cualquier intent de pago pendiente.
+ * Usa el endpoint legacy /point/integration-api/devices que sigue siendo
+ * el único confiable para limpiar la cola visible de la maquinita —
+ * /v1/orders/{id}/cancel a veces devuelve order_not_found.
+ *
+ * No lanza si el endpoint devuelve 404 / sin contenido (puede no haber
+ * nada que liberar, que es el estado deseado).
+ */
+export async function liberarDispositivo(deviceId: string): Promise<void> {
+  const res = await fetch(
+    `${MP_BASE}/point/integration-api/devices/${deviceId}/payment-intents`,
+    {
+      method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${accessToken()}`,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    }
+  )
+  if (!res.ok && res.status !== 404 && res.status !== 204) {
+    const t = await res.text()
+    throw new Error(
+      `Liberar dispositivo: ${res.status} — ${t.slice(0, 200)}`
+    )
+  }
 }
 
 interface OrdenBusqueda {

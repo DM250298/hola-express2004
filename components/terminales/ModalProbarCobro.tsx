@@ -98,7 +98,11 @@ export function ModalProbarCobro({
   }, [estadoFinal, terminal?.device_id])
 
   const cancelar = useMutation({
-    mutationFn: () => cancelarCobroTerminal(ordenId as string),
+    mutationFn: () =>
+      cancelarCobroTerminal(
+        ordenId as string,
+        terminal?.device_id ?? undefined
+      ),
     onSuccess: () => {
       if (terminal?.device_id) olvidarOrdenPendiente(terminal.device_id)
       setOrdenId(null)

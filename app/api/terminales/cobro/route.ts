@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import {
   crearOrdenPago,
+  liberarDispositivo,
   liberarOrdenesPendientes,
 } from '@/lib/mercadopago/point'
 
@@ -51,9 +52,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ orden })
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
-    // Si la terminal tiene una orden colgada, intentamos limpiarla y reintentar.
+    // Si la terminal tiene una orden colgada, intentamos limpiarla por las
+    // dos vías (cancel a nivel /v1/orders + liberar el dispositivo legacy)
+    // y reintentar.
     if (/already_queued/i.test(msg)) {
       const canceladas = await liberarOrdenesPendientes(deviceId)
+      try {
+        await liberarDispositivo(deviceId)
+      } catch {
+        // si el endpoint legacy no responde, seguimos igual
+      }
       try {
         const orden = await crearOrdenPago(deviceId, monto, referencia)
         return NextResponse.json({ orden, limpieza: { canceladas } })
