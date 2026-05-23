@@ -1,6 +1,6 @@
 'use client'
 
-import { Minus, Plus, ShoppingCart, Trash2, User, X } from 'lucide-react'
+import { Minus, Plus, ShoppingCart, Trash2, User, Wifi, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
 import {
@@ -19,6 +19,10 @@ interface Props {
   clienteNombre: string | null
   onElegirCliente: () => void
   onQuitarCliente: () => void
+  /** Cobrar directo en una terminal Point. */
+  onCobrarTerminal?: () => void
+  /** ¿Hay alguna terminal Point activa configurada en el sistema? */
+  hayTerminalActiva?: boolean
 }
 
 export function CarritoVenta({
@@ -28,6 +32,8 @@ export function CarritoVenta({
   clienteNombre,
   onElegirCliente,
   onQuitarCliente,
+  onCobrarTerminal,
+  hayTerminalActiva = false,
 }: Props) {
   const total = calcularTotal(items)
   const unidades = contarUnidades(items)
@@ -202,17 +208,38 @@ export function CarritoVenta({
             <MontoARS monto={total} />
           </span>
         </div>
-        <Button
-          onClick={onCobrar}
-          title="Cobrar (F4)"
-          disabled={vacio}
-          className="w-full h-14 text-lg bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-extrabold rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed gap-2"
+        <div
+          className={cn(
+            'grid gap-2',
+            hayTerminalActiva && onCobrarTerminal
+              ? 'grid-cols-2'
+              : 'grid-cols-1'
+          )}
         >
-          Cobrar
-          <kbd className="px-1.5 py-0.5 bg-[#391511]/15 border border-[#391511]/20 rounded text-xs font-mono">
-            F4
-          </kbd>
-        </Button>
+          <Button
+            onClick={onCobrar}
+            title="Cobrar (F4)"
+            disabled={vacio}
+            className="h-14 text-base bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-extrabold rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed gap-2"
+          >
+            Cobrar
+            <kbd className="px-1.5 py-0.5 bg-[#391511]/15 border border-[#391511]/20 rounded text-xs font-mono">
+              F4
+            </kbd>
+          </Button>
+          {hayTerminalActiva && onCobrarTerminal && (
+            <Button
+              onClick={onCobrarTerminal}
+              title="Cobrar con la maquinita Point"
+              disabled={vacio}
+              variant="outline"
+              className="h-14 text-base border-2 border-[#391511] text-[#391511] bg-white hover:bg-[#fdfaf6] font-extrabold rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed gap-1.5"
+            >
+              <Wifi className="h-4 w-4" />
+              Maquinita
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )

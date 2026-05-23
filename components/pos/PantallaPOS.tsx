@@ -33,6 +33,8 @@ import { TicketResumen } from './TicketResumen'
 import { OverlayAtajos } from './OverlayAtajos'
 import { IndicadorConexion } from './IndicadorConexion'
 import { SelectorCliente, type ClienteSeleccionado } from './SelectorCliente'
+import { ModalCobroTerminal } from './ModalCobroTerminal'
+import { useTerminales } from '@/lib/hooks/useTerminales'
 import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
@@ -70,7 +72,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   } = useTurnoActivo(usuarioId)
   const crearVenta = useCrearVenta()
   const { data: usuario } = useUsuario()
+  const { data: terminales } = useTerminales()
   const puedeGasto = tienePermiso(usuario?.permisos, 'pos_gasto')
+  const hayTerminalActiva = (terminales ?? []).some(
+    (t) => t.activo && !!t.device_id
+  )
 
   // Múltiples órdenes — cada una es un carrito independiente
   const [ordenes, setOrdenes] = useState<Orden[]>(() => [nuevaOrden()])
@@ -85,6 +91,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [ticketAbierto, setTicketAbierto] = useState(false)
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
+  const [modalTerminalAbierto, setModalTerminalAbierto] = useState(false)
   const buscadorRef = useRef<BuscadorProductoRef>(null)
   const [ultimaVenta, setUltimaVenta] = useState<VentaCompleta | null>(null)
   const [ultimoVuelto, setUltimoVuelto] = useState<number | null>(null)
@@ -160,7 +167,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     modalGastoAbierto ||
     ticketAbierto ||
     overlayAtajosAbierto ||
-    selectorClienteAbierto
+    selectorClienteAbierto ||
+    modalTerminalAbierto
 
   const shortcutsPantalla = useMemo(
     () => [
@@ -305,6 +313,37 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           dispatchCarrito({ tipo: 'VACIAR' })
           elegirCliente(null)
           setModalCobroAbierto(false)
+          setTicketAbierto(true)
+        },
+      }
+    )
+  }
+
+  /** Llamado por ModalCobroTerminal cuando la maquinita aprobó el pago. */
+  function confirmarVentaTerminal(medioPago: string) {
+    if (carrito.length === 0 || !turno) return
+    const items = carrito.map((it) => ({
+      producto_id: it.producto_id,
+      cantidad: it.cantidad,
+      precio_unitario: it.precio_unitario,
+      stock_actual: it.stock_disponible,
+      nombre: it.nombre,
+    }))
+    crearVenta.mutate(
+      {
+        turno_id: turno.id,
+        usuario_id: usuarioId,
+        cliente_id: ordenActiva?.clienteId ?? null,
+        pagos: [{ medio_pago: medioPago, monto: totalCarrito }],
+        items,
+      },
+      {
+        onSuccess: (venta) => {
+          setUltimaVenta(venta)
+          setUltimoVuelto(null) // no hay vuelto con tarjeta
+          dispatchCarrito({ tipo: 'VACIAR' })
+          elegirCliente(null)
+          setModalTerminalAbierto(false)
           setTicketAbierto(true)
         },
       }
@@ -490,6 +529,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             clienteNombre={ordenActiva?.clienteNombre ?? null}
             onElegirCliente={() => setSelectorClienteAbierto(true)}
             onQuitarCliente={() => elegirCliente(null)}
+            onCobrarTerminal={() => setModalTerminalAbierto(true)}
+            hayTerminalActiva={hayTerminalActiva}
           />
         </div>
       </div>
@@ -543,6 +584,14 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         abierto={selectorClienteAbierto}
         onCambioAbierto={setSelectorClienteAbierto}
         onSeleccionar={elegirCliente}
+      />
+
+      <ModalCobroTerminal
+        abierto={modalTerminalAbierto}
+        onCambioAbierto={setModalTerminalAbierto}
+        total={totalCarrito}
+        onAprobado={confirmarVentaTerminal}
+        procesandoVenta={crearVenta.isPending}
       />
 
       {/* Overlay global mientras procesa venta — bloquea taps repetidos */}
