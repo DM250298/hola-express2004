@@ -48,7 +48,7 @@ const SECCIONES: Seccion[] = [
       },
       {
         href: '/proyectos',
-        etiqueta: 'Proyectos',
+        etiqueta: 'Tableros',
         icono: FolderKanban,
         permiso: 'proyectos',
       },
@@ -82,7 +82,7 @@ const SECCIONES: Seccion[] = [
     items: [
       {
         href: '/inventario',
-        etiqueta: 'Inventario',
+        etiqueta: 'Stock',
         icono: Package,
         permiso: 'inventario',
       },

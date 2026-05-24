@@ -25,10 +25,10 @@ export const TAREAS_KEY = ['tareas'] as const
 
 // ─── Proyectos ───────────────────────────────────────────────────────────────
 
-export function useProyectos() {
+export function useProyectos(tableroId?: number | null) {
   return useQuery({
-    queryKey: PROYECTOS_KEY,
-    queryFn: getProyectos,
+    queryKey: [...PROYECTOS_KEY, tableroId ?? 'todos'],
+    queryFn: () => getProyectos(tableroId ?? undefined),
     staleTime: 30 * 1000,
   })
 }

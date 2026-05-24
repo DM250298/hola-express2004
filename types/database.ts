@@ -256,6 +256,8 @@ export type ProyectoRow = {
   estado: string
   fecha_limite: string | null
   usuario_id: string | null
+  tablero_id: number
+  orden: number
   created_at: string
   updated_at: string
 }
@@ -267,6 +269,8 @@ export type ProyectoInsert = {
   estado?: string
   fecha_limite?: string | null
   usuario_id?: string | null
+  tablero_id: number
+  orden?: number
 }
 
 export type ProyectoUpdate = Partial<ProyectoInsert> & {
@@ -309,6 +313,92 @@ export type TareaInsert = {
 
 export type TareaUpdate = Partial<Omit<TareaInsert, 'proyecto_id'>> & {
   updated_at?: string
+}
+
+export type VistaTareaRow = TareaRow & {
+  total_subtareas: number
+  subtareas_hechas: number
+}
+
+// ─── subtareas (checklist dentro de una tarea) ────────────────────────────────
+
+export type SubtareaRow = {
+  id: number
+  tarea_id: number
+  titulo: string
+  hecha: boolean
+  responsable_id: string | null
+  orden: number
+  completada_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SubtareaInsert = {
+  id?: number
+  tarea_id: number
+  titulo: string
+  hecha?: boolean
+  responsable_id?: string | null
+  orden?: number
+  completada_at?: string | null
+}
+
+export type SubtareaUpdate = Partial<Omit<SubtareaInsert, 'tarea_id'>> & {
+  updated_at?: string
+}
+
+// ─── tableros (agrupan proyectos + miembros con rol) ──────────────────────────
+
+export type RolTablero = 'lector' | 'editor' | 'admin'
+
+export type TableroRow = {
+  id: number
+  nombre: string
+  descripcion: string | null
+  color: string
+  imagen_url: string | null
+  archivado: boolean
+  creado_por: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type TableroInsert = {
+  id?: number
+  nombre: string
+  descripcion?: string | null
+  color?: string
+  imagen_url?: string | null
+  archivado?: boolean
+  creado_por?: string | null
+}
+
+export type TableroUpdate = Partial<TableroInsert> & {
+  updated_at?: string
+}
+
+export type TableroMiembroRow = {
+  tablero_id: number
+  usuario_id: string
+  rol: RolTablero
+  agregado_at: string
+}
+
+export type TableroMiembroInsert = {
+  tablero_id: number
+  usuario_id: string
+  rol?: RolTablero
+}
+
+export type VistaTableroRow = TableroRow & {
+  total_proyectos: number
+  proyectos_activos: number
+  total_miembros: number
+}
+
+export type VistaTableroUsuarioRow = VistaTableroRow & {
+  mi_rol: RolTablero | null
 }
 
 // ─── terminales de cobro (FASE 6) ────────────────────────────────────────────
@@ -1306,10 +1396,28 @@ export interface Database {
         Update: ProyectoUpdate
         Relationships: []
       }
+      tableros: {
+        Row: TableroRow
+        Insert: TableroInsert
+        Update: TableroUpdate
+        Relationships: []
+      }
+      tablero_miembros: {
+        Row: TableroMiembroRow
+        Insert: TableroMiembroInsert
+        Update: Partial<TableroMiembroRow>
+        Relationships: []
+      }
       tareas: {
         Row: TareaRow
         Insert: TareaInsert
         Update: TareaUpdate
+        Relationships: []
+      }
+      subtareas: {
+        Row: SubtareaRow
+        Insert: SubtareaInsert
+        Update: SubtareaUpdate
         Relationships: []
       }
       terminales: {
@@ -1551,6 +1659,18 @@ export interface Database {
       }
       vista_proyectos: {
         Row: VistaProyectoRow
+        Relationships: []
+      }
+      vista_tableros: {
+        Row: VistaTableroRow
+        Relationships: []
+      }
+      vista_tableros_usuario: {
+        Row: VistaTableroUsuarioRow
+        Relationships: []
+      }
+      vista_tareas: {
+        Row: VistaTareaRow
         Relationships: []
       }
     }

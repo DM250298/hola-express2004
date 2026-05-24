@@ -11,13 +11,19 @@ import type {
 
 // ─── Proyectos ───────────────────────────────────────────────────────────────
 
-export async function getProyectos(): Promise<VistaProyectoRow[]> {
+export async function getProyectos(
+  tableroId?: number
+): Promise<VistaProyectoRow[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
+  let q = supabase
     .from('vista_proyectos')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('orden', { ascending: true })
+    .order('created_at', { ascending: true })
 
+  if (tableroId !== undefined) q = q.eq('tablero_id', tableroId)
+
+  const { data, error } = await q
   if (error) throw error
   return (data ?? []) as VistaProyectoRow[]
 }

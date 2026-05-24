@@ -28,6 +28,8 @@ interface Props {
   onCambioAbierto: (v: boolean) => void
   /** Proyecto a editar; null = alta. */
   proyecto?: ProyectoRow | null
+  /** Tablero al que pertenece el proyecto (obligatorio al crear). */
+  tableroId?: number
 }
 
 const ESTADOS: Record<string, string> = {
@@ -36,7 +38,12 @@ const ESTADOS: Record<string, string> = {
   archivado: 'Archivado',
 }
 
-export function ModalProyecto({ abierto, onCambioAbierto, proyecto }: Props) {
+export function ModalProyecto({
+  abierto,
+  onCambioAbierto,
+  proyecto,
+  tableroId,
+}: Props) {
   const { data: usuario } = useUsuario()
   const crear = useCreateProyecto()
   const actualizar = useUpdateProyecto()
@@ -75,12 +82,14 @@ export function ModalProyecto({ abierto, onCambioAbierto, proyecto }: Props) {
         { onSuccess: () => onCambioAbierto(false) }
       )
     } else {
+      if (!tableroId) return
       crear.mutate(
         {
           nombre: nombre.trim(),
           descripcion: descripcion.trim() || null,
           fecha_limite: fechaLimite || null,
           usuario_id: usuario?.id ?? null,
+          tablero_id: tableroId,
         },
         { onSuccess: () => onCambioAbierto(false) }
       )

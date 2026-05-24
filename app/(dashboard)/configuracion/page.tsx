@@ -1,14 +1,7 @@
 import Link from 'next/link'
-import { Package, Tag, Truck, ChevronRight, Users } from 'lucide-react'
+import { Tag, Truck, ChevronRight, Users } from 'lucide-react'
 
 const SECCIONES = [
-  {
-    href: '/configuracion/productos',
-    titulo: 'Productos',
-    descripcion: 'Catálogo, precios, stock mínimo y códigos de barras.',
-    icono: Package,
-    color: '#f9b44c',
-  },
   {
     href: '/configuracion/categorias',
     titulo: 'Categorías',
