@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, Wifi } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,12 +19,26 @@ import { cn } from '@/lib/utils'
 import type { MedioPago } from '@/types/database'
 import type { PagoPayload } from '@/lib/queries/ventas'
 
+/** Código "sintético" que representa el cobro por maquinita Point. */
+export const MEDIO_MAQUINITA = '__maquinita'
+
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   total: number
   procesando: boolean
   onConfirmar: (pagos: PagoPayload[], vueltoEfectivo: number) => void
+  /**
+   * Si está presente y el cobro incluye una línea de maquinita, se llama
+   * con los demás pagos y el monto a cobrar por la terminal. El parent
+   * abre el modal de la maquinita y registra la venta al aprobarse.
+   */
+  onCobrarConMaquinita?: (
+    pagosNoMaq: PagoPayload[],
+    montoMaquinita: number
+  ) => void
+  /** ¿Hay alguna terminal Point activa configurada en el sistema? */
+  hayTerminalActiva?: boolean
 }
 
 interface PagoLinea {
@@ -43,23 +57,34 @@ export function ModalCobro({
   total,
   procesando,
   onConfirmar,
+  onCobrarConMaquinita,
+  hayTerminalActiva = false,
 }: Props) {
   const { data: mediosActivos } = useMediosPagoActivos()
   const [pagos, setPagos] = useState<PagoLinea[]>([])
   const [indiceActivo, setIndiceActivo] = useState(0)
 
   // Medios disponibles (dinámicos). Los primeros 4 reciben atajo F1-F4.
-  const medios = useMemo(
-    () =>
-      (mediosActivos ?? []).map((m, i) => ({
-        valor: m.codigo,
-        etiqueta: m.nombre,
-        Icono: resolverIconoMedio(m.icono),
-        tecla: i < 4 ? `F${i + 1}` : null,
-        comision: m.comision_porcentaje,
-      })),
-    [mediosActivos]
-  )
+  // Si hay terminal activa, agregamos "Maquinita" como un medio extra al final.
+  const medios = useMemo(() => {
+    const base = (mediosActivos ?? []).map((m, i) => ({
+      valor: m.codigo,
+      etiqueta: m.nombre,
+      Icono: resolverIconoMedio(m.icono),
+      tecla: i < 4 ? `F${i + 1}` : null,
+      comision: m.comision_porcentaje,
+    }))
+    if (hayTerminalActiva && onCobrarConMaquinita) {
+      base.push({
+        valor: MEDIO_MAQUINITA,
+        etiqueta: 'Maquinita',
+        Icono: Wifi,
+        tecla: null,
+        comision: 0,
+      })
+    }
+    return base
+  }, [mediosActivos, hayTerminalActiva, onCobrarConMaquinita])
 
   const medioInicial: MedioPago = medios[0]?.valor ?? 'efectivo'
 
@@ -134,6 +159,20 @@ export function ModalCobro({
 
   function confirmar() {
     if (!puedeConfirmar) return
+    // Si hay una línea de maquinita y el parent sabe manejarla, desviamos
+    // a ese flujo: el parent abre la maquinita con el monto parcial y
+    // registra la venta al aprobarse.
+    const lineaMaq = pagos.find((p) => p.medio === MEDIO_MAQUINITA)
+    if (lineaMaq && onCobrarConMaquinita) {
+      const otros: PagoPayload[] = pagos
+        .filter((p) => p.medio !== MEDIO_MAQUINITA)
+        .map((p) => ({
+          medio_pago: p.medio,
+          monto: Number(p.monto),
+        }))
+      onCobrarConMaquinita(otros, Number(lineaMaq.monto))
+      return
+    }
     const pagosLimpios: PagoPayload[] = pagos.map((p) => ({
       medio_pago: p.medio,
       monto: Number(p.monto),

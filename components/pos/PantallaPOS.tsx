@@ -92,6 +92,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
   const [modalTerminalAbierto, setModalTerminalAbierto] = useState(false)
+  /** Cuando el cobro es mixto (maquinita + otros), guardamos los pagos no-
+   *  maquinita acá y el monto a cobrar por la terminal. Al aprobarse, se
+   *  registra la venta con todos los pagos combinados. */
+  const [pagosPrevios, setPagosPrevios] = useState<PagoPayload[]>([])
+  const [montoMaquinita, setMontoMaquinita] = useState(0)
   const buscadorRef = useRef<BuscadorProductoRef>(null)
   const [ultimaVenta, setUltimaVenta] = useState<VentaCompleta | null>(null)
   const [ultimoVuelto, setUltimoVuelto] = useState<number | null>(null)
@@ -329,12 +334,20 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       stock_actual: it.stock_disponible,
       nombre: it.nombre,
     }))
+    // Si hay un cobro parcial pre-cargado (modo "mixto"), combinamos los
+    // pagos no-maquinita con la línea de la maquinita aprobada.
+    const montoMaq = montoMaquinita > 0 ? montoMaquinita : totalCarrito
+    const pagos: PagoPayload[] =
+      pagosPrevios.length > 0
+        ? [...pagosPrevios, { medio_pago: medioPago, monto: montoMaq }]
+        : [{ medio_pago: medioPago, monto: totalCarrito }]
+
     crearVenta.mutate(
       {
         turno_id: turno.id,
         usuario_id: usuarioId,
         cliente_id: ordenActiva?.clienteId ?? null,
-        pagos: [{ medio_pago: medioPago, monto: totalCarrito }],
+        pagos,
         items,
       },
       {
@@ -344,10 +357,24 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           dispatchCarrito({ tipo: 'VACIAR' })
           elegirCliente(null)
           setModalTerminalAbierto(false)
+          setPagosPrevios([])
+          setMontoMaquinita(0)
           setTicketAbierto(true)
         },
       }
     )
+  }
+
+  /** Llamado por ModalCobro cuando hay una línea de "Maquinita": guarda
+   *  los demás pagos y abre el flujo de la terminal con el monto parcial. */
+  function iniciarCobroMixto(
+    pagosNoMaq: PagoPayload[],
+    montoMaq: number
+  ) {
+    setPagosPrevios(pagosNoMaq)
+    setMontoMaquinita(montoMaq)
+    setModalCobroAbierto(false)
+    setModalTerminalAbierto(true)
   }
 
   const totalCarrito = carrito.reduce(
@@ -542,6 +569,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         total={totalCarrito}
         procesando={crearVenta.isPending}
         onConfirmar={confirmarVenta}
+        onCobrarConMaquinita={iniciarCobroMixto}
+        hayTerminalActiva={hayTerminalActiva}
       />
 
       <TicketResumen
@@ -588,8 +617,17 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
 
       <ModalCobroTerminal
         abierto={modalTerminalAbierto}
-        onCambioAbierto={setModalTerminalAbierto}
-        total={totalCarrito}
+        onCambioAbierto={(v) => {
+          setModalTerminalAbierto(v)
+          // Si se cierra sin haber registrado la venta, descartamos los
+          // pagos previos para no contaminar el próximo cobro.
+          if (!v && !crearVenta.isPending) {
+            setPagosPrevios([])
+            setMontoMaquinita(0)
+          }
+        }}
+        total={montoMaquinita > 0 ? montoMaquinita : totalCarrito}
+        totalVenta={totalCarrito}
         onAprobado={confirmarVentaTerminal}
         procesandoVenta={crearVenta.isPending}
       />

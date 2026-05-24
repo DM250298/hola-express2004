@@ -41,7 +41,10 @@ import { cn } from '@/lib/utils'
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
+  /** Monto a cobrar por la maquinita. */
   total: number
+  /** Total de la venta completa. Si difiere de `total`, indica cobro parcial. */
+  totalVenta?: number
   /** Llamado cuando el pago en la terminal fue aprobado. */
   onAprobado: (medioPago: string) => void
   /** true si la venta se está registrando luego de la aprobación. */
@@ -61,9 +64,11 @@ export function ModalCobroTerminal({
   abierto,
   onCambioAbierto,
   total,
+  totalVenta,
   onAprobado,
   procesandoVenta,
 }: Props) {
+  const esParcial = totalVenta != null && totalVenta > total + 0.001
   const { data: terminales } = useTerminales()
   const { data: mediosActivos } = useMediosPagoActivos()
 
@@ -225,8 +230,19 @@ export function ModalCobroTerminal({
             </span>
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            El monto se envía a la Point. La venta se registra sola al
-            aprobarse.
+            {esParcial ? (
+              <>
+                Cobro parcial · resto a cobrar por otro medio:{' '}
+                <strong className="text-[#391511]">
+                  <MontoARS monto={(totalVenta ?? 0) - total} />
+                </strong>
+              </>
+            ) : (
+              <>
+                El monto se envía a la Point. La venta se registra sola al
+                aprobarse.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
