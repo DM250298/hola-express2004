@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
+  CalendarClock,
   FileSpreadsheet,
   Package,
   Pencil,
@@ -33,6 +34,7 @@ import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { DrawerProducto } from './DrawerProducto'
 import { ModalImportarProductos } from './ModalImportarProductos'
+import { ModalVencimientoMinimoMasivo } from './ModalVencimientoMinimoMasivo'
 import {
   PaginadorTabla,
   paginarArreglo,
@@ -59,6 +61,7 @@ export function TablaProductos() {
   const [unidadFiltro, setUnidadFiltro] = useState<string>(TODAS)
   const [drawerAbierto, setDrawerAbierto] = useState(false)
   const [modalImportarAbierto, setModalImportarAbierto] = useState(false)
+  const [modalVencMinAbierto, setModalVencMinAbierto] = useState(false)
   const [productoEditar, setProductoEditar] =
     useState<ProductoConRelaciones | null>(null)
   const [pagina, setPagina] = useState(0)
@@ -147,6 +150,15 @@ export function TablaProductos() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setModalVencMinAbierto(true)}
+            className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#fdfaf6] gap-1.5"
+            title="Aplicar vencimiento mínimo masivo por categoría o proveedor"
+          >
+            <CalendarClock className="h-4 w-4" />
+            Vencimiento mín.
+          </Button>
           <Button
             variant="outline"
             onClick={() => setModalImportarAbierto(true)}
@@ -459,6 +471,11 @@ export function TablaProductos() {
       <ModalImportarProductos
         abierto={modalImportarAbierto}
         onCambioAbierto={setModalImportarAbierto}
+      />
+
+      <ModalVencimientoMinimoMasivo
+        abierto={modalVencMinAbierto}
+        onCambioAbierto={setModalVencMinAbierto}
       />
     </div>
   )

@@ -17,6 +17,7 @@ export interface ItemPedidoConProducto extends ItemPedidoRow {
     nombre: string
     codigo_barras: string | null
     stock_actual: number
+    dias_vencimiento_minimo: number | null
   } | null
 }
 
@@ -86,7 +87,7 @@ export async function getPedidoDetalle(
   const { data: items, error: errItems } = await supabase
     .from('items_pedido')
     .select(
-      '*, productos(id, nombre, codigo_barras, stock_actual)'
+      '*, productos(id, nombre, codigo_barras, stock_actual, dias_vencimiento_minimo)'
     )
     .eq('pedido_id', id)
     .order('id', { ascending: true })
@@ -99,6 +100,7 @@ export async function getPedidoDetalle(
       nombre: string
       codigo_barras: string | null
       stock_actual: number
+      dias_vencimiento_minimo: number | null
     } | null
   }
 

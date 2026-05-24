@@ -73,6 +73,17 @@ const esquemaProducto = z.object({
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
     .pipe(z.number().int('Solo enteros').min(0, 'No puede ser negativo')),
+  dias_vencimiento_minimo: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    })
+    .pipe(
+      z.number().int('Solo enteros').min(0, 'No puede ser negativo').nullable()
+    ),
   tipo: z.string().trim().min(1, 'Requerido'),
   unidad: z.string().trim().min(1, 'Requerido'),
   activo: z.boolean(),
@@ -130,6 +141,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       proveedor_id: SIN_VALOR,
       stock_actual: '0',
       stock_minimo: '5',
+      dias_vencimiento_minimo: '',
       tipo: 'simple',
       unidad: 'unidad',
       activo: true,
@@ -151,6 +163,10 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
           : SIN_VALOR,
       stock_actual: String(producto?.stock_actual ?? 0),
       stock_minimo: String(producto?.stock_minimo ?? 5),
+      dias_vencimiento_minimo:
+        producto?.dias_vencimiento_minimo != null
+          ? String(producto.dias_vencimiento_minimo)
+          : '',
       tipo: producto?.tipo ?? 'simple',
       unidad: producto?.unidad ?? 'unidad',
       activo: producto?.activo ?? true,
@@ -231,6 +247,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       costos_adicionales: costosAdicionales,
       stock_actual: validado.stock_actual,
       stock_minimo: validado.stock_minimo,
+      dias_vencimiento_minimo: validado.dias_vencimiento_minimo,
       tipo: validado.tipo,
       unidad: validado.unidad,
       activo: validado.activo,
@@ -660,6 +677,36 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Vencimiento mínimo al recibir */}
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="dias_vencimiento_minimo"
+              className="text-[#391511] font-medium"
+            >
+              Vencimiento mínimo al recibir (días)
+            </Label>
+            <Input
+              id="dias_vencimiento_minimo"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Sin mínimo"
+              {...register('dias_vencimiento_minimo')}
+              disabled={guardando}
+              className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+            />
+            <p className="text-[11px] text-[#c8a58a]">
+              Si lo definís, al recibir el producto se alerta cuando la fecha
+              de vencimiento esté por debajo de este margen. Dejalo en blanco
+              para no validar.
+            </p>
+            {errors.dias_vencimiento_minimo && (
+              <p className="text-[#c43e2c] text-xs">
+                {errors.dias_vencimiento_minimo.message}
+              </p>
+            )}
           </div>
 
           {/* Toggle activo */}

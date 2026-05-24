@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Calendar, Loader2, PackageCheck } from 'lucide-react'
+import { AlertTriangle, Calendar, Loader2, PackageCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,6 +32,7 @@ interface ItemEstado {
   precio_costo: number
   cantidad_recibida: string
   fecha_vencimiento: string
+  dias_vencimiento_minimo: number | null
 }
 
 interface Props {
@@ -47,6 +48,8 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   const [itemsParaEtiquetar, setItemsParaEtiquetar] = useState<ItemParaEtiqueta[]>([])
   const [modalEtiquetasAbierto, setModalEtiquetasAbierto] = useState(false)
 
+  const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
+
   useEffect(() => {
     if (abierto) {
       setItemsEstado(
@@ -59,8 +62,11 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           // Pre-cargar con la cantidad pedida — es lo más común
           cantidad_recibida: String(it.cantidad_pedida),
           fecha_vencimiento: '',
+          dias_vencimiento_minimo:
+            it.producto?.dias_vencimiento_minimo ?? null,
         }))
       )
+      setAceptaPorDebajoMin(false)
     }
   }, [abierto, pedido])
 
@@ -97,6 +103,27 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
       (Number.isNaN(Number(it.cantidad_recibida)) ||
         Number(it.cantidad_recibida) < 0)
   )
+
+  /** Items que tienen fecha de vencimiento por debajo del mínimo configurado. */
+  const itemsPorDebajoMinimo = useMemo(() => {
+    return itemsEstado.flatMap((it) => {
+      const min = it.dias_vencimiento_minimo
+      if (min == null || !it.fecha_vencimiento) return []
+      const cant = Number(it.cantidad_recibida) || 0
+      if (cant <= 0) return []
+      const hoy = new Date()
+      hoy.setHours(0, 0, 0, 0)
+      const venc = new Date(`${it.fecha_vencimiento}T00:00:00`)
+      const dias = Math.floor(
+        (venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)
+      )
+      if (dias >= min) return []
+      return [{ ...it, diasReales: dias, diasMinimo: min }]
+    })
+  }, [itemsEstado])
+
+  const hayPorDebajoMinimo = itemsPorDebajoMinimo.length > 0
+  const requiereAceptacion = hayPorDebajoMinimo && !aceptaPorDebajoMin
 
   function confirmar() {
     if (!usuario || hayErrores) return
@@ -208,10 +235,26 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             {itemsEstado.map((it) => {
               const cantNum = Number(it.cantidad_recibida) || 0
               const diferencia = cantNum - it.cantidad_pedida
+              const min = it.dias_vencimiento_minimo
+              let diasReales: number | null = null
+              let debajoMinimo = false
+              if (min != null && it.fecha_vencimiento && cantNum > 0) {
+                const hoy = new Date()
+                hoy.setHours(0, 0, 0, 0)
+                const venc = new Date(`${it.fecha_vencimiento}T00:00:00`)
+                diasReales = Math.floor(
+                  (venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)
+                )
+                debajoMinimo = diasReales < min
+              }
               return (
                 <li
                   key={it.item_id}
-                  className="bg-white border border-[#e4c9b0]/60 rounded-xl p-3 space-y-2"
+                  className={
+                    debajoMinimo
+                      ? 'bg-white border-2 border-[#c43e2c]/60 rounded-xl p-3 space-y-2'
+                      : 'bg-white border border-[#e4c9b0]/60 rounded-xl p-3 space-y-2'
+                  }
                 >
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div className="min-w-0 flex-1">
@@ -287,9 +330,22 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         disabled={recibir.isPending}
                         className="h-10 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
-                      {it.fecha_vencimiento && (
+                      {it.fecha_vencimiento && !debajoMinimo && (
                         <p className="text-[10px] text-[#6f3a2a]">
                           Se creará un lote con esta fecha.
+                          {min != null &&
+                            diasReales != null &&
+                            ` Vence en ${diasReales} día${
+                              diasReales === 1 ? '' : 's'
+                            } (mín ${min}).`}
+                        </p>
+                      )}
+                      {debajoMinimo && diasReales != null && min != null && (
+                        <p className="text-[11px] text-[#c43e2c] font-semibold flex items-start gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          Vence en {diasReales} día
+                          {diasReales === 1 ? '' : 's'}, por debajo del mínimo
+                          ({min}).
                         </p>
                       )}
                     </div>
@@ -298,6 +354,43 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
               )
             })}
           </ul>
+
+          {/* Cartel global de aceptación si hay items por debajo del mínimo */}
+          {hayPorDebajoMinimo && (
+            <div className="bg-[#c43e2c]/10 border-2 border-[#c43e2c]/40 rounded-xl p-4 space-y-2">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="h-5 w-5 text-[#c43e2c] shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-[#c43e2c] font-bold text-sm">
+                    Mercadería con vencimiento por debajo del mínimo
+                  </p>
+                  <p className="text-[#391511] text-xs mt-1">
+                    {itemsPorDebajoMinimo.length} producto
+                    {itemsPorDebajoMinimo.length === 1 ? '' : 's'} con menos
+                    días de los configurados. Si la aceptás igual, se va a
+                    registrar el lote.
+                  </p>
+                  <ul className="text-[11px] text-[#6f3a2a] mt-2 list-disc pl-4 space-y-0.5">
+                    {itemsPorDebajoMinimo.map((it) => (
+                      <li key={it.item_id}>
+                        <strong>{it.nombre}</strong> · vence en{' '}
+                        {it.diasReales} d (mín {it.diasMinimo})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <label className="flex items-center gap-2 pt-1 text-sm text-[#391511] font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={aceptaPorDebajoMin}
+                  onChange={(e) => setAceptaPorDebajoMin(e.target.checked)}
+                  className="h-4 w-4 accent-[#c43e2c]"
+                />
+                Acepto recibir esta mercadería igual
+              </label>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-3 flex items-center justify-between shrink-0">
@@ -321,7 +414,12 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             </Button>
             <Button
               onClick={confirmar}
-              disabled={recibir.isPending || hayErrores || totalRecibido <= 0}
+              disabled={
+                recibir.isPending ||
+                hayErrores ||
+                totalRecibido <= 0 ||
+                requiereAceptacion
+              }
               className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
             >
               {recibir.isPending ? (

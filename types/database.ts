@@ -456,6 +456,7 @@ export type ProductoRow = {
   iva_venta: number
   margen: number
   costos_adicionales: CostoAdicional[]
+  dias_vencimiento_minimo: number | null
   created_at: string
   updated_at: string
 }
@@ -477,6 +478,7 @@ export type ProductoInsert = {
   iva_venta?: number
   margen?: number
   costos_adicionales?: CostoAdicional[]
+  dias_vencimiento_minimo?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -497,6 +499,7 @@ export type ProductoUpdate = {
   iva_venta?: number
   margen?: number
   costos_adicionales?: CostoAdicional[]
+  dias_vencimiento_minimo?: number | null
   updated_at?: string
 }
 
