@@ -4,25 +4,25 @@ import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 
 const RUTAS_PUBLICAS = ['/login']
 
-/** Permiso → prefijo de ruta que habilita. */
-const PERMISO_RUTA: Record<string, string> = {
-  dashboard: '/',
-  proyectos: '/proyectos',
-  pos: '/pos',
-  ventas: '/ventas',
-  clientes: '/clientes',
-  inventario: '/inventario',
-  vencimientos: '/vencimientos',
-  compras: '/compras',
-  etiquetas: '/etiquetas',
-  pedidos: '/pedidos',
-  recepcion: '/recepcion',
-  finanzas: '/finanzas',
-  contabilidad: '/contabilidad',
-  rrhh: '/rrhh',
-  terminales: '/terminales',
-  reportes: '/reportes',
-  configuracion: '/configuracion',
+/** Permiso → prefijos de ruta que habilita. */
+const PERMISO_RUTA: Record<string, string[]> = {
+  dashboard: ['/'],
+  proyectos: ['/proyectos', '/agenda'],
+  pos: ['/pos'],
+  ventas: ['/ventas'],
+  clientes: ['/clientes'],
+  inventario: ['/inventario'],
+  vencimientos: ['/vencimientos'],
+  compras: ['/compras'],
+  etiquetas: ['/etiquetas'],
+  pedidos: ['/pedidos'],
+  recepcion: ['/recepcion'],
+  finanzas: ['/finanzas'],
+  contabilidad: ['/contabilidad'],
+  rrhh: ['/rrhh'],
+  terminales: ['/terminales'],
+  reportes: ['/reportes'],
+  configuracion: ['/configuracion'],
 }
 
 export async function middleware(request: NextRequest) {
@@ -105,9 +105,9 @@ export async function middleware(request: NextRequest) {
         }
       }
 
-      const rutasPermitidas = permisos
-        .map((p) => PERMISO_RUTA[p])
-        .filter((r): r is string => !!r)
+      const rutasPermitidas = permisos.flatMap(
+        (p) => PERMISO_RUTA[p] ?? []
+      )
 
       const tieneAcceso = rutasPermitidas.some(
         (r) => pathname === r || pathname.startsWith(`${r}/`)
