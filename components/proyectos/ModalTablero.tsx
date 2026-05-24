@@ -38,14 +38,12 @@ export function ModalTablero({ abierto, onCambioAbierto, tablero }: Props) {
   const [nombre, setNombre] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [color, setColor] = useState(COLORES[0])
-  const [imagenUrl, setImagenUrl] = useState('')
 
   useEffect(() => {
     if (abierto) {
       setNombre(tablero?.nombre ?? '')
       setDescripcion(tablero?.descripcion ?? '')
       setColor(tablero?.color ?? COLORES[0])
-      setImagenUrl(tablero?.imagen_url ?? '')
     }
   }, [abierto, tablero])
 
@@ -58,7 +56,6 @@ export function ModalTablero({ abierto, onCambioAbierto, tablero }: Props) {
       nombre: nombre.trim(),
       descripcion: descripcion.trim() || null,
       color,
-      imagen_url: imagenUrl.trim() || null,
     }
     if (editando && tablero) {
       actualizar.mutate(
@@ -107,19 +104,6 @@ export function ModalTablero({ abierto, onCambioAbierto, tablero }: Props) {
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               placeholder="Para qué sirve este tablero…"
-              disabled={procesando}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium text-sm">
-              Portada (URL de imagen, opcional)
-            </Label>
-            <Input
-              value={imagenUrl}
-              onChange={(e) => setImagenUrl(e.target.value)}
-              placeholder="https://…"
               disabled={procesando}
               className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
