@@ -34,7 +34,7 @@ import {
 import { useUsuariosActivos } from '@/lib/hooks/useConteos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { cn } from '@/lib/utils'
-import type { SubtareaRow, TareaRow } from '@/types/database'
+import type { Recurrencia, SubtareaRow, TareaRow } from '@/types/database'
 
 interface Props {
   abierto: boolean
@@ -58,6 +58,14 @@ export const ESTADOS_TAREA: Record<string, string> = {
   hecha: 'Hecha',
 }
 
+export const RECURRENCIAS: Record<Recurrencia, string> = {
+  none: 'No se repite',
+  diaria: 'Todos los días',
+  semanal: 'Cada semana',
+  mensual: 'Cada mes',
+  anual: 'Cada año',
+}
+
 export function ModalTarea({
   abierto,
   onCambioAbierto,
@@ -77,6 +85,7 @@ export function ModalTarea({
   const [estado, setEstado] = useState('pendiente')
   const [responsable, setResponsable] = useState(SIN_RESP)
   const [fechaLimite, setFechaLimite] = useState('')
+  const [recurrencia, setRecurrencia] = useState<Recurrencia>('none')
 
   useEffect(() => {
     if (abierto) {
@@ -86,6 +95,7 @@ export function ModalTarea({
       setEstado(tarea?.estado ?? 'pendiente')
       setResponsable(tarea?.responsable_id ?? SIN_RESP)
       setFechaLimite(tarea?.fecha_limite ?? '')
+      setRecurrencia(tarea?.recurrencia ?? 'none')
     }
   }, [abierto, tarea])
 
@@ -113,6 +123,7 @@ export function ModalTarea({
             estado,
             responsable_id: responsableId,
             fecha_limite: fechaLimite || null,
+            recurrencia,
             completada_at:
               estado === 'hecha'
                 ? (tarea.completada_at ?? new Date().toISOString())
@@ -130,6 +141,7 @@ export function ModalTarea({
           prioridad,
           responsable_id: responsableId,
           fecha_limite: fechaLimite || null,
+          recurrencia,
           creado_por: usuario?.id ?? null,
         },
         { onSuccess: () => onCambioAbierto(false) }
@@ -218,6 +230,28 @@ export function ModalTarea({
                 disabled={procesando}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums bg-white"
               />
+            </MetaCampo>
+
+            <MetaCampo label="Repetir">
+              <Select
+                items={RECURRENCIAS as Record<string, string>}
+                value={recurrencia}
+                onValueChange={(v) =>
+                  setRecurrencia((v as Recurrencia) ?? 'none')
+                }
+                disabled={procesando}
+              >
+                <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(RECURRENCIAS) as Recurrencia[]).map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {RECURRENCIAS[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </MetaCampo>
 
             <MetaCampo label="Prioridad">

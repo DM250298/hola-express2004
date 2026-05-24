@@ -122,3 +122,48 @@ export async function cambiarEstadoTarea(
     completada_at: estado === 'hecha' ? new Date().toISOString() : null,
   })
 }
+
+/**
+ * Marca una tarea como hecha. Si es recurrente, avanza la fecha límite
+ * a la próxima ocurrencia y la deja en estado 'pendiente' (es decir:
+ * la tarea "vuelve a aparecer" para la próxima vez).
+ */
+export async function completarTarea(tarea: TareaRow): Promise<TareaRow> {
+  if (tarea.recurrencia === 'none') {
+    return cambiarEstadoTarea(tarea.id, 'hecha')
+  }
+
+  const base = tarea.fecha_limite
+    ? new Date(`${tarea.fecha_limite}T00:00:00`)
+    : new Date()
+
+  const proxima = avanzarFecha(base, tarea.recurrencia)
+  const fecha = proxima.toISOString().slice(0, 10)
+
+  return updateTarea(tarea.id, {
+    estado: 'pendiente',
+    completada_at: null,
+    fecha_limite: fecha,
+  })
+}
+
+function avanzarFecha(base: Date, recurrencia: string): Date {
+  const d = new Date(base)
+  switch (recurrencia) {
+    case 'diaria':
+      d.setDate(d.getDate() + 1)
+      break
+    case 'semanal':
+      d.setDate(d.getDate() + 7)
+      break
+    case 'mensual':
+      d.setMonth(d.getMonth() + 1)
+      break
+    case 'anual':
+      d.setFullYear(d.getFullYear() + 1)
+      break
+    default:
+      break
+  }
+  return d
+}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   cambiarEstadoTarea,
+  completarTarea,
   createProyecto,
   createTarea,
   deleteProyecto,
@@ -17,6 +18,7 @@ import type {
   ProyectoInsert,
   ProyectoUpdate,
   TareaInsert,
+  TareaRow,
   TareaUpdate,
 } from '@/types/database'
 
@@ -91,6 +93,7 @@ function useTareaMutation<TVars>(
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TAREAS_KEY })
       qc.invalidateQueries({ queryKey: PROYECTOS_KEY })
+      qc.invalidateQueries({ queryKey: ['agenda'] })
       if (okMsg) toast.success(okMsg)
     },
     onError: (e: Error) => toast.error(e.message),
@@ -123,4 +126,12 @@ export function useCambiarEstadoTarea() {
       cambiarEstadoTarea(id, estado),
     ''
   )
+}
+
+/**
+ * Marca una tarea como hecha; si es recurrente, avanza la fecha y la
+ * vuelve a dejar pendiente. Sin toast (es acción rápida).
+ */
+export function useCompletarTarea() {
+  return useTareaMutation((t: TareaRow) => completarTarea(t), '')
 }

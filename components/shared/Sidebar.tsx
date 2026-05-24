@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   FolderKanban,
+  CalendarCheck,
   ShoppingCart,
   ShoppingBag,
   Receipt,
@@ -45,6 +46,12 @@ const SECCIONES: Seccion[] = [
         etiqueta: 'Dashboard',
         icono: LayoutDashboard,
         permiso: 'dashboard',
+      },
+      {
+        href: '/agenda',
+        etiqueta: 'Mi día',
+        icono: CalendarCheck,
+        permiso: 'proyectos',
       },
       {
         href: '/proyectos',

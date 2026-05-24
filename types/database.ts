@@ -283,6 +283,8 @@ export type VistaProyectoRow = ProyectoRow & {
   tareas_hechas: number
 }
 
+export type Recurrencia = 'none' | 'diaria' | 'semanal' | 'mensual' | 'anual'
+
 export type TareaRow = {
   id: number
   proyecto_id: number
@@ -294,6 +296,7 @@ export type TareaRow = {
   fecha_limite: string | null
   creado_por: string | null
   completada_at: string | null
+  recurrencia: Recurrencia
   created_at: string
   updated_at: string
 }
@@ -309,6 +312,7 @@ export type TareaInsert = {
   fecha_limite?: string | null
   creado_por?: string | null
   completada_at?: string | null
+  recurrencia?: Recurrencia
 }
 
 export type TareaUpdate = Partial<Omit<TareaInsert, 'proyecto_id'>> & {
