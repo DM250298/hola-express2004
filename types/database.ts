@@ -241,10 +241,47 @@ export type ReciboSueldoRow = {
   aportes: number
   adelantos: number
   otros_descuentos: number
+  descuento_cta_cte: number
   neto: number
   pagado: boolean
   fecha_pago: string | null
   created_at: string
+}
+
+// ─── cuenta corriente del empleado ───────────────────────────────────────────
+
+export type TipoMovimientoCtaCte =
+  | 'consumo'
+  | 'pago_libre'
+  | 'descuento_sueldo'
+  | 'ajuste'
+
+export type CuentaCorrienteEmpleadoRow = {
+  id: number
+  empleado_id: number
+  fecha: string
+  tipo: TipoMovimientoCtaCte
+  concepto: string | null
+  /** Monto con signo: positivo aumenta deuda, negativo la cancela. */
+  monto: number
+  recibo_id: number | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type CuentaCorrienteEmpleadoInsert = {
+  id?: number
+  empleado_id: number
+  fecha?: string
+  tipo: TipoMovimientoCtaCte
+  concepto?: string | null
+  monto: number
+  recibo_id?: number | null
+  usuario_id?: string | null
+}
+
+export type EmpleadoConSaldo = EmpleadoRow & {
+  saldo_cta_cte: number
 }
 
 // ─── proyectos y tareas (FASE 5) ─────────────────────────────────────────────
@@ -1397,6 +1434,12 @@ export interface Database {
         Update: Partial<ReciboSueldoRow>
         Relationships: []
       }
+      cuenta_corriente_empleado: {
+        Row: CuentaCorrienteEmpleadoRow
+        Insert: CuentaCorrienteEmpleadoInsert
+        Update: Partial<CuentaCorrienteEmpleadoRow>
+        Relationships: []
+      }
       proyectos: {
         Row: ProyectoRow
         Insert: ProyectoInsert
@@ -1678,6 +1721,10 @@ export interface Database {
       }
       vista_tareas: {
         Row: VistaTareaRow
+        Relationships: []
+      }
+      vista_empleados_saldo: {
+        Row: EmpleadoConSaldo
         Relationships: []
       }
     }

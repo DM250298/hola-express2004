@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabEmpleados } from './TabEmpleados'
 import { TabNovedades } from './TabNovedades'
 import { TabLiquidaciones } from './TabLiquidaciones'
+import { TabCtaCteEmpleados } from './TabCtaCteEmpleados'
 
 export function PantallaRrhh() {
   return (
@@ -32,6 +33,12 @@ export function PantallaRrhh() {
             Novedades
           </TabsTrigger>
           <TabsTrigger
+            value="cta_cte"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
+          >
+            Cta. corriente
+          </TabsTrigger>
+          <TabsTrigger
             value="liquidaciones"
             className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
           >
@@ -44,6 +51,9 @@ export function PantallaRrhh() {
         </TabsContent>
         <TabsContent value="novedades">
           <TabNovedades />
+        </TabsContent>
+        <TabsContent value="cta_cte">
+          <TabCtaCteEmpleados />
         </TabsContent>
         <TabsContent value="liquidaciones">
           <TabLiquidaciones />

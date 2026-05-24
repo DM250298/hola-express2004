@@ -204,9 +204,20 @@ export function ModalDetalleLiquidacion({
                             <MontoARS monto={r.aportes} />
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-[#c43e2c]">
-                            <MontoARS
-                              monto={r.adelantos + r.otros_descuentos}
-                            />
+                            <div>
+                              <MontoARS
+                                monto={
+                                  r.adelantos +
+                                  r.otros_descuentos +
+                                  (r.descuento_cta_cte ?? 0)
+                                }
+                              />
+                            </div>
+                            {(r.descuento_cta_cte ?? 0) > 0 && (
+                              <div className="text-[10px] text-[#6f3a2a] font-normal mt-0.5">
+                                Cta. cte. <MontoARS monto={r.descuento_cta_cte} />
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums font-bold text-[#391511]">
                             <MontoARS monto={r.neto} />
