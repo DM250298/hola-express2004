@@ -148,55 +148,86 @@ export function ModalTarea({
       open={abierto}
       onOpenChange={(v) => !procesando && onCambioAbierto(v)}
     >
-      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
-        <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
-          <DialogTitle className="text-[#391511] text-lg">
+      <DialogContent className="sm:max-w-3xl p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
+          <DialogTitle className="text-[#391511] text-base font-semibold">
             {editando ? 'Editar tarea' : 'Nueva tarea'}
           </DialogTitle>
-          <DialogDescription className="text-[#6f3a2a]">
-            Asigná responsable, prioridad y fecha límite.
+          <DialogDescription className="sr-only">
+            Detalles de la tarea
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium text-sm">
-              Título
-            </Label>
+        <div className="grid grid-cols-1 sm:grid-cols-[1fr_240px] max-h-[70vh]">
+          {/* ─── Columna izquierda: contenido ─── */}
+          <div className="px-6 py-5 space-y-4 overflow-y-auto border-r border-[#e4c9b0]/60">
             <Input
               value={titulo}
               onChange={(e) => setTitulo(e.target.value)}
-              placeholder="Ej: Pintar la entrada"
+              placeholder="Nombre de la tarea"
               disabled={procesando}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+              className="border-0 px-0 text-lg font-semibold text-[#391511] placeholder:text-[#c8a58a] focus-visible:ring-0 shadow-none h-auto"
             />
-          </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium text-sm">
-              Descripción (opcional)
-            </Label>
             <Input
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
-              placeholder="Detalle…"
+              placeholder="Descripción…"
               disabled={procesando}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+              className="border-0 px-0 text-sm text-[#6f3a2a] placeholder:text-[#c8a58a] focus-visible:ring-0 shadow-none h-auto"
             />
+
+            {editando && tarea && (
+              <SeccionSubtareas tareaId={tarea.id} usuarios={usuarios ?? []} />
+            )}
+            {!editando && (
+              <p className="text-[11px] text-[#c8a58a] pt-2">
+                Las subtareas se agregan después de crear la tarea.
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-[#391511] font-medium text-sm">
-                Prioridad
-              </Label>
+          {/* ─── Columna derecha: metadata ─── */}
+          <aside className="px-5 py-5 space-y-4 bg-[#fdfaf6] overflow-y-auto">
+            <MetaCampo label="Responsable">
+              <Select
+                items={itemsResponsable}
+                value={responsable}
+                onValueChange={(v) => setResponsable(v ?? SIN_RESP)}
+                disabled={procesando}
+              >
+                <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_RESP}>Sin asignar</SelectItem>
+                  {(usuarios ?? []).map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </MetaCampo>
+
+            <MetaCampo label="Fecha límite">
+              <Input
+                type="date"
+                value={fechaLimite}
+                onChange={(e) => setFechaLimite(e.target.value)}
+                disabled={procesando}
+                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums bg-white"
+              />
+            </MetaCampo>
+
+            <MetaCampo label="Prioridad">
               <Select
                 items={PRIORIDADES}
                 value={prioridad}
                 onValueChange={(v) => setPrioridad(v ?? 'media')}
                 disabled={procesando}
               >
-                <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
+                <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -207,19 +238,17 @@ export function ModalTarea({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </MetaCampo>
+
             {editando && (
-              <div className="space-y-1.5">
-                <Label className="text-[#391511] font-medium text-sm">
-                  Estado
-                </Label>
+              <MetaCampo label="Estado">
                 <Select
                   items={ESTADOS_TAREA}
                   value={estado}
                   onValueChange={(v) => setEstado(v ?? 'pendiente')}
                   disabled={procesando}
                 >
-                  <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
+                  <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -230,55 +259,9 @@ export function ModalTarea({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </MetaCampo>
             )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium text-sm">
-              Responsable
-            </Label>
-            <Select
-              items={itemsResponsable}
-              value={responsable}
-              onValueChange={(v) => setResponsable(v ?? SIN_RESP)}
-              disabled={procesando}
-            >
-              <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SIN_RESP}>Sin asignar</SelectItem>
-                {(usuarios ?? []).map((u) => (
-                  <SelectItem key={u.id} value={u.id}>
-                    {u.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium text-sm">
-              Fecha límite (opcional)
-            </Label>
-            <Input
-              type="date"
-              value={fechaLimite}
-              onChange={(e) => setFechaLimite(e.target.value)}
-              disabled={procesando}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
-            />
-          </div>
-
-          {editando && tarea && (
-            <SeccionSubtareas tareaId={tarea.id} usuarios={usuarios ?? []} />
-          )}
-          {!editando && (
-            <p className="text-[11px] text-[#c8a58a]">
-              Las subtareas se pueden agregar después de crear la tarea.
-            </p>
-          )}
+          </aside>
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
@@ -323,6 +306,25 @@ export function ModalTarea({
   )
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function MetaCampo({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6f3a2a]">
+        {label}
+      </p>
+      {children}
+    </div>
+  )
+}
+
 // ─── Subtareas (checklist con responsable por subtarea) ──────────────────────
 
 const SIN_RESP_SUB = '__sin__'
@@ -336,80 +338,100 @@ function SeccionSubtareas({ tareaId, usuarios }: SeccionSubtareasProps) {
   const { data: subtareas, isLoading } = useSubtareas(tareaId)
   const crear = useCreateSubtarea()
   const [nuevoTitulo, setNuevoTitulo] = useState('')
+  const [agregando, setAgregando] = useState(false)
 
   const total = subtareas?.length ?? 0
   const hechas = (subtareas ?? []).filter((s) => s.hecha).length
-  const progreso = total > 0 ? Math.round((hechas / total) * 100) : 0
 
   function agregar() {
     const t = nuevoTitulo.trim()
     if (!t) return
     crear.mutate(
+      { tarea_id: tareaId, titulo: t, orden: total },
       {
-        tarea_id: tareaId,
-        titulo: t,
-        orden: total,
-      },
-      { onSuccess: () => setNuevoTitulo('') }
+        onSuccess: () => {
+          setNuevoTitulo('')
+        },
+      }
     )
   }
 
   return (
-    <div className="space-y-2 pt-2 border-t border-[#e4c9b0]/60">
-      <div className="flex items-center justify-between">
-        <Label className="text-[#391511] font-medium text-sm">Subtareas</Label>
+    <div className="space-y-1 pt-3 border-t border-[#e4c9b0]/40">
+      <div className="flex items-center gap-2 px-1 py-1">
+        <span className="text-[#391511] font-semibold text-sm">Subtareas</span>
         {total > 0 && (
-          <span className="text-[11px] text-[#6f3a2a] tabular-nums">
-            {hechas} / {total} · {progreso}%
+          <span className="text-[11px] text-[#c8a58a] tabular-nums">
+            {hechas}/{total}
           </span>
         )}
       </div>
 
-      {total > 0 && (
-        <div className="h-1 rounded-full bg-[#f9d2a2]/40 overflow-hidden">
-          <div
-            className="h-full bg-[#f9b44c]"
-            style={{ width: `${progreso}%` }}
-          />
-        </div>
-      )}
-
       {isLoading ? (
-        <p className="text-[#c8a58a] text-xs">Cargando…</p>
+        <p className="text-[#c8a58a] text-xs px-1">Cargando…</p>
       ) : (
-        <ul className="space-y-1.5">
+        <ul className="divide-y divide-[#e4c9b0]/40">
           {(subtareas ?? []).map((s) => (
             <FilaSubtarea key={s.id} subtarea={s} usuarios={usuarios} />
           ))}
         </ul>
       )}
 
-      <div className="flex gap-1.5">
-        <Input
-          value={nuevoTitulo}
-          onChange={(e) => setNuevoTitulo(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              agregar()
-            }
-          }}
-          placeholder="Nueva subtarea…"
-          className="h-8 border-[#e4c9b0] focus-visible:ring-[#f9b44c] text-sm"
-        />
-        <Button
-          size="sm"
-          onClick={agregar}
-          disabled={!nuevoTitulo.trim() || crear.isPending}
-          className="h-8 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+      {agregando ? (
+        <div className="flex items-center gap-2 pl-1 pr-1 py-1">
+          <span className="h-4 w-4 rounded-full border-2 border-[#c8a58a] shrink-0" />
+          <Input
+            autoFocus
+            value={nuevoTitulo}
+            onChange={(e) => setNuevoTitulo(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                agregar()
+              }
+              if (e.key === 'Escape') {
+                setNuevoTitulo('')
+                setAgregando(false)
+              }
+            }}
+            placeholder="Nueva subtarea…"
+            className="h-7 flex-1 text-sm border-0 shadow-none focus-visible:ring-0 px-0"
+          />
+          <Button
+            size="sm"
+            onClick={agregar}
+            disabled={!nuevoTitulo.trim() || crear.isPending}
+            className="h-7 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold text-xs"
+          >
+            {crear.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              'Añadir'
+            )}
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => {
+              setNuevoTitulo('')
+              setAgregando(false)
+            }}
+            className="h-7 w-7 text-[#6f3a2a]"
+            aria-label="Cancelar"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAgregando(true)}
+          className="flex items-center gap-2 text-[#c43e2c] hover:text-[#9e2f25] text-sm font-medium px-1 py-1.5 transition-colors"
         >
-          {crear.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Plus className="h-3.5 w-3.5" />
-          )}
-        </Button>
-      </div>
+          <Plus className="h-4 w-4" />
+          Añadir subtarea
+        </button>
+      )}
     </div>
   )
 }
@@ -428,6 +450,13 @@ function FilaSubtarea({
   const [editando, setEditando] = useState(false)
   const [titulo, setTitulo] = useState(subtarea.titulo)
 
+  // Items para el Select de responsable (sin esto el SelectValue muestra el UUID crudo).
+  const itemsResp: Record<string, string> = useMemo(() => {
+    const base: Record<string, string> = { [SIN_RESP_SUB]: 'Sin asignar' }
+    for (const u of usuarios) base[u.id] = u.nombre
+    return base
+  }, [usuarios])
+
   function guardarTitulo() {
     const t = titulo.trim()
     if (!t || t === subtarea.titulo) {
@@ -442,15 +471,37 @@ function FilaSubtarea({
   }
 
   return (
-    <li className="flex items-center gap-2 bg-[#fdfaf6] border border-[#e4c9b0]/60 rounded-lg px-2 py-1.5">
-      <input
-        type="checkbox"
-        checked={subtarea.hecha}
-        onChange={(e) =>
-          marcar.mutate({ id: subtarea.id, hecha: e.target.checked })
+    <li className="group flex items-center gap-2 px-1 py-1.5 hover:bg-[#fdfaf6] rounded">
+      <button
+        type="button"
+        onClick={() =>
+          marcar.mutate({ id: subtarea.id, hecha: !subtarea.hecha })
         }
-        className="h-4 w-4 accent-[#f9b44c]"
-      />
+        className={cn(
+          'h-4 w-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-colors',
+          subtarea.hecha
+            ? 'bg-[#f9b44c] border-[#f9b44c]'
+            : 'border-[#c8a58a] hover:border-[#f9b44c]'
+        )}
+        aria-label={subtarea.hecha ? 'Desmarcar' : 'Marcar como hecha'}
+      >
+        {subtarea.hecha && (
+          <svg
+            className="h-2.5 w-2.5 text-white"
+            viewBox="0 0 12 12"
+            fill="none"
+          >
+            <path
+              d="M2 6l3 3 5-6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
+      </button>
+
       {editando ? (
         <Input
           autoFocus
@@ -464,7 +515,7 @@ function FilaSubtarea({
               setEditando(false)
             }
           }}
-          className="h-7 flex-1 text-sm border-[#f9b44c] focus-visible:ring-[#f9b44c] px-2 py-0.5"
+          className="h-7 flex-1 text-sm border-0 shadow-none focus-visible:ring-0 px-0"
         />
       ) : (
         <button
@@ -482,18 +533,20 @@ function FilaSubtarea({
       )}
 
       <Select
+        items={itemsResp}
         value={subtarea.responsable_id ?? SIN_RESP_SUB}
         onValueChange={(v) =>
           actualizar.mutate({
             id: subtarea.id,
             datos: {
-              responsable_id: v === SIN_RESP_SUB ? null : (v ?? null),
+              responsable_id:
+                !v || v === SIN_RESP_SUB ? null : v,
             },
           })
         }
       >
-        <SelectTrigger className="h-7 w-32 border-[#e4c9b0] text-xs">
-          <SelectValue placeholder="—" />
+        <SelectTrigger className="h-7 w-32 border-[#e4c9b0] text-xs bg-white">
+          <SelectValue placeholder="Sin asignar" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={SIN_RESP_SUB}>Sin asignar</SelectItem>
@@ -509,7 +562,7 @@ function FilaSubtarea({
         size="icon"
         variant="ghost"
         onClick={() => eliminar.mutate(subtarea.id)}
-        className="h-6 w-6 text-[#c43e2c] hover:bg-[#c43e2c]/10"
+        className="h-6 w-6 text-[#c43e2c] hover:bg-[#c43e2c]/10 opacity-0 group-hover:opacity-100 transition-opacity"
         aria-label="Eliminar subtarea"
       >
         <X className="h-3.5 w-3.5" />
