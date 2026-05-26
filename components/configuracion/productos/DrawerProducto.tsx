@@ -73,6 +73,7 @@ const esquemaProducto = z.object({
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
     .pipe(z.number().int('Solo enteros').min(0, 'No puede ser negativo')),
+  venta_por_peso: z.boolean().default(false),
   dias_vencimiento_minimo: z
     .union([z.string(), z.number(), z.null()])
     .optional()
@@ -145,6 +146,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       tipo: 'simple',
       unidad: 'unidad',
       activo: true,
+      venta_por_peso: false,
     },
   })
 
@@ -170,6 +172,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       tipo: producto?.tipo ?? 'simple',
       unidad: producto?.unidad ?? 'unidad',
       activo: producto?.activo ?? true,
+      venta_por_peso: producto?.venta_por_peso ?? false,
     })
 
     // Bloque de costo / precio
@@ -251,6 +254,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       tipo: validado.tipo,
       unidad: validado.unidad,
       activo: validado.activo,
+      venta_por_peso: validado.venta_por_peso,
     }
 
     try {
@@ -707,6 +711,31 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
                 {errors.dias_vencimiento_minimo.message}
               </p>
             )}
+          </div>
+
+          {/* Toggle venta por peso */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
+            <div>
+              <Label htmlFor="venta_por_peso" className="text-[#391511] font-medium cursor-pointer">
+                Venta por kg
+              </Label>
+              <p className="text-[#6f3a2a] text-xs mt-0.5">
+                En el POS se ingresa el peso en lugar de la cantidad. El precio es por kg.
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="venta_por_peso"
+              render={({ field }) => (
+                <Switch
+                  id="venta_por_peso"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={guardando}
+                  className="data-[state=checked]:bg-[#f9b44c]"
+                />
+              )}
+            />
           </div>
 
           {/* Toggle activo */}

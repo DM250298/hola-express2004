@@ -213,6 +213,9 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
                         <div className="text-right shrink-0 flex items-center gap-2">
                           <div className="font-bold text-[#391511] tabular-nums">
                             <MontoARS monto={p.precio_venta} />
+                            {p.venta_por_peso && (
+                              <span className="text-[10px] text-[#6f3a2a] font-normal ml-0.5">/kg</span>
+                            )}
                           </div>
                           {seleccionado && !sinStock && (
                             <span className="text-[10px] font-bold uppercase tracking-wide text-[#6f3a2a] bg-[#f9b44c] px-1.5 py-0.5 rounded">

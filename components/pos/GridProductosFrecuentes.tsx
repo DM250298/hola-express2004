@@ -25,6 +25,7 @@ function datosProducto(p: ProductoGrid) {
     nombre: p.nombre,
     precio: p.precio_venta,
     stock: p.stock_actual,
+    venta_por_peso: ('venta_por_peso' in p ? p.venta_por_peso : false) ?? false,
   }
 }
 
@@ -98,9 +99,12 @@ export function GridProductosFrecuentes({ turnoId, onSeleccionar }: Props) {
                 <div>
                   <div className="text-[#391511] font-bold text-sm tabular-nums">
                     <MontoARS monto={d.precio} />
+                    {d.venta_por_peso && (
+                      <span className="text-[10px] text-[#6f3a2a] font-normal">/kg</span>
+                    )}
                   </div>
                   <div className="text-[10px] text-[#c8a58a] mt-0.5">
-                    Stock: {d.stock}
+                    {d.venta_por_peso ? `${d.stock} kg disp.` : `Stock: ${d.stock}`}
                   </div>
                 </div>
               </button>

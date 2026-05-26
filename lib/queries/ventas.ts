@@ -203,6 +203,7 @@ export interface ProductoFrecuente {
   precio_venta: number
   stock_actual: number
   cantidad_vendida: number
+  venta_por_peso: boolean
 }
 
 /**
@@ -223,7 +224,7 @@ export async function getProductosFrecuentesTurno(
     .select(
       `cantidad,
        ventas!inner(turno_id, estado),
-       productos!inner(id, nombre, codigo_barras, precio_venta, stock_actual, activo)`
+       productos!inner(id, nombre, codigo_barras, precio_venta, stock_actual, activo, venta_por_peso)`
     )
     .eq('ventas.turno_id', turnoId)
     .eq('ventas.estado', 'completada')
@@ -243,6 +244,7 @@ export async function getProductosFrecuentesTurno(
       codigo_barras: string | null
       precio_venta: number
       stock_actual: number
+      venta_por_peso: boolean
     }
   }
 
@@ -261,6 +263,7 @@ export async function getProductosFrecuentesTurno(
         codigo_barras: p.codigo_barras,
         precio_venta: p.precio_venta,
         stock_actual: p.stock_actual,
+        venta_por_peso: p.venta_por_peso,
         cantidad_vendida: fila.cantidad,
       })
     }

@@ -34,6 +34,7 @@ import { OverlayAtajos } from './OverlayAtajos'
 import { IndicadorConexion } from './IndicadorConexion'
 import { SelectorCliente, type ClienteSeleccionado } from './SelectorCliente'
 import { ModalCobroTerminal } from './ModalCobroTerminal'
+import { ModalIngresoPeso } from './ModalIngresoPeso'
 import { useTerminales } from '@/lib/hooks/useTerminales'
 import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -92,6 +93,15 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
   const [modalTerminalAbierto, setModalTerminalAbierto] = useState(false)
+  /** Producto por peso pendiente de ingreso de gramos. */
+  const [productoPeso, setProductoPeso] = useState<{
+    producto_id: number
+    nombre: string
+    codigo_barras: string | null
+    precio_venta: number
+    stock_actual: number
+    pesoActualKg?: number
+  } | null>(null)
   /** Cuando el cobro es mixto (maquinita + otros), guardamos los pagos no-
    *  maquinita acá y el monto a cobrar por la terminal. Al aprobarse, se
    *  registra la venta con todos los pagos combinados. */
@@ -173,7 +183,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     ticketAbierto ||
     overlayAtajosAbierto ||
     selectorClienteAbierto ||
-    modalTerminalAbierto
+    modalTerminalAbierto ||
+    !!productoPeso
 
   const shortcutsPantalla = useMemo(
     () => [
@@ -281,6 +292,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             codigo_barras: p.codigo_barras,
             precio_venta: p.precio_venta,
             stock_actual: p.stock_actual,
+            venta_por_peso: p.venta_por_peso ?? false,
           }
         : {
             producto_id: p.producto_id,
@@ -288,8 +300,33 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             codigo_barras: p.codigo_barras,
             precio_venta: p.precio_venta,
             stock_actual: p.stock_actual,
+            venta_por_peso: p.venta_por_peso ?? false,
           }
+
+    if (datos.venta_por_peso) {
+      // Abrir modal para ingresar el peso
+      const pesoActual = carrito.find(
+        (it) => it.producto_id === datos.producto_id
+      )?.cantidad
+      setProductoPeso({ ...datos, pesoActualKg: pesoActual })
+      return
+    }
+
     dispatchCarrito({ tipo: 'AGREGAR_PRODUCTO', producto: datos })
+  }
+
+  /** Llamado desde el carrito para re-editar el peso de un ítem por kg. */
+  function editarPesoCarrito(productoId: number) {
+    const it = carrito.find((i) => i.producto_id === productoId)
+    if (!it) return
+    setProductoPeso({
+      producto_id: it.producto_id,
+      nombre: it.nombre,
+      codigo_barras: it.codigo_barras,
+      precio_venta: it.precio_unitario,
+      stock_actual: it.stock_disponible,
+      pesoActualKg: it.cantidad,
+    })
   }
 
   function confirmarVenta(pagos: PagoPayload[], vueltoEfectivo: number) {
@@ -558,6 +595,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             onQuitarCliente={() => elegirCliente(null)}
             onCobrarTerminal={() => setModalTerminalAbierto(true)}
             hayTerminalActiva={hayTerminalActiva}
+            onEditarPeso={editarPesoCarrito}
           />
         </div>
       </div>
@@ -631,6 +669,32 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         onAprobado={confirmarVentaTerminal}
         procesandoVenta={crearVenta.isPending}
       />
+
+      {/* Modal ingreso de peso para productos por kg */}
+      {productoPeso && (
+        <ModalIngresoPeso
+          abierto={!!productoPeso}
+          onCambioAbierto={(v) => !v && setProductoPeso(null)}
+          nombre={productoPeso.nombre}
+          precioPorKg={productoPeso.precio_venta}
+          pesoActualKg={productoPeso.pesoActualKg}
+          onConfirmar={(kg) => {
+            dispatchCarrito({
+              tipo: 'AGREGAR_PRODUCTO',
+              producto: {
+                producto_id: productoPeso.producto_id,
+                nombre: productoPeso.nombre,
+                codigo_barras: productoPeso.codigo_barras,
+                precio_venta: productoPeso.precio_venta,
+                stock_actual: productoPeso.stock_actual,
+                venta_por_peso: true,
+                cantidad_kg: kg,
+              },
+            })
+            setProductoPeso(null)
+          }}
+        />
+      )}
 
       {/* Overlay global mientras procesa venta — bloquea taps repetidos */}
       {crearVenta.isPending && !modalCobroAbierto && (

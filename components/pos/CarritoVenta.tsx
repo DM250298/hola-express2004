@@ -1,11 +1,12 @@
 'use client'
 
-import { Minus, Plus, ShoppingCart, Trash2, User, Wifi, X } from 'lucide-react'
+import { Minus, Plus, Scale, ShoppingCart, Trash2, User, Wifi, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
 import {
   calcularTotal,
   contarUnidades,
+  formatearCantidadItem,
   type AccionCarrito,
   type ItemCarrito,
 } from './carrito'
@@ -23,6 +24,8 @@ interface Props {
   onCobrarTerminal?: () => void
   /** ¿Hay alguna terminal Point activa configurada en el sistema? */
   hayTerminalActiva?: boolean
+  /** Abre el modal de peso para re-editar un ítem por kg. */
+  onEditarPeso?: (productoId: number) => void
 }
 
 export function CarritoVenta({
@@ -34,6 +37,7 @@ export function CarritoVenta({
   onQuitarCliente,
   onCobrarTerminal,
   hayTerminalActiva = false,
+  onEditarPeso,
 }: Props) {
   const total = calcularTotal(items)
   const unidades = contarUnidades(items)
@@ -120,12 +124,17 @@ export function CarritoVenta({
               <li key={it.producto_id} className="px-3 py-3">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-[#391511] text-sm leading-tight">
+                    <div className="font-medium text-[#391511] text-sm leading-tight flex items-center gap-1.5">
                       {it.nombre}
+                      {it.venta_por_peso && (
+                        <Scale className="h-3 w-3 text-[#c8a58a] shrink-0" />
+                      )}
                     </div>
                     <div className="text-xs text-[#6f3a2a] mt-0.5 tabular-nums">
                       <MontoARS monto={it.precio_unitario} />
-                      <span className="text-[#c8a58a]"> c/u</span>
+                      <span className="text-[#c8a58a]">
+                        {it.venta_por_peso ? ' / kg' : ' c/u'}
+                      </span>
                     </div>
                   </div>
                   <Button
@@ -142,47 +151,65 @@ export function CarritoVenta({
                 </div>
 
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() =>
-                        dispatch({
-                          tipo: 'CAMBIAR_CANTIDAD',
-                          producto_id: it.producto_id,
-                          cantidad: it.cantidad - 1,
-                        })
-                      }
-                      className="h-9 w-9 border-[#e4c9b0] hover:bg-[#f9d2a2]/40"
-                      aria-label="Restar"
+                  {it.venta_por_peso ? (
+                    /* ── Producto por peso: mostrar gramos + botón editar ── */
+                    <button
+                      type="button"
+                      onClick={() => onEditarPeso?.(it.producto_id)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[#e4c9b0] bg-[#fdfaf6] hover:bg-[#f9d2a2]/40 transition-colors"
                     >
-                      <Minus className="h-3.5 w-3.5" />
-                    </Button>
-                    <span className="w-10 text-center font-bold text-[#391511] tabular-nums">
-                      {it.cantidad}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() =>
-                        dispatch({
-                          tipo: 'CAMBIAR_CANTIDAD',
-                          producto_id: it.producto_id,
-                          cantidad: it.cantidad + 1,
-                        })
-                      }
-                      disabled={it.cantidad >= it.stock_disponible}
-                      className="h-9 w-9 border-[#e4c9b0] hover:bg-[#f9d2a2]/40 disabled:opacity-40"
-                      aria-label="Sumar"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                      <Scale className="h-3.5 w-3.5 text-[#6f3a2a]" />
+                      <span className="font-bold text-[#391511] tabular-nums text-sm">
+                        {formatearCantidadItem(it)}
+                      </span>
+                      <span className="text-[10px] text-[#6f3a2a] uppercase tracking-wide">
+                        editar
+                      </span>
+                    </button>
+                  ) : (
+                    /* ── Producto por unidad: controles +/- ── */
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          dispatch({
+                            tipo: 'CAMBIAR_CANTIDAD',
+                            producto_id: it.producto_id,
+                            cantidad: it.cantidad - 1,
+                          })
+                        }
+                        className="h-9 w-9 border-[#e4c9b0] hover:bg-[#f9d2a2]/40"
+                        aria-label="Restar"
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </Button>
+                      <span className="w-10 text-center font-bold text-[#391511] tabular-nums">
+                        {it.cantidad}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() =>
+                          dispatch({
+                            tipo: 'CAMBIAR_CANTIDAD',
+                            producto_id: it.producto_id,
+                            cantidad: it.cantidad + 1,
+                          })
+                        }
+                        disabled={it.cantidad >= it.stock_disponible}
+                        className="h-9 w-9 border-[#e4c9b0] hover:bg-[#f9d2a2]/40 disabled:opacity-40"
+                        aria-label="Sumar"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
                   <div className="font-bold text-[#391511] tabular-nums">
                     <MontoARS monto={it.precio_unitario * it.cantidad} />
                   </div>
                 </div>
-                {it.cantidad >= it.stock_disponible && (
+                {!it.venta_por_peso && it.cantidad >= it.stock_disponible && (
                   <p className="text-[10px] text-[#c43e2c] mt-1">
                     Stock máximo alcanzado ({it.stock_disponible})
                   </p>

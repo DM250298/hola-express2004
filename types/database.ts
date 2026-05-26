@@ -494,6 +494,7 @@ export type ProductoRow = {
   margen: number
   costos_adicionales: CostoAdicional[]
   dias_vencimiento_minimo: number | null
+  venta_por_peso: boolean
   created_at: string
   updated_at: string
 }
@@ -516,6 +517,7 @@ export type ProductoInsert = {
   margen?: number
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
+  venta_por_peso?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -537,6 +539,7 @@ export type ProductoUpdate = {
   margen?: number
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
+  venta_por_peso?: boolean
   updated_at?: string
 }
 

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ComprobanteCierre, type DatosComprobanteCierre } from './ComprobanteCierre'
+import { ContadorBilletes } from './ContadorBilletes'
 import { useCerrarTurno } from '@/lib/hooks/useTurno'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { createClient } from '@/lib/supabase/client'
@@ -154,6 +155,18 @@ export function CierreCaja({
   const { data: medios } = useMediosPago()
   const [montoCierre, setMontoCierre] = useState('')
   const [novedades, setNovedades] = useState('')
+  const [mostrarContador, setMostrarContador] = useState(false)
+  const [cantidadesBilletes, setCantidadesBilletes] = useState<Record<number, number>>({})
+
+  // Calcula el total del contador y actualiza el campo de monto automáticamente
+  function handleCantidadesBilletes(nuevas: Record<number, number>) {
+    setCantidadesBilletes(nuevas)
+    const total = Object.entries(nuevas).reduce(
+      (acc, [denom, cant]) => acc + Number(denom) * (cant || 0),
+      0
+    )
+    if (total > 0) setMontoCierre(String(total))
+  }
   // Datos del comprobante una vez cerrado el turno
   const [comprobante, setComprobante] = useState<DatosComprobanteCierre | null>(
     null
@@ -171,6 +184,8 @@ export function CierreCaja({
       setMontoCierre('')
       setNovedades('')
       setComprobante(null)
+      setMostrarContador(false)
+      setCantidadesBilletes({})
     }
   }, [abierto])
 
@@ -396,6 +411,32 @@ export function CierreCaja({
                   }
                   destacado
                 />
+              </div>
+
+              {/* Contador de billetes (opcional) */}
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarContador((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-[#e4c9b0]/60 bg-white text-sm font-medium text-[#391511] hover:bg-[#f9d2a2]/30 transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    🪙 Contar billetes
+                    <span className="text-[11px] text-[#c8a58a] font-normal">
+                      — calcula el total automáticamente
+                    </span>
+                  </span>
+                  <span className="text-[#6f3a2a] text-xs">
+                    {mostrarContador ? '▲ ocultar' : '▼ mostrar'}
+                  </span>
+                </button>
+
+                {mostrarContador && (
+                  <ContadorBilletes
+                    cantidades={cantidadesBilletes}
+                    onChange={handleCantidadesBilletes}
+                  />
+                )}
               </div>
 
               <div className="space-y-1.5">
