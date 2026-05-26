@@ -179,7 +179,7 @@ export function ModalProbarCobro({
                   />
                 </div>
                 <p className="text-[11px] text-[#c8a58a]">
-                  Usá un monto chico para probar. Se envía a la maquinita real
+                  Usá un monto chico para probar. Se envía al posnet real
                   y se cobra de verdad si pagás con tarjeta.
                 </p>
               </div>
@@ -205,7 +205,7 @@ export function ModalProbarCobro({
                 <p className="text-xs text-[#6f3a2a] mt-1">
                   {enviar.isPending
                     ? 'Un momento…'
-                    : 'Mirá la maquinita: tiene que mostrar el monto y pedir la tarjeta.'}
+                    : 'Mirá el posnet: tiene que mostrar el monto y pedir la tarjeta.'}
                 </p>
               </div>
               <div className="text-2xl font-extrabold text-[#391511] tabular-nums">

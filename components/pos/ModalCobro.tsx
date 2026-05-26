@@ -77,7 +77,7 @@ export function ModalCobro({
     if (hayTerminalActiva && onCobrarConMaquinita) {
       base.push({
         valor: MEDIO_MAQUINITA,
-        etiqueta: 'Maquinita',
+        etiqueta: 'Posnet',
         Icono: Wifi,
         tecla: null,
         comision: 0,

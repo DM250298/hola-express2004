@@ -224,7 +224,7 @@ export function ModalCobroTerminal({
       <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
           <DialogTitle className="text-[#391511] text-lg flex items-center justify-between">
-            <span>Cobrar con maquinita</span>
+            <span>Cobrar con posnet</span>
             <span className="text-2xl font-extrabold tabular-nums">
               <MontoARS monto={total} />
             </span>
@@ -319,7 +319,7 @@ export function ModalCobroTerminal({
                   </Select>
                   <p className="text-[11px] text-[#c8a58a]">
                     Con qué medio se registra la venta en el sistema. El
-                    cobro se hace siempre a través de la maquinita.
+                    cobro se hace siempre a través del posnet.
                   </p>
                 </div>
 
@@ -344,7 +344,7 @@ export function ModalCobroTerminal({
                 <p className="text-xs text-[#6f3a2a] mt-1">
                   {enviar.isPending
                     ? 'Un momento…'
-                    : 'La maquinita muestra el monto y pide la tarjeta.'}
+                    : 'El posnet muestra el monto y pide la tarjeta.'}
                 </p>
               </div>
               <div className="text-2xl font-extrabold text-[#391511] tabular-nums">

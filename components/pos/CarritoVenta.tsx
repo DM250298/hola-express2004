@@ -257,13 +257,13 @@ export function CarritoVenta({
           {hayTerminalActiva && onCobrarTerminal && (
             <Button
               onClick={onCobrarTerminal}
-              title="Cobrar con la maquinita Point"
+              title="Cobrar con el posnet"
               disabled={vacio}
               variant="outline"
               className="h-14 text-base border-2 border-[#391511] text-[#391511] bg-white hover:bg-[#fdfaf6] font-extrabold rounded-xl shadow-sm disabled:opacity-50 disabled:cursor-not-allowed gap-1.5"
             >
               <Wifi className="h-4 w-4" />
-              Maquinita
+              Posnet
             </Button>
           )}
         </div>
