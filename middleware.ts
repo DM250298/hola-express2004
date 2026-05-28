@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 
-const RUTAS_PUBLICAS = ['/login', '/tienda']
+const RUTAS_PUBLICAS = ['/login', '/tienda', '/api/tienda']
 /** Rutas que solo deben ver usuarios NO logueados (ej: login). */
 const RUTAS_SOLO_ANON = ['/login']
 
