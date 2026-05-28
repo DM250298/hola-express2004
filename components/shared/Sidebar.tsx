@@ -13,6 +13,7 @@ import {
   Users,
   Package,
   ArrowDownWideNarrow,
+  ArrowLeftRight,
   CalendarX,
   ClipboardList,
   Tag,
@@ -92,6 +93,12 @@ const SECCIONES: Seccion[] = [
         href: '/inventario',
         etiqueta: 'Stock',
         icono: Package,
+        permiso: 'inventario',
+      },
+      {
+        href: '/inventario/movimientos',
+        etiqueta: 'Movimientos',
+        icono: ArrowLeftRight,
         permiso: 'inventario',
       },
       {
@@ -215,7 +222,20 @@ export function Sidebar({ permisos }: SidebarProps) {
   }
 
   function esActivo(href: string): boolean {
-    return href === '/' ? pathname === '/' : pathname.startsWith(href)
+    if (href === '/') return pathname === '/'
+    // Coincidencia exacta o sub-ruta directa, pero no si hay un item
+    // más específico registrado que también coincida con la ruta actual.
+    if (!pathname.startsWith(href)) return false
+    // Evitar que "/inventario" se marque activo en "/inventario/movimientos"
+    // si existe un item con ese href más largo.
+    const todosLosItems = SECCIONES.flatMap((s) => s.items)
+    const hayMasEspecifico = todosLosItems.some(
+      (i) =>
+        i.href !== href &&
+        i.href.startsWith(href) &&
+        pathname.startsWith(i.href)
+    )
+    return !hayMasEspecifico
   }
 
   // Filtrar items por permiso y secciones que quedaron vacías
