@@ -1381,6 +1381,87 @@ export type ActivoFijoUpdate = {
   fecha_baja?: string | null
 }
 
+// ─── pedidos_tienda (e-commerce) ──────────────────────────────────────────────
+
+export type EstadoPedidoTienda =
+  | 'pendiente'
+  | 'confirmado'
+  | 'preparando'
+  | 'listo'
+  | 'entregado'
+  | 'cancelado'
+
+export type MetodoEntrega = 'retiro' | 'delivery'
+
+export type PedidoTiendaRow = {
+  id: number
+  codigo: string
+  estado: EstadoPedidoTienda
+  metodo_entrega: MetodoEntrega
+  cliente_nombre: string
+  cliente_telefono: string
+  cliente_email: string | null
+  cliente_direccion: string | null
+  cliente_notas: string | null
+  total: number
+  cantidad_items: number
+  created_at: string
+  updated_at: string
+}
+
+export type PedidoTiendaInsert = {
+  id?: number
+  codigo: string
+  estado?: EstadoPedidoTienda
+  metodo_entrega?: MetodoEntrega
+  cliente_nombre: string
+  cliente_telefono: string
+  cliente_email?: string | null
+  cliente_direccion?: string | null
+  cliente_notas?: string | null
+  total?: number
+  cantidad_items?: number
+}
+
+export type PedidoTiendaUpdate = {
+  estado?: EstadoPedidoTienda
+  metodo_entrega?: MetodoEntrega
+  cliente_nombre?: string
+  cliente_telefono?: string
+  cliente_email?: string | null
+  cliente_direccion?: string | null
+  cliente_notas?: string | null
+  total?: number
+  cantidad_items?: number
+  updated_at?: string
+}
+
+export type ItemPedidoTiendaRow = {
+  id: number
+  pedido_id: number
+  producto_id: number
+  nombre: string
+  precio_unitario: number
+  cantidad: number
+  subtotal: number
+  created_at: string
+}
+
+export type ItemPedidoTiendaInsert = {
+  id?: number
+  pedido_id: number
+  producto_id: number
+  nombre: string
+  precio_unitario: number
+  cantidad?: number
+  subtotal: number
+}
+
+export type ItemPedidoTiendaUpdate = {
+  cantidad?: number
+  subtotal?: number
+}
+
 // ─── Tipo Database (compatible con el cliente de Supabase) ───────────────────
 
 export interface Database {
@@ -1729,6 +1810,25 @@ export interface Database {
       vista_empleados_saldo: {
         Row: EmpleadoConSaldo
         Relationships: []
+      }
+      pedidos_tienda: {
+        Row: PedidoTiendaRow
+        Insert: PedidoTiendaInsert
+        Update: PedidoTiendaUpdate
+        Relationships: []
+      }
+      items_pedido_tienda: {
+        Row: ItemPedidoTiendaRow
+        Insert: ItemPedidoTiendaInsert
+        Update: ItemPedidoTiendaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'items_pedido_tienda_pedido_id_fkey'
+            columns: ['pedido_id']
+            referencedRelation: 'pedidos_tienda'
+            referencedColumns: ['id']
+          },
+        ]
       }
     }
     Functions: {

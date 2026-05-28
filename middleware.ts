@@ -2,7 +2,9 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 
-const RUTAS_PUBLICAS = ['/login']
+const RUTAS_PUBLICAS = ['/login', '/tienda']
+/** Rutas que solo deben ver usuarios NO logueados (ej: login). */
+const RUTAS_SOLO_ANON = ['/login']
 
 /** Permiso → prefijos de ruta que habilita. */
 const PERMISO_RUTA: Record<string, string[]> = {
@@ -62,8 +64,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Redirigir al dashboard si ya tiene sesión y va al login
-  if (user && RUTAS_PUBLICAS.some((r) => pathname.startsWith(r))) {
+  // Redirigir al dashboard si ya tiene sesión y va al login (no aplica a tienda)
+  if (user && RUTAS_SOLO_ANON.some((r) => pathname.startsWith(r))) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)
