@@ -12,6 +12,7 @@ import {
   Receipt,
   Users,
   Package,
+  ArrowDownWideNarrow,
   CalendarX,
   ClipboardList,
   Tag,
@@ -91,6 +92,12 @@ const SECCIONES: Seccion[] = [
         href: '/inventario',
         etiqueta: 'Stock',
         icono: Package,
+        permiso: 'inventario',
+      },
+      {
+        href: '/inventario/clasificacion-abc',
+        etiqueta: 'Clasificación ABC',
+        icono: ArrowDownWideNarrow,
         permiso: 'inventario',
       },
       {
