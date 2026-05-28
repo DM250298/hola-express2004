@@ -77,6 +77,11 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse
   }
 
+  // Las rutas públicas no pasan por el guard de permisos
+  if (RUTAS_PUBLICAS.some((r) => pathname.startsWith(r))) {
+    return supabaseResponse
+  }
+
   // Control de acceso por permisos del rol (si hay usuario)
   if (user) {
     const { data: perfil } = await supabase
