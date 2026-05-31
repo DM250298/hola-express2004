@@ -240,7 +240,7 @@ begin
   end if;
 
   update public.pedidos
-    set estado = v_estado, total = v_total, updated_at = v_ahora
+    set estado = v_estado::public.estado_pedido, total = v_total, updated_at = v_ahora
     where id = p_pedido_id;
 
   -- ── Cuenta a pagar PROVISORIA (Opción B) ──
