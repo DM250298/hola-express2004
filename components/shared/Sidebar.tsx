@@ -31,6 +31,8 @@ interface ItemNav {
   etiqueta: string
   icono: React.ElementType
   permiso: string
+  /** Permisos extra que también habilitan ver este item. */
+  permisosAlt?: string[]
 }
 
 interface Seccion {
@@ -112,16 +114,24 @@ const SECCIONES: Seccion[] = [
         permiso: 'vencimientos',
       },
       {
-        href: '/compras',
-        etiqueta: 'Compras',
-        icono: ShoppingBag,
-        permiso: 'compras',
-      },
-      {
         href: '/etiquetas',
         etiqueta: 'Etiquetas de precio',
         icono: Tag,
         permiso: 'etiquetas',
+      },
+    ],
+  },
+  {
+    titulo: 'Compras',
+    items: [
+      {
+        href: '/compras',
+        etiqueta: 'Compras',
+        icono: ShoppingBag,
+        permiso: 'compras',
+        // El cajero recibe mercadería (permiso 'recepcion'); el encargado
+        // arma órdenes ('pedidos'). Cualquiera de los tres ve el módulo.
+        permisosAlt: ['pedidos', 'recepcion'],
       },
     ],
   },
@@ -227,7 +237,11 @@ export function Sidebar({ permisos }: SidebarProps) {
   // Filtrar items por permiso y secciones que quedaron vacías
   const seccionesFiltradas = SECCIONES.map((s) => ({
     ...s,
-    items: s.items.filter((i) => permisos.includes(i.permiso)),
+    items: s.items.filter(
+      (i) =>
+        permisos.includes(i.permiso) ||
+        (i.permisosAlt?.some((p) => permisos.includes(p)) ?? false)
+    ),
   })).filter((s) => s.items.length > 0)
 
   return (
