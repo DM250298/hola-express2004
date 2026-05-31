@@ -36,14 +36,12 @@ export function PantallaPedidos() {
   const { data: pedidos, isLoading, isError } = usePedidos(filtros)
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <header className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-[#391511] text-2xl font-bold">Pedidos</h1>
-          <p className="text-[#6f3a2a] text-sm mt-1">
-            Órdenes de compra a proveedores y recepción de mercadería.
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-[#6f3a2a] text-sm">
+          Órdenes de compra a proveedores. Creá una orden y luego registrá su
+          recepción.
+        </p>
         <Link
           href="/pedidos/nuevo"
           className={cn(
@@ -52,9 +50,9 @@ export function PantallaPedidos() {
           )}
         >
           <Plus className="h-4 w-4" />
-          Nuevo pedido
+          Nueva orden
         </Link>
-      </header>
+      </div>
 
       <div className="flex flex-wrap gap-2">
         <Select
@@ -68,6 +66,7 @@ export function PantallaPedidos() {
             <SelectItem value={TODOS}>Todos los estados</SelectItem>
             <SelectItem value="borrador">Borrador</SelectItem>
             <SelectItem value="enviado">Enviado</SelectItem>
+            <SelectItem value="recepcion_parcial">Parcial</SelectItem>
             <SelectItem value="recibido">Recibido</SelectItem>
             <SelectItem value="cancelado">Cancelado</SelectItem>
           </SelectContent>

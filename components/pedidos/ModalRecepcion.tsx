@@ -1,7 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Calendar, Loader2, PackageCheck } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertTriangle,
+  Calendar,
+  Loader2,
+  PackageCheck,
+  ScanLine,
+  ShieldCheck,
+  TrendingUp,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { parsearDiasCondicionPago } from '@/lib/queries/pedidos'
@@ -28,6 +38,7 @@ interface ItemEstado {
   item_id: number
   producto_id: number
   nombre: string
+  codigo_barras: string | null
   cantidad_pedida: number
   precio_costo: number
   cantidad_recibida: string
@@ -50,6 +61,15 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
 
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
 
+  // Escaneo guiado
+  const [codigoScan, setCodigoScan] = useState('')
+  const refScan = useRef<HTMLInputElement>(null)
+
+  // Autorización de supervisor para recibir más de lo pedido
+  const [excesoAutorizado, setExcesoAutorizado] = useState(false)
+  const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
+  const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
+
   useEffect(() => {
     if (abierto) {
       setItemsEstado(
@@ -57,6 +77,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           item_id: it.id,
           producto_id: it.producto_id,
           nombre: it.producto?.nombre ?? 'Producto eliminado',
+          codigo_barras: it.producto?.codigo_barras ?? null,
           cantidad_pedida: it.cantidad_pedida,
           precio_costo: it.precio_costo,
           // Pre-cargar con la cantidad pedida — es lo más común
@@ -67,8 +88,27 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         }))
       )
       setAceptaPorDebajoMin(false)
+      setExcesoAutorizado(false)
+      setAutorizadoPor(null)
+      setCodigoScan('')
     }
   }, [abierto, pedido])
+
+  /** Escaneo: suma 1 a la cantidad recibida del producto con ese código. */
+  function procesarScan(codigo: string) {
+    const cod = codigo.trim()
+    if (!cod) return
+    const item = itemsEstado.find((it) => it.codigo_barras === cod)
+    setCodigoScan('')
+    refScan.current?.focus()
+    if (!item) {
+      toast.error('Ese código no pertenece a este pedido.')
+      return
+    }
+    const actual = Number(item.cantidad_recibida) || 0
+    actualizarItem(item.item_id, { cantidad_recibida: String(actual + 1) })
+    toast.success(`${item.nombre} · ${actual + 1}`)
+  }
 
   function actualizarItem(
     item_id: number,
@@ -104,6 +144,30 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         Number(it.cantidad_recibida) < 0)
   )
 
+  /** Items donde se recibió MÁS de lo pedido (requiere supervisor). */
+  const itemsConExceso = useMemo(
+    () =>
+      itemsEstado.filter(
+        (it) => (Number(it.cantidad_recibida) || 0) > it.cantidad_pedida
+      ),
+    [itemsEstado]
+  )
+  const hayExceso = itemsConExceso.length > 0
+  const requiereSupervisor = hayExceso && !excesoAutorizado
+
+  /** ¿Es una recepción parcial? (se recibió menos que lo pedido en total) */
+  const esParcial = useMemo(() => {
+    const pedidoTotal = itemsEstado.reduce(
+      (acc, it) => acc + it.cantidad_pedida,
+      0
+    )
+    const recibidoTotal = itemsEstado.reduce(
+      (acc, it) => acc + (Number(it.cantidad_recibida) || 0),
+      0
+    )
+    return recibidoTotal < pedidoTotal
+  }, [itemsEstado])
+
   /** Items que tienen fecha de vencimiento por debajo del mínimo configurado. */
   const itemsPorDebajoMinimo = useMemo(() => {
     return itemsEstado.flatMap((it) => {
@@ -129,6 +193,18 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     if (!usuario || hayErrores) return
     if (!pedido.proveedor) return
 
+    // Recibir más de lo pedido exige autorización de un supervisor
+    if (requiereSupervisor) {
+      setModalSupervisorAbierto(true)
+      return
+    }
+
+    ejecutarRecepcion()
+  }
+
+  function ejecutarRecepcion() {
+    if (!usuario || !pedido.proveedor) return
+
     recibir.mutate(
       {
         pedido_id: pedido.id,
@@ -144,7 +220,22 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         })),
       },
       {
-        onSuccess: () => {
+        onSuccess: (resultado) => {
+          // Alertar variaciones de costo por encima del umbral configurado
+          if (resultado.variaciones && resultado.variaciones.length > 0) {
+            const nombres = resultado.variaciones
+              .map((v) => {
+                const it = itemsEstado.find(
+                  (i) => i.producto_id === v.producto_id
+                )
+                return `${it?.nombre ?? 'Producto'} (+${v.variacion_pct}%)`
+              })
+              .join(', ')
+            toast.warning(
+              `Subas de costo detectadas: ${nombres}. Revisá si conviene remarcar el precio (pestaña Costos).`,
+              { duration: 8000 }
+            )
+          }
           // Recolectar items con fecha de vencimiento — son los que pueden
           // imprimir etiqueta. Productos sin vencimiento no se etiquetan.
           const conVencimiento: ItemParaEtiqueta[] = itemsEstado
@@ -229,6 +320,41 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
               </div>
             </div>
           </div>
+
+          {/* Escaneo guiado */}
+          <div className="bg-[#f9b44c]/8 border border-[#f9b44c]/40 rounded-xl p-3">
+            <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1 mb-1.5">
+              <ScanLine className="h-3.5 w-3.5 text-[#f9b44c]" />
+              Escaneá los productos que bajan del camión
+            </Label>
+            <Input
+              ref={refScan}
+              value={codigoScan}
+              onChange={(e) => setCodigoScan(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  procesarScan(codigoScan)
+                }
+              }}
+              placeholder="Escaneá o escribí el código de barras y Enter…"
+              disabled={recibir.isPending}
+              className="h-10 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white font-mono"
+            />
+            <p className="text-[10px] text-[#6f3a2a] mt-1">
+              Cada escaneo suma 1 unidad al producto correspondiente. También
+              podés ajustar las cantidades a mano abajo.
+            </p>
+          </div>
+
+          {/* Aviso de autorización de supervisor concedida */}
+          {excesoAutorizado && autorizadoPor && (
+            <div className="flex items-center gap-2 text-xs text-[#2f7d4f] bg-[#2f7d4f]/10 border border-[#2f7d4f]/30 rounded-lg px-3 py-2">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              Exceso de cantidad autorizado por{' '}
+              <span className="font-semibold">{autorizadoPor}</span>.
+            </div>
+          )}
 
           {/* Items */}
           <ul className="space-y-3">
@@ -396,11 +522,16 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-3 flex items-center justify-between shrink-0">
           <div>
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-              Total a pagar
+              Total {esParcial ? '(provisorio · parcial)' : 'a pagar'}
             </div>
             <div className="text-2xl font-extrabold text-[#391511] tabular-nums">
               <MontoARS monto={totalRecibido} />
             </div>
+            {esParcial && (
+              <p className="text-[11px] text-[#9e6b15] font-medium mt-0.5">
+                Recepción parcial: el pedido queda abierto para el faltante.
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -443,6 +574,18 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         abierto={modalEtiquetasAbierto}
         onCambioAbierto={cerrarTodo}
         items={itemsParaEtiquetar}
+      />
+
+      <ModalClaveSupervisor
+        abierto={modalSupervisorAbierto}
+        onCambioAbierto={setModalSupervisorAbierto}
+        motivo={`Se está recibiendo más cantidad de la pedida en ${itemsConExceso.length} producto(s). Un encargado debe autorizarlo.`}
+        onAutorizado={(nombre) => {
+          setExcesoAutorizado(true)
+          setAutorizadoPor(nombre)
+          // Ya autorizado: ejecutar directamente, sin re-chequear supervisor
+          ejecutarRecepcion()
+        }}
       />
     </Dialog>
   )

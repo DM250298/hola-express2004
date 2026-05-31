@@ -93,7 +93,14 @@ export function useRecibirPedido() {
       qc.invalidateQueries({ queryKey: ['alertas-stock'] })
       qc.invalidateQueries({ queryKey: ['lotes-activos'] })
       qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
-      toast.success('Recepción registrada · cuenta a pagar creada')
+      qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      if (_d.es_parcial) {
+        toast.warning(
+          'Recepción parcial registrada · el pedido queda abierto para el faltante'
+        )
+      } else {
+        toast.success('Recepción registrada · deuda provisoria creada')
+      }
     },
     onError: (error: Error) => {
       toast.error(`No se pudo registrar la recepción: ${error.message}`)

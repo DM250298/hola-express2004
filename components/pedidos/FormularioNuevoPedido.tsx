@@ -199,13 +199,13 @@ export function FormularioNuevoPedido() {
       {/* Header */}
       <div>
         <Link
-          href="/pedidos"
+          href="/compras"
           className="inline-flex items-center gap-1 text-sm text-[#6f3a2a] hover:text-[#391511] transition-colors"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Pedidos
+          Compras
         </Link>
-        <h1 className="text-[#391511] text-2xl font-bold mt-1">Nuevo pedido</h1>
+        <h1 className="text-[#391511] text-2xl font-bold mt-1">Nueva orden de compra</h1>
       </div>
 
       {/* Bloque 1: Proveedor + fecha */}

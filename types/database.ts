@@ -13,7 +13,12 @@ export type MedioPago = string
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoLote = 'activo' | 'agotado' | 'vencido' | 'dado_de_baja'
 export type TipoMovimiento = 'entrada' | 'salida' | 'ajuste' | 'merma' | 'venta'
-export type EstadoPedido = 'borrador' | 'enviado' | 'recibido' | 'cancelado'
+export type EstadoPedido =
+  | 'borrador'
+  | 'enviado'
+  | 'recibido'
+  | 'recepcion_parcial'
+  | 'cancelado'
 export type EstadoCuentaPagar = 'pendiente' | 'pagada' | 'vencida'
 
 /** Valor JSON genérico (para argumentos jsonb de funciones RPC). */
@@ -943,6 +948,8 @@ export type CuentaAPagarRow = {
   fecha_vencimiento: string
   fecha_pago: string | null
   estado: EstadoCuentaPagar
+  provisoria: boolean
+  tiene_factura: boolean
   created_at: string
 }
 
@@ -954,6 +961,8 @@ export type CuentaAPagarInsert = {
   fecha_vencimiento: string
   fecha_pago?: string | null
   estado?: EstadoCuentaPagar
+  provisoria?: boolean
+  tiene_factura?: boolean
   created_at?: string
 }
 
@@ -962,6 +971,92 @@ export type CuentaAPagarUpdate = {
   fecha_vencimiento?: string
   fecha_pago?: string | null
   estado?: EstadoCuentaPagar
+  provisoria?: boolean
+  tiene_factura?: boolean
+}
+
+// ─── proveedor_producto (catálogo N:M) ───────────────────────────────────────
+
+export type ProveedorProductoRow = {
+  id: number
+  proveedor_id: number
+  producto_id: number
+  costo: number
+  codigo_proveedor: string | null
+  es_principal: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ProveedorProductoInsert = {
+  id?: number
+  proveedor_id: number
+  producto_id: number
+  costo?: number
+  codigo_proveedor?: string | null
+  es_principal?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export type ProveedorProductoUpdate = {
+  costo?: number
+  codigo_proveedor?: string | null
+  es_principal?: boolean
+  updated_at?: string
+}
+
+// ─── historial_costos ────────────────────────────────────────────────────────
+
+export type OrigenVariacionCosto = 'recepcion' | 'factura'
+
+export type HistorialCostoRow = {
+  id: number
+  producto_id: number
+  proveedor_id: number | null
+  costo_anterior: number
+  costo_nuevo: number
+  variacion_pct: number
+  origen: OrigenVariacionCosto
+  pedido_id: number | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type HistorialCostoInsert = {
+  id?: number
+  producto_id: number
+  proveedor_id?: number | null
+  costo_anterior?: number
+  costo_nuevo?: number
+  variacion_pct?: number
+  origen?: OrigenVariacionCosto
+  pedido_id?: number | null
+  usuario_id?: string | null
+  created_at?: string
+}
+
+export type HistorialCostoUpdate = {
+  variacion_pct?: number
+}
+
+// ─── config_compras (singleton) ──────────────────────────────────────────────
+
+export type ConfigComprasRow = {
+  id: number
+  umbral_variacion_costo: number
+  exige_factura: boolean
+}
+
+export type ConfigComprasInsert = {
+  id?: number
+  umbral_variacion_costo?: number
+  exige_factura?: boolean
+}
+
+export type ConfigComprasUpdate = {
+  umbral_variacion_costo?: number
+  exige_factura?: boolean
 }
 
 // ─── medios_pago (dinámicos) ─────────────────────────────────────────────────
@@ -1488,6 +1583,24 @@ export interface Database {
         Update: ProveedorUpdate
         Relationships: []
       }
+      proveedor_producto: {
+        Row: ProveedorProductoRow
+        Insert: ProveedorProductoInsert
+        Update: ProveedorProductoUpdate
+        Relationships: []
+      }
+      historial_costos: {
+        Row: HistorialCostoRow
+        Insert: HistorialCostoInsert
+        Update: HistorialCostoUpdate
+        Relationships: []
+      }
+      config_compras: {
+        Row: ConfigComprasRow
+        Insert: ConfigComprasInsert
+        Update: ConfigComprasUpdate
+        Relationships: []
+      }
       clientes: {
         Row: ClienteRow
         Insert: ClienteInsert
@@ -1881,7 +1994,17 @@ export interface Database {
           p_condicion_pago_dias: number
           p_items: Json
         }
-        Returns: { cuenta_a_pagar_id: number; total_recibido: number }
+        Returns: {
+          cuenta_a_pagar_id: number
+          total_recibido: number
+          es_parcial: boolean
+          variaciones: {
+            producto_id: number
+            costo_anterior: number
+            costo_nuevo: number
+            variacion_pct: number
+          }[]
+        }
       }
       fn_guardar_factura_compra: {
         Args: {

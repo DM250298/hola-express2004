@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Pencil, Truck } from 'lucide-react'
+import { Package, Plus, Pencil, Truck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { DrawerProveedor } from './DrawerProveedor'
+import { ModalCatalogoProveedor } from './ModalCatalogoProveedor'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import type { ProveedorRow } from '@/types/database'
 
@@ -20,6 +21,9 @@ export function TablaProveedores() {
   const { data: proveedores, isLoading, isError } = useProveedores()
   const [drawerAbierto, setDrawerAbierto] = useState(false)
   const [proveedorEditar, setProveedorEditar] = useState<ProveedorRow | null>(null)
+  const [catalogoAbierto, setCatalogoAbierto] = useState(false)
+  const [proveedorCatalogo, setProveedorCatalogo] =
+    useState<ProveedorRow | null>(null)
 
   function abrirNuevo() {
     setProveedorEditar(null)
@@ -29,6 +33,11 @@ export function TablaProveedores() {
   function abrirEdicion(proveedor: ProveedorRow) {
     setProveedorEditar(proveedor)
     setDrawerAbierto(true)
+  }
+
+  function abrirCatalogo(proveedor: ProveedorRow) {
+    setProveedorCatalogo(proveedor)
+    setCatalogoAbierto(true)
   }
 
   return (
@@ -121,14 +130,26 @@ export function TablaProveedores() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => abrirEdicion(p)}
-                      className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => abrirCatalogo(p)}
+                        title="Catálogo de productos"
+                        className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]"
+                      >
+                        <Package className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => abrirEdicion(p)}
+                        title="Editar proveedor"
+                        className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -141,6 +162,12 @@ export function TablaProveedores() {
         abierto={drawerAbierto}
         onCambioAbierto={setDrawerAbierto}
         proveedor={proveedorEditar}
+      />
+
+      <ModalCatalogoProveedor
+        abierto={catalogoAbierto}
+        onCambioAbierto={setCatalogoAbierto}
+        proveedor={proveedorCatalogo}
       />
     </div>
   )

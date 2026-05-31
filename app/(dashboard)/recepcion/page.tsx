@@ -1,9 +1,6 @@
-import { PantallaRecepcion } from '@/components/recepcion/PantallaRecepcion'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Recepción — ¡Hola! Express',
-}
-
+/** La recepción ahora vive dentro del módulo unificado /compras. */
 export default function PaginaRecepcion() {
-  return <PantallaRecepcion />
+  redirect('/compras')
 }

@@ -27,13 +27,19 @@ import { cn } from '@/lib/utils'
 
 export function PantallaRecepcion() {
   const {
-    data: enviados,
+    data: soloEnviados,
     isLoading: cargandoEnviados,
     isError: errorEnviados,
   } = usePedidos({ estado: 'enviado' })
+  const { data: parciales } = usePedidos({ estado: 'recepcion_parcial' })
   const { data: recibidos, isLoading: cargandoRecibidos } = usePedidos({
     estado: 'recibido',
   })
+
+  // "Por recibir" = pedidos enviados + parciales (que esperan el faltante)
+  const enviados = [...(soloEnviados ?? []), ...(parciales ?? [])].sort(
+    (a, b) => b.id - a.id
+  )
 
   const [pedidoARecibirId, setPedidoARecibirId] = useState<number | null>(null)
   const { data: pedidoARecibir } = usePedidoDetalle(
@@ -77,17 +83,11 @@ export function PantallaRecepcion() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-[#391511] text-2xl font-bold flex items-center gap-2">
-          <Truck className="h-6 w-6 text-[#f9b44c]" />
-          Recepción de mercadería
-        </h1>
-        <p className="text-[#6f3a2a] text-sm mt-1">
-          Pedidos enviados que esperan recibirse, y los ya recibidos para
-          reimprimir etiquetas si hace falta.
-        </p>
-      </header>
+    <div className="space-y-5">
+      <p className="text-[#6f3a2a] text-sm">
+        Pedidos enviados o parciales que esperan recibirse, y los ya recibidos
+        para reimprimir etiquetas si hace falta.
+      </p>
 
       <Tabs defaultValue="pendientes" className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto">

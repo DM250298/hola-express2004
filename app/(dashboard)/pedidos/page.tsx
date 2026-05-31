@@ -1,9 +1,6 @@
-import { PantallaPedidos } from '@/components/pedidos/PantallaPedidos'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Pedidos — ¡Hola! Express',
-}
-
+/** Las órdenes de compra ahora viven dentro del módulo unificado /compras. */
 export default function PaginaPedidos() {
-  return <PantallaPedidos />
+  redirect('/compras')
 }

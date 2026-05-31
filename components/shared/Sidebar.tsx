@@ -15,9 +15,7 @@ import {
   ArrowDownWideNarrow,
   ArrowLeftRight,
   CalendarX,
-  ClipboardList,
   Tag,
-  Truck,
   DollarSign,
   Calculator,
   BarChart3,
@@ -112,18 +110,6 @@ const SECCIONES: Seccion[] = [
         etiqueta: 'Vencimientos',
         icono: CalendarX,
         permiso: 'vencimientos',
-      },
-      {
-        href: '/pedidos',
-        etiqueta: 'Pedidos',
-        icono: ClipboardList,
-        permiso: 'pedidos',
-      },
-      {
-        href: '/recepcion',
-        etiqueta: 'Recepción',
-        icono: Truck,
-        permiso: 'recepcion',
       },
       {
         href: '/compras',

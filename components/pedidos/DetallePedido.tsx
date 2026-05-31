@@ -56,10 +56,10 @@ export function DetallePedido({ pedidoId }: Props) {
         <ClipboardList className="h-10 w-10 text-[#c8a58a] mx-auto mb-3" />
         <p className="text-[#391511] font-semibold">Pedido no encontrado</p>
         <Link
-          href="/pedidos"
+          href="/compras"
           className="text-[#c43e2c] text-sm hover:underline mt-1 inline-block"
         >
-          Volver a pedidos
+          Volver a compras
         </Link>
       </div>
     )
@@ -75,11 +75,11 @@ export function DetallePedido({ pedidoId }: Props) {
       {/* Breadcrumb */}
       <div>
         <Link
-          href="/pedidos"
+          href="/compras"
           className="inline-flex items-center gap-1 text-sm text-[#6f3a2a] hover:text-[#391511] transition-colors"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
-          Pedidos
+          Compras
         </Link>
       </div>
 

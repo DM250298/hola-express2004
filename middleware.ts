@@ -15,10 +15,13 @@ const PERMISO_RUTA: Record<string, string[]> = {
   clientes: ['/clientes'],
   inventario: ['/inventario'],
   vencimientos: ['/vencimientos'],
+  // El módulo unificado /compras es accesible con cualquiera de los permisos
+  // de abastecimiento (compras, pedidos o recepción). El cajero recibe
+  // mercadería, por eso 'recepcion' también habilita /compras.
   compras: ['/compras'],
   etiquetas: ['/etiquetas'],
-  pedidos: ['/pedidos'],
-  recepcion: ['/recepcion'],
+  pedidos: ['/pedidos', '/compras'],
+  recepcion: ['/recepcion', '/compras'],
   finanzas: ['/finanzas'],
   contabilidad: ['/contabilidad'],
   rrhh: ['/rrhh'],

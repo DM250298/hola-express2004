@@ -268,9 +268,23 @@ export interface RecibirPedidoPayload {
  *
  * Todo dentro de una única transacción Postgres: o se registra todo, o nada.
  */
+export interface VariacionRecepcion {
+  producto_id: number
+  costo_anterior: number
+  costo_nuevo: number
+  variacion_pct: number
+}
+
+export interface ResultadoRecepcion {
+  cuenta_a_pagar_id: number
+  total_recibido: number
+  es_parcial: boolean
+  variaciones: VariacionRecepcion[]
+}
+
 export async function recibirPedido(
   payload: RecibirPedidoPayload
-): Promise<{ cuenta_a_pagar_id: number; total_recibido: number }> {
+): Promise<ResultadoRecepcion> {
   const supabase = createClient()
 
   const { data, error } = await supabase.rpc('fn_recibir_pedido', {
@@ -289,7 +303,7 @@ export async function recibirPedido(
 
   if (error) throw error
   if (!data) throw new Error('No se pudo registrar la recepción.')
-  return data as { cuenta_a_pagar_id: number; total_recibido: number }
+  return data as ResultadoRecepcion
 }
 
 // ─── Lotes del pedido (para reimprimir etiquetas) ─────────────────────

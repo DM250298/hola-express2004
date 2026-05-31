@@ -1,4 +1,4 @@
-import { Check, FileText, Send, X } from 'lucide-react'
+import { Check, FileText, PackageOpen, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { EstadoPedido } from '@/types/database'
 
@@ -20,6 +20,11 @@ const CONFIG: Record<
     etiqueta: 'Recibido',
     clase: 'bg-[#6f3a2a]/10 text-[#391511] border-[#6f3a2a]/30',
     icono: Check,
+  },
+  recepcion_parcial: {
+    etiqueta: 'Parcial',
+    clase: 'bg-[#e4a42a]/20 text-[#9e6b15] border-[#e4a42a]/50',
+    icono: PackageOpen,
   },
   cancelado: {
     etiqueta: 'Cancelado',
