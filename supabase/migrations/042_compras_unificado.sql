@@ -45,10 +45,13 @@ exception when duplicate_object then null; end $$;
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 2. Estado "recepcion_parcial" en pedidos
+--    pedidos.estado es un ENUM (estado_pedido), así que se agrega el valor
+--    al tipo. ADD VALUE no puede usarse en la misma transacción donde se
+--    crea, pero como sólo lo usan las funciones (en runtime), no hay
+--    problema. Si tu Postgres se queja por la transacción, corré PRIMERO
+--    esta línea sola y después el resto del script.
 -- ─────────────────────────────────────────────────────────────────────
-alter table public.pedidos drop constraint if exists pedidos_estado_check;
-alter table public.pedidos add constraint pedidos_estado_check
-  check (estado in ('borrador','enviado','recibido','recepcion_parcial','cancelado'));
+alter type public.estado_pedido add value if not exists 'recepcion_parcial';
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 3. Three-way match (Opción B): deuda provisoria en cuentas_a_pagar
