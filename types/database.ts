@@ -587,6 +587,102 @@ export type CajaTurnoUpdate = {
   novedades?: string | null
 }
 
+// ─── sangrias (retiros de caja al buzón de caja fuerte) ───────────────────────
+
+export type EstadoSangria = 'en_buzon' | 'arqueada'
+
+export type SangriaRow = {
+  id: number
+  turno_id: number | null
+  usuario_id: string | null
+  monto: number
+  nota: string | null
+  estado: EstadoSangria
+  arqueo_id: number | null
+  created_at: string
+}
+
+export type SangriaInsert = {
+  id?: number
+  turno_id?: number | null
+  usuario_id?: string | null
+  monto: number
+  nota?: string | null
+  estado?: EstadoSangria
+  arqueo_id?: number | null
+  created_at?: string
+}
+
+export type SangriaUpdate = {
+  estado?: EstadoSangria
+  arqueo_id?: number | null
+  nota?: string | null
+}
+
+// ─── arqueos_tesoreria ────────────────────────────────────────────────────────
+
+export type EstadoArqueo = 'validado' | 'con_diferencia'
+
+export type ArqueoTesoreriaRow = {
+  id: number
+  usuario_id: string | null
+  fecha: string
+  monto_esperado: number
+  monto_fisico: number
+  diferencia: number
+  nota_ajuste: string | null
+  estado: EstadoArqueo
+  created_at: string
+}
+
+export type ArqueoTesoreriaInsert = {
+  id?: number
+  usuario_id?: string | null
+  fecha?: string
+  monto_esperado?: number
+  monto_fisico?: number
+  diferencia?: number
+  nota_ajuste?: string | null
+  estado?: EstadoArqueo
+  created_at?: string
+}
+
+export type ArqueoTesoreriaUpdate = {
+  nota_ajuste?: string | null
+  estado?: EstadoArqueo
+}
+
+// ─── remesas (depósitos de caja fuerte al banco) ─────────────────────────────
+
+export type RemesaRow = {
+  id: number
+  usuario_id: string | null
+  cuenta_id: number | null
+  monto: number
+  fecha: string
+  comprobante: string | null
+  nota: string | null
+  movimiento_id: number | null
+  created_at: string
+}
+
+export type RemesaInsert = {
+  id?: number
+  usuario_id?: string | null
+  cuenta_id?: number | null
+  monto: number
+  fecha?: string
+  comprobante?: string | null
+  nota?: string | null
+  movimiento_id?: number | null
+  created_at?: string
+}
+
+export type RemesaUpdate = {
+  comprobante?: string | null
+  nota?: string | null
+}
+
 // ─── ventas ──────────────────────────────────────────────────────────────────
 
 export type VentaRow = {
@@ -1692,6 +1788,24 @@ export interface Database {
           },
         ]
       }
+      sangrias: {
+        Row: SangriaRow
+        Insert: SangriaInsert
+        Update: SangriaUpdate
+        Relationships: []
+      }
+      arqueos_tesoreria: {
+        Row: ArqueoTesoreriaRow
+        Insert: ArqueoTesoreriaInsert
+        Update: ArqueoTesoreriaUpdate
+        Relationships: []
+      }
+      remesas: {
+        Row: RemesaRow
+        Insert: RemesaInsert
+        Update: RemesaUpdate
+        Relationships: []
+      }
       caja_turnos: {
         Row: CajaTurnoRow
         Insert: CajaTurnoInsert
@@ -2083,6 +2197,35 @@ export interface Database {
           p_usuario_id: string
         }
         Returns: undefined
+      }
+      fn_validar_arqueo: {
+        Args: {
+          p_usuario_id: string
+          p_sangria_ids: number[]
+          p_monto_fisico: number
+          p_nota: string | null
+        }
+        Returns: {
+          arqueo_id: number
+          monto_esperado: number
+          monto_fisico: number
+          diferencia: number
+          estado: string
+        }
+      }
+      fn_generar_remesa: {
+        Args: {
+          p_usuario_id: string
+          p_cuenta_id: number
+          p_monto: number
+          p_comprobante: string | null
+          p_nota: string | null
+        }
+        Returns: {
+          remesa_id: number
+          movimiento_id: number
+          saldo_nuevo: number
+        }
       }
       fn_crear_activo: {
         Args: {

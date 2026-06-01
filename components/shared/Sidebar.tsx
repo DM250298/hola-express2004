@@ -136,7 +136,7 @@ const SECCIONES: Seccion[] = [
     ],
   },
   {
-    titulo: 'Administración',
+    titulo: 'Finanzas y Tesorería',
     items: [
       {
         href: '/finanzas',
@@ -150,6 +150,11 @@ const SECCIONES: Seccion[] = [
         icono: Calculator,
         permiso: 'contabilidad',
       },
+    ],
+  },
+  {
+    titulo: 'Administración',
+    items: [
       {
         href: '/rrhh',
         etiqueta: 'Recursos Humanos',

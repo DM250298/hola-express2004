@@ -17,6 +17,7 @@ import { TabCuentasAPagar } from './TabCuentasAPagar'
 import { TabEgresos } from './TabEgresos'
 import { TabCuentas } from './TabCuentas'
 import { TabMovimientos } from './TabMovimientos'
+import { TabCajaFuerte } from './TabCajaFuerte'
 import {
   rangoDesdeFechas,
   rangoPredefinido,
@@ -124,6 +125,12 @@ export function PantallaFinanzas() {
             Resumen
           </TabsTrigger>
           <TabsTrigger
+            value="caja_fuerte"
+            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+          >
+            Caja fuerte
+          </TabsTrigger>
+          <TabsTrigger
             value="cuentas_bancarias"
             className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
           >
@@ -151,6 +158,9 @@ export function PantallaFinanzas() {
 
         <TabsContent value="resumen">
           <TabResumen desde={rango.desde} hasta={rango.hasta} />
+        </TabsContent>
+        <TabsContent value="caja_fuerte">
+          <TabCajaFuerte />
         </TabsContent>
         <TabsContent value="cuentas_bancarias">
           <TabCuentas />

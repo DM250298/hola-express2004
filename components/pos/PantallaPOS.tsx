@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import {
+  ArrowDownToLine,
   Keyboard,
   Loader2,
   LockKeyhole,
@@ -29,6 +30,7 @@ import { CarritoVenta } from './CarritoVenta'
 import { ModalCobro } from './ModalCobro'
 import { ModalVentasTurno } from './ModalVentasTurno'
 import { ModalGastoPOS } from './ModalGastoPOS'
+import { ModalSangria } from './ModalSangria'
 import { TicketResumen } from './TicketResumen'
 import { OverlayAtajos } from './OverlayAtajos'
 import { IndicadorConexion } from './IndicadorConexion'
@@ -89,6 +91,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [modalCierreAbierto, setModalCierreAbierto] = useState(false)
   const [modalVentasTurnoAbierto, setModalVentasTurnoAbierto] = useState(false)
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false)
+  const [modalSangriaAbierto, setModalSangriaAbierto] = useState(false)
   const [ticketAbierto, setTicketAbierto] = useState(false)
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
@@ -180,6 +183,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     modalCierreAbierto ||
     modalVentasTurnoAbierto ||
     modalGastoAbierto ||
+    modalSangriaAbierto ||
     ticketAbierto ||
     overlayAtajosAbierto ||
     selectorClienteAbierto ||
@@ -480,6 +484,16 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             </Button>
           )}
           <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setModalSangriaAbierto(true)}
+            title="Sangría / retiro a caja fuerte"
+            className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Sangría</span>
+          </Button>
+          <Button
             variant="outline"
             onClick={() => setModalCierreAbierto(true)}
             className="border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c] gap-1.5"
@@ -638,6 +652,13 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       <ModalGastoPOS
         abierto={modalGastoAbierto}
         onCambioAbierto={setModalGastoAbierto}
+        turnoId={turno.id}
+        usuarioId={usuarioId}
+      />
+
+      <ModalSangria
+        abierto={modalSangriaAbierto}
+        onCambioAbierto={setModalSangriaAbierto}
         turnoId={turno.id}
         usuarioId={usuarioId}
       />

@@ -88,8 +88,23 @@ export async function cerrarTurno(
     0
   )
 
+  // Sangrías del turno (efectivo retirado al buzón de la caja fuerte).
+  // Si la tabla aún no existe (migración 043 sin correr) se asume 0.
+  const { data: sangriasData } = await supabase
+    .from('sangrias')
+    .select('monto')
+    .eq('turno_id', turnoId)
+
+  const totalSangrias = (sangriasData ?? []).reduce(
+    (acc, s) => acc + Number((s as { monto: number }).monto),
+    0
+  )
+
   const montoEsperado =
-    Number(turnoActual.monto_apertura) + totalVentasEfectivo - totalGastos
+    Number(turnoActual.monto_apertura) +
+    totalVentasEfectivo -
+    totalGastos -
+    totalSangrias
   const diferencia = montoCierreReal - montoEsperado
 
   // 2. Cerrar el turno
