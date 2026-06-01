@@ -18,6 +18,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { ComprobanteCierre, type DatosComprobanteCierre } from './ComprobanteCierre'
 import { ContadorBilletes } from './ContadorBilletes'
 import { useCerrarTurno } from '@/lib/hooks/useTurno'
+import { useRegistrarSangria } from '@/lib/hooks/useCajaFuerte'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { createClient } from '@/lib/supabase/client'
 import { formatearMonto } from '@/lib/utils/formato'
@@ -30,6 +31,7 @@ interface Props {
   montoApertura: number
   fechaApertura: string
   nombreCajero: string
+  usuarioId: string
 }
 
 interface DesgloseMedio {
@@ -51,29 +53,34 @@ interface ResumenTurno {
   por_medio: DesgloseMedio[]
   productos: ProductoVendido[]
   gastos: number
+  sangrias: number
 }
 
 async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
   const supabase = createClient()
 
-  const [resVentas, resPagos, resItems, resGastos] = await Promise.all([
-    supabase
-      .from('ventas')
-      .select('id', { count: 'exact', head: true })
-      .eq('turno_id', turnoId)
-      .eq('estado', 'completada'),
-    supabase
-      .from('pagos_venta')
-      .select('medio_pago, monto, ventas!inner(turno_id, estado)')
-      .eq('ventas.turno_id', turnoId)
-      .eq('ventas.estado', 'completada'),
-    supabase
-      .from('items_venta')
-      .select('cantidad, productos(nombre, unidad), ventas!inner(turno_id, estado)')
-      .eq('ventas.turno_id', turnoId)
-      .eq('ventas.estado', 'completada'),
-    supabase.from('egresos').select('monto').eq('turno_id', turnoId),
-  ])
+  const [resVentas, resPagos, resItems, resGastos, resSangrias] =
+    await Promise.all([
+      supabase
+        .from('ventas')
+        .select('id', { count: 'exact', head: true })
+        .eq('turno_id', turnoId)
+        .eq('estado', 'completada'),
+      supabase
+        .from('pagos_venta')
+        .select('medio_pago, monto, ventas!inner(turno_id, estado)')
+        .eq('ventas.turno_id', turnoId)
+        .eq('ventas.estado', 'completada'),
+      supabase
+        .from('items_venta')
+        .select(
+          'cantidad, productos(nombre, unidad), ventas!inner(turno_id, estado)'
+        )
+        .eq('ventas.turno_id', turnoId)
+        .eq('ventas.estado', 'completada'),
+      supabase.from('egresos').select('monto').eq('turno_id', turnoId),
+      supabase.from('sangrias').select('monto').eq('turno_id', turnoId),
+    ])
 
   if (resVentas.error) throw resVentas.error
   if (resPagos.error) throw resPagos.error
@@ -132,6 +139,11 @@ async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
     0
   )
 
+  const sangrias = (resSangrias.data ?? []).reduce(
+    (acc, s) => acc + Number((s as { monto: number }).monto),
+    0
+  )
+
   return {
     total_ventas_efectivo: total_efectivo,
     cantidad_ventas: resVentas.count ?? 0,
@@ -139,6 +151,7 @@ async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
     por_medio,
     productos,
     gastos,
+    sangrias,
   }
 }
 
@@ -149,8 +162,10 @@ export function CierreCaja({
   montoApertura,
   fechaApertura,
   nombreCajero,
+  usuarioId,
 }: Props) {
   const cerrar = useCerrarTurno()
+  const sangriaAuto = useRegistrarSangria()
   const qc = useQueryClient()
   const { data: medios } = useMediosPago()
   const [montoCierre, setMontoCierre] = useState('')
@@ -219,7 +234,8 @@ export function CierreCaja({
       resumen
         ? Number(montoApertura) +
           resumen.total_ventas_efectivo -
-          resumen.gastos
+          resumen.gastos -
+          resumen.sangrias
         : null,
     [resumen, montoApertura]
   )
@@ -240,6 +256,17 @@ export function CierreCaja({
       },
       {
         onSuccess: (resultado) => {
+          // Al cerrar turno, el efectivo contado va automáticamente al buzón
+          // de la caja fuerte como sangría, para que pase por el arqueo.
+          if (cierreNumero > 0) {
+            sangriaAuto.mutate({
+              turno_id: turnoId,
+              usuario_id: usuarioId,
+              monto: cierreNumero,
+              nota: `Cierre de turno #${turnoId}`,
+            })
+          }
+
           setComprobante({
             turnoId,
             cajeroNombre: nombreCajero,
@@ -395,15 +422,21 @@ export function CierreCaja({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <ResumenItem
-                  etiqueta="Gastos de caja del turno"
+                  etiqueta="Gastos de caja"
                   valor={
                     isLoading ? '…' : formatearMonto(resumen?.gastos ?? 0)
                   }
                 />
                 <ResumenItem
-                  etiqueta="Esperado (apertura + efectivo − gastos)"
+                  etiqueta="Sangrías (a caja fuerte)"
+                  valor={
+                    isLoading ? '…' : formatearMonto(resumen?.sangrias ?? 0)
+                  }
+                />
+                <ResumenItem
+                  etiqueta="Esperado en caja"
                   valor={
                     montoEsperado != null
                       ? formatearMonto(montoEsperado)

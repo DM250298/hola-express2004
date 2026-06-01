@@ -640,6 +640,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         montoApertura={turno.monto_apertura}
         fechaApertura={turno.fecha_apertura}
         nombreCajero={nombreUsuario}
+        usuarioId={usuarioId}
       />
 
       <ModalVentasTurno
