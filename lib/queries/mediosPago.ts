@@ -42,6 +42,7 @@ export interface NuevoMedioPagoPayload {
   nombre: string
   icono: string
   comision_porcentaje?: number
+  dias_acreditacion?: number
   cuenta_id?: number | null
 }
 
@@ -80,6 +81,7 @@ export async function crearMedioPago(
       nombre,
       icono: payload.icono || 'wallet',
       comision_porcentaje: payload.comision_porcentaje ?? 0,
+      dias_acreditacion: payload.dias_acreditacion ?? 0,
       cuenta_id: payload.cuenta_id ?? null,
       orden: ordenMax + 1,
       activo: true,
@@ -96,6 +98,7 @@ export interface ActualizarMedioPagoPatch {
   icono?: string
   activo?: boolean
   comision_porcentaje?: number
+  dias_acreditacion?: number
   cuenta_id?: number | null
 }
 

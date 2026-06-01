@@ -1165,6 +1165,7 @@ export type MedioPagoRow = {
   activo: boolean
   orden: number
   comision_porcentaje: number
+  dias_acreditacion: number
   cuenta_id: number | null
   protegido: boolean
   created_at: string
@@ -1179,6 +1180,7 @@ export type MedioPagoInsert = {
   activo?: boolean
   orden?: number
   comision_porcentaje?: number
+  dias_acreditacion?: number
   cuenta_id?: number | null
   protegido?: boolean
   created_at?: string
@@ -1192,8 +1194,63 @@ export type MedioPagoUpdate = {
   activo?: boolean
   orden?: number
   comision_porcentaje?: number
+  dias_acreditacion?: number
   cuenta_id?: number | null
   protegido?: boolean
+  updated_at?: string
+}
+
+// ─── acreditaciones (cuentas por cobrar / clearing) ──────────────────────────
+
+export type EstadoAcreditacion = 'pendiente' | 'acreditada' | 'cancelada'
+
+export type AcreditacionRow = {
+  id: number
+  venta_id: number | null
+  pago_venta_id: number | null
+  medio_pago: string
+  cuenta_id: number | null
+  monto_bruto: number
+  comision_pct: number
+  comision_monto: number
+  monto_neto: number
+  fecha_venta: string
+  fecha_estimada: string
+  fecha_real: string | null
+  estado: EstadoAcreditacion
+  movimiento_id: number | null
+  usuario_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type AcreditacionInsert = {
+  id?: number
+  venta_id?: number | null
+  pago_venta_id?: number | null
+  medio_pago: string
+  cuenta_id?: number | null
+  monto_bruto: number
+  comision_pct?: number
+  comision_monto?: number
+  monto_neto: number
+  fecha_venta?: string
+  fecha_estimada: string
+  fecha_real?: string | null
+  estado?: EstadoAcreditacion
+  movimiento_id?: number | null
+  usuario_id?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type AcreditacionUpdate = {
+  estado?: EstadoAcreditacion
+  fecha_real?: string | null
+  movimiento_id?: number | null
+  comision_pct?: number
+  comision_monto?: number
+  monto_neto?: number
   updated_at?: string
 }
 
@@ -1806,6 +1863,12 @@ export interface Database {
         Update: RemesaUpdate
         Relationships: []
       }
+      acreditaciones: {
+        Row: AcreditacionRow
+        Insert: AcreditacionInsert
+        Update: AcreditacionUpdate
+        Relationships: []
+      }
       caja_turnos: {
         Row: CajaTurnoRow
         Insert: CajaTurnoInsert
@@ -2224,6 +2287,18 @@ export interface Database {
         Returns: {
           remesa_id: number
           movimiento_id: number
+          saldo_nuevo: number
+        }
+      }
+      fn_acreditar_pago: {
+        Args: {
+          p_acreditacion_id: number
+          p_usuario_id: string
+          p_fecha_real: string | null
+        }
+        Returns: {
+          movimiento_id: number
+          monto_neto: number
           saldo_nuevo: number
         }
       }

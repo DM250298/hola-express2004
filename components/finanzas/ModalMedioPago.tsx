@@ -48,6 +48,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
   const [nombre, setNombre] = useState('')
   const [icono, setIcono] = useState('wallet')
   const [comision, setComision] = useState('0')
+  const [diasAcred, setDiasAcred] = useState('0')
   const [cuentaId, setCuentaId] = useState<string>(SIN_CUENTA)
 
   const esEdicion = medio !== null
@@ -58,6 +59,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
     setNombre(medio?.nombre ?? '')
     setIcono(medio?.icono ?? 'wallet')
     setComision(String(medio?.comision_porcentaje ?? 0))
+    setDiasAcred(String(medio?.dias_acreditacion ?? 0))
     setCuentaId(medio?.cuenta_id ? String(medio.cuenta_id) : SIN_CUENTA)
   }, [abierto, medio])
 
@@ -66,6 +68,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
     if (!nombreLimpio) return
     const comisionNum = Number(comision.replace(',', '.')) || 0
     if (comisionNum < 0 || comisionNum > 100) return
+    const diasNum = Math.max(0, Math.floor(Number(diasAcred) || 0))
     const cuenta_id = cuentaId === SIN_CUENTA ? null : Number(cuentaId)
 
     if (esEdicion && medio) {
@@ -76,6 +79,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             nombre: nombreLimpio,
             icono,
             comision_porcentaje: comisionNum,
+            dias_acreditacion: diasNum,
             cuenta_id,
           },
         },
@@ -87,6 +91,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
           nombre: nombreLimpio,
           icono,
           comision_porcentaje: comisionNum,
+          dias_acreditacion: diasNum,
           cuenta_id,
         },
         { onSuccess: () => onCambioAbierto(false) }
@@ -159,27 +164,48 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             </div>
           </div>
 
-          {/* Comisión */}
-          <div className="space-y-1.5">
-            <Label htmlFor="medio-comision" className="text-[#391511] font-medium">
-              Comisión bancaria (%)
-            </Label>
-            <Input
-              id="medio-comision"
-              type="number"
-              min={0}
-              max={100}
-              step="0.1"
-              inputMode="decimal"
-              value={comision}
-              onChange={(e) => setComision(e.target.value)}
-              disabled={procesando}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
-            />
-            <p className="text-[10px] text-[#c8a58a]">
-              Se descuenta como egreso en la cuenta al cobrar una venta.
-            </p>
+          {/* Comisión + Plazo de acreditación */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="medio-comision" className="text-[#391511] font-medium">
+                Comisión (%)
+              </Label>
+              <Input
+                id="medio-comision"
+                type="number"
+                min={0}
+                max={100}
+                step="0.1"
+                inputMode="decimal"
+                value={comision}
+                onChange={(e) => setComision(e.target.value)}
+                disabled={procesando}
+                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="medio-dias" className="text-[#391511] font-medium">
+                Plazo acreditación (días)
+              </Label>
+              <Input
+                id="medio-dias"
+                type="number"
+                min={0}
+                max={90}
+                step="1"
+                inputMode="numeric"
+                value={diasAcred}
+                onChange={(e) => setDiasAcred(e.target.value)}
+                disabled={procesando}
+                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+              />
+            </div>
           </div>
+          <p className="text-[10px] text-[#c8a58a] -mt-2">
+            <span className="font-semibold">0 días</span> = ingresa al banco al
+            instante. Si es mayor a 0, las ventas con este medio quedan en
+            &quot;Por cobrar&quot; hasta acreditarse.
+          </p>
 
           {/* Cuenta destino */}
           <div className="space-y-1.5">
