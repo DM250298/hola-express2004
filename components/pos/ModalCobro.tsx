@@ -144,6 +144,9 @@ export function ModalCobro({
     pagos.every((p) => Number(p.monto) > 0)
   const pagoActivoEsEfectivo = pagoActivo?.medio === 'efectivo'
   const pagoActivoEsNc = pagoActivo?.medio === MEDIO_NOTA_CREDITO
+  // Mientras se tipea el código del vale, se apaga el teclado del cobro para
+  // que las teclas vayan al input y no al keypad de montos.
+  const ingresandoCodigoNc = pagoActivoEsNc && !pagoActivo?.ncCodigo
 
   function cambiarMedio(medio: MedioPago) {
     if (!pagoActivo) return
@@ -316,7 +319,7 @@ export function ModalCobro({
     [pagoActivo, pagos, indiceActivo, total, puedeConfirmar, medios]
   )
 
-  useShortcuts(shortcuts, abierto && !procesando)
+  useShortcuts(shortcuts, abierto && !procesando && !ingresandoCodigoNc)
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !procesando && onCambioAbierto(v)}>
@@ -439,6 +442,7 @@ export function ModalCobro({
                         </label>
                         <Input
                           value={ncInput}
+                          autoFocus
                           onChange={(e) => setNcInput(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {

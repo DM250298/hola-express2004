@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
-import { ComprobanteNotaCredito } from './ComprobanteNotaCredito'
+import { ComprobanteDevolucion } from './ComprobanteDevolucion'
 import {
   useVentaParaDevolucion,
   useCrearDevolucion,
@@ -97,6 +97,18 @@ export function ModalDevolucion({
 
   const hayItems = total > 0
 
+  // Items efectivamente devueltos (para el comprobante)
+  const itemsDevueltos = useMemo(() => {
+    if (!venta) return []
+    return venta.items
+      .filter((it) => (cantidades[it.item_venta_id] ?? 0) > 0)
+      .map((it) => ({
+        nombre: it.nombre,
+        cantidad: cantidades[it.item_venta_id],
+        subtotal: cantidades[it.item_venta_id] * it.precio_unitario,
+      }))
+  }, [venta, cantidades])
+
   function confirmar() {
     if (!venta || !hayItems) return
     const items = venta.items
@@ -150,37 +162,41 @@ export function ModalDevolucion({
               Total devuelto: <MontoARS monto={resultado.total_devuelto} />
             </p>
             {resultado.codigo_nc && (
-              <>
-                <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#f9b44c]/10 px-6 py-3">
-                  <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                    Nota de crédito — entregá este código al cliente
-                  </div>
-                  <div className="text-2xl font-extrabold text-[#391511] font-mono tracking-wider">
-                    {resultado.codigo_nc}
-                  </div>
+              <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#f9b44c]/10 px-6 py-3">
+                <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                  Nota de crédito — entregá este código al cliente
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => window.print()}
-                  className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
-                >
-                  <Printer className="h-4 w-4" />
-                  Imprimir vale
-                </Button>
-                {/* Comprobante térmico (oculto; visible solo al imprimir) */}
-                <ComprobanteNotaCredito
-                  codigo={resultado.codigo_nc}
-                  monto={resultado.total_devuelto}
-                  ventaId={ventaId}
-                />
-              </>
+                <div className="text-2xl font-extrabold text-[#391511] font-mono tracking-wider">
+                  {resultado.codigo_nc}
+                </div>
+              </div>
             )}
-            <Button
-              onClick={() => cerrar(false)}
-              className="mt-2 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
-            >
-              Listo
-            </Button>
+
+            <div className="flex gap-2 mt-2">
+              <Button
+                variant="outline"
+                onClick={() => window.print()}
+                className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+              >
+                <Printer className="h-4 w-4" />
+                Imprimir comprobante
+              </Button>
+              <Button
+                onClick={() => cerrar(false)}
+                className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+              >
+                Listo
+              </Button>
+            </div>
+
+            {/* Comprobante térmico (oculto; visible solo al imprimir) */}
+            <ComprobanteDevolucion
+              ventaId={ventaId}
+              total={resultado.total_devuelto}
+              reembolso={reembolso}
+              codigoNc={resultado.codigo_nc}
+              items={itemsDevueltos}
+            />
           </div>
         ) : (
           <>
