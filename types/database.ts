@@ -1174,6 +1174,8 @@ export type MedioPagoRow = {
   mp_payment_type: string | null
   /** MP Point payment_method.id — ej: visa, master, mercadopago_cc. NULL = wildcard. */
   mp_payment_method_id: string | null
+  /** Canal del cobro: 'point' (tarjeta física) o 'qr' (QR en pantalla). NULL = cualquier canal. */
+  mp_channel: 'point' | 'qr' | null
   orden: number
   comision_porcentaje: number
   dias_acreditacion: number
@@ -1192,6 +1194,7 @@ export type MedioPagoInsert = {
   disponible_terminal?: boolean
   mp_payment_type?: string | null
   mp_payment_method_id?: string | null
+  mp_channel?: 'point' | 'qr' | null
   orden?: number
   comision_porcentaje?: number
   dias_acreditacion?: number
@@ -1209,6 +1212,7 @@ export type MedioPagoUpdate = {
   disponible_terminal?: boolean
   mp_payment_type?: string | null
   mp_payment_method_id?: string | null
+  mp_channel?: 'point' | 'qr' | null
   orden?: number
   comision_porcentaje?: number
   dias_acreditacion?: number

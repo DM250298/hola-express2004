@@ -64,8 +64,16 @@ export interface NuevoMedioPagoPayload {
 
 /**
  * Dado el `payment_method.type` y `payment_method.id` que devolvió MP Point
- * al aprobarse una orden, encuentra el medio de pago más específico que
- * matchea. Prioridad: type+method_id exacto > type-only > null (no match).
+ * al aprobarse una orden, encuentra el medio de pago que matchea.
+ *
+ * Prioridad:
+ *   1. Match exacto type + method_id → si hay UNO solo, gana
+ *   2. Genérico del type (method_id NULL) → si hay UNO solo, gana
+ *
+ * Si después del filtro quedan VARIOS candidatos (ej: débito Point y
+ * débito QR ambos matchean type='debit_card'), devuelve null para que
+ * el sistema use el medio que eligió manualmente el cajero — porque la
+ * API no nos dice el canal y no podemos adivinar.
  */
 export function matchMedioPagoPorMP(
   medios: MedioPagoRow[],
@@ -77,14 +85,15 @@ export function matchMedioPagoPorMP(
     (m) => m.disponible_terminal && m.mp_payment_type === mpType
   )
   if (candidatos.length === 0) return null
-  // 1. Match exacto type + method_id
+
   if (mpMethodId) {
-    const exacto = candidatos.find((m) => m.mp_payment_method_id === mpMethodId)
-    if (exacto) return exacto
+    const exactos = candidatos.filter((m) => m.mp_payment_method_id === mpMethodId)
+    if (exactos.length === 1) return exactos[0]
+    if (exactos.length > 1) return null
   }
-  // 2. Genérico (method_id NULL) — wildcard del type
-  const generico = candidatos.find((m) => m.mp_payment_method_id == null)
-  if (generico) return generico
+
+  const genericos = candidatos.filter((m) => m.mp_payment_method_id == null)
+  if (genericos.length === 1) return genericos[0]
   return null
 }
 
