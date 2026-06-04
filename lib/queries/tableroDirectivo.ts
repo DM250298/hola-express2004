@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { getResumenPorCobrar } from '@/lib/queries/acreditaciones'
+import { costoDesdeEmbed } from '@/lib/queries/productos'
 
 export interface PosicionCaja {
   efectivo: number
@@ -49,15 +50,15 @@ export async function getTableroDirectivo(
   // Capital inmovilizado en inventario (a costo)
   const productos = await traerTodo<{
     stock_actual: number
-    precio_costo: number
+    costos_producto: { precio_costo: number } | { precio_costo: number }[] | null
   }>(() =>
     supabase
       .from('productos')
-      .select('stock_actual, precio_costo')
+      .select('stock_actual, costos_producto(precio_costo)')
       .eq('activo', true)
   )
   const capital_inventario = productos.reduce(
-    (acc, p) => acc + (Number(p.stock_actual) || 0) * (Number(p.precio_costo) || 0),
+    (acc, p) => acc + (Number(p.stock_actual) || 0) * costoDesdeEmbed(p.costos_producto),
     0
   )
 

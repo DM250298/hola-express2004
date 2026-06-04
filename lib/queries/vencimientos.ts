@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type { EstadoLote, LoteRow } from '@/types/database'
 
 export type ClaseVencimiento = 'vencido' | 'rojo' | 'amarillo' | 'verde'
@@ -41,7 +42,7 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
   const { data, error } = await supabase
     .from('lotes')
     .select(
-      `*, productos(id, nombre, codigo_barras, precio_costo, stock_actual)`
+      `*, productos(id, nombre, codigo_barras, stock_actual, costos_producto(precio_costo))`
     )
     .in('estado', ['activo', 'vencido'])
     .gt('cantidad_actual', 0)
@@ -54,8 +55,8 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
       id: number
       nombre: string
       codigo_barras: string | null
-      precio_costo: number
       stock_actual: number
+      costos_producto: CostoEmbed
     } | null
   }
 
@@ -63,9 +64,10 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
     .filter((l) => l.productos !== null)
     .map((l) => {
       const dias = diasHastaVencimiento(l.fecha_vencimiento)
+      const { costos_producto, ...prod } = l.productos!
       return {
         ...l,
-        producto: l.productos!,
+        producto: { ...prod, precio_costo: costoDesdeEmbed(costos_producto) },
         dias_restantes: dias,
         clase: clasificarVencimiento(dias),
       }
@@ -94,7 +96,7 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
 
   const { data: mermas, error } = await supabase
     .from('movimientos_stock')
-    .select('cantidad, productos(precio_costo)')
+    .select('cantidad, productos(costos_producto(precio_costo))')
     .eq('tipo', 'merma')
     .gte('created_at', inicioMes.toISOString())
 
@@ -102,13 +104,13 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
 
   type FilaMerma = {
     cantidad: number
-    productos: { precio_costo: number } | null
+    productos: { costos_producto: CostoEmbed } | null
   }
 
   const lista = (mermas ?? []) as unknown as FilaMerma[]
   const mermas_mes_unidades = lista.reduce((acc, m) => acc + m.cantidad, 0)
   const mermas_mes_monto = lista.reduce(
-    (acc, m) => acc + m.cantidad * (m.productos?.precio_costo ?? 0),
+    (acc, m) => acc + m.cantidad * costoDesdeEmbed(m.productos?.costos_producto ?? null),
     0
   )
 

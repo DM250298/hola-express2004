@@ -18,6 +18,36 @@ export interface ProductoConRelaciones extends ProductoRow {
   proveedores: { id: number; nombre: string } | null
 }
 
+export type CostoEmbed =
+  | { precio_costo: number }
+  | { precio_costo: number }[]
+  | null
+
+/** Fila cruda con el costo embebido desde costos_producto (gateado por RLS). */
+type ProductoRaw = ProductoConRelaciones & {
+  costos_producto: CostoEmbed
+}
+
+/** Normaliza el embed (objeto o array) y devuelve el costo, o 0. */
+export function costoDesdeEmbed(embed: CostoEmbed): number {
+  if (!embed) return 0
+  const fila = Array.isArray(embed) ? embed[0] : embed
+  return Number(fila?.precio_costo ?? 0)
+}
+
+/**
+ * Mapea el costo embebido (costos_producto) a `precio_costo`. Para un cajero,
+ * RLS deniega costos_producto → queda en 0 (no ve el costo). Para admin/
+ * encargado, trae el valor real.
+ */
+function mapearCosto(r: ProductoRaw): ProductoConRelaciones {
+  const { costos_producto, ...resto } = r
+  return { ...resto, precio_costo: costoDesdeEmbed(costos_producto) }
+}
+
+const SELECT_PRODUCTO =
+  '*, categorias(id, nombre), proveedores(id, nombre), costos_producto(precio_costo)'
+
 export interface FiltrosProducto {
   busqueda?: string
   categoria_id?: number | null
@@ -38,10 +68,10 @@ async function fetchProductosRemoto(
     : null
 
   // Paginamos para soportar catálogos > 1000 productos (límite default de Supabase REST)
-  return traerTodo<ProductoConRelaciones>(() => {
+  const filas = await traerTodo<ProductoRaw>(() => {
     let q = supabase
       .from('productos')
-      .select('*, categorias(id, nombre), proveedores(id, nombre)')
+      .select(SELECT_PRODUCTO)
       .order('nombre', { ascending: true })
     if (patron) {
       q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
@@ -63,6 +93,7 @@ async function fetchProductosRemoto(
     }
     return q
   })
+  return filas.map(mapearCosto)
 }
 
 /** ¿Los filtros representan el catálogo activo completo (sin acotar)? */
@@ -139,12 +170,12 @@ export async function getProductoByBarcode(
   try {
     const { data, error } = await supabase
       .from('productos')
-      .select('*, categorias(id, nombre), proveedores(id, nombre)')
+      .select(SELECT_PRODUCTO)
       .eq('codigo_barras', codigo.trim())
       .maybeSingle()
 
     if (error) throw error
-    return data as ProductoConRelaciones | null
+    return data ? mapearCosto(data as unknown as ProductoRaw) : null
   } catch (error) {
     if (esErrorDeRed(error)) {
       return buscarPorBarcodeLocal(codigo)

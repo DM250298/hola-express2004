@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type { MedioPago } from '@/types/database'
 
 // ─── Reporte de ventas ───────────────────────────────────────────────────────
@@ -293,7 +294,7 @@ export async function getDeadStock(
   // Productos activos con stock > 0
   const { data: productosData, error: errProd } = await supabase
     .from('productos')
-    .select('id, nombre, stock_actual, precio_costo, categorias(nombre)')
+    .select('id, nombre, stock_actual, categorias(nombre), costos_producto(precio_costo)')
     .eq('activo', true)
     .gt('stock_actual', 0)
 
@@ -303,7 +304,7 @@ export async function getDeadStock(
     id: number
     nombre: string
     stock_actual: number
-    precio_costo: number
+    costos_producto: CostoEmbed
     categorias: { nombre: string } | null
   }
   const productos = (productosData ?? []) as unknown as ProductoFila[]
@@ -331,15 +332,16 @@ export async function getDeadStock(
       const diasSin = ultimo
         ? Math.round((ahora - new Date(ultimo).getTime()) / (1000 * 60 * 60 * 24))
         : null
+      const costo = costoDesdeEmbed(p.costos_producto)
       return {
         producto_id: p.id,
         nombre: p.nombre,
         categoria_nombre: p.categorias?.nombre ?? null,
         stock_actual: p.stock_actual,
-        precio_costo: p.precio_costo,
+        precio_costo: costo,
         ultimo_movimiento: ultimo,
         dias_sin_movimiento: diasSin,
-        valor_inmovilizado: p.stock_actual * p.precio_costo,
+        valor_inmovilizado: p.stock_actual * costo,
       }
     })
     .filter((p) => p.dias_sin_movimiento === null || p.dias_sin_movimiento > diasUmbral)
@@ -369,7 +371,7 @@ export async function getMermasPorCategoria(
   const { data, error } = await supabase
     .from('movimientos_stock')
     .select(
-      'cantidad, productos(precio_costo, categorias(nombre))'
+      'cantidad, productos(costos_producto(precio_costo), categorias(nombre))'
     )
     .eq('tipo', 'merma')
     .gte('created_at', desde)
@@ -380,7 +382,7 @@ export async function getMermasPorCategoria(
   type FilaMerma = {
     cantidad: number
     productos: {
-      precio_costo: number
+      costos_producto: CostoEmbed
       categorias: { nombre: string } | null
     } | null
   }
@@ -390,7 +392,7 @@ export async function getMermasPorCategoria(
   const porCat = new Map<string, MermaPorCategoria>()
 
   for (const m of (data ?? []) as unknown as FilaMerma[]) {
-    const costo = m.productos?.precio_costo ?? 0
+    const costo = costoDesdeEmbed(m.productos?.costos_producto ?? null)
     const cat = m.productos?.categorias?.nombre ?? 'Sin categoría'
     const monto = m.cantidad * costo
 

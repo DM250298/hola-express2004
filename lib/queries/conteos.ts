@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type { ConteoItemRow, ConteoRow } from '@/types/database'
 
 export interface UsuarioSimple {
@@ -145,7 +146,7 @@ export async function getConteoDetalle(
     supabase.from('conteos').select('*').eq('id', id).maybeSingle<ConteoRow>(),
     supabase
       .from('conteos_items')
-      .select('*, productos(nombre, codigo_barras, precio_costo)')
+      .select('*, productos(nombre, codigo_barras, costos_producto(precio_costo))')
       .eq('conteo_id', id)
       .order('id', { ascending: true }),
   ])
@@ -158,7 +159,7 @@ export async function getConteoDetalle(
     productos: {
       nombre: string
       codigo_barras: string | null
-      precio_costo: number
+      costos_producto: CostoEmbed
     } | null
   }
 
@@ -168,7 +169,7 @@ export async function getConteoDetalle(
     ...resto,
     producto_nombre: productos?.nombre ?? 'Producto eliminado',
     producto_codigo: productos?.codigo_barras ?? null,
-    precio_costo: Number(productos?.precio_costo ?? 0),
+    precio_costo: costoDesdeEmbed(productos?.costos_producto ?? null),
   }))
 
   return { conteo: resConteo.data, items }

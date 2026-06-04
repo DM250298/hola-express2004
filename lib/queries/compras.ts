@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 
 export interface ProductoAReponer {
   id: number
@@ -27,7 +28,7 @@ export async function getProductosAReponer(
     id: number
     nombre: string
     codigo_barras: string | null
-    precio_costo: number
+    costos_producto: CostoEmbed
     stock_actual: number
     stock_minimo: number
     proveedor_id: number | null
@@ -38,7 +39,7 @@ export async function getProductosAReponer(
     let q = supabase
       .from('productos')
       .select(
-        'id, nombre, codigo_barras, precio_costo, stock_actual, stock_minimo, proveedor_id, proveedores(nombre)'
+        'id, nombre, codigo_barras, stock_actual, stock_minimo, proveedor_id, proveedores(nombre), costos_producto(precio_costo)'
       )
       .eq('activo', true)
     if (proveedorId != null) q = q.eq('proveedor_id', proveedorId)
@@ -51,7 +52,7 @@ export async function getProductosAReponer(
       id: p.id,
       nombre: p.nombre,
       codigo_barras: p.codigo_barras,
-      precio_costo: Number(p.precio_costo),
+      precio_costo: costoDesdeEmbed(p.costos_producto),
       stock_actual: p.stock_actual,
       stock_minimo: p.stock_minimo,
       proveedor_id: p.proveedor_id,

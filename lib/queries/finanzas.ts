@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { claveSemana, semanasEnRango } from '@/lib/utils/periodos'
 import type { EgresoRow } from '@/types/database'
 
@@ -33,11 +34,11 @@ export async function getResumenFinanciero(
 ): Promise<ResumenFinanciero> {
   const supabase = createClient()
 
-  // 1. Ventas brutas + items con precio costo de producto
+  // 1. Ventas brutas + items con precio costo de producto (gateado por RLS)
   const { data: ventasData, error: errVentas } = await supabase
     .from('ventas')
     .select(
-      `id, total, fecha, items_venta(cantidad, productos(precio_costo))`
+      `id, total, fecha, items_venta(cantidad, productos(costos_producto(precio_costo)))`
     )
     .eq('estado', 'completada')
     .gte('fecha', desde)
@@ -51,7 +52,7 @@ export async function getResumenFinanciero(
     fecha: string
     items_venta: Array<{
       cantidad: number
-      productos: { precio_costo: number } | null
+      productos: { costos_producto: CostoEmbed } | null
     }>
   }
 
@@ -63,7 +64,7 @@ export async function getResumenFinanciero(
       acc +
       v.items_venta.reduce(
         (s, it) =>
-          s + it.cantidad * (it.productos?.precio_costo ?? 0),
+          s + it.cantidad * costoDesdeEmbed(it.productos?.costos_producto ?? null),
         0
       ),
     0
@@ -72,7 +73,7 @@ export async function getResumenFinanciero(
   // 2. Mermas del período
   const { data: mermasData, error: errMermas } = await supabase
     .from('movimientos_stock')
-    .select('cantidad, productos(precio_costo)')
+    .select('cantidad, productos(costos_producto(precio_costo))')
     .eq('tipo', 'merma')
     .gte('created_at', desde)
     .lte('created_at', hasta)
@@ -81,11 +82,11 @@ export async function getResumenFinanciero(
 
   type MermaCruda = {
     cantidad: number
-    productos: { precio_costo: number } | null
+    productos: { costos_producto: CostoEmbed } | null
   }
 
   const mermas = ((mermasData ?? []) as unknown as MermaCruda[]).reduce(
-    (acc, m) => acc + m.cantidad * (m.productos?.precio_costo ?? 0),
+    (acc, m) => acc + m.cantidad * costoDesdeEmbed(m.productos?.costos_producto ?? null),
     0
   )
 

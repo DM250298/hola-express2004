@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type {
   EstadoPedido,
   ItemPedidoRow,
@@ -139,7 +140,7 @@ export async function getProductosSugeridos(
   const { data, error } = await supabase
     .from('productos')
     .select(
-      'id, nombre, codigo_barras, precio_costo, stock_actual, stock_minimo'
+      'id, nombre, codigo_barras, stock_actual, stock_minimo, costos_producto(precio_costo)'
     )
     .eq('proveedor_id', proveedor_id)
     .eq('activo', true)
@@ -150,15 +151,16 @@ export async function getProductosSugeridos(
     id: number
     nombre: string
     codigo_barras: string | null
-    precio_costo: number
     stock_actual: number
     stock_minimo: number
+    costos_producto: CostoEmbed
   }
 
-  return ((data ?? []) as Fila[])
+  return ((data ?? []) as unknown as Fila[])
     .filter((p) => p.stock_actual < p.stock_minimo)
-    .map((p) => ({
+    .map(({ costos_producto, ...p }) => ({
       ...p,
+      precio_costo: costoDesdeEmbed(costos_producto),
       // Cantidad sugerida: llevar al doble del mínimo (colchón). Mínimo 1.
       cantidad_sugerida: Math.max(p.stock_minimo * 2 - p.stock_actual, 1),
     }))

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -109,13 +110,13 @@ export async function calcularClasificacionABC(
     codigo_barras: string | null
     categoria_id: number | null
     precio_venta: number
-    precio_costo: number
+    costos_producto: CostoEmbed
     stock_actual: number
     categorias: { nombre: string } | null
   }>(() =>
     supabase
       .from('productos')
-      .select('id, nombre, codigo_barras, categoria_id, precio_venta, precio_costo, stock_actual, categorias(nombre)')
+      .select('id, nombre, codigo_barras, categoria_id, precio_venta, stock_actual, categorias(nombre), costos_producto(precio_costo)')
       .eq('activo', true)
       .order('nombre')
   )
@@ -136,7 +137,7 @@ export async function calcularClasificacionABC(
       categoria_nombre:
         (p.categorias as { nombre: string } | null)?.nombre ?? null,
       precio_venta: p.precio_venta,
-      precio_costo: p.precio_costo,
+      precio_costo: costoDesdeEmbed(p.costos_producto),
       stock_actual: p.stock_actual,
       unidades_vendidas: ventas.unidades,
       ingresos: ventas.ingresos,
