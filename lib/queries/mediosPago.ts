@@ -64,27 +64,44 @@ export interface NuevoMedioPagoPayload {
 
 /**
  * Dado el `payment_method.type` y `payment_method.id` que devolvió MP Point
- * al aprobarse una orden, encuentra el medio de pago que matchea.
+ * al aprobarse una orden — más el canal (Point/QR) que eligió el cajero —
+ * encuentra el medio de pago que matchea.
+ *
+ * El canal es clave: la API de MP devuelve `debit_card` igual sea Point o
+ * QR, pero cada canal tiene comisión distinta. Como el cajero ya eligió el
+ * canal antes de cobrar, lo usamos para desambiguar.
  *
  * Prioridad:
- *   1. Match exacto type + method_id → si hay UNO solo, gana
- *   2. Genérico del type (method_id NULL) → si hay UNO solo, gana
+ *   1. Filtra por type
+ *   2. Filtra por canal: deja los del canal elegido + los agnósticos (null),
+ *      y prefiere los específicos del canal si existen
+ *   3. Match exacto type + method_id → si hay UNO solo, gana
+ *   4. Genérico del type (method_id NULL) → si hay UNO solo, gana
  *
- * Si después del filtro quedan VARIOS candidatos (ej: débito Point y
- * débito QR ambos matchean type='debit_card'), devuelve null para que
- * el sistema use el medio que eligió manualmente el cajero — porque la
- * API no nos dice el canal y no podemos adivinar.
+ * Si igual quedan varios candidatos, devuelve null (usa el medio manual).
  */
 export function matchMedioPagoPorMP(
   medios: MedioPagoRow[],
   mpType: string | null | undefined,
-  mpMethodId: string | null | undefined
+  mpMethodId: string | null | undefined,
+  canal?: 'point' | 'qr' | null
 ): MedioPagoRow | null {
   if (!mpType) return null
-  const candidatos = medios.filter(
+  let candidatos = medios.filter(
     (m) => m.disponible_terminal && m.mp_payment_type === mpType
   )
   if (candidatos.length === 0) return null
+
+  if (canal) {
+    // Dejar solo los del canal elegido o los agnósticos (sin canal).
+    const relevantes = candidatos.filter(
+      (m) => m.mp_channel === canal || m.mp_channel == null
+    )
+    if (relevantes.length > 0) candidatos = relevantes
+    // Si hay específicos del canal, esos ganan sobre los agnósticos.
+    const especificos = candidatos.filter((m) => m.mp_channel === canal)
+    if (especificos.length > 0) candidatos = especificos
+  }
 
   if (mpMethodId) {
     const exactos = candidatos.filter((m) => m.mp_payment_method_id === mpMethodId)

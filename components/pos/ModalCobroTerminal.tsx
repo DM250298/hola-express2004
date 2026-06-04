@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CreditCard,
   Loader2,
+  QrCode,
   Wifi,
   XCircle,
 } from 'lucide-react'
@@ -80,12 +81,22 @@ export function ModalCobroTerminal({
     [terminales]
   )
 
-  // Medios habilitados específicamente para cobro con terminal.
-  // Por seguridad, descartamos efectivo aunque alguien lo haya marcado.
+  // Canal del cobro elegido por el cajero: Point (tarjeta en la maquinita)
+  // o QR (el cliente escanea). Determina qué comisión aplica, porque la API
+  // de MP no distingue débito Point de débito QR.
+  const [canal, setCanal] = useState<'point' | 'qr'>('point')
+
+  // Medios habilitados para terminal, filtrados por el canal elegido.
+  // Se incluyen los del canal + los agnósticos (mp_channel null). Se
+  // descarta efectivo aunque alguien lo haya marcado por error.
   const mediosTarjeta = useMemo(
     () =>
-      (mediosTerminal ?? []).filter((m) => m.codigo !== 'efectivo'),
-    [mediosTerminal]
+      (mediosTerminal ?? []).filter(
+        (m) =>
+          m.codigo !== 'efectivo' &&
+          (m.mp_channel === canal || m.mp_channel == null)
+      ),
+    [mediosTerminal, canal]
   )
 
   const [terminalId, setTerminalId] = useState<string>('')
@@ -100,12 +111,21 @@ export function ModalCobroTerminal({
       setTerminalId((prev) =>
         prev || (terminalesUsables[0]?.id.toString() ?? '')
       )
-      setMedioPago((prev) => prev || (mediosTarjeta[0]?.codigo ?? ''))
       setOrdenId(null)
       setErrorEnvio(null)
       setYaAvisoExito(false)
     }
-  }, [abierto, terminalesUsables, mediosTarjeta])
+  }, [abierto, terminalesUsables])
+
+  // Al cambiar de canal (o abrir), elegir el primer medio del canal si el
+  // actual ya no pertenece a la lista filtrada.
+  useEffect(() => {
+    if (!abierto) return
+    setMedioPago((prev) => {
+      if (prev && mediosTarjeta.some((m) => m.codigo === prev)) return prev
+      return mediosTarjeta[0]?.codigo ?? ''
+    })
+  }, [abierto, mediosTarjeta])
 
   const terminalElegida = terminalesUsables.find(
     (t) => String(t.id) === terminalId
@@ -153,9 +173,9 @@ export function ModalCobroTerminal({
   const medioAutoDetectado = useMemo(
     () =>
       mediosTerminal && mpPayment?.type
-        ? matchMedioPagoPorMP(mediosTerminal, mpPayment.type, mpPayment.id)
+        ? matchMedioPagoPorMP(mediosTerminal, mpPayment.type, mpPayment.id, canal)
         : null,
-    [mediosTerminal, mpPayment?.type, mpPayment?.id]
+    [mediosTerminal, mpPayment?.type, mpPayment?.id, canal]
   )
 
   // Dispara onAprobado cuando llega el estado processed (una sola vez).
@@ -277,6 +297,41 @@ export function ModalCobroTerminal({
             !ordenId &&
             !enviar.isPending && (
               <>
+                {/* Canal: Point (tarjeta en la maquinita) vs QR (escanea el cliente) */}
+                <div className="space-y-1.5">
+                  <Label className="text-[#391511] font-medium text-sm">
+                    ¿Cómo paga?
+                  </Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCanal('point')}
+                      className={cn(
+                        'flex items-center justify-center gap-2 h-12 rounded-xl border-2 font-bold transition-all',
+                        canal === 'point'
+                          ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                          : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#c8a58a]'
+                      )}
+                    >
+                      <CreditCard className="h-4 w-4" />
+                      Tarjeta (Point)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCanal('qr')}
+                      className={cn(
+                        'flex items-center justify-center gap-2 h-12 rounded-xl border-2 font-bold transition-all',
+                        canal === 'qr'
+                          ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                          : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#c8a58a]'
+                      )}
+                    >
+                      <QrCode className="h-4 w-4" />
+                      QR
+                    </button>
+                  </div>
+                </div>
+
                 {terminalesUsables.length > 1 && (
                   <div className="space-y-1.5">
                     <Label className="text-[#391511] font-medium text-sm">
