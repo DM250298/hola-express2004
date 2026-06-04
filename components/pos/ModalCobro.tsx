@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, Trash2, Wifi } from 'lucide-react'
+import { Loader2, Plus, Ticket, Trash2, Wifi } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -13,6 +15,7 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useShortcuts } from '@/lib/hooks/useShortcuts'
 import { useMediosPagoActivos } from '@/lib/hooks/useMediosPago'
+import { getNotaCredito } from '@/lib/queries/devoluciones'
 import { resolverIconoMedio } from '@/lib/utils/iconosMedioPago'
 import { formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -21,6 +24,8 @@ import type { PagoPayload } from '@/lib/queries/ventas'
 
 /** Código "sintético" que representa el cobro por maquinita Point. */
 export const MEDIO_MAQUINITA = '__maquinita'
+/** Código "sintético" para pagar con una nota de crédito (vale). */
+export const MEDIO_NOTA_CREDITO = '__nc'
 
 interface Props {
   abierto: boolean
@@ -45,6 +50,9 @@ interface PagoLinea {
   id: string
   medio: MedioPago
   monto: string // editable como string
+  /** Solo para nota de crédito. */
+  ncCodigo?: string
+  ncSaldo?: number
 }
 
 function nuevoId() {
@@ -63,6 +71,8 @@ export function ModalCobro({
   const { data: mediosActivos } = useMediosPagoActivos()
   const [pagos, setPagos] = useState<PagoLinea[]>([])
   const [indiceActivo, setIndiceActivo] = useState(0)
+  const [ncInput, setNcInput] = useState('')
+  const [validandoNc, setValidandoNc] = useState(false)
 
   // Medios disponibles (dinámicos). Los primeros 4 reciben atajo F1-F4.
   // Si hay terminal activa, agregamos "Maquinita" como un medio extra al final.
@@ -83,6 +93,13 @@ export function ModalCobro({
         comision: 0,
       })
     }
+    base.push({
+      valor: MEDIO_NOTA_CREDITO,
+      etiqueta: 'Nota de crédito',
+      Icono: Ticket,
+      tecla: null,
+      comision: 0,
+    })
     return base
   }, [mediosActivos, hayTerminalActiva, onCobrarConMaquinita])
 
@@ -92,6 +109,7 @@ export function ModalCobro({
     if (abierto) {
       setPagos([{ id: nuevoId(), medio: medioInicial, monto: '' }])
       setIndiceActivo(0)
+      setNcInput('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto])
@@ -111,19 +129,75 @@ export function ModalCobro({
   const vuelto = Math.max(0, totalEfectivo - Math.max(0, total - totalNoEfectivo))
 
   const sinMedios = (mediosActivos ?? []).length === 0
+  // Las líneas de nota de crédito deben tener código y no superar su saldo
+  const ncOk = pagos.every(
+    (p) =>
+      p.medio !== MEDIO_NOTA_CREDITO ||
+      (!!p.ncCodigo && Number(p.monto) <= (p.ncSaldo ?? 0) + 0.01)
+  )
   const puedeConfirmar =
     !procesando &&
     !sinMedios &&
     cubierto &&
+    ncOk &&
     pagos.length > 0 &&
     pagos.every((p) => Number(p.monto) > 0)
   const pagoActivoEsEfectivo = pagoActivo?.medio === 'efectivo'
+  const pagoActivoEsNc = pagoActivo?.medio === MEDIO_NOTA_CREDITO
 
   function cambiarMedio(medio: MedioPago) {
     if (!pagoActivo) return
     setPagos((prev) =>
-      prev.map((p, i) => (i === indiceActivo ? { ...p, medio } : p))
+      prev.map((p, i) =>
+        i === indiceActivo
+          ? {
+              ...p,
+              medio,
+              // al salir de nota de crédito, limpiar sus datos
+              ncCodigo: medio === MEDIO_NOTA_CREDITO ? p.ncCodigo : undefined,
+              ncSaldo: medio === MEDIO_NOTA_CREDITO ? p.ncSaldo : undefined,
+            }
+          : p
+      )
     )
+  }
+
+  async function validarNc() {
+    if (!pagoActivo) return
+    const cod = ncInput.trim()
+    if (!cod) return
+    setValidandoNc(true)
+    try {
+      const nc = await getNotaCredito(cod)
+      if (!nc || nc.estado !== 'activa' || nc.saldo_disponible <= 0) {
+        toast.error('Nota de crédito no válida o sin saldo.')
+        return
+      }
+      const otros = pagos.reduce(
+        (acc, p, i) => (i === indiceActivo ? acc : acc + (Number(p.monto) || 0)),
+        0
+      )
+      const necesario = Math.max(0, total - otros)
+      const aplicar = Math.min(nc.saldo_disponible, necesario || nc.saldo_disponible)
+      setPagos((prev) =>
+        prev.map((p, i) =>
+          i === indiceActivo
+            ? {
+                ...p,
+                ncCodigo: nc.codigo,
+                ncSaldo: nc.saldo_disponible,
+                monto: aplicar.toFixed(2),
+              }
+            : p
+        )
+      )
+      setNcInput('')
+      toast.success(`Vale ${nc.codigo} aplicado`)
+    } catch {
+      toast.error('No se pudo validar la nota de crédito.')
+    } finally {
+      setValidandoNc(false)
+    }
   }
 
   function setearMontoActivo(monto: string) {
@@ -157,6 +231,17 @@ export function ModalCobro({
     setIndiceActivo((curr) => Math.max(0, Math.min(curr, pagos.length - 2)))
   }
 
+  function mapPago(p: PagoLinea): PagoPayload {
+    if (p.medio === MEDIO_NOTA_CREDITO) {
+      return {
+        medio_pago: 'nota_credito',
+        monto: Number(p.monto),
+        nc_codigo: p.ncCodigo ?? null,
+      }
+    }
+    return { medio_pago: p.medio, monto: Number(p.monto) }
+  }
+
   function confirmar() {
     if (!puedeConfirmar) return
     // Si hay una línea de maquinita y el parent sabe manejarla, desviamos
@@ -166,18 +251,11 @@ export function ModalCobro({
     if (lineaMaq && onCobrarConMaquinita) {
       const otros: PagoPayload[] = pagos
         .filter((p) => p.medio !== MEDIO_MAQUINITA)
-        .map((p) => ({
-          medio_pago: p.medio,
-          monto: Number(p.monto),
-        }))
+        .map(mapPago)
       onCobrarConMaquinita(otros, Number(lineaMaq.monto))
       return
     }
-    const pagosLimpios: PagoPayload[] = pagos.map((p) => ({
-      medio_pago: p.medio,
-      monto: Number(p.monto),
-    }))
-    onConfirmar(pagosLimpios, vuelto)
+    onConfirmar(pagos.map(mapPago), vuelto)
   }
 
   const shortcuts = useMemo(
@@ -340,6 +418,54 @@ export function ModalCobro({
                   })}
                 </div>
               </div>
+
+              {/* Nota de crédito: ingresar código del vale */}
+              {pagoActivoEsNc && (
+                <div className="rounded-xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/8 p-3 space-y-2">
+                  {pagoActivo?.ncCodigo ? (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-[#391511] font-semibold">
+                        Vale {pagoActivo.ncCodigo}
+                      </span>
+                      <span className="text-[#6f3a2a]">
+                        saldo <MontoARS monto={pagoActivo.ncSaldo ?? 0} />
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Código de la nota de crédito
+                        </label>
+                        <Input
+                          value={ncInput}
+                          onChange={(e) => setNcInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              validarNc()
+                            }
+                          }}
+                          placeholder="Ej: NC-260604-3271"
+                          className="h-10 border-[#e4c9b0] focus-visible:ring-[#f9b44c] font-mono"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={validarNc}
+                        disabled={validandoNc || !ncInput.trim()}
+                        className="h-10 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+                      >
+                        {validandoNc ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          'Aplicar'
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Lista de pagos */}
               <div>

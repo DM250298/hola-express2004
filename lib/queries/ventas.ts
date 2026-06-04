@@ -14,6 +14,8 @@ export interface ItemVentaPayload {
 export interface PagoPayload {
   medio_pago: MedioPago
   monto: number
+  /** Solo para medio_pago === 'nota_credito': código del vale a consumir. */
+  nc_codigo?: string | null
 }
 
 export interface CrearVentaPayload {
@@ -135,6 +137,7 @@ export async function crearVenta(
       p_pagos: payload.pagos.map((p) => ({
         medio_pago: p.medio_pago,
         monto: p.monto,
+        nc_codigo: p.nc_codigo ?? null,
       })) as unknown as Json,
       p_items: payload.items.map((it) => ({
         producto_id: it.producto_id,

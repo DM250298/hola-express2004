@@ -106,6 +106,33 @@ export interface ResultadoDevolucion {
   codigo_nc: string | null
 }
 
+export interface NotaCreditoValida {
+  id: number
+  codigo: string
+  saldo_disponible: number
+  estado: string
+}
+
+/** Valida una nota de crédito por código (para usarla como pago). */
+export async function getNotaCredito(
+  codigo: string
+): Promise<NotaCreditoValida | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('notas_credito')
+    .select('id, codigo, saldo_disponible, estado')
+    .eq('codigo', codigo.trim())
+    .maybeSingle()
+  if (error) throw error
+  if (!data) return null
+  return {
+    id: data.id,
+    codigo: data.codigo,
+    saldo_disponible: Number(data.saldo_disponible),
+    estado: data.estado,
+  }
+}
+
 export async function crearDevolucion(
   payload: CrearDevolucionPayload
 ): Promise<ResultadoDevolucion> {
