@@ -131,6 +131,12 @@ export function ConfiguracionCobros() {
                         · {m.comision_porcentaje}% comisión
                       </span>
                     )}
+                    {m.disponible_terminal && m.mp_payment_type && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#f9b44c]/15 text-[#6f3a2a] text-[10px] font-mono">
+                        MP: {m.mp_payment_type}
+                        {m.mp_payment_method_id ? ` / ${m.mp_payment_method_id}` : ''}
+                      </span>
+                    )}
                   </div>
                 </div>
 

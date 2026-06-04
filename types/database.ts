@@ -1166,6 +1166,10 @@ export type MedioPagoRow = {
   activo: boolean
   /** Aparece como forma de pago al cobrar con la terminal Point. */
   disponible_terminal: boolean
+  /** MP Point payment_method.type — ej: credit_card, debit_card, account_money. */
+  mp_payment_type: string | null
+  /** MP Point payment_method.id — ej: visa, master, mercadopago_cc. NULL = wildcard. */
+  mp_payment_method_id: string | null
   orden: number
   comision_porcentaje: number
   dias_acreditacion: number
@@ -1182,6 +1186,8 @@ export type MedioPagoInsert = {
   icono?: string
   activo?: boolean
   disponible_terminal?: boolean
+  mp_payment_type?: string | null
+  mp_payment_method_id?: string | null
   orden?: number
   comision_porcentaje?: number
   dias_acreditacion?: number
@@ -1197,6 +1203,8 @@ export type MedioPagoUpdate = {
   icono?: string
   activo?: boolean
   disponible_terminal?: boolean
+  mp_payment_type?: string | null
+  mp_payment_method_id?: string | null
   orden?: number
   comision_porcentaje?: number
   dias_acreditacion?: number

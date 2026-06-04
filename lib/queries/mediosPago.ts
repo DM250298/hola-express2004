@@ -58,6 +58,34 @@ export interface NuevoMedioPagoPayload {
   dias_acreditacion?: number
   cuenta_id?: number | null
   disponible_terminal?: boolean
+  mp_payment_type?: string | null
+  mp_payment_method_id?: string | null
+}
+
+/**
+ * Dado el `payment_method.type` y `payment_method.id` que devolvió MP Point
+ * al aprobarse una orden, encuentra el medio de pago más específico que
+ * matchea. Prioridad: type+method_id exacto > type-only > null (no match).
+ */
+export function matchMedioPagoPorMP(
+  medios: MedioPagoRow[],
+  mpType: string | null | undefined,
+  mpMethodId: string | null | undefined
+): MedioPagoRow | null {
+  if (!mpType) return null
+  const candidatos = medios.filter(
+    (m) => m.disponible_terminal && m.mp_payment_type === mpType
+  )
+  if (candidatos.length === 0) return null
+  // 1. Match exacto type + method_id
+  if (mpMethodId) {
+    const exacto = candidatos.find((m) => m.mp_payment_method_id === mpMethodId)
+    if (exacto) return exacto
+  }
+  // 2. Genérico (method_id NULL) — wildcard del type
+  const generico = candidatos.find((m) => m.mp_payment_method_id == null)
+  if (generico) return generico
+  return null
 }
 
 export async function crearMedioPago(
@@ -100,6 +128,8 @@ export async function crearMedioPago(
       orden: ordenMax + 1,
       activo: true,
       disponible_terminal: payload.disponible_terminal ?? false,
+      mp_payment_type: payload.mp_payment_type ?? null,
+      mp_payment_method_id: payload.mp_payment_method_id ?? null,
       protegido: false,
     })
     .select()
@@ -116,6 +146,8 @@ export interface ActualizarMedioPagoPatch {
   comision_porcentaje?: number
   dias_acreditacion?: number
   cuenta_id?: number | null
+  mp_payment_type?: string | null
+  mp_payment_method_id?: string | null
 }
 
 export async function actualizarMedioPago(

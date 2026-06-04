@@ -28,6 +28,7 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useTerminales } from '@/lib/hooks/useTerminales'
 import { useMediosPagoTerminal } from '@/lib/hooks/useMediosPago'
+import { matchMedioPagoPorMP } from '@/lib/queries/mediosPago'
 import {
   cancelarCobroTerminal,
   consultarCobroTerminal,
@@ -146,13 +147,27 @@ export function ModalCobroTerminal({
     !!orden?.status && ESTADOS_FINALES_ORDEN.has(orden.status)
   const aprobado = orden?.status === PROCESSED
 
+  // Lee el payment_method que devolvió MP en la orden aprobada.
+  const mpPayment = orden?.transactions?.payments?.[0]?.payment_method
+  // Intenta resolver el medio exacto a partir del payment_method de MP.
+  const medioAutoDetectado = useMemo(
+    () =>
+      mediosTerminal && mpPayment?.type
+        ? matchMedioPagoPorMP(mediosTerminal, mpPayment.type, mpPayment.id)
+        : null,
+    [mediosTerminal, mpPayment?.type, mpPayment?.id]
+  )
+
   // Dispara onAprobado cuando llega el estado processed (una sola vez).
+  // Si MP devolvió un payment_method que matchea con un medio configurado,
+  // usa ese (con su comisión exacta) en lugar del que eligió el cajero.
   useEffect(() => {
     if (aprobado && !yaAvisoExito && medioPago) {
       setYaAvisoExito(true)
-      onAprobado(medioPago)
+      const codigoFinal = medioAutoDetectado?.codigo ?? medioPago
+      onAprobado(codigoFinal)
     }
-  }, [aprobado, yaAvisoExito, medioPago, onAprobado])
+  }, [aprobado, yaAvisoExito, medioPago, medioAutoDetectado, onAprobado])
 
   // Cuando la orden llega a un estado final, dejar de seguirla localmente.
   useEffect(() => {
@@ -374,6 +389,28 @@ export function ModalCobroTerminal({
                 <p className="text-2xl font-extrabold text-[#391511] tabular-nums mt-1">
                   <MontoARS monto={total} />
                 </p>
+                {/* Mostrar qué medio se detectó automáticamente desde MP */}
+                {aprobado && medioAutoDetectado && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[#2f8f4e]/10 border border-[#2f8f4e]/30">
+                    <span className="text-[10px] text-[#2f8f4e] font-semibold uppercase tracking-wide">
+                      Detectado
+                    </span>
+                    <span className="text-xs text-[#391511] font-bold">
+                      {medioAutoDetectado.nombre}
+                    </span>
+                    {medioAutoDetectado.comision_porcentaje > 0 && (
+                      <span className="text-[10px] text-[#6f3a2a]">
+                        · {medioAutoDetectado.comision_porcentaje}%
+                      </span>
+                    )}
+                  </div>
+                )}
+                {aprobado && !medioAutoDetectado && mpPayment?.type && (
+                  <p className="text-[10px] text-[#c8a58a] mt-2 font-mono">
+                    MP: {mpPayment.type}
+                    {mpPayment.id ? ` / ${mpPayment.id}` : ''} · sin mapeo
+                  </p>
+                )}
                 {procesandoVenta && (
                   <p className="text-xs text-[#6f3a2a] mt-2 flex items-center justify-center gap-1.5">
                     <Loader2 className="h-3 w-3 animate-spin" />

@@ -52,6 +52,8 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
   const [diasAcred, setDiasAcred] = useState('0')
   const [cuentaId, setCuentaId] = useState<string>(SIN_CUENTA)
   const [disponibleTerminal, setDisponibleTerminal] = useState(false)
+  const [mpPaymentType, setMpPaymentType] = useState<string>('')
+  const [mpPaymentMethodId, setMpPaymentMethodId] = useState<string>('')
 
   const esEdicion = medio !== null
   const procesando = crear.isPending || actualizar.isPending
@@ -64,6 +66,8 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
     setDiasAcred(String(medio?.dias_acreditacion ?? 0))
     setCuentaId(medio?.cuenta_id ? String(medio.cuenta_id) : SIN_CUENTA)
     setDisponibleTerminal(medio?.disponible_terminal ?? false)
+    setMpPaymentType(medio?.mp_payment_type ?? '')
+    setMpPaymentMethodId(medio?.mp_payment_method_id ?? '')
   }, [abierto, medio])
 
   function guardar() {
@@ -73,6 +77,9 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
     if (comisionNum < 0 || comisionNum > 100) return
     const diasNum = Math.max(0, Math.floor(Number(diasAcred) || 0))
     const cuenta_id = cuentaId === SIN_CUENTA ? null : Number(cuentaId)
+
+    const mpType = mpPaymentType.trim() || null
+    const mpMethod = mpPaymentMethodId.trim() || null
 
     if (esEdicion && medio) {
       actualizar.mutate(
@@ -85,6 +92,8 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             dias_acreditacion: diasNum,
             cuenta_id,
             disponible_terminal: disponibleTerminal,
+            mp_payment_type: mpType,
+            mp_payment_method_id: mpMethod,
           },
         },
         { onSuccess: () => onCambioAbierto(false) }
@@ -98,6 +107,8 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
           dias_acreditacion: diasNum,
           cuenta_id,
           disponible_terminal: disponibleTerminal,
+          mp_payment_type: mpType,
+          mp_payment_method_id: mpMethod,
         },
         { onSuccess: () => onCambioAbierto(false) }
       )
@@ -256,6 +267,76 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
               </p>
             </div>
           </div>
+
+          {/* Auto-detección desde MP (solo si está disponible en terminal) */}
+          {disponibleTerminal && (
+            <div className="rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-3 space-y-3">
+              <div>
+                <Label className="text-[#391511] font-medium text-sm">
+                  Auto-detección desde Mercado Pago
+                </Label>
+                <p className="text-[11px] text-[#6f3a2a] mt-0.5">
+                  Cuando MP Point apruebe un cobro, si los datos abajo coinciden
+                  con lo que devuelve la API, este medio se selecciona solo (con
+                  su comisión exacta) en lugar del que eligió el cajero.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="mp-type" className="text-[#391511] text-xs font-medium">
+                    payment_method.type
+                  </Label>
+                  <Input
+                    id="mp-type"
+                    value={mpPaymentType}
+                    onChange={(e) => setMpPaymentType(e.target.value)}
+                    placeholder="credit_card"
+                    disabled={procesando}
+                    list="mp-type-options"
+                    className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] text-sm h-8"
+                  />
+                  <datalist id="mp-type-options">
+                    <option value="credit_card" />
+                    <option value="debit_card" />
+                    <option value="prepaid_card" />
+                    <option value="account_money" />
+                    <option value="digital_currency" />
+                  </datalist>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mp-method" className="text-[#391511] text-xs font-medium">
+                    payment_method.id
+                  </Label>
+                  <Input
+                    id="mp-method"
+                    value={mpPaymentMethodId}
+                    onChange={(e) => setMpPaymentMethodId(e.target.value)}
+                    placeholder="visa (vacío = cualquiera)"
+                    disabled={procesando}
+                    list="mp-method-options"
+                    className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] text-sm h-8"
+                  />
+                  <datalist id="mp-method-options">
+                    <option value="visa" />
+                    <option value="master" />
+                    <option value="amex" />
+                    <option value="naranja" />
+                    <option value="cabal" />
+                    <option value="maestro" />
+                    <option value="mercadopago_cc" />
+                  </datalist>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-[#c8a58a] leading-relaxed">
+                Dejá vacío el <strong>method.id</strong> para matchear cualquier
+                tarjeta del mismo tipo (ej: solo &quot;debit_card&quot; aplica a
+                cualquier tarjeta de débito). Dejá ambos vacíos si no querés
+                auto-detección para este medio.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
