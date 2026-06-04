@@ -39,7 +39,6 @@ interface Props {
 
 const REEMBOLSOS: { valor: TipoReembolso; etiqueta: string }[] = [
   { valor: 'efectivo', etiqueta: 'Efectivo' },
-  { valor: 'nota_credito', etiqueta: 'Nota de crédito' },
   { valor: 'tarjeta', etiqueta: 'Reverso a tarjeta' },
 ]
 
@@ -161,17 +160,6 @@ export function ModalDevolucion({
             <p className="text-[#6f3a2a]">
               Total devuelto: <MontoARS monto={resultado.total_devuelto} />
             </p>
-            {resultado.codigo_nc && (
-              <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#f9b44c]/10 px-6 py-3">
-                <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Nota de crédito — entregá este código al cliente
-                </div>
-                <div className="text-2xl font-extrabold text-[#391511] font-mono tracking-wider">
-                  {resultado.codigo_nc}
-                </div>
-              </div>
-            )}
-
             <div className="flex gap-2 mt-2">
               <Button
                 variant="outline"

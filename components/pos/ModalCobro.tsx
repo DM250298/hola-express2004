@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Loader2, Plus, Ticket, Trash2, Wifi } from 'lucide-react'
+import { Loader2, Plus, Trash2, Wifi } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -93,13 +93,6 @@ export function ModalCobro({
         comision: 0,
       })
     }
-    base.push({
-      valor: MEDIO_NOTA_CREDITO,
-      etiqueta: 'Nota de crédito',
-      Icono: Ticket,
-      tecla: null,
-      comision: 0,
-    })
     return base
   }, [mediosActivos, hayTerminalActiva, onCobrarConMaquinita])
 
