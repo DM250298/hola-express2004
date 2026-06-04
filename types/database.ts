@@ -1221,6 +1221,105 @@ export type MedioPagoUpdate = {
   updated_at?: string
 }
 
+// ─── notas_credito ────────────────────────────────────────────────────────────
+
+export type EstadoNotaCredito = 'activa' | 'usada' | 'anulada'
+
+export type NotaCreditoRow = {
+  id: number
+  codigo: string
+  cliente_id: number | null
+  devolucion_id: number | null
+  monto_original: number
+  saldo_disponible: number
+  estado: EstadoNotaCredito
+  fecha_emision: string
+  created_at: string
+}
+
+export type NotaCreditoInsert = {
+  id?: number
+  codigo: string
+  cliente_id?: number | null
+  devolucion_id?: number | null
+  monto_original: number
+  saldo_disponible: number
+  estado?: EstadoNotaCredito
+  fecha_emision?: string
+  created_at?: string
+}
+
+export type NotaCreditoUpdate = {
+  saldo_disponible?: number
+  estado?: EstadoNotaCredito
+}
+
+// ─── devoluciones ─────────────────────────────────────────────────────────────
+
+export type TipoReembolso = 'efectivo' | 'nota_credito' | 'tarjeta'
+
+export type DevolucionRow = {
+  id: number
+  venta_id: number | null
+  turno_id: number | null
+  usuario_id: string | null
+  motivo: string | null
+  tipo_reembolso: TipoReembolso
+  total_devuelto: number
+  cliente_id: number | null
+  nota_credito_id: number | null
+  egreso_id: number | null
+  created_at: string
+}
+
+export type DevolucionInsert = {
+  id?: number
+  venta_id?: number | null
+  turno_id?: number | null
+  usuario_id?: string | null
+  motivo?: string | null
+  tipo_reembolso: TipoReembolso
+  total_devuelto?: number
+  cliente_id?: number | null
+  nota_credito_id?: number | null
+  egreso_id?: number | null
+  created_at?: string
+}
+
+export type DevolucionUpdate = {
+  motivo?: string | null
+  nota_credito_id?: number | null
+  egreso_id?: number | null
+}
+
+export type DestinoItemDevolucion = 'stock' | 'merma'
+
+export type ItemDevolucionRow = {
+  id: number
+  devolucion_id: number
+  item_venta_id: number | null
+  producto_id: number | null
+  cantidad: number
+  precio_unitario: number
+  subtotal: number
+  destino: DestinoItemDevolucion
+}
+
+export type ItemDevolucionInsert = {
+  id?: number
+  devolucion_id: number
+  item_venta_id?: number | null
+  producto_id?: number | null
+  cantidad: number
+  precio_unitario: number
+  subtotal: number
+  destino?: DestinoItemDevolucion
+}
+
+export type ItemDevolucionUpdate = {
+  destino?: DestinoItemDevolucion
+}
+
 // ─── extractos_bancarios (conciliación) ──────────────────────────────────────
 
 export type ExtractoBancarioRow = {
@@ -1957,6 +2056,24 @@ export interface Database {
         Update: AcreditacionUpdate
         Relationships: []
       }
+      notas_credito: {
+        Row: NotaCreditoRow
+        Insert: NotaCreditoInsert
+        Update: NotaCreditoUpdate
+        Relationships: []
+      }
+      devoluciones: {
+        Row: DevolucionRow
+        Insert: DevolucionInsert
+        Update: DevolucionUpdate
+        Relationships: []
+      }
+      items_devolucion: {
+        Row: ItemDevolucionRow
+        Insert: ItemDevolucionInsert
+        Update: ItemDevolucionUpdate
+        Relationships: []
+      }
       extractos_bancarios: {
         Row: ExtractoBancarioRow
         Insert: ExtractoBancarioInsert
@@ -2414,6 +2531,23 @@ export interface Database {
           total: number
           conciliadas: number
           anomalias: number
+        }
+      }
+      fn_crear_devolucion: {
+        Args: {
+          p_venta_id: number
+          p_usuario_id: string
+          p_turno_id: number | null
+          p_motivo: string | null
+          p_tipo_reembolso: string
+          p_cliente_id: number | null
+          p_items: Json
+        }
+        Returns: {
+          devolucion_id: number
+          total_devuelto: number
+          nota_credito_id: number | null
+          codigo_nc: string | null
         }
       }
       fn_crear_activo: {

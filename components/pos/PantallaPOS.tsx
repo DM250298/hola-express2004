@@ -8,6 +8,7 @@ import {
   LockKeyhole,
   Plus,
   Receipt,
+  RotateCcw,
   Wallet,
   X,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ import { ModalCobro } from './ModalCobro'
 import { ModalVentasTurno } from './ModalVentasTurno'
 import { ModalGastoPOS } from './ModalGastoPOS'
 import { ModalSangria } from './ModalSangria'
+import { ModalDevolucion } from './ModalDevolucion'
 import { TicketResumen } from './TicketResumen'
 import { OverlayAtajos } from './OverlayAtajos'
 import { IndicadorConexion } from './IndicadorConexion'
@@ -77,6 +79,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const { data: usuario } = useUsuario()
   const { data: terminales } = useTerminales()
   const puedeGasto = tienePermiso(usuario?.permisos, 'pos_gasto')
+  const puedeDevolver = tienePermiso(usuario?.permisos, 'devoluciones')
   const hayTerminalActiva = (terminales ?? []).some(
     (t) => t.activo && !!t.device_id
   )
@@ -92,6 +95,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [modalVentasTurnoAbierto, setModalVentasTurnoAbierto] = useState(false)
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false)
   const [modalSangriaAbierto, setModalSangriaAbierto] = useState(false)
+  const [modalDevolucionAbierto, setModalDevolucionAbierto] = useState(false)
   const [ticketAbierto, setTicketAbierto] = useState(false)
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
@@ -184,6 +188,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     modalVentasTurnoAbierto ||
     modalGastoAbierto ||
     modalSangriaAbierto ||
+    modalDevolucionAbierto ||
     ticketAbierto ||
     overlayAtajosAbierto ||
     selectorClienteAbierto ||
@@ -493,6 +498,18 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             <ArrowDownToLine className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Sangría</span>
           </Button>
+          {puedeDevolver && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setModalDevolucionAbierto(true)}
+              title="Registrar una devolución"
+              className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Devolución</span>
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => setModalCierreAbierto(true)}
@@ -663,6 +680,15 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         turnoId={turno.id}
         usuarioId={usuarioId}
       />
+
+      {puedeDevolver && (
+        <ModalDevolucion
+          abierto={modalDevolucionAbierto}
+          onCambioAbierto={setModalDevolucionAbierto}
+          turnoId={turno.id}
+          usuarioId={usuarioId}
+        />
+      )}
 
       <OverlayAtajos
         abierto={overlayAtajosAbierto}
