@@ -955,6 +955,8 @@ export type CuentaRow = {
   alias_cbu: string | null
   notas: string | null
   activo: boolean
+  /** Retención de IIBB que aplica el agente de retención sobre cada ingreso. */
+  retencion_iibb_porcentaje: number
   created_at: string
   updated_at: string
 }
@@ -970,6 +972,7 @@ export type CuentaInsert = {
   alias_cbu?: string | null
   notas?: string | null
   activo?: boolean
+  retencion_iibb_porcentaje?: number
   created_at?: string
   updated_at?: string
 }
@@ -984,6 +987,7 @@ export type CuentaUpdate = {
   alias_cbu?: string | null
   notas?: string | null
   activo?: boolean
+  retencion_iibb_porcentaje?: number
   updated_at?: string
 }
 

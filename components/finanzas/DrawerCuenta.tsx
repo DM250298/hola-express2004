@@ -37,6 +37,10 @@ const esquemaCuenta = z.object({
   alias_cbu: z.string().trim().max(60).optional().or(z.literal('')),
   notas: z.string().trim().max(200).optional().or(z.literal('')),
   activo: z.boolean(),
+  retencion_iibb_porcentaje: z
+    .union([z.string(), z.number()])
+    .transform((v) => (v === '' ? 0 : Number(v)))
+    .pipe(z.number().min(0).max(100)),
 })
 
 type DatosForm = z.input<typeof esquemaCuenta>
@@ -85,6 +89,7 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
       alias_cbu: '',
       notas: '',
       activo: true,
+      retencion_iibb_porcentaje: '0',
     },
   })
 
@@ -99,6 +104,7 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
         alias_cbu: cuenta?.alias_cbu ?? '',
         notas: cuenta?.notas ?? '',
         activo: cuenta?.activo ?? true,
+        retencion_iibb_porcentaje: String(cuenta?.retencion_iibb_porcentaje ?? 0),
       })
     }
   }, [abierto, cuenta, reset])
@@ -118,6 +124,7 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
       alias_cbu: validado.alias_cbu?.trim() ? validado.alias_cbu : null,
       notas: validado.notas?.trim() ? validado.notas : null,
       activo: validado.activo,
+      retencion_iibb_porcentaje: validado.retencion_iibb_porcentaje,
     }
 
     try {
@@ -270,6 +277,35 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] font-mono text-xs"
               />
             </div>
+          </div>
+
+          {/* Retención IIBB */}
+          <div className="space-y-1.5">
+            <Label htmlFor="iibb" className="text-[#391511] font-medium">
+              Retención IIBB (%)
+            </Label>
+            <div className="relative">
+              <Input
+                id="iibb"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                {...register('retencion_iibb_porcentaje')}
+                disabled={guardando}
+                placeholder="0"
+                className="pr-7 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6f3a2a] font-bold text-sm">
+                %
+              </span>
+            </div>
+            <p className="text-[10px] text-[#6f3a2a] leading-snug">
+              Tasa que te retiene el agente (ej: MP te descuenta IIBB en cada
+              venta). Se aplica automáticamente sobre el bruto de cada ingreso
+              a esta cuenta, sumado a la comisión. Dejá en <strong>0</strong> si
+              no corresponde.
+            </p>
           </div>
 
           <div className="space-y-1.5">
