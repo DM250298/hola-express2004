@@ -251,10 +251,6 @@ export function ModalCobroTerminal({
     terminalesUsables.map((t) => [String(t.id), t.nombre])
   )
 
-  const itemsMedio: Record<string, string> = Object.fromEntries(
-    mediosTarjeta.map((m) => [m.codigo, m.nombre])
-  )
-
   return (
     <Dialog open={abierto} onOpenChange={manejarCierre}>
       <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
@@ -368,30 +364,15 @@ export function ModalCobroTerminal({
                   </div>
                 )}
 
-                <div className="space-y-1.5">
-                  <Label className="text-[#391511] font-medium text-sm">
-                    Forma de pago
-                  </Label>
-                  <Select
-                    items={itemsMedio}
-                    value={medioPago}
-                    onValueChange={(v) => setMedioPago(v ?? '')}
-                  >
-                    <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
-                      <SelectValue placeholder="Elegí el medio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mediosTarjeta.map((m) => (
-                        <SelectItem key={m.codigo} value={m.codigo}>
-                          {m.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-[11px] text-[#c8a58a]">
-                    Con qué medio se registra la venta en el sistema. El
-                    cobro se hace siempre a través del posnet.
-                  </p>
+                {/* La forma de pago la detecta MP sola al aprobarse. El cajero
+                    no la elige: solo definió el canal (Tarjeta/QR) arriba. */}
+                <div className="flex items-start gap-2 text-[11px] text-[#6f3a2a] bg-[#fdfaf6] border border-[#e4c9b0]/60 rounded-lg px-3 py-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-[#2f8f4e] shrink-0 mt-0.5" />
+                  <span>
+                    El medio exacto (débito, crédito, etc.) se detecta solo
+                    según cómo pague el cliente y se registra con su comisión
+                    real.
+                  </span>
                 </div>
 
                 {errorEnvio && (
