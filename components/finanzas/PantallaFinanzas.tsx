@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TabTableroDirectivo } from './TabTableroDirectivo'
 import { TabResumen } from './TabResumen'
 import { TabCuentasAPagar } from './TabCuentasAPagar'
 import { TabEgresos } from './TabEgresos'
@@ -118,8 +119,14 @@ export function PantallaFinanzas() {
         </div>
       </header>
 
-      <Tabs defaultValue="resumen" className="space-y-4">
+      <Tabs defaultValue="tablero" className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
+          <TabsTrigger
+            value="tablero"
+            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+          >
+            Tablero
+          </TabsTrigger>
           <TabsTrigger
             value="resumen"
             className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
@@ -170,6 +177,9 @@ export function PantallaFinanzas() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="tablero">
+          <TabTableroDirectivo desde={rango.desde} hasta={rango.hasta} />
+        </TabsContent>
         <TabsContent value="resumen">
           <TabResumen desde={rango.desde} hasta={rango.hasta} />
         </TabsContent>
