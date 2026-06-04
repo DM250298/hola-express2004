@@ -38,12 +38,26 @@ export async function getMediosPagoActivos(): Promise<MedioPagoRow[]> {
   return (data ?? []) as MedioPagoRow[]
 }
 
+/** Medios marcados como disponibles para cobrar con terminal/posnet. */
+export async function getMediosPagoTerminal(): Promise<MedioPagoRow[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('medios_pago')
+    .select('*')
+    .eq('disponible_terminal', true)
+    .order('orden', { ascending: true })
+    .order('id', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as MedioPagoRow[]
+}
+
 export interface NuevoMedioPagoPayload {
   nombre: string
   icono: string
   comision_porcentaje?: number
   dias_acreditacion?: number
   cuenta_id?: number | null
+  disponible_terminal?: boolean
 }
 
 export async function crearMedioPago(
@@ -85,6 +99,7 @@ export async function crearMedioPago(
       cuenta_id: payload.cuenta_id ?? null,
       orden: ordenMax + 1,
       activo: true,
+      disponible_terminal: payload.disponible_terminal ?? false,
       protegido: false,
     })
     .select()
@@ -97,6 +112,7 @@ export interface ActualizarMedioPagoPatch {
   nombre?: string
   icono?: string
   activo?: boolean
+  disponible_terminal?: boolean
   comision_porcentaje?: number
   dias_acreditacion?: number
   cuenta_id?: number | null

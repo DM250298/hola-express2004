@@ -5,6 +5,7 @@ import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -50,6 +51,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
   const [comision, setComision] = useState('0')
   const [diasAcred, setDiasAcred] = useState('0')
   const [cuentaId, setCuentaId] = useState<string>(SIN_CUENTA)
+  const [disponibleTerminal, setDisponibleTerminal] = useState(false)
 
   const esEdicion = medio !== null
   const procesando = crear.isPending || actualizar.isPending
@@ -61,6 +63,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
     setComision(String(medio?.comision_porcentaje ?? 0))
     setDiasAcred(String(medio?.dias_acreditacion ?? 0))
     setCuentaId(medio?.cuenta_id ? String(medio.cuenta_id) : SIN_CUENTA)
+    setDisponibleTerminal(medio?.disponible_terminal ?? false)
   }, [abierto, medio])
 
   function guardar() {
@@ -81,6 +84,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             comision_porcentaje: comisionNum,
             dias_acreditacion: diasNum,
             cuenta_id,
+            disponible_terminal: disponibleTerminal,
           },
         },
         { onSuccess: () => onCambioAbierto(false) }
@@ -93,6 +97,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
           comision_porcentaje: comisionNum,
           dias_acreditacion: diasNum,
           cuenta_id,
+          disponible_terminal: disponibleTerminal,
         },
         { onSuccess: () => onCambioAbierto(false) }
       )
@@ -231,6 +236,25 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Disponible en terminal */}
+          <div className="flex items-start gap-3 rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] px-3 py-2.5">
+            <Switch
+              checked={disponibleTerminal}
+              onCheckedChange={setDisponibleTerminal}
+              disabled={procesando}
+              aria-label="Disponible en terminal"
+              className="mt-0.5"
+            />
+            <div className="flex-1 min-w-0">
+              <Label className="text-[#391511] font-medium text-sm cursor-pointer">
+                Disponible en terminal
+              </Label>
+              <p className="text-[11px] text-[#6f3a2a] mt-0.5">
+                Aparece como forma de pago al cobrar con el posnet.
+              </p>
+            </div>
           </div>
         </div>
 

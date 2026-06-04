@@ -1162,7 +1162,10 @@ export type MedioPagoRow = {
   codigo: string
   nombre: string
   icono: string
+  /** Aparece en el modal de cobro normal del POS. */
   activo: boolean
+  /** Aparece como forma de pago al cobrar con la terminal Point. */
+  disponible_terminal: boolean
   orden: number
   comision_porcentaje: number
   dias_acreditacion: number
@@ -1178,6 +1181,7 @@ export type MedioPagoInsert = {
   nombre: string
   icono?: string
   activo?: boolean
+  disponible_terminal?: boolean
   orden?: number
   comision_porcentaje?: number
   dias_acreditacion?: number
@@ -1192,6 +1196,7 @@ export type MedioPagoUpdate = {
   nombre?: string
   icono?: string
   activo?: boolean
+  disponible_terminal?: boolean
   orden?: number
   comision_porcentaje?: number
   dias_acreditacion?: number

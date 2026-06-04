@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/select'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useTerminales } from '@/lib/hooks/useTerminales'
-import { useMediosPagoActivos } from '@/lib/hooks/useMediosPago'
+import { useMediosPagoTerminal } from '@/lib/hooks/useMediosPago'
 import {
   cancelarCobroTerminal,
   consultarCobroTerminal,
@@ -70,7 +70,7 @@ export function ModalCobroTerminal({
 }: Props) {
   const esParcial = totalVenta != null && totalVenta > total + 0.001
   const { data: terminales } = useTerminales()
-  const { data: mediosActivos } = useMediosPagoActivos()
+  const { data: mediosTerminal } = useMediosPagoTerminal()
 
   // Solo terminales activas con device_id vinculado.
   const terminalesUsables = useMemo(
@@ -79,11 +79,12 @@ export function ModalCobroTerminal({
     [terminales]
   )
 
-  // Medios de pago no-efectivo (los de tarjeta).
+  // Medios habilitados específicamente para cobro con terminal.
+  // Por seguridad, descartamos efectivo aunque alguien lo haya marcado.
   const mediosTarjeta = useMemo(
     () =>
-      (mediosActivos ?? []).filter((m) => m.codigo !== 'efectivo'),
-    [mediosActivos]
+      (mediosTerminal ?? []).filter((m) => m.codigo !== 'efectivo'),
+    [mediosTerminal]
   )
 
   const [terminalId, setTerminalId] = useState<string>('')

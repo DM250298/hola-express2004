@@ -8,12 +8,14 @@ import {
   eliminarMedioPago,
   getMediosPago,
   getMediosPagoActivos,
+  getMediosPagoTerminal,
   type ActualizarMedioPagoPatch,
   type NuevoMedioPagoPayload,
 } from '@/lib/queries/mediosPago'
 
 export const MEDIOS_PAGO_KEY = ['medios-pago'] as const
 export const MEDIOS_PAGO_ACTIVOS_KEY = ['medios-pago', 'activos'] as const
+export const MEDIOS_PAGO_TERMINAL_KEY = ['medios-pago', 'terminal'] as const
 
 /** Todos los medios de pago (activos e inactivos) — para configuración. */
 export function useMediosPago() {
@@ -33,8 +35,19 @@ export function useMediosPagoActivos() {
   })
 }
 
+/** Medios marcados como disponibles para cobrar con terminal/posnet. */
+export function useMediosPagoTerminal() {
+  return useQuery({
+    queryKey: MEDIOS_PAGO_TERMINAL_KEY,
+    queryFn: getMediosPagoTerminal,
+    staleTime: 60 * 1000,
+  })
+}
+
 function invalidar(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: MEDIOS_PAGO_KEY })
+  qc.invalidateQueries({ queryKey: MEDIOS_PAGO_ACTIVOS_KEY })
+  qc.invalidateQueries({ queryKey: MEDIOS_PAGO_TERMINAL_KEY })
 }
 
 export function useCrearMedioPago() {

@@ -45,6 +45,10 @@ export function ConfiguracionCobros() {
     actualizar.mutate({ id: m.id, patch: { activo } })
   }
 
+  function toggleTerminal(m: MedioPagoRow, disponible_terminal: boolean) {
+    actualizar.mutate({ id: m.id, patch: { disponible_terminal } })
+  }
+
   function borrar(m: MedioPagoRow) {
     if (
       !confirm(
@@ -76,6 +80,8 @@ export function ConfiguracionCobros() {
       <p className="text-[#6f3a2a] text-xs mb-4">
         Activá los medios que ofrecés en el POS y asigná a qué cuenta entra cada
         cobro. La comisión es informativa y se descuenta como egreso al vender.
+        El switch <strong>Terminal</strong> controla qué formas de pago aparecen
+        al cobrar con el posnet.
       </p>
 
       {isLoading ? (
@@ -128,12 +134,29 @@ export function ConfiguracionCobros() {
                   </div>
                 </div>
 
-                <Switch
-                  checked={m.activo}
-                  onCheckedChange={(v) => toggleActivo(m, v)}
-                  disabled={actualizar.isPending || m.protegido}
-                  aria-label={`Activar ${m.nombre}`}
-                />
+                <div className="flex flex-col items-center gap-0.5">
+                  <Switch
+                    checked={m.activo}
+                    onCheckedChange={(v) => toggleActivo(m, v)}
+                    disabled={actualizar.isPending || m.protegido}
+                    aria-label={`Activar ${m.nombre} en POS`}
+                  />
+                  <span className="text-[9px] text-[#6f3a2a] uppercase tracking-wide font-semibold">
+                    POS
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center gap-0.5">
+                  <Switch
+                    checked={m.disponible_terminal}
+                    onCheckedChange={(v) => toggleTerminal(m, v)}
+                    disabled={actualizar.isPending || m.protegido}
+                    aria-label={`Disponible en terminal: ${m.nombre}`}
+                  />
+                  <span className="text-[9px] text-[#6f3a2a] uppercase tracking-wide font-semibold">
+                    Terminal
+                  </span>
+                </div>
 
                 <Button
                   variant="ghost"
