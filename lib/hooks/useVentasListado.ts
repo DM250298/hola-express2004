@@ -49,7 +49,9 @@ export function useAnularVenta() {
       queryClient.invalidateQueries({ queryKey: ['cuentas'] })
       queryClient.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
       queryClient.invalidateQueries({ queryKey: ['resumen-turno'] })
-      toast.success('Venta anulada — stock y cuentas revertidos')
+      queryClient.invalidateQueries({ queryKey: ['acreditaciones'] })
+      queryClient.invalidateQueries({ queryKey: ['lotes-activos'] })
+      toast.success('Venta anulada — stock, lotes, cuentas y acreditaciones revertidos')
     },
     onError: (error: Error) => {
       toast.error(`No se pudo anular la venta: ${error.message}`)
