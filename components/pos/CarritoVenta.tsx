@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Minus, Plus, Scale, ShoppingCart, Trash2, User, Wifi, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
@@ -11,6 +12,60 @@ import {
   type ItemCarrito,
 } from './carrito'
 import { cn } from '@/lib/utils'
+
+/**
+ * Input editable de cantidad. Mantiene estado local para permitir
+ * estados intermedios vacíos mientras el cajero tipea; al confirmar
+ * (blur o Enter) clampea al stock disponible y dispatcha el cambio.
+ * Si queda vacío o en 0, restaura la cantidad anterior.
+ */
+function EditorCantidad({
+  cantidad,
+  stockDisponible,
+  onCambiar,
+}: {
+  cantidad: number
+  stockDisponible: number
+  onCambiar: (nuevaCantidad: number) => void
+}) {
+  const [valor, setValor] = useState(String(cantidad))
+
+  useEffect(() => {
+    setValor(String(cantidad))
+  }, [cantidad])
+
+  const confirmar = () => {
+    const n = parseInt(valor, 10)
+    if (!Number.isFinite(n) || n <= 0) {
+      setValor(String(cantidad))
+      return
+    }
+    const clamp = Math.min(n, stockDisponible)
+    if (clamp !== cantidad) onCambiar(clamp)
+    setValor(String(clamp))
+  }
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={1}
+      max={stockDisponible}
+      value={valor}
+      onChange={(e) => setValor(e.target.value.replace(/[^0-9]/g, ''))}
+      onFocus={(e) => e.currentTarget.select()}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          ;(e.currentTarget as HTMLInputElement).blur()
+        }
+      }}
+      aria-label="Cantidad"
+      className="w-12 h-9 text-center font-bold text-[#391511] tabular-nums bg-white border border-[#e4c9b0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#f9b44c] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    />
+  )
+}
 
 interface Props {
   items: ItemCarrito[]
@@ -184,9 +239,17 @@ export function CarritoVenta({
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </Button>
-                      <span className="w-10 text-center font-bold text-[#391511] tabular-nums">
-                        {it.cantidad}
-                      </span>
+                      <EditorCantidad
+                        cantidad={it.cantidad}
+                        stockDisponible={it.stock_disponible}
+                        onCambiar={(nueva) =>
+                          dispatch({
+                            tipo: 'CAMBIAR_CANTIDAD',
+                            producto_id: it.producto_id,
+                            cantidad: nueva,
+                          })
+                        }
+                      />
                       <Button
                         variant="outline"
                         size="icon"
