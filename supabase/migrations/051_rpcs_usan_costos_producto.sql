@@ -339,7 +339,7 @@ begin
       producto_id, tipo, cantidad, stock_anterior, stock_nuevo,
       referencia_id, usuario_id, nota
     ) values (
-      v_prod_id, v_tipo, v_mov_cant, v_stock_ant, v_stock_final,
+      v_prod_id, v_tipo::public.tipo_movimiento, v_mov_cant, v_stock_ant, v_stock_final,
       v_ajuste.id, p_usuario_id, 'Ajuste #' || v_ajuste.id || ' · ' || p_razon
     );
     insert into public.items_ajuste_stock (
