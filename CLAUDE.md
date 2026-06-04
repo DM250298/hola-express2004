@@ -1,85 +1,336 @@
-# CLAUDE.md
+# CLAUDE.md — Hola Express
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Sistema ERP para **Hola Express**, autoservicio 24 horas en La Rioja, Argentina.
+Operación 24/7 con hasta 15 empleados, modelo de referencia: el sistema
+integrado de 7-Eleven (cada venta actualiza stock, cada movimiento queda
+registrado, dueños con visibilidad en tiempo real).
 
-> ⚠️ **This is Next.js 16, not Next.js 13/14.** APIs, conventions, and file structure may differ from training data. Read `node_modules/next/dist/docs/` before writing routing or data-fetching code. Heed deprecation notices.
+> ⚠️ **Next.js 16, no 13/14.** APIs, convenciones y file structure pueden
+> diferir del training data. Leé `node_modules/next/dist/docs/` antes de
+> escribir routing o data fetching nuevo. Atendé las deprecation notices.
 
 ---
 
-## Commands
+## Comandos
 
 ```bash
-npm run dev      # start dev server
-npm run build    # production build (runs TypeScript check)
-npm run start    # serve production build
+npm run dev      # dev server
+npm run build    # build de producción (corre TypeScript check)
+npm run start    # sirve el build
 ```
 
-No test runner or linter is configured. TypeScript errors surface at build time (`npm run build`).
+No hay test runner ni linter configurados. Los errores de TypeScript salen
+en `npm run build`. **Siempre correr `npm run build` antes de cada commit
+grande** — es la única red de seguridad.
 
 ---
 
-## Architecture
+## Stack técnico
 
-### Stack
-- **Next.js 16** (App Router) + **React 19** + **TypeScript strict**
-- **Supabase** (`@supabase/ssr` v0.10) — PostgreSQL + Auth + RLS
-- **TanStack Query v5** — all client-side data fetching and mutations
-- **Tailwind CSS v4** + **shadcn/ui** (built on `@base-ui/react`, not Radix)
-- **Zod v4** + **react-hook-form v7** — form validation
-- **sonner** — toast notifications
-
-### Route structure
-All authenticated pages live under `app/(dashboard)/`. The layout at `app/(dashboard)/layout.tsx` is a **Server Component** that reads the Supabase session and user permissions, then passes them to `<Sidebar>` and `<Header>`. There is no client-side auth check — if the layout renders, the user is authenticated.
-
-Routes: `/` (dashboard), `/pos`, `/ventas`, `/inventario`, `/vencimientos`, `/pedidos`, `/recepcion`, `/compras`, `/etiquetas`, `/finanzas`, `/contabilidad`, `/rrhh`, `/clientes`, `/tableros`, `/proyectos`, `/agenda`, `/reportes`, `/terminales`, `/configuracion`.
-
-### Supabase client usage
-- **Server Components / layouts**: `createServerClient()` from `@/lib/supabase/server`
-- **Client Components / hooks / queries**: `createClient()` from `@/lib/supabase/client`
-- Never mix them. The server client reads cookies via Next.js headers; the browser client uses `createBrowserClient` from `@supabase/ssr`.
-
-### Data layer pattern
-Every feature follows this layering:
-
-```
-lib/queries/<feature>.ts      ← raw Supabase calls, typed with Database types
-lib/hooks/use<Feature>.ts     ← TanStack Query wrappers (useQuery / useMutation)
-components/<feature>/         ← UI consumes hooks only, never queries directly
-```
-
-Mutations that need atomicity (create sale, void sale, run payroll) call **Postgres RPCs** (`supabase.rpc('fn_...')`) instead of multiple client-side inserts. This is the critical pattern for financial operations.
-
-### Permission system
-Permissions are string keys defined in `lib/permisos.ts`. Each user has a `rol` in `usuarios` table; each role has a `permisos: string[]` array in the `roles` table (with a legacy fallback in `PERMISOS_POR_ROL_LEGACY`).
-
-- **Middleware** (`middleware.ts`): enforces route-level access using `PERMISO_RUTA` (permiso → array of route prefixes). Redirects unauthorized users to `/`.
-- **Layout**: reads permisos from DB and passes them down as props to `<Sidebar>` and `<Header>`.
-- **RLS**: Supabase Row Level Security provides the actual security boundary at the DB level.
-
-To add a new protected route: add the permiso key to `PERMISOS` in `lib/permisos.ts`, add the route prefix to `PERMISO_RUTA` in `middleware.ts`, and assign it to roles in the `roles` table.
-
-### Offline mode (POS only)
-The POS supports offline sales via `lib/offline/`:
-- `db.ts` — IndexedDB schema using `idb`
-- `cola.ts` — queues sales when offline (`encolarVenta`)
-- `sync.ts` — re-sends queued sales when connectivity returns (`esErrorDeRed` detects network errors)
-- `catalogo.ts` — caches product catalog for offline search
-
-Sales go through `crearVenta` in `lib/queries/ventas.ts` which checks `navigator.onLine` and falls back to the queue. Queued sales are returned as `pendiente: true` so the POS can still print a ticket.
-
-### Database migrations
-Migrations live in `supabase/migrations/` numbered sequentially (e.g. `039_cuenta_corriente_empleado.sql`). There is no migration runner in the codebase — run migrations manually via the Supabase Dashboard SQL Editor or `supabase db push`. Never modify existing migrations; always add a new numbered file.
-
-Types in `types/database.ts` are manually maintained (not auto-generated). Use `type` aliases (not `interface`) and include `Relationships` and `CompositeTypes` keys to avoid `never[]` errors from `@supabase/supabase-js` v2.105+.
+| Capa | Tecnología | Nota |
+|---|---|---|
+| Framework | **Next.js 16** (App Router) | Server Components por defecto |
+| UI | **React 19** + **TypeScript estricto** | `strict: true`, sin `any` |
+| Estilos | **Tailwind CSS v4** | Sin `tailwind.config.js`, todo CSS-first |
+| Componentes | **shadcn/ui** sobre `@base-ui/react` | **NO Radix**, ver gotcha más abajo |
+| DB / Auth | **Supabase** (`@supabase/ssr` v0.10) | PostgreSQL + Auth + RLS |
+| Data fetching | **TanStack Query v5** | Wrappers en `lib/hooks/` |
+| Formularios | **Zod v4** + **react-hook-form v7** | |
+| Gráficos | **Recharts v3** | |
+| Toasts | **sonner** | |
+| PDF | **jsPDF** + **html2canvas** | |
+| Offline POS | **idb** (IndexedDB) | Cola de ventas + catálogo cacheado |
+| Deploy | **Vercel** (auto-deploy desde GitHub main) | |
 
 ---
 
-## Key conventions
+## Arquitectura
 
-- **Language**: all variable names, comments, and UI text in Spanish (Argentine business context).
-- **Dates**: always `date-fns` with `es` locale. Utilities in `lib/utils/formato.ts`.
-- **Currency**: `Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' })`. Use the `<MontoARS monto={n} />` component.
-- **`"use client"`**: only when the component uses state, effects, or event handlers. Layouts and data-display pages are Server Components by default.
-- **shadcn `<Button>` without `asChild`**: this build uses `@base-ui/react` under shadcn, which does not support `asChild`. Use `buttonVariants()` + a plain `<Link>` wrapper instead.
-- **`<Select>` with `items` prop**: the local shadcn Select accepts an `items` prop (`Record<string, string>`) as a shorthand, in addition to the standard `<SelectItem>` children pattern.
-- **Toasts**: import `toast` from `sonner`. Always show success/error toasts from mutation `onSuccess`/`onError` callbacks in the hook layer, not in components.
+### Estructura de rutas
+
+Todas las páginas autenticadas viven bajo `app/(dashboard)/`. El layout en
+`app/(dashboard)/layout.tsx` es **Server Component**: lee la sesión de
+Supabase y los permisos del usuario, y los pasa como props a `<Sidebar>` y
+`<Header>`. **No hay chequeo de auth en cliente** — si el layout renderiza,
+el usuario está autenticado.
+
+Existe un segundo grupo `app/(tienda)/` para la tienda online pública (no
+requiere login, max-w-lg mobile-first).
+
+**Rutas autenticadas:** `/` (dashboard), `/pos`, `/ventas`, `/inventario`
+(con `/movimientos` y `/clasificacion-abc`), `/vencimientos`, `/compras`
+(unificado), `/etiquetas`, `/finanzas`, `/contabilidad`, `/rrhh`,
+`/clientes`, `/tableros`, `/proyectos`, `/agenda`, `/reportes`,
+`/terminales`, `/configuracion` (productos, categorías, proveedores,
+usuarios).
+
+**Rutas públicas:** `/login`, `/tienda` (catálogo, carrito, checkout,
+confirmado), `/api/tienda/*`.
+
+**Rutas legacy redirigidas:** `/pedidos` y `/recepcion` → `/compras` (módulo
+unificado).
+
+### Cliente Supabase (no mezclar)
+
+- **Server Components / layouts**: `createServerClient()` de
+  `@/lib/supabase/server`
+- **Client Components / hooks / queries**: `createClient()` de
+  `@/lib/supabase/client`
+- El server lee cookies vía Next.js headers; el browser usa
+  `createBrowserClient` de `@supabase/ssr`
+
+Nunca mezclarlos.
+
+### Patrón de capa de datos
+
+Toda feature sigue este layering:
+
+```
+lib/queries/<feature>.ts      ← Supabase raw, tipado contra Database
+lib/hooks/use<Feature>.ts     ← Wrappers TanStack (useQuery/useMutation)
+components/<feature>/         ← UI; SOLO consume hooks, nunca queries directas
+```
+
+**Mutaciones financieras u operaciones que necesitan atomicidad** llaman
+RPCs Postgres (`supabase.rpc('fn_...')`) en lugar de múltiples inserts del
+cliente. Este es el patrón crítico — la falta de transacciones en el
+cliente Supabase obliga a empujar la lógica al server.
+
+RPCs principales: `fn_crear_venta`, `fn_anular_venta`, `fn_recibir_pedido`,
+`fn_guardar_factura_compra`, `fn_pagar_cuenta`, `fn_crear_movimiento`,
+`fn_crear_transferencia`, `fn_validar_arqueo`, `fn_generar_remesa`,
+`fn_acreditar_pago`, `fn_aprobar_conteo`, `fn_crear_ajuste_stock`,
+`fn_crear_egreso`, `fn_crear_asiento`, `fn_crear_activo`.
+
+### Sistema de permisos
+
+Permisos = string keys en `lib/permisos.ts`. Cada user tiene un `rol` en
+`usuarios`; cada rol tiene `permisos: string[]` en la tabla `roles` (con
+fallback `PERMISOS_POR_ROL_LEGACY`).
+
+- **Middleware** (`middleware.ts`): controla acceso a rutas usando
+  `PERMISO_RUTA` (permiso → prefijos de ruta). Redirige no autorizados a
+  `/`. También maneja `RUTAS_PUBLICAS` y `RUTAS_SOLO_ANON` (ej: `/login`
+  redirige logueados al dashboard, pero `/tienda` no).
+- **Layout**: lee permisos de la DB y los pasa down como props.
+- **Sidebar**: filtra items por permiso. Soporta `permisosAlt` para items
+  visibles con cualquiera de N permisos (ej: `/compras` se ve con
+  `compras`, `pedidos` o `recepcion`).
+- **RLS**: la frontera de seguridad real está a nivel DB.
+
+**Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
+`lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
+asignarla a roles en la tabla `roles`.
+
+### Modo offline (solo POS)
+
+`lib/offline/`:
+- `db.ts` — schema IndexedDB con `idb`
+- `cola.ts` — encola ventas cuando hay error de red (`encolarVenta`)
+- `sync.ts` — reenvía cuando vuelve la conexión (`esErrorDeRed` detecta
+  network errors)
+- `catalogo.ts` — cachea el catálogo de productos para búsqueda offline
+
+Las ventas pasan por `crearVenta` en `lib/queries/ventas.ts` que chequea
+`navigator.onLine` y cae a la cola. Las encoladas vuelven como
+`pendiente: true` para que el POS pueda imprimir el ticket igual.
+
+### Migraciones de DB
+
+Viven en `supabase/migrations/` numeradas secuencialmente (`044_xxx.sql`).
+**No hay migration runner en el repo** — se corren a mano desde el SQL
+Editor de Supabase o `supabase db push`. **Nunca modificar una migración
+existente**, siempre crear una nueva.
+
+Tipos en `types/database.ts` se mantienen **a mano** (no auto-generados).
+Usar `type` aliases (no `interface`) e incluir las keys `Relationships` y
+`CompositeTypes` para evitar `never[]` con `@supabase/supabase-js` v2.105+.
+
+---
+
+## Módulos del sistema
+
+### 1. POS (`/pos`) — punto de venta
+Búsqueda + grid de frecuentes, carrito con +/-, cobro multi-medio (efectivo
+con vuelto, débito/crédito/transferencia, terminal Mercado Pago, venta por
+peso), apertura/cierre de caja con conteo de billetes, **sangrías**
+(retiros a caja fuerte que descuentan del cierre), gastos del turno,
+selector de cliente, atajos F1–F12, modo offline. La venta crea asiento
+contable automático.
+
+### 2. Ventas (`/ventas`)
+Listado con filtros, drawer de detalle, anulación con asiento contable
+inverso.
+
+### 3. Clientes (`/clientes`) — CRM
+ABM + historial de compras.
+
+### 4. Inventario (`/inventario`)
+- **Stock**: tabla, filtros, alertas de mínimo, detalle por producto con
+  gráfico de evolución
+- **Movimientos** (`/inventario/movimientos`): historial completo, filtros
+  por tipo/turno/usuario/categoría, export CSV
+- **Clasificación ABC** (`/inventario/clasificacion-abc`): análisis Pareto
+  por ingresos
+- Conteos físicos con aprobación atómica, ajustes manuales
+
+### 5. Vencimientos (`/vencimientos`)
+Semáforo verde/amarillo/rojo por lote, baja con merma automática,
+vencimiento mínimo configurable.
+
+### 6. **Compras (`/compras`) — módulo unificado**
+Hub con 4 tabs según permisos:
+- **Reposición**: sugerido de stock bajo + cotización Excel/PDF + borrador
+- **Órdenes**: lista + crear OC (absorbe `/pedidos` legacy)
+- **Recepción**: escaneo guiado, recepción parcial, **clave de supervisor**
+  para excesos, alerta de variación de costo (absorbe `/recepcion` legacy)
+- **Costos**: monitor de variación de costos + umbral configurable
+
+**Three-way match (Opción B):** la recepción crea una cuenta a pagar
+**provisoria** (`provisoria=true`, `tiene_factura=false`). Al cargar la
+factura, se ajusta al monto real y se cierra el match. Si nunca se carga
+factura, la deuda queda registrada con el monto estimado de la recepción.
+
+**Catálogo N:M proveedor↔producto** (`proveedor_producto`): un producto
+puede comprarse a varios proveedores con costos y códigos distintos.
+
+### 7. Etiquetas (`/etiquetas`)
+Generación e impresión de etiquetas de precio masivo.
+
+### 8. **Finanzas y Tesorería (`/finanzas`) — unificado**
+Tabs:
+- **Resumen**: P&L del período
+- **Caja fuerte**: KPIs (en buzón, en caja fuerte, arqueado, remesado),
+  arqueo con nota de ajuste obligatoria si hay diferencia, generación de
+  remesas que ingresan a la cuenta bancaria
+- **Por cobrar (Clearing digital)**: acreditaciones pendientes de ventas
+  con tarjeta/MP. Cada medio de pago tiene `dias_acreditacion` y
+  `comision_porcentaje`. Las ventas con plazo > 0 generan una
+  `acreditacion` pendiente en vez de impactar el saldo; el responsable la
+  marca como cobrada cuando llega al extracto y la plata neta entra al
+  banco
+- **Cuentas**: cuentas bancarias / billeteras / caja con saldos
+- **Movimientos**: filtros por cuenta/tipo/categoría
+- **Cuentas a pagar**: deudas a proveedores con `provisoria` /
+  `tiene_factura`
+- **Egresos**: gastos categorizados
+
+### 9. Contabilidad (`/contabilidad`)
+Plan de cuentas jerárquico, libro diario (asientos automáticos + manuales),
+conciliación bancaria, activos fijos con depreciación, impuestos.
+
+### 10. RRHH (`/rrhh`)
+Empleados, novedades (horas extra, faltas, adelantos), liquidación de
+sueldos, cuenta corriente de empleados.
+
+### 11. Reportes (`/reportes`)
+Ventas, top productos, rotación, mermas, export PDF.
+
+### 12. Proyectos y Agenda (`/proyectos`, `/tableros`, `/agenda`)
+Kanban con subtareas, tareas recurrentes, "Mi día".
+
+### 13. Terminales (`/terminales`)
+Mercado Pago Point: ABM de dispositivos, cobro integrado desde POS.
+
+### 14. Configuración (`/configuracion`)
+ABM de productos (con importación Excel), categorías, proveedores (con
+catálogo N:M), usuarios y roles con matriz de permisos.
+
+### 15. Tienda online (`/tienda`) — público, sin login
+Mobile-first (max-w-lg). Catálogo, carrito en localStorage, checkout
+(retiro/delivery), confirmado con código de pedido. Validación server-side
+de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
+
+---
+
+## Convenciones críticas
+
+- **Idioma**: todo en español argentino. Variables, comentarios y UI.
+- **Fechas**: `date-fns` con locale `es`. Utilities en
+  `lib/utils/formato.ts`.
+- **Moneda**: `Intl.NumberFormat('es-AR', { style: 'currency', currency:
+  'ARS' })`. Usar el componente `<MontoARS monto={n} />`.
+- **`"use client"`**: solo cuando hay state, effects o event handlers.
+  Layouts y páginas de display son Server Components por defecto.
+- **shadcn `<Button>` sin `asChild`**: este build usa `@base-ui/react` bajo
+  shadcn, **no soporta `asChild`**. Usar `buttonVariants()` + un `<Link>`
+  común como wrapper.
+- **`<Select>` con `items` prop**: el Select local de shadcn acepta `items`
+  prop (`Record<string, string>`) como shorthand, además del patrón
+  estándar con `<SelectItem>` children.
+- **Toasts**: importar `toast` desde `sonner`. Mostrar success/error desde
+  los callbacks `onSuccess`/`onError` del **hook**, no del componente.
+
+---
+
+## Gotchas y patrones de Postgres / Supabase
+
+### Enums vs. text
+Varias columnas del schema viejo son enums (`estado_pedido`, `estado_lote`,
+`estado_venta`, `tipo_movimiento`, etc.). Al asignar text desde una RPC en
+plpgsql, **castear explícitamente**: `'recibido'::public.estado_pedido`.
+
+### `fn_crear_venta` recibe 6 argumentos
+Firma actual: `(p_turno_id integer, p_usuario_id uuid, p_pagos jsonb,
+p_items jsonb, p_cliente_uuid uuid default null, p_cliente_id integer
+default null)`. Si tocás esta función, no rompas la firma o se cae el POS.
+
+### CREATE OR REPLACE no pisa firmas distintas
+Si la función actual difiere en un argumento (orden, default, tipo),
+Postgres crea una nueva en lugar de reemplazar. Hay que **dropearla**
+primero por nombre solo (`drop function public.fn_xxx`) y crearla limpia.
+PostgREST cachea firmas y devuelve "Could not find function ... in the
+schema cache" si hay desalineación con el cliente.
+
+### `notify pgrst, 'reload schema'`
+Toda migración debe terminar con esto para que PostgREST recargue el
+schema cache. Si después de correr una migración el cliente sigue viendo
+firmas viejas, falta este `notify`.
+
+### Tipos `database.ts`
+Mantener `Database` con `Tables`, `Functions`, `Enums` y `CompositeTypes`
+(aunque `CompositeTypes` esté vacío). Sin ellas, `supabase-js` v2.105+
+devuelve `never[]`.
+
+### shadcn Button + Link
+`<Button asChild><Link/></Button>` **no funciona** acá. Patrón correcto:
+
+```tsx
+<Link href="/x" className={cn(buttonVariants({ variant: 'default' }), 'extra-classes')}>
+  Texto
+</Link>
+```
+
+---
+
+## Flujo de trabajo
+
+1. Cambio en código → `npm run build` para verificar TypeScript
+2. Si la feature toca DB → crear migración numerada en
+   `supabase/migrations/NNN_descripcion.sql`
+3. Pasarle la migración al usuario para que la corra en SQL Editor de
+   Supabase (no hay runner automático)
+4. Actualizar `types/database.ts` a mano con los tipos nuevos
+5. Commit + push a `main` → Vercel deploya solo
+
+**Nunca skippear hooks de git** ni hacer `--no-verify` sin pedirlo
+explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
+
+---
+
+## Estado del proyecto
+
+44 migraciones corridas, ~300 archivos fuente, deploy en Vercel:
+`hola-express2004.vercel.app`.
+
+Módulos completos: POS (con offline), Ventas, Clientes, Inventario (con
+movimientos y ABC), Vencimientos, Compras (unificado con 3-way match,
+catálogo N:M, monitor de costos, escaneo, supervisor), Etiquetas, Finanzas
+(con Caja Fuerte y Clearing Digital), Contabilidad (con asientos
+automáticos), RRHH, Reportes, Proyectos, Terminales MP, Configuración,
+Tienda online pública.
+
+**Fases pendientes del manual de Tesorería:**
+- Fase 3: Conciliación bancaria automática por CSV (import + cruce + flags
+  de anomalías)
+- Fase 4: Cierre de período inalterable + log de auditoría con IP/usuario
