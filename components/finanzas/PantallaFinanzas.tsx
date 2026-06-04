@@ -19,6 +19,7 @@ import { TabCuentas } from './TabCuentas'
 import { TabMovimientos } from './TabMovimientos'
 import { TabCajaFuerte } from './TabCajaFuerte'
 import { TabPorCobrar } from './TabPorCobrar'
+import { TabConciliacionBancaria } from './TabConciliacionBancaria'
 import {
   rangoDesdeFechas,
   rangoPredefinido,
@@ -150,6 +151,12 @@ export function PantallaFinanzas() {
             Movimientos
           </TabsTrigger>
           <TabsTrigger
+            value="conciliacion"
+            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+          >
+            Conciliación
+          </TabsTrigger>
+          <TabsTrigger
             value="cuentas_pagar"
             className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
           >
@@ -177,6 +184,9 @@ export function PantallaFinanzas() {
         </TabsContent>
         <TabsContent value="movimientos">
           <TabMovimientos desde={rango.desde} hasta={rango.hasta} />
+        </TabsContent>
+        <TabsContent value="conciliacion">
+          <TabConciliacionBancaria />
         </TabsContent>
         <TabsContent value="cuentas_pagar">
           <TabCuentasAPagar />

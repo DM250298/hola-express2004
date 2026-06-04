@@ -1221,6 +1221,73 @@ export type MedioPagoUpdate = {
   updated_at?: string
 }
 
+// ─── extractos_bancarios (conciliación) ──────────────────────────────────────
+
+export type ExtractoBancarioRow = {
+  id: number
+  cuenta_id: number | null
+  usuario_id: string | null
+  nombre_archivo: string | null
+  lineas_total: number
+  lineas_conciliadas: number
+  lineas_anomalia: number
+  monto_conciliado: number
+  created_at: string
+}
+
+export type ExtractoBancarioInsert = {
+  id?: number
+  cuenta_id?: number | null
+  usuario_id?: string | null
+  nombre_archivo?: string | null
+  lineas_total?: number
+  lineas_conciliadas?: number
+  lineas_anomalia?: number
+  monto_conciliado?: number
+  created_at?: string
+}
+
+export type ExtractoBancarioUpdate = {
+  lineas_total?: number
+  lineas_conciliadas?: number
+  lineas_anomalia?: number
+  monto_conciliado?: number
+}
+
+export type EstadoLineaExtracto = 'conciliada' | 'anomalia' | 'ignorada'
+
+export type LineaExtractoRow = {
+  id: number
+  extracto_id: number
+  fecha: string | null
+  descripcion: string | null
+  monto: number
+  id_externo: string | null
+  estado: EstadoLineaExtracto
+  match_tipo: string | null
+  match_id: number | null
+  created_at: string
+}
+
+export type LineaExtractoInsert = {
+  id?: number
+  extracto_id: number
+  fecha?: string | null
+  descripcion?: string | null
+  monto: number
+  id_externo?: string | null
+  estado?: EstadoLineaExtracto
+  match_tipo?: string | null
+  match_id?: number | null
+  created_at?: string
+}
+
+export type LineaExtractoUpdate = {
+  estado?: EstadoLineaExtracto
+  match_tipo?: string | null
+  match_id?: number | null
+}
+
 // ─── acreditaciones (cuentas por cobrar / clearing) ──────────────────────────
 
 export type EstadoAcreditacion = 'pendiente' | 'acreditada' | 'cancelada'
@@ -1890,6 +1957,18 @@ export interface Database {
         Update: AcreditacionUpdate
         Relationships: []
       }
+      extractos_bancarios: {
+        Row: ExtractoBancarioRow
+        Insert: ExtractoBancarioInsert
+        Update: ExtractoBancarioUpdate
+        Relationships: []
+      }
+      lineas_extracto: {
+        Row: LineaExtractoRow
+        Insert: LineaExtractoInsert
+        Update: LineaExtractoUpdate
+        Relationships: []
+      }
       caja_turnos: {
         Row: CajaTurnoRow
         Insert: CajaTurnoInsert
@@ -2321,6 +2400,20 @@ export interface Database {
           movimiento_id: number
           monto_neto: number
           saldo_nuevo: number
+        }
+      }
+      fn_aplicar_conciliacion: {
+        Args: {
+          p_usuario_id: string
+          p_cuenta_id: number
+          p_nombre_archivo: string | null
+          p_lineas: Json
+        }
+        Returns: {
+          extracto_id: number
+          total: number
+          conciliadas: number
+          anomalias: number
         }
       }
       fn_crear_activo: {
