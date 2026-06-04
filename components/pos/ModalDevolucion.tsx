@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import {
   CheckCircle2,
   Loader2,
+  Printer,
   RotateCcw,
   Search,
   Ticket,
@@ -19,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ComprobanteNotaCredito } from './ComprobanteNotaCredito'
 import {
   useVentaParaDevolucion,
   useCrearDevolucion,
@@ -148,14 +150,30 @@ export function ModalDevolucion({
               Total devuelto: <MontoARS monto={resultado.total_devuelto} />
             </p>
             {resultado.codigo_nc && (
-              <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#f9b44c]/10 px-6 py-3">
-                <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Nota de crédito — entregá este código al cliente
+              <>
+                <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#f9b44c]/10 px-6 py-3">
+                  <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                    Nota de crédito — entregá este código al cliente
+                  </div>
+                  <div className="text-2xl font-extrabold text-[#391511] font-mono tracking-wider">
+                    {resultado.codigo_nc}
+                  </div>
                 </div>
-                <div className="text-2xl font-extrabold text-[#391511] font-mono tracking-wider">
-                  {resultado.codigo_nc}
-                </div>
-              </div>
+                <Button
+                  variant="outline"
+                  onClick={() => window.print()}
+                  className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+                >
+                  <Printer className="h-4 w-4" />
+                  Imprimir vale
+                </Button>
+                {/* Comprobante térmico (oculto; visible solo al imprimir) */}
+                <ComprobanteNotaCredito
+                  codigo={resultado.codigo_nc}
+                  monto={resultado.total_devuelto}
+                  ventaId={ventaId}
+                />
+              </>
             )}
             <Button
               onClick={() => cerrar(false)}
