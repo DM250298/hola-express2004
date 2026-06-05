@@ -44,6 +44,8 @@ export function exportarLibroIvaCompras(
     'Neto 27%',
     'IVA 27%',
     'Exento/No grav.',
+    'Perc. IVA',
+    'Perc. IIBB',
     'Total',
     'CAE',
   ]
@@ -69,6 +71,8 @@ export function exportarLibroIvaCompras(
       l.neto27,
       l.iva27,
       l.exento,
+      l.perc_iva,
+      l.perc_iibb,
       l.total,
       l.cae ?? '',
     ]),
@@ -87,6 +91,8 @@ export function exportarLibroIvaCompras(
       totales.neto27,
       totales.iva27,
       totales.exento,
+      totales.perc_iva,
+      totales.perc_iibb,
       totales.total,
       '',
     ],
@@ -107,6 +113,8 @@ export function exportarLibroIvaCompras(
     { wch: 12 }, // Neto 27
     { wch: 11 }, // IVA 27
     { wch: 14 }, // Exento
+    { wch: 11 }, // Perc. IVA
+    { wch: 11 }, // Perc. IIBB
     { wch: 13 }, // Total
     { wch: 16 }, // CAE
   ]

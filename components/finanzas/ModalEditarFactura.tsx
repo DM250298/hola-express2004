@@ -115,6 +115,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const [lineas, setLineas] = useState<LineaFactura[]>([])
   const [cab, setCab] = useState<CabeceraState>(CABECERA_DEFAULT)
   const [busqueda, setBusqueda] = useState('')
+  // Percepciones sufridas (las que el proveedor carga en la factura).
+  const [percepciones, setPercepciones] = useState({
+    iibb: '',
+    iva: '',
+    otros: '',
+  })
 
   const { data: productosBusqueda } = useProductos({
     activo: true,
@@ -185,11 +191,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         cuit_proveedor: f.cuit_proveedor || proveedorCuenta?.cuit || '',
         fecha_emision: f.fecha ?? hoyIso(),
       })
+      setPercepciones({
+        iibb: f.percepcion_iibb ? String(f.percepcion_iibb) : '',
+        iva: f.percepcion_iva ? String(f.percepcion_iva) : '',
+        otros: f.percepcion_otros ? String(f.percepcion_otros) : '',
+      })
     } else {
       setCab({
         ...CABECERA_DEFAULT,
         cuit_proveedor: proveedorCuenta?.cuit ?? '',
       })
+      setPercepciones({ iibb: '', iva: '', otros: '' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cargando, facturaGuardada, proveedorCuenta?.cuit])
@@ -260,7 +272,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     },
     { neto: 0, iva: 0 }
   )
-  const totalConIva = totales.neto + totales.iva
+  const percIibb = Number(percepciones.iibb) || 0
+  const percIva = Number(percepciones.iva) || 0
+  const percOtros = Number(percepciones.otros) || 0
+  const totalPercepciones = percIibb + percIva + percOtros
+  const totalConIva = totales.neto + totales.iva + totalPercepciones
 
   function handleGuardar() {
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
@@ -277,6 +293,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         fecha: cab.fecha_emision || hoyIso(),
         afecta_precio_venta: afectaVenta,
         usuario_id: usuario.id,
+        percepciones: { iva: percIva, iibb: percIibb, otros: percOtros },
         comprobante: {
           tipo_comprobante: cab.tipo_comprobante || null,
           punto_venta: limpio(cab.punto_venta),
@@ -617,6 +634,35 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 shrink-0">
+          {/* Percepciones sufridas en el comprobante */}
+          <div className="flex flex-wrap items-center justify-end gap-3 mb-3">
+            <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mr-1">
+              Percepciones
+            </span>
+            {(
+              [
+                ['IIBB', 'iibb'],
+                ['IVA', 'iva'],
+                ['Otros', 'otros'],
+              ] as const
+            ).map(([etiqueta, clave]) => (
+              <div key={clave} className="flex items-center gap-1.5">
+                <span className="text-xs text-[#6f3a2a]">{etiqueta}</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={percepciones[clave]}
+                  onChange={(e) =>
+                    setPercepciones((p) => ({ ...p, [clave]: e.target.value }))
+                  }
+                  placeholder="0"
+                  className="h-8 w-24 text-right tabular-nums border-[#e4c9b0] text-xs"
+                />
+              </div>
+            ))}
+          </div>
+
           <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 mb-3 text-sm">
             <span className="text-[#6f3a2a]">
               Importe neto:{' '}
@@ -630,6 +676,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 <MontoARS monto={totales.iva} />
               </span>
             </span>
+            {totalPercepciones > 0 && (
+              <span className="text-[#6f3a2a]">
+                Percepciones:{' '}
+                <span className="font-semibold text-[#391511] tabular-nums">
+                  <MontoARS monto={totalPercepciones} />
+                </span>
+              </span>
+            )}
             <span className="text-[#391511] font-bold">
               Total a pagar:{' '}
               <span className="text-xl font-extrabold tabular-nums">

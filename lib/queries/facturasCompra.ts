@@ -53,6 +53,12 @@ export interface DatosComprobante {
   cuit_proveedor: string | null
 }
 
+export interface PercepcionesPayload {
+  iva: number
+  iibb: number
+  otros: number
+}
+
 export interface GuardarFacturaPayload {
   cuenta_id: number
   pedido_id: number
@@ -62,6 +68,8 @@ export interface GuardarFacturaPayload {
   afecta_precio_venta: boolean
   usuario_id: string
   lineas: LineaFacturaPayload[]
+  /** Percepciones sufridas (suman al total a pagar y quedan como saldo a favor). */
+  percepciones?: PercepcionesPayload
   /** Datos formales del comprobante; si se omiten, no se tocan. */
   comprobante?: DatosComprobante
 }
@@ -186,6 +194,11 @@ export async function guardarFacturaCompra(
     p_fecha: payload.fecha,
     p_afecta_precio_venta: payload.afecta_precio_venta,
     p_usuario_id: payload.usuario_id,
+    p_percepciones: {
+      iva: payload.percepciones?.iva ?? 0,
+      iibb: payload.percepciones?.iibb ?? 0,
+      otros: payload.percepciones?.otros ?? 0,
+    } as unknown as Json,
     p_lineas: payload.lineas.map((l) => ({
       item_pedido_id: l.item_pedido_id,
       producto_id: l.producto_id,

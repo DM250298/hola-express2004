@@ -39,6 +39,8 @@ export interface BloqueIva {
   iva_debito: number
   compras_neto: number
   iva_credito: number
+  /** Percepciones de IVA sufridas en compras (pago a cuenta). */
+  percepciones_iva: number
   /** Posición: > 0 IVA a pagar · < 0 saldo a favor. */
   posicion: number
 }
@@ -50,8 +52,10 @@ export interface BloqueIibb {
   base: number
   /** IIBB determinado = base × alícuota. */
   determinado: number
-  /** Retenciones de IIBB ya sufridas (MP, bancos) en el período. */
+  /** Retenciones de IIBB sufridas (MP/bancos) + percepciones de compra. */
   retenciones_sufridas: number
+  /** Percepciones de IIBB sufridas en compras (parte de retenciones_sufridas). */
+  percepciones_compra: number
   /** A pagar = determinado − retenciones (nunca negativo). */
   a_pagar: number
   /** Saldo a favor si las retenciones superan el determinado. */
@@ -96,16 +100,24 @@ export async function getResumenFiscal(
   const ventasNeto = ventasTotal / factorIva
   const ivaDebito = ventasTotal - ventasNeto
 
-  // Facturas de compra emitidas en el período → IVA crédito
+  // Facturas de compra emitidas en el período → IVA crédito + percepciones
   const { data: facturas, error } = await supabase
     .from('facturas_compra')
-    .select('neto, iva_total')
+    .select('neto, iva_total, percepcion_iva, percepcion_iibb')
     .gte('fecha', desde)
     .lt('fecha', hastaExcl)
   if (error) throw error
   const comprasNeto = (facturas ?? []).reduce((s, f) => s + Number(f.neto), 0)
   const ivaCredito = (facturas ?? []).reduce(
     (s, f) => s + Number(f.iva_total),
+    0
+  )
+  const percepcionesIva = (facturas ?? []).reduce(
+    (s, f) => s + Number(f.percepcion_iva ?? 0),
+    0
+  )
+  const percepcionesIibb = (facturas ?? []).reduce(
+    (s, f) => s + Number(f.percepcion_iibb ?? 0),
     0
   )
 
@@ -118,11 +130,19 @@ export async function getResumenFiscal(
       .gte('fecha', desde)
       .lt('fecha', hastaExcl)
   )
-  const retencionesIibb = retenciones.reduce((s, m) => s + Number(m.monto), 0)
+  const retencionesIibbMov = retenciones.reduce(
+    (s, m) => s + Number(m.monto),
+    0
+  )
+  // Las percepciones de IIBB sufridas en compras también son pago a cuenta.
+  const retencionesIibbTotal = retencionesIibbMov + percepcionesIibb
 
   const iibbDeterminado = ventasNeto * (alicuotaIibb / 100)
-  const iibbAPagar = Math.max(0, iibbDeterminado - retencionesIibb)
-  const iibbSaldoFavor = Math.max(0, retencionesIibb - iibbDeterminado)
+  const iibbAPagar = Math.max(0, iibbDeterminado - retencionesIibbTotal)
+  const iibbSaldoFavor = Math.max(0, retencionesIibbTotal - iibbDeterminado)
+
+  // Las percepciones de IVA reducen la posición (pago a cuenta del IVA).
+  const ivaPosicion = ivaDebito - ivaCredito - percepcionesIva
 
   return {
     iva: {
@@ -131,18 +151,20 @@ export async function getResumenFiscal(
       iva_debito: r2(ivaDebito),
       compras_neto: r2(comprasNeto),
       iva_credito: r2(ivaCredito),
-      posicion: r2(ivaDebito - ivaCredito),
+      percepciones_iva: r2(percepcionesIva),
+      posicion: r2(ivaPosicion),
     },
     iibb: {
       jurisdiccion,
       alicuota: alicuotaIibb,
       base: r2(ventasNeto),
       determinado: r2(iibbDeterminado),
-      retenciones_sufridas: r2(retencionesIibb),
+      retenciones_sufridas: r2(retencionesIibbTotal),
+      percepciones_compra: r2(percepcionesIibb),
       a_pagar: r2(iibbAPagar),
       saldo_favor: r2(iibbSaldoFavor),
     },
-    retenciones_totales: r2(retencionesIibb),
+    retenciones_totales: r2(retencionesIibbTotal),
   }
 }
 
@@ -164,6 +186,8 @@ export interface LineaLibroIva {
   iva27: number
   /** Neto no gravado / exento / alícuotas no estándar. */
   exento: number
+  perc_iva: number
+  perc_iibb: number
   total: number
 }
 
@@ -175,6 +199,8 @@ export interface TotalesLibroIva {
   neto27: number
   iva27: number
   exento: number
+  perc_iva: number
+  perc_iibb: number
   total: number
 }
 
@@ -207,12 +233,14 @@ export async function getLibroIvaCompras(
     proveedor_id: number | null
     neto: number
     total: number
+    percepcion_iva: number
+    percepcion_iibb: number
   }
 
   const { data: facturasData, error } = await supabase
     .from('facturas_compra')
     .select(
-      'id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, cuit_proveedor, proveedor_id, neto, total'
+      'id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, cuit_proveedor, proveedor_id, neto, total, percepcion_iva, percepcion_iibb'
     )
     .gte('fecha', desde)
     .lt('fecha', hastaExcl)
@@ -228,6 +256,8 @@ export async function getLibroIvaCompras(
     neto27: 0,
     iva27: 0,
     exento: 0,
+    perc_iva: 0,
+    perc_iibb: 0,
     total: 0,
   }
   if (facturas.length === 0) return { lineas: [], totales: cero }
@@ -308,6 +338,8 @@ export async function getLibroIvaCompras(
       neto27: r2(neto27),
       iva27: r2(iva27),
       exento: r2(exento),
+      perc_iva: r2(Number(f.percepcion_iva ?? 0)),
+      perc_iibb: r2(Number(f.percepcion_iibb ?? 0)),
       total: Number(f.total),
     }
   })
@@ -322,6 +354,8 @@ export async function getLibroIvaCompras(
     neto27: sum((l) => l.neto27),
     iva27: sum((l) => l.iva27),
     exento: sum((l) => l.exento),
+    perc_iva: sum((l) => l.perc_iva),
+    perc_iibb: sum((l) => l.perc_iibb),
     total: sum((l) => l.total),
   }
 

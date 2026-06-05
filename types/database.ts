@@ -1806,6 +1806,9 @@ export type FacturaCompraRow = {
   numero_comprobante: string | null
   cae: string | null
   cuit_proveedor: string | null
+  percepcion_iva: number
+  percepcion_iibb: number
+  percepcion_otros: number
   created_at: string
   updated_at: string
 }
@@ -1826,6 +1829,9 @@ export type FacturaCompraInsert = {
   numero_comprobante?: string | null
   cae?: string | null
   cuit_proveedor?: string | null
+  percepcion_iva?: number
+  percepcion_iibb?: number
+  percepcion_otros?: number
   created_at?: string
   updated_at?: string
 }
@@ -2624,6 +2630,7 @@ export interface Database {
           p_afecta_precio_venta: boolean
           p_usuario_id: string
           p_lineas: Json
+          p_percepciones?: Json
         }
         Returns: undefined
       }

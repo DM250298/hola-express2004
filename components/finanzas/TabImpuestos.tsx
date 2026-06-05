@@ -258,7 +258,7 @@ export function TabImpuestos() {
               icono={ShieldCheck}
               titulo="Retenciones sufridas"
               monto={data.retenciones_totales}
-              leyenda="IIBB retenido por MP / bancos"
+              leyenda="IIBB MP/bancos + percepciones de compra"
               tono="neutro"
             />
           </div>
@@ -292,6 +292,16 @@ export function TabImpuestos() {
                 monto={data.iva.iva_credito}
               />
             </div>
+            {data.iva.percepciones_iva > 0.009 && (
+              <div className="flex items-center justify-between text-sm px-1">
+                <span className="text-[#6f3a2a]">
+                  (−) Percepciones de IVA (compras)
+                </span>
+                <span className="tabular-nums text-[#c43e2c]">
+                  −<MontoARS monto={data.iva.percepciones_iva} />
+                </span>
+              </div>
+            )}
             <div
               className={cn(
                 'rounded-xl border-2 p-3 flex items-center justify-between',
@@ -336,9 +346,20 @@ export function TabImpuestos() {
                 monto={data.iibb.determinado}
               />
               <FilaIibb
-                label="(−) Retenciones sufridas"
-                monto={-data.iibb.retenciones_sufridas}
+                label="(−) Retenciones MP/bancos"
+                monto={
+                  -(
+                    data.iibb.retenciones_sufridas -
+                    data.iibb.percepciones_compra
+                  )
+                }
               />
+              {data.iibb.percepciones_compra > 0.009 && (
+                <FilaIibb
+                  label="(−) Percepciones de compra"
+                  monto={-data.iibb.percepciones_compra}
+                />
+              )}
               <div className="h-px bg-[#e4c9b0]/60 my-1.5" />
               {data.iibb.saldo_favor > 0.009 ? (
                 <div className="flex items-center justify-between font-bold">
