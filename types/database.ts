@@ -1076,6 +1076,62 @@ export type CuentaAPagarUpdate = {
   tiene_factura?: boolean
 }
 
+// ─── periodos_contables (cierre de mes) ──────────────────────────────────────
+
+export type EstadoPeriodo = 'abierto' | 'cerrado'
+
+export type PeriodoContableRow = {
+  id: number
+  anio: number
+  mes: number
+  estado: EstadoPeriodo
+  fecha_cierre: string | null
+  usuario_cierre: string | null
+}
+
+export type PeriodoContableInsert = {
+  id?: number
+  anio: number
+  mes: number
+  estado?: EstadoPeriodo
+  fecha_cierre?: string | null
+  usuario_cierre?: string | null
+}
+
+export type PeriodoContableUpdate = {
+  estado?: EstadoPeriodo
+  fecha_cierre?: string | null
+  usuario_cierre?: string | null
+}
+
+// ─── auditoria ────────────────────────────────────────────────────────────────
+
+export type AuditoriaRow = {
+  id: number
+  usuario_id: string | null
+  accion: string
+  entidad: string | null
+  entidad_id: number | null
+  detalle: Json | null
+  ip: string | null
+  created_at: string
+}
+
+export type AuditoriaInsert = {
+  id?: number
+  usuario_id?: string | null
+  accion: string
+  entidad?: string | null
+  entidad_id?: number | null
+  detalle?: Json | null
+  ip?: string | null
+  created_at?: string
+}
+
+export type AuditoriaUpdate = {
+  detalle?: Json | null
+}
+
 // ─── costos_producto (precio de costo gateado por RLS) ───────────────────────
 
 export type CostoProductoRow = {
@@ -1955,6 +2011,18 @@ export interface Database {
         Update: CostoProductoUpdate
         Relationships: []
       }
+      periodos_contables: {
+        Row: PeriodoContableRow
+        Insert: PeriodoContableInsert
+        Update: PeriodoContableUpdate
+        Relationships: []
+      }
+      auditoria: {
+        Row: AuditoriaRow
+        Insert: AuditoriaInsert
+        Update: AuditoriaUpdate
+        Relationships: []
+      }
       historial_costos: {
         Row: HistorialCostoRow
         Insert: HistorialCostoInsert
@@ -2558,6 +2626,14 @@ export interface Database {
           conciliadas: number
           anomalias: number
         }
+      }
+      fn_cerrar_periodo: {
+        Args: { p_usuario_id: string; p_anio: number; p_mes: number }
+        Returns: undefined
+      }
+      fn_reabrir_periodo: {
+        Args: { p_usuario_id: string; p_anio: number; p_mes: number }
+        Returns: undefined
       }
       fn_crear_devolucion: {
         Args: {

@@ -6,6 +6,7 @@ import { TabLibroDiario } from './TabLibroDiario'
 import { TabConciliacion } from './TabConciliacion'
 import { TabActivos } from './TabActivos'
 import { TabImpuestos } from './TabImpuestos'
+import { TabCierreAuditoria } from './TabCierreAuditoria'
 
 export function PantallaContabilidad() {
   return (
@@ -49,6 +50,12 @@ export function PantallaContabilidad() {
           >
             Impuestos
           </TabsTrigger>
+          <TabsTrigger
+            value="cierre"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
+          >
+            Cierre y auditoría
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="plan">
@@ -65,6 +72,9 @@ export function PantallaContabilidad() {
         </TabsContent>
         <TabsContent value="impuestos">
           <TabImpuestos />
+        </TabsContent>
+        <TabsContent value="cierre">
+          <TabCierreAuditoria />
         </TabsContent>
       </Tabs>
     </div>
