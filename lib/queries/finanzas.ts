@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { claveSemana, semanasEnRango } from '@/lib/utils/periodos'
-import type { EgresoRow } from '@/types/database'
+import type { CuentaAPagarUpdate, EgresoRow } from '@/types/database'
 
 export interface PuntoSemana {
   semana: string // ISO yyyy-MM-dd (lunes)
@@ -147,9 +147,17 @@ export interface CuentaAPagarConProveedor {
   pedido_id: number
   proveedor_id: number
   monto: number
+  monto_pagado: number
+  /** Saldo que falta pagar = monto − monto_pagado. */
+  saldo_pendiente: number
   fecha_vencimiento: string
   fecha_pago: string | null
   estado: EstadoCuentaDerivado
+  /** true si hay pagos pero no cubre el total (parcial). */
+  parcial: boolean
+  tiene_factura: boolean
+  provisoria: boolean
+  nota: string | null
   proveedor_nombre: string | null
 }
 
@@ -175,7 +183,7 @@ export async function getCuentasAPagar(
   const { data, error } = await supabase
     .from('cuentas_a_pagar')
     .select(
-      'id, pedido_id, proveedor_id, monto, fecha_vencimiento, fecha_pago, estado, proveedores(nombre)'
+      'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, nota, proveedores(nombre)'
     )
     .order('fecha_vencimiento', { ascending: true })
 
@@ -186,22 +194,36 @@ export async function getCuentasAPagar(
     pedido_id: number
     proveedor_id: number
     monto: number
+    monto_pagado: number | null
     fecha_vencimiento: string
     fecha_pago: string | null
     estado: 'pendiente' | 'pagada' | 'vencida'
+    tiene_factura: boolean
+    provisoria: boolean
+    nota: string | null
     proveedores: { nombre: string } | null
   }
 
-  const filas = ((data ?? []) as unknown as FilaCruda[]).map((f) => ({
-    id: f.id,
-    pedido_id: f.pedido_id,
-    proveedor_id: f.proveedor_id,
-    monto: f.monto,
-    fecha_vencimiento: f.fecha_vencimiento,
-    fecha_pago: f.fecha_pago,
-    estado: derivarEstado(f.estado, f.fecha_vencimiento),
-    proveedor_nombre: f.proveedores?.nombre ?? null,
-  }))
+  const filas = ((data ?? []) as unknown as FilaCruda[]).map((f) => {
+    const pagado = Number(f.monto_pagado ?? 0)
+    const saldo = Number(f.monto) - pagado
+    return {
+      id: f.id,
+      pedido_id: f.pedido_id,
+      proveedor_id: f.proveedor_id,
+      monto: Number(f.monto),
+      monto_pagado: pagado,
+      saldo_pendiente: saldo,
+      fecha_vencimiento: f.fecha_vencimiento,
+      fecha_pago: f.fecha_pago,
+      estado: derivarEstado(f.estado, f.fecha_vencimiento),
+      parcial: f.estado !== 'pagada' && pagado > 0.009,
+      tiene_factura: f.tiene_factura,
+      provisoria: f.provisoria,
+      nota: f.nota,
+      proveedor_nombre: f.proveedores?.nombre ?? null,
+    }
+  })
 
   if (estadoFiltro) {
     return filas.filter((f) => f.estado === estadoFiltro)
@@ -212,19 +234,118 @@ export async function getCuentasAPagar(
 export interface PagarCuentaPayload {
   cuenta_id: number
   usuario_id: string
+  cuenta_origen_id: number
+  monto: number
+  fecha: string
+  nota?: string | null
 }
 
 /**
- * Marca la cuenta como pagada y genera el egreso del pago, de forma atómica
- * (`fn_pagar_cuenta`). El egreso dispara su propio asiento contable
- * (Debe Proveedores / Haber Caja).
+ * Registra un pago (total o parcial) de una cuenta a pagar, de forma atómica
+ * (`fn_pagar_cuenta`): descuenta del saldo de la cuenta de tesorería de
+ * origen, deja el pago en el historial, genera el egreso y su asiento
+ * (Debe Proveedores / Haber según el tipo de cuenta de origen). La cuenta
+ * pasa a 'pagada' recién cuando se cubre el total.
  */
 export async function pagarCuenta(payload: PagarCuentaPayload): Promise<void> {
   const supabase = createClient()
   const { error } = await supabase.rpc('fn_pagar_cuenta', {
     p_cuenta_id: payload.cuenta_id,
     p_usuario_id: payload.usuario_id,
+    p_cuenta_origen_id: payload.cuenta_origen_id,
+    p_monto: payload.monto,
+    p_fecha: payload.fecha,
+    p_nota: payload.nota ?? null,
   })
+  if (error) throw error
+}
+
+export interface PagoConCuenta {
+  id: number
+  monto: number
+  fecha: string
+  nota: string | null
+  cuenta_origen_id: number | null
+  cuenta_origen_nombre: string | null
+}
+
+/** Historial de pagos de una cuenta a pagar, con el nombre de la cuenta origen. */
+export async function getPagosCuenta(
+  cuentaAPagarId: number
+): Promise<PagoConCuenta[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('pagos_cuenta')
+    .select('id, monto, fecha, nota, cuenta_origen_id, cuentas(nombre)')
+    .eq('cuenta_a_pagar_id', cuentaAPagarId)
+    .order('fecha', { ascending: false })
+  if (error) throw error
+
+  type FilaCruda = {
+    id: number
+    monto: number
+    fecha: string
+    nota: string | null
+    cuenta_origen_id: number | null
+    cuentas: { nombre: string } | null
+  }
+
+  return ((data ?? []) as unknown as FilaCruda[]).map((p) => ({
+    id: p.id,
+    monto: Number(p.monto),
+    fecha: p.fecha,
+    nota: p.nota,
+    cuenta_origen_id: p.cuenta_origen_id,
+    cuenta_origen_nombre: p.cuentas?.nombre ?? null,
+  }))
+}
+
+export interface EditarCuentaPayload {
+  cuenta_id: number
+  fecha_vencimiento?: string
+  monto?: number
+  nota?: string | null
+}
+
+/**
+ * Edita una cuenta a pagar: vencimiento, nota y/o monto. El monto solo se
+ * permite cambiar si la cuenta NO tiene factura cargada (rompería el cruce
+ * three-way) y nunca por debajo de lo ya pagado.
+ */
+export async function editarCuentaAPagar(
+  payload: EditarCuentaPayload
+): Promise<void> {
+  const supabase = createClient()
+
+  const patch: CuentaAPagarUpdate = {}
+  if (payload.fecha_vencimiento !== undefined)
+    patch.fecha_vencimiento = payload.fecha_vencimiento
+  if (payload.nota !== undefined) patch.nota = payload.nota
+
+  if (payload.monto !== undefined) {
+    const { data: actual, error: errLeer } = await supabase
+      .from('cuentas_a_pagar')
+      .select('monto_pagado, tiene_factura')
+      .eq('id', payload.cuenta_id)
+      .single<{ monto_pagado: number | null; tiene_factura: boolean }>()
+    if (errLeer) throw errLeer
+    if (actual.tiene_factura) {
+      throw new Error(
+        'No se puede cambiar el monto: la cuenta ya tiene una factura cargada. Editá la factura en Comprobantes.'
+      )
+    }
+    if (payload.monto < Number(actual.monto_pagado ?? 0)) {
+      throw new Error('El monto no puede ser menor a lo ya pagado.')
+    }
+    patch.monto = payload.monto
+  }
+
+  if (Object.keys(patch).length === 0) return
+
+  const { error } = await supabase
+    .from('cuentas_a_pagar')
+    .update(patch)
+    .eq('id', payload.cuenta_id)
   if (error) throw error
 }
 

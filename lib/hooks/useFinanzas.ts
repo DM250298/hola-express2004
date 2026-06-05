@@ -5,12 +5,15 @@ import { toast } from 'sonner'
 import {
   actualizarEgreso,
   crearEgreso,
+  editarCuentaAPagar,
   eliminarEgreso,
   getCuentasAPagar,
   getEgresos,
+  getPagosCuenta,
   getResumenFinanciero,
   pagarCuenta,
   type ActualizarEgresoPayload,
+  type EditarCuentaPayload,
   type EstadoCuentaDerivado,
   type NuevoEgresoPayload,
   type PagarCuentaPayload,
@@ -48,18 +51,53 @@ export function useEgresos(
   })
 }
 
+function invalidarTrasPago(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: CUENTAS_PAGAR_KEY })
+  qc.invalidateQueries({ queryKey: EGRESOS_KEY })
+  qc.invalidateQueries({ queryKey: RESUMEN_FIN_KEY })
+  // El pago descuenta del saldo de una cuenta de tesorería y deja movimiento.
+  qc.invalidateQueries({ queryKey: ['cuentas'] })
+  qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+  qc.invalidateQueries({ queryKey: ['pagos-cuenta'] })
+  // El tablero directivo y los asientos también cambian.
+  qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+  qc.invalidateQueries({ queryKey: ['asientos'] })
+}
+
 export function usePagarCuenta() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (payload: PagarCuentaPayload) => pagarCuenta(payload),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: CUENTAS_PAGAR_KEY })
-      qc.invalidateQueries({ queryKey: EGRESOS_KEY })
-      qc.invalidateQueries({ queryKey: RESUMEN_FIN_KEY })
-      toast.success('Cuenta marcada como pagada')
+      invalidarTrasPago(qc)
+      toast.success('Pago registrado')
     },
     onError: (error: Error) => {
-      toast.error(`No se pudo pagar la cuenta: ${error.message}`)
+      toast.error(`No se pudo registrar el pago: ${error.message}`)
+    },
+  })
+}
+
+export function usePagosCuenta(cuentaAPagarId: number | null) {
+  return useQuery({
+    queryKey: ['pagos-cuenta', cuentaAPagarId],
+    queryFn: () =>
+      cuentaAPagarId === null ? [] : getPagosCuenta(cuentaAPagarId),
+    enabled: cuentaAPagarId !== null,
+    staleTime: 15 * 1000,
+  })
+}
+
+export function useEditarCuentaAPagar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: EditarCuentaPayload) => editarCuentaAPagar(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: CUENTAS_PAGAR_KEY })
+      toast.success('Cuenta actualizada')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo actualizar: ${error.message}`)
     },
   })
 }

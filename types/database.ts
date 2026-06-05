@@ -1061,11 +1061,13 @@ export type CuentaAPagarRow = {
   pedido_id: number
   proveedor_id: number
   monto: number
+  monto_pagado: number
   fecha_vencimiento: string
   fecha_pago: string | null
   estado: EstadoCuentaPagar
   provisoria: boolean
   tiene_factura: boolean
+  nota: string | null
   created_at: string
 }
 
@@ -1084,12 +1086,44 @@ export type CuentaAPagarInsert = {
 
 export type CuentaAPagarUpdate = {
   monto?: number
+  monto_pagado?: number
   fecha_vencimiento?: string
   fecha_pago?: string | null
   estado?: EstadoCuentaPagar
   provisoria?: boolean
   tiene_factura?: boolean
+  nota?: string | null
 }
+
+// ─── pagos_cuenta (historial de pagos a proveedores) ─────────────────────────
+
+export type PagoCuentaRow = {
+  id: number
+  cuenta_a_pagar_id: number
+  cuenta_origen_id: number | null
+  monto: number
+  fecha: string
+  nota: string | null
+  usuario_id: string | null
+  movimiento_id: number | null
+  egreso_id: number | null
+  created_at: string
+}
+
+export type PagoCuentaInsert = {
+  id?: number
+  cuenta_a_pagar_id: number
+  cuenta_origen_id?: number | null
+  monto: number
+  fecha?: string
+  nota?: string | null
+  usuario_id?: string | null
+  movimiento_id?: number | null
+  egreso_id?: number | null
+  created_at?: string
+}
+
+export type PagoCuentaUpdate = Partial<PagoCuentaInsert>
 
 // ─── periodos_contables (cierre de mes) ──────────────────────────────────────
 
@@ -2098,6 +2132,12 @@ export interface Database {
         Row: ConfigFiscalRow
         Insert: ConfigFiscalInsert
         Update: ConfigFiscalUpdate
+        Relationships: []
+      }
+      pagos_cuenta: {
+        Row: PagoCuentaRow
+        Insert: PagoCuentaInsert
+        Update: PagoCuentaUpdate
         Relationships: []
       }
       clientes: {
