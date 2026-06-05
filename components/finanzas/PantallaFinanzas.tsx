@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabTableroDirectivo } from './TabTableroDirectivo'
+import { TabFlujoProyectado } from './TabFlujoProyectado'
 import { TabResumen } from './TabResumen'
 import { TabComprobantes } from './TabComprobantes'
 import { TabImpuestos } from './TabImpuestos'
@@ -130,6 +131,9 @@ export function PantallaFinanzas() {
           <TabsTrigger value="tablero" className={TAB_CLS}>
             Tablero
           </TabsTrigger>
+          <TabsTrigger value="flujo" className={TAB_CLS}>
+            Flujo proyectado
+          </TabsTrigger>
           <TabsTrigger value="comprobantes" className={TAB_CLS}>
             Comprobantes
           </TabsTrigger>
@@ -171,6 +175,9 @@ export function PantallaFinanzas() {
 
         <TabsContent value="tablero">
           <TabTableroDirectivo desde={rango.desde} hasta={rango.hasta} />
+        </TabsContent>
+        <TabsContent value="flujo">
+          <TabFlujoProyectado />
         </TabsContent>
         <TabsContent value="comprobantes">
           <TabComprobantes />
