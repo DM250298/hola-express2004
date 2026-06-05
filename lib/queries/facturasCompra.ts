@@ -38,7 +38,8 @@ export function calcularLinea(e: EntradaLinea): LineaCalculada {
 }
 
 export interface LineaFacturaPayload extends EntradaLinea {
-  item_pedido_id: number
+  /** null para un producto que no estaba en el pedido (extra de la factura). */
+  item_pedido_id: number | null
   producto_id: number
   cantidad: number
 }

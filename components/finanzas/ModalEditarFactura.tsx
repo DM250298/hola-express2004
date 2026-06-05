@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Loader2, Trash2 } from 'lucide-react'
+import { FileText, Loader2, Plus, Search, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,6 +24,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
+import { useProductos } from '@/lib/hooks/useProductos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
   useFacturaCompra,
@@ -37,7 +39,15 @@ interface Props {
   cuenta: CuentaAPagarConProveedor | null
 }
 
-interface LineaState {
+interface LineaFactura {
+  /** Clave única en el modal (un producto no se repite). */
+  key: string
+  /** id del item del pedido, o null si es un producto extra (no pedido). */
+  item_pedido_id: number | null
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  cantidad: string
   costo: string
   descuento: string
   iva_compra: string
@@ -45,13 +55,20 @@ interface LineaState {
   iva_venta: string
 }
 
-const LINEA_DEFAULT: LineaState = {
-  costo: '0',
+type CampoEditable =
+  | 'cantidad'
+  | 'costo'
+  | 'descuento'
+  | 'iva_compra'
+  | 'margen'
+  | 'iva_venta'
+
+const DEFAULTS = {
   descuento: '0',
   iva_compra: '21',
   margen: '30',
   iva_venta: '21',
-}
+} as const
 
 interface CabeceraState {
   tipo_comprobante: string
@@ -94,11 +111,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const guardar = useGuardarFacturaCompra()
 
   const [afectaVenta, setAfectaVenta] = useState(true)
-  const [lineas, setLineas] = useState<Record<number, LineaState>>({})
+  const [lineas, setLineas] = useState<LineaFactura[]>([])
   const [cab, setCab] = useState<CabeceraState>(CABECERA_DEFAULT)
-  // Items quitados de la factura (productos del pedido que el comprobante
-  // no trae). No se guardan ni suman al total.
-  const [quitados, setQuitados] = useState<Set<number>>(new Set())
+  const [busqueda, setBusqueda] = useState('')
+
+  const { data: productosBusqueda } = useProductos({
+    activo: true,
+    busqueda: busqueda || undefined,
+  })
 
   function setCabCampo(campo: keyof CabeceraState, valor: string) {
     setCab((prev) => ({ ...prev, [campo]: valor }))
@@ -107,53 +127,46 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const items = useMemo(() => pedido?.items ?? [], [pedido])
   const cargando = cargandoPedido || cargandoFactura
 
-  function cantidadDe(it: (typeof items)[number]): number {
-    return it.cantidad_recibida ?? it.cantidad_pedida
-  }
-
-  // Solo las líneas que la factura sí incluye (las quitadas no entran).
-  const itemsVisibles = useMemo(
-    () => items.filter((it) => !quitados.has(it.id)),
-    [items, quitados]
-  )
-
-  function quitarLinea(itemId: number) {
-    setQuitados((prev) => {
-      const s = new Set(prev)
-      s.add(itemId)
-      return s
-    })
-  }
-  function restaurarLineas() {
-    setQuitados(new Set())
-  }
-
-  // Inicializar las líneas: factura guardada si existe, sino defaults.
+  // Inicializar líneas:
+  //  · Con factura guardada → reconstruir lo que se había facturado.
+  //  · Sin factura → SOLO los productos efectivamente recibidos (lo que el
+  //    proveedor entregó); el resto se agrega a mano con el buscador.
   useEffect(() => {
-    if (!abierto || cargando || items.length === 0) return
-    const guardadaPorProducto = new Map(
-      (facturaGuardada?.items ?? []).map((i) => [i.producto_id, i])
-    )
-    const inicial: Record<number, LineaState> = {}
-    for (const it of items) {
-      const g = guardadaPorProducto.get(it.producto_id)
-      if (g) {
-        inicial[it.id] = {
+    if (!abierto || cargando) return
+    let nuevas: LineaFactura[]
+    if (facturaGuardada && facturaGuardada.items.length > 0) {
+      nuevas = facturaGuardada.items.map((g) => {
+        const it = items.find((i) => i.producto_id === g.producto_id)
+        return {
+          key: `prod-${g.producto_id}`,
+          item_pedido_id: it?.id ?? null,
+          producto_id: g.producto_id,
+          nombre: it?.producto?.nombre ?? `Producto #${g.producto_id}`,
+          codigo_barras: it?.producto?.codigo_barras ?? null,
+          cantidad: String(g.cantidad),
           costo: String(g.costo_sin_iva),
           descuento: String(g.descuento_porcentaje),
           iva_compra: String(g.iva_compra_porcentaje),
           margen: String(g.margen_porcentaje),
           iva_venta: String(g.iva_venta_porcentaje),
         }
-      } else {
-        inicial[it.id] = {
-          ...LINEA_DEFAULT,
+      })
+    } else {
+      nuevas = items
+        .filter((it) => (it.cantidad_recibida ?? 0) > 0)
+        .map((it) => ({
+          key: `prod-${it.producto_id}`,
+          item_pedido_id: it.id,
+          producto_id: it.producto_id,
+          nombre: it.producto?.nombre ?? 'Producto eliminado',
+          codigo_barras: it.producto?.codigo_barras ?? null,
+          cantidad: String(it.cantidad_recibida ?? 0),
           costo: String(it.precio_costo || 0),
-        }
-      }
+          ...DEFAULTS,
+        }))
     }
-    setLineas(inicial)
-    setQuitados(new Set())
+    setLineas(nuevas)
+    setBusqueda('')
     if (facturaGuardada) {
       setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
       const f = facturaGuardada.factura
@@ -169,26 +182,64 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setCab(CABECERA_DEFAULT)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierto, cargando, items.length, facturaGuardada])
+  }, [abierto, cargando, facturaGuardada])
 
-  function setCampo(itemId: number, campo: keyof LineaState, valor: string) {
-    setLineas((prev) => ({
-      ...prev,
-      [itemId]: { ...(prev[itemId] ?? LINEA_DEFAULT), [campo]: valor },
-    }))
+  function setLineaCampo(key: string, campo: CampoEditable, valor: string) {
+    setLineas((prev) =>
+      prev.map((l) => (l.key === key ? { ...l, [campo]: valor } : l))
+    )
   }
 
-  // Cálculo por línea (solo sobre las visibles)
-  const calculadas = itemsVisibles.map((it) => {
-    const e = lineas[it.id] ?? LINEA_DEFAULT
+  function quitarLinea(key: string) {
+    setLineas((prev) => prev.filter((l) => l.key !== key))
+  }
+
+  function agregarProducto(p: {
+    id: number
+    nombre: string
+    codigo_barras: string | null
+    precio_costo?: number | null
+  }) {
+    if (lineas.some((l) => l.producto_id === p.id)) {
+      toast.info('Ese producto ya está en la factura.')
+      setBusqueda('')
+      return
+    }
+    const it = items.find((i) => i.producto_id === p.id)
+    setLineas((prev) => [
+      ...prev,
+      {
+        key: `prod-${p.id}`,
+        item_pedido_id: it?.id ?? null,
+        producto_id: p.id,
+        nombre: p.nombre,
+        codigo_barras: p.codigo_barras ?? null,
+        cantidad: it?.cantidad_recibida ? String(it.cantidad_recibida) : '1',
+        costo: String((it?.precio_costo ?? p.precio_costo ?? 0) || 0),
+        ...DEFAULTS,
+      },
+    ])
+    setBusqueda('')
+  }
+
+  // Productos del buscador que todavía no están en la factura (máx 6).
+  const resultados = useMemo(() => {
+    if (!busqueda.trim() || !productosBusqueda) return []
+    const enFactura = new Set(lineas.map((l) => l.producto_id))
+    return productosBusqueda.filter((p) => !enFactura.has(p.id)).slice(0, 6)
+  }, [busqueda, productosBusqueda, lineas])
+
+  // Cálculo por línea
+  const calculadas = lineas.map((l) => {
+    const cantidad = Number(l.cantidad) || 0
     const calc = calcularLinea({
-      costo_sin_iva: Number(e.costo) || 0,
-      descuento_porcentaje: Number(e.descuento) || 0,
-      iva_compra_porcentaje: Number(e.iva_compra) || 0,
-      margen_porcentaje: Number(e.margen) || 0,
-      iva_venta_porcentaje: Number(e.iva_venta) || 0,
+      costo_sin_iva: Number(l.costo) || 0,
+      descuento_porcentaje: Number(l.descuento) || 0,
+      iva_compra_porcentaje: Number(l.iva_compra) || 0,
+      margen_porcentaje: Number(l.margen) || 0,
+      iva_venta_porcentaje: Number(l.iva_venta) || 0,
     })
-    return { it, e, calc, cantidad: cantidadDe(it) }
+    return { l, calc, cantidad }
   })
 
   const totales = calculadas.reduce(
@@ -203,6 +254,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
 
   function handleGuardar() {
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
+    if (lineas.length === 0) return
     const limpio = (s: string) => {
       const t = s.trim()
       return t === '' ? null : t
@@ -222,15 +274,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           cae: limpio(cab.cae),
           cuit_proveedor: limpio(cab.cuit_proveedor),
         },
-        lineas: calculadas.map(({ it, e, cantidad }) => ({
-          item_pedido_id: it.id,
-          producto_id: it.producto_id,
+        lineas: calculadas.map(({ l, cantidad }) => ({
+          item_pedido_id: l.item_pedido_id,
+          producto_id: l.producto_id,
           cantidad,
-          costo_sin_iva: Number(e.costo) || 0,
-          descuento_porcentaje: Number(e.descuento) || 0,
-          iva_compra_porcentaje: Number(e.iva_compra) || 0,
-          margen_porcentaje: Number(e.margen) || 0,
-          iva_venta_porcentaje: Number(e.iva_venta) || 0,
+          costo_sin_iva: Number(l.costo) || 0,
+          descuento_porcentaje: Number(l.descuento) || 0,
+          iva_compra_porcentaje: Number(l.iva_compra) || 0,
+          margen_porcentaje: Number(l.margen) || 0,
+          iva_venta_porcentaje: Number(l.iva_venta) || 0,
         })),
       },
       { onSuccess: () => onCambioAbierto(false) }
@@ -252,8 +304,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             Cargar factura{cuenta ? ` · Pedido #${cuenta.pedido_id}` : ''}
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            Cargá los costos con IVA y el margen. El costo guardado es el neto
-            (sin IVA).
+            Vienen cargados los productos recibidos. Quitá los que la factura no
+            traiga y agregá los que falten. El costo guardado es el neto (sin
+            IVA).
           </DialogDescription>
         </DialogHeader>
 
@@ -359,21 +412,40 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </div>
           </div>
 
-          {quitados.size > 0 && itemsVisibles.length > 0 && (
-            <div className="flex items-center justify-between rounded-lg border border-[#f9b44c]/40 bg-[#f9b44c]/10 px-3 py-2 text-xs text-[#6f3a2a]">
-              <span>
-                {quitados.size} producto{quitados.size === 1 ? '' : 's'} quitado
-                {quitados.size === 1 ? '' : 's'} de la factura.
-              </span>
-              <button
-                type="button"
-                onClick={restaurarLineas}
-                className="font-semibold text-[#c43e2c] hover:underline"
-              >
-                Restaurar
-              </button>
-            </div>
-          )}
+          {/* Buscador para agregar un producto a la factura */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
+            <Input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Agregar un producto a la factura (del pedido o uno extra)…"
+              className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+            />
+            {busqueda && resultados.length > 0 && (
+              <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-[#e4c9b0] rounded-xl shadow-lg max-h-64 overflow-y-auto">
+                {resultados.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => agregarProducto(p)}
+                    className="w-full px-3 py-2 flex items-center justify-between gap-2 hover:bg-[#fdfaf6] text-left border-b border-[#e4c9b0]/40 last:border-b-0"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-[#391511] text-sm truncate">
+                        {p.nombre}
+                      </div>
+                      {p.codigo_barras && (
+                        <div className="text-xs text-[#c8a58a] font-mono">
+                          {p.codigo_barras}
+                        </div>
+                      )}
+                    </div>
+                    <Plus className="h-4 w-4 text-[#f9b44c] shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {cargando || !pedido ? (
             <div className="space-y-2">
@@ -381,21 +453,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 <Skeleton key={i} className="h-10 rounded-lg bg-[#f9d2a2]/30" />
               ))}
             </div>
-          ) : items.length === 0 ? (
+          ) : lineas.length === 0 ? (
             <p className="text-sm text-[#6f3a2a] py-6 text-center">
-              Este pedido no tiene items.
+              No hay productos en la factura. Usá el buscador de arriba para
+              agregar lo que trae el comprobante.
             </p>
-          ) : itemsVisibles.length === 0 ? (
-            <div className="py-6 text-center text-sm text-[#6f3a2a]">
-              Quitaste todas las líneas — no queda nada para facturar.
-              <button
-                type="button"
-                onClick={restaurarLineas}
-                className="ml-1 font-semibold text-[#c43e2c] hover:underline"
-              >
-                Restaurar
-              </button>
-            </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#e4c9b0]/60">
               <table className="w-full text-xs">
@@ -427,42 +489,56 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </tr>
                 </thead>
                 <tbody>
-                  {calculadas.map(({ it, e, calc, cantidad }) => (
+                  {calculadas.map(({ l, calc, cantidad }) => (
                     <tr
-                      key={it.id}
+                      key={l.key}
                       className="border-b border-[#e4c9b0]/40 bg-white"
                     >
                       <td className="p-2 text-[#391511] font-medium min-w-[180px]">
                         <div className="flex items-start gap-2">
                           <button
                             type="button"
-                            onClick={() => quitarLinea(it.id)}
-                            title="Quitar de la factura (no vino en el comprobante)"
+                            onClick={() => quitarLinea(l.key)}
+                            title="Quitar de la factura"
                             className="mt-0.5 shrink-0 text-[#c8a58a] transition-colors hover:text-[#c43e2c]"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                           <div className="min-w-0">
-                            {it.producto?.nombre ?? 'Producto eliminado'}
-                            {it.producto?.codigo_barras && (
+                            {l.nombre}
+                            {l.codigo_barras && (
                               <span className="block text-[#c8a58a] font-mono text-[10px]">
-                                {it.producto.codigo_barras}
+                                {l.codigo_barras}
+                              </span>
+                            )}
+                            {l.item_pedido_id === null && (
+                              <span className="block text-[10px] font-semibold text-[#9e6b15]">
+                                Extra (no pedido)
                               </span>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="p-2 text-center tabular-nums text-[#6f3a2a]">
-                        {cantidad}
+                      <td className="p-1 w-16">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={l.cantidad}
+                          onChange={(ev) =>
+                            setLineaCampo(l.key, 'cantidad', ev.target.value)
+                          }
+                          className={inputCls}
+                        />
                       </td>
                       <td className="p-1 w-24">
                         <Input
                           type="number"
                           min="0"
                           step="0.01"
-                          value={e.costo}
+                          value={l.costo}
                           onChange={(ev) =>
-                            setCampo(it.id, 'costo', ev.target.value)
+                            setLineaCampo(l.key, 'costo', ev.target.value)
                           }
                           className={inputCls}
                         />
@@ -471,9 +547,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <Input
                           type="number"
                           min="0"
-                          value={e.descuento}
+                          value={l.descuento}
                           onChange={(ev) =>
-                            setCampo(it.id, 'descuento', ev.target.value)
+                            setLineaCampo(l.key, 'descuento', ev.target.value)
                           }
                           className={inputCls}
                         />
@@ -485,9 +561,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <Input
                           type="number"
                           min="0"
-                          value={e.iva_compra}
+                          value={l.iva_compra}
                           onChange={(ev) =>
-                            setCampo(it.id, 'iva_compra', ev.target.value)
+                            setLineaCampo(l.key, 'iva_compra', ev.target.value)
                           }
                           className={inputCls}
                         />
@@ -498,9 +574,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       <td className="p-1 w-16">
                         <Input
                           type="number"
-                          value={e.margen}
+                          value={l.margen}
                           onChange={(ev) =>
-                            setCampo(it.id, 'margen', ev.target.value)
+                            setLineaCampo(l.key, 'margen', ev.target.value)
                           }
                           className={inputCls}
                         />
@@ -512,9 +588,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <Input
                           type="number"
                           min="0"
-                          value={e.iva_venta}
+                          value={l.iva_venta}
                           onChange={(ev) =>
-                            setCampo(it.id, 'iva_venta', ev.target.value)
+                            setLineaCampo(l.key, 'iva_venta', ev.target.value)
                           }
                           className={inputCls}
                         />
@@ -562,7 +638,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </Button>
             <Button
               onClick={handleGuardar}
-              disabled={guardar.isPending || itemsVisibles.length === 0}
+              disabled={guardar.isPending || lineas.length === 0}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
               {guardar.isPending ? (
