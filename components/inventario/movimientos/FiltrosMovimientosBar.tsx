@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -42,6 +43,11 @@ const TURNOS: { valor: Turno; etiqueta: string }[] = [
 
 const SIN_VALOR = '__todos__'
 
+const ITEMS_TURNO: Record<string, string> = {
+  [SIN_VALOR]: 'Todos',
+  ...Object.fromEntries(TURNOS.map((t) => [t.valor, t.etiqueta])),
+}
+
 export function FiltrosMovimientosBar({
   filtros,
   onChange,
@@ -49,6 +55,18 @@ export function FiltrosMovimientosBar({
   categorias,
 }: Props) {
   const tiposActivos = filtros.tipos ?? []
+
+  const itemsUsuario = useMemo(() => {
+    const r: Record<string, string> = { [SIN_VALOR]: 'Todos' }
+    for (const u of usuarios) r[u.id] = u.nombre
+    return r
+  }, [usuarios])
+
+  const itemsCategoria = useMemo(() => {
+    const r: Record<string, string> = { [SIN_VALOR]: 'Todas' }
+    for (const c of categorias) r[String(c.id)] = c.nombre
+    return r
+  }, [categorias])
 
   function toggleTipo(tipo: TipoMovimiento) {
     const nuevos = tiposActivos.includes(tipo)
@@ -112,6 +130,7 @@ export function FiltrosMovimientosBar({
             Turno
           </label>
           <Select
+            items={ITEMS_TURNO}
             value={filtros.turno ?? SIN_VALOR}
             onValueChange={(v) =>
               onChange({
@@ -140,6 +159,7 @@ export function FiltrosMovimientosBar({
             Usuario
           </label>
           <Select
+            items={itemsUsuario}
             value={filtros.usuario_id ?? SIN_VALOR}
             onValueChange={(v) =>
               onChange({
@@ -168,6 +188,7 @@ export function FiltrosMovimientosBar({
             Categoría
           </label>
           <Select
+            items={itemsCategoria}
             value={
               filtros.categoria_id != null
                 ? String(filtros.categoria_id)

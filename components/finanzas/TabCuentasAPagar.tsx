@@ -34,6 +34,14 @@ import type {
 
 const TODOS = '__todos__'
 
+const ITEMS_ESTADO: Record<string, string> = {
+  pendientes: 'Pendientes y vencidas',
+  pendiente: 'Solo pendientes',
+  vencida: 'Solo vencidas',
+  pagada: 'Pagadas',
+  [TODOS]: 'Todas',
+}
+
 export function TabCuentasAPagar() {
   const [estadoFiltro, setEstadoFiltro] = useState<string>('pendientes')
   const [cuentaEditar, setCuentaEditar] =
@@ -71,6 +79,7 @@ export function TabCuentasAPagar() {
           </p>
         </div>
         <Select
+          items={ITEMS_ESTADO}
           value={estadoFiltro}
           onValueChange={(v) => setEstadoFiltro(v ?? 'pendientes')}
         >

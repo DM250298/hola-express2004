@@ -29,6 +29,15 @@ import type { EstadoPedido } from '@/types/database'
 
 const TODOS = '__todos__'
 
+const ITEMS_ESTADO: Record<string, string> = {
+  [TODOS]: 'Todos los estados',
+  borrador: 'Borrador',
+  enviado: 'Enviado',
+  recepcion_parcial: 'Parcial',
+  recibido: 'Recibido',
+  cancelado: 'Cancelado',
+}
+
 export function PantallaPedidos() {
   const [estadoFiltro, setEstadoFiltro] = useState<string>(TODOS)
   const filtros =
@@ -56,6 +65,7 @@ export function PantallaPedidos() {
 
       <div className="flex flex-wrap gap-2">
         <Select
+          items={ITEMS_ESTADO}
           value={estadoFiltro}
           onValueChange={(v) => setEstadoFiltro(v ?? TODOS)}
         >

@@ -39,6 +39,15 @@ import type { TipoMovimientoCuenta } from '@/types/database'
 
 const TODOS = '__todos__'
 
+const ITEMS_TIPO: Record<string, string> = {
+  [TODOS]: 'Todos los tipos',
+  ingreso: 'Ingresos',
+  egreso: 'Egresos',
+  transferencia_entrada: 'Transf. entrada',
+  transferencia_salida: 'Transf. salida',
+  ajuste: 'Ajustes',
+}
+
 interface Props {
   desde: string
   hasta: string
@@ -98,6 +107,12 @@ export function TabMovimientos({ desde, hasta }: Props) {
   useEffect(() => {
     setPagina(0)
   }, [desde, hasta, cuentaFiltro, tipoFiltro])
+
+  const itemsCuenta = useMemo(() => {
+    const r: Record<string, string> = { [TODOS]: 'Todas las cuentas' }
+    for (const c of cuentas ?? []) r[String(c.id)] = c.nombre
+    return r
+  }, [cuentas])
 
   const totales = useMemo(() => {
     const lista = movimientos ?? []
@@ -182,6 +197,7 @@ export function TabMovimientos({ desde, hasta }: Props) {
       {/* Filtros */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-3 flex flex-wrap gap-2">
         <Select
+          items={itemsCuenta}
           value={cuentaFiltro}
           onValueChange={(v) => setCuentaFiltro(v ?? TODOS)}
         >
@@ -199,6 +215,7 @@ export function TabMovimientos({ desde, hasta }: Props) {
         </Select>
 
         <Select
+          items={ITEMS_TIPO}
           value={tipoFiltro}
           onValueChange={(v) => setTipoFiltro(v ?? TODOS)}
         >

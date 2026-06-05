@@ -44,6 +44,20 @@ import type { MedioPago } from '@/types/database'
 
 const TODOS = '__todos__'
 
+const ITEMS_PERIODO: Record<string, string> = {
+  hoy: 'Hoy',
+  ultimos_7: 'Última semana',
+  mes_actual: 'Este mes',
+  mes_anterior: 'Mes anterior',
+  personalizado: 'Personalizado',
+}
+
+const ITEMS_ESTADO: Record<string, string> = {
+  completada: 'Completadas',
+  anulada: 'Anuladas',
+  [TODOS]: 'Todas',
+}
+
 function hoyIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -85,6 +99,12 @@ export function PantallaVentas() {
     for (const m of medios ?? [])
       mapa.set(m.codigo, { nombre: m.nombre, icono: m.icono })
     return mapa
+  }, [medios])
+
+  const itemsMedio = useMemo(() => {
+    const r: Record<string, string> = { [TODOS]: 'Todos' }
+    for (const m of medios ?? []) r[m.codigo] = m.nombre
+    return r
   }, [medios])
 
   useEffect(() => {
@@ -138,6 +158,7 @@ export function PantallaVentas() {
               Período
             </Label>
             <Select
+              items={ITEMS_PERIODO}
               value={periodo}
               onValueChange={(v) =>
                 setPeriodo((v ?? 'mes_actual') as ClavePeriodo)
@@ -191,6 +212,7 @@ export function PantallaVentas() {
               Medio de pago
             </Label>
             <Select
+              items={itemsMedio}
               value={medioFiltro}
               onValueChange={(v) => setMedioFiltro(v ?? TODOS)}
             >
@@ -213,6 +235,7 @@ export function PantallaVentas() {
               Estado
             </Label>
             <Select
+              items={ITEMS_ESTADO}
               value={estadoFiltro}
               onValueChange={(v) => setEstadoFiltro(v ?? 'completada')}
             >
