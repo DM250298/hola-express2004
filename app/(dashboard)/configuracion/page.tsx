@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Tag, Truck, ChevronRight, Users } from 'lucide-react'
+import { Tag, Truck, ChevronRight, Users, Landmark } from 'lucide-react'
 
 const SECCIONES = [
   {
@@ -22,6 +22,13 @@ const SECCIONES = [
     descripcion: 'Empleados y roles del sistema.',
     icono: Users,
     color: '#9e2f25',
+  },
+  {
+    href: '/configuracion/fiscal',
+    titulo: 'Datos fiscales',
+    descripcion: 'CUIT, IVA, Ingresos Brutos y vencimientos impositivos.',
+    icono: Landmark,
+    color: '#2f8f4e',
   },
 ]
 

@@ -1,9 +1,5 @@
-import { PantallaMovimientos } from '@/components/inventario/movimientos/PantallaMovimientos'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Movimientos de stock — ¡Hola! Express',
-}
-
-export default function PaginaMovimientosStock() {
-  return <PantallaMovimientos />
+export default function PaginaMovimientosLegacy() {
+  redirect('/inventario/control')
 }

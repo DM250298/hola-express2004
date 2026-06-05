@@ -167,12 +167,19 @@ Usar `type` aliases (no `interface`) e incluir las keys `Relationships` y
 ## Módulos del sistema
 
 ### 1. POS (`/pos`) — punto de venta
-Búsqueda + grid de frecuentes, carrito con +/-, cobro multi-medio (efectivo
-con vuelto, débito/crédito/transferencia, terminal Mercado Pago, venta por
-peso), apertura/cierre de caja con conteo de billetes, **sangrías**
-(retiros a caja fuerte que descuentan del cierre), gastos del turno,
-selector de cliente, atajos F1–F12, modo offline. La venta crea asiento
-contable automático.
+Búsqueda + grid de frecuentes, carrito con +/- y **cantidad editable a mano**
+(input directo, clampea al stock), cobro multi-medio (efectivo con vuelto,
+débito/crédito/transferencia, terminal Mercado Pago, venta por peso),
+apertura/cierre de caja con conteo de billetes, **sangrías** (retiros a caja
+fuerte que descuentan del cierre), gastos del turno, selector de cliente,
+atajos F1–F12, modo offline. La venta crea asiento contable automático.
+
+**Cobro con terminal MP Point (`ModalCobroTerminal`):** el cajero elige solo
+el **canal** (Tarjeta/Point o QR) con un toggle; NO elige la forma de pago.
+Al aprobarse la orden, MP devuelve `payment_method.type/id` y el sistema
+auto-detecta el medio exacto vía `matchMedioPagoPorMP` (filtra por canal +
+type, resuelve ambigüedad débito Point vs QR), registrando con la **comisión
+real** de ese método. Ver "Medios de pago y comisiones MP" abajo.
 
 **Devoluciones** (permiso `devoluciones`): se busca la venta original, se
 eligen items y cantidades, cada uno va **a stock** (repone) o **merma** (se
@@ -189,13 +196,18 @@ inverso.
 ABM + historial de compras.
 
 ### 4. Inventario (`/inventario`)
-- **Stock**: tabla, filtros, alertas de mínimo, detalle por producto con
-  gráfico de evolución
-- **Movimientos** (`/inventario/movimientos`): historial completo, filtros
-  por tipo/turno/usuario/categoría, export CSV
+- **Stock** (`/inventario`): vista operativa pura — panel de alertas (KPIs
+  clickeables), filtros (búsqueda, categoría, proveedor, estado, orden),
+  tabla con acciones (ver detalle, etiqueta, ajustar). Detalle por producto
+  con gráfico de evolución 30 días e historial paginado
+- **Control de stock** (`/inventario/control`): operaciones de control en
+  tabs — Conteo (asignar/contar/aprobar), Ajustes (formulario + historial,
+  gated con `inventario_ajustes`), Movimientos (historial global con
+  filtros y export CSV). `/inventario/movimientos` redirige acá
 - **Clasificación ABC** (`/inventario/clasificacion-abc`): análisis Pareto
   por ingresos
-- Conteos físicos con aprobación atómica, ajustes manuales
+- ABM de productos vive en `/configuracion/productos` — no es parte
+  del módulo operativo de stock
 
 ### 5. Vencimientos (`/vencimientos`)
 Semáforo verde/amarillo/rojo por lote, baja con merma automática,
@@ -235,7 +247,12 @@ Tabs:
   `comision_porcentaje`. Las ventas con plazo > 0 generan una
   `acreditacion` pendiente en vez de impactar el saldo; se acredita (manual
   o al conciliar) y la plata neta entra al banco
-- **Cuentas**: cuentas bancarias / billeteras / caja con saldos
+- **Cuentas**: cuentas bancarias / billeteras / caja con saldos. Cada cuenta
+  tiene `retencion_iibb_porcentaje` (ej: MP retiene 3% IIBB La Rioja): se
+  descuenta del saldo en cada ingreso (venta inmediata o acreditación),
+  registrando un movimiento aparte con categoría `iibb`. Configurable en
+  `DrawerCuenta`. La config de medios de pago vive al final de esta tab
+  (`ConfiguracionCobros`) — ver "Medios de pago y comisiones MP" abajo
 - **Movimientos**: filtros por cuenta/tipo/categoría
 - **Conciliación**: importa el reporte/extracto de Mercado Pago (CSV/Excel,
   parser con auto-detección de columnas), cruza contra acreditaciones
@@ -247,6 +264,39 @@ Tabs:
 - **Egresos**: gastos categorizados
 
 Sidebar: sección **"Finanzas y Tesorería"** agrupa Finanzas + Contabilidad.
+
+#### Medios de pago y comisiones MP (cross-cutting POS ↔ Finanzas)
+
+Tabla `medios_pago` (dinámica, ver `lib/queries/mediosPago.ts` +
+`useMediosPago`). Campos clave:
+- `activo` → aparece en el modal de cobro manual del POS
+- `disponible_terminal` → aparece en el flujo de cobro con posnet
+  (`ModalCobroTerminal`). **Flags independientes**: un medio puede estar en
+  uno, ambos o ninguno
+- `comision_porcentaje` → comisión del medio, **con IVA incluido** (las tasas
+  públicas de MP NO incluyen IVA → cargar `tasa × 1.21`). Se descuenta como
+  egreso categoría `comisiones` al vender
+- `mp_payment_type` / `mp_payment_method_id` → mapeo a lo que devuelve la API
+  de MP Point (`account_money`, `debit_card`, `credit_card`, `prepaid_card`;
+  id como `visa`, `master`, etc. — NULL = wildcard del type)
+- `mp_channel` (`'point' | 'qr' | null`) → desambigua medios con mismo
+  `payment_type` pero distinta comisión. **Caso crítico:** la API devuelve
+  `debit_card` igual para Point (3.74%) y QR (1.69%); el cajero elige el
+  canal en el toggle del modal y eso resuelve cuál aplica. `null` = sirve
+  para ambos canales (crédito y prepaga tienen igual tasa en los dos)
+
+**Auto-detección** (`matchMedioPagoPorMP`): al aprobarse la orden, filtra por
+type → por canal (prefiere específicos sobre agnósticos) → por method_id. Si
+queda un único candidato, ese se registra (con su comisión real); si hay
+ambigüedad o MP no devolvió datos, cae al medio default del canal. El cajero
+**no elige forma de pago**, solo el canal.
+
+Seed real del comercio (La Rioja, acreditación al instante, con IVA): códigos
+`mp2_*` — QR cuenta 0.97%, débito Point 3.74%, débito QR 1.69%, crédito 7.48%,
+prepaga 4.69%, QR cuotas 1.68%. Migraciones 055–059 (la 058 `retencion_iibb`
+reescribe `fn_crear_venta` v6 + `fn_acreditar_pago` v3 **sobre la base v5 que
+usa `fn_costo`** — no vuelve a `productos.precio_costo`, agrega el egreso IIBB).
+Ajustar tasas desde la UI, no por código.
 
 ### 9. Contabilidad (`/contabilidad`)
 Plan de cuentas jerárquico, libro diario (asientos automáticos + manuales),
@@ -383,7 +433,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-53 migraciones corridas, ~320 archivos fuente, deploy en Vercel:
+59 migraciones corridas, ~320 archivos fuente, deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

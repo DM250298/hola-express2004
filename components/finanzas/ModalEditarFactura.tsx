@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { FileText, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -45,6 +53,37 @@ const LINEA_DEFAULT: LineaState = {
   iva_venta: '21',
 }
 
+interface CabeceraState {
+  tipo_comprobante: string
+  punto_venta: string
+  numero_comprobante: string
+  cae: string
+  cuit_proveedor: string
+  fecha_emision: string
+}
+
+function hoyIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const CABECERA_DEFAULT: CabeceraState = {
+  tipo_comprobante: 'A',
+  punto_venta: '',
+  numero_comprobante: '',
+  cae: '',
+  cuit_proveedor: '',
+  fecha_emision: hoyIso(),
+}
+
+const TIPOS_COMPROBANTE = [
+  { valor: 'A', etiqueta: 'Factura A' },
+  { valor: 'B', etiqueta: 'Factura B' },
+  { valor: 'C', etiqueta: 'Factura C' },
+  { valor: 'M', etiqueta: 'Factura M' },
+  { valor: 'E', etiqueta: 'Factura E (export.)' },
+]
+
 export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) {
   const { data: usuario } = useUsuario()
   const { data: pedido, isLoading: cargandoPedido } = usePedidoDetalle(
@@ -56,6 +95,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
 
   const [afectaVenta, setAfectaVenta] = useState(true)
   const [lineas, setLineas] = useState<Record<number, LineaState>>({})
+  const [cab, setCab] = useState<CabeceraState>(CABECERA_DEFAULT)
+
+  function setCabCampo(campo: keyof CabeceraState, valor: string) {
+    setCab((prev) => ({ ...prev, [campo]: valor }))
+  }
 
   const items = useMemo(() => pedido?.items ?? [], [pedido])
   const cargando = cargandoPedido || cargandoFactura
@@ -89,7 +133,20 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       }
     }
     setLineas(inicial)
-    if (facturaGuardada) setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
+    if (facturaGuardada) {
+      setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
+      const f = facturaGuardada.factura
+      setCab({
+        tipo_comprobante: f.tipo_comprobante ?? 'A',
+        punto_venta: f.punto_venta ?? '',
+        numero_comprobante: f.numero_comprobante ?? '',
+        cae: f.cae ?? '',
+        cuit_proveedor: f.cuit_proveedor ?? '',
+        fecha_emision: f.fecha ?? hoyIso(),
+      })
+    } else {
+      setCab(CABECERA_DEFAULT)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cargando, items.length, facturaGuardada])
 
@@ -125,14 +182,25 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
 
   function handleGuardar() {
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
+    const limpio = (s: string) => {
+      const t = s.trim()
+      return t === '' ? null : t
+    }
     guardar.mutate(
       {
         cuenta_id: cuenta.id,
         pedido_id: pedido.id,
         proveedor_id: cuenta.proveedor_id,
-        fecha: new Date().toISOString().slice(0, 10),
+        fecha: cab.fecha_emision || hoyIso(),
         afecta_precio_venta: afectaVenta,
         usuario_id: usuario.id,
+        comprobante: {
+          tipo_comprobante: cab.tipo_comprobante || null,
+          punto_venta: limpio(cab.punto_venta),
+          numero_comprobante: limpio(cab.numero_comprobante),
+          cae: limpio(cab.cae),
+          cuit_proveedor: limpio(cab.cuit_proveedor),
+        },
         lineas: calculadas.map(({ it, e, cantidad }) => ({
           item_pedido_id: it.id,
           producto_id: it.producto_id,
@@ -181,6 +249,93 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               <Switch checked={afectaVenta} onCheckedChange={setAfectaVenta} />
               Afectar precio de venta
             </label>
+          </div>
+
+          {/* Datos formales del comprobante */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3">
+            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-2">
+              Datos del comprobante (para libro IVA)
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">Tipo</Label>
+                <Select
+                  value={cab.tipo_comprobante}
+                  onValueChange={(v) =>
+                    setCabCampo('tipo_comprobante', v ?? 'A')
+                  }
+                >
+                  <SelectTrigger className="h-8 border-[#e4c9b0] bg-white text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_COMPROBANTE.map((t) => (
+                      <SelectItem key={t.valor} value={t.valor}>
+                        {t.etiqueta}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">Pto. venta</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0001"
+                  value={cab.punto_venta}
+                  onChange={(e) => setCabCampo('punto_venta', e.target.value)}
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">Número</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="00001234"
+                  value={cab.numero_comprobante}
+                  onChange={(e) =>
+                    setCabCampo('numero_comprobante', e.target.value)
+                  }
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  CUIT proveedor
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="30-xxxxxxxx-x"
+                  value={cab.cuit_proveedor}
+                  onChange={(e) =>
+                    setCabCampo('cuit_proveedor', e.target.value)
+                  }
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  Fecha emisión
+                </Label>
+                <Input
+                  type="date"
+                  value={cab.fecha_emision}
+                  max={hoyIso()}
+                  onChange={(e) => setCabCampo('fecha_emision', e.target.value)}
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">CAE</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="Opcional"
+                  value={cab.cae}
+                  onChange={(e) => setCabCampo('cae', e.target.value)}
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+            </div>
           </div>
 
           {cargando || !pedido ? (

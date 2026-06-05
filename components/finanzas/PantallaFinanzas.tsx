@@ -14,6 +14,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabTableroDirectivo } from './TabTableroDirectivo'
 import { TabResumen } from './TabResumen'
+import { TabComprobantes } from './TabComprobantes'
+import { TabImpuestos } from './TabImpuestos'
 import { TabCuentasAPagar } from './TabCuentasAPagar'
 import { TabEgresos } from './TabEgresos'
 import { TabCuentas } from './TabCuentas'
@@ -26,6 +28,9 @@ import {
   rangoPredefinido,
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
+
+const TAB_CLS =
+  'data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm'
 
 function isoLocalAHoy(): string {
   const d = new Date()
@@ -120,65 +125,61 @@ export function PantallaFinanzas() {
       </header>
 
       <Tabs defaultValue="tablero" className="space-y-4">
-        <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
-          <TabsTrigger
-            value="tablero"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
+        <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap gap-0.5">
+          {/* Gestión */}
+          <TabsTrigger value="tablero" className={TAB_CLS}>
             Tablero
           </TabsTrigger>
-          <TabsTrigger
-            value="resumen"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
-            Resumen
+          <TabsTrigger value="comprobantes" className={TAB_CLS}>
+            Comprobantes
           </TabsTrigger>
-          <TabsTrigger
-            value="caja_fuerte"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
-            Caja fuerte
-          </TabsTrigger>
-          <TabsTrigger
-            value="por_cobrar"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
-            Por cobrar
-          </TabsTrigger>
-          <TabsTrigger
-            value="cuentas_bancarias"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
-            Cuentas
-          </TabsTrigger>
-          <TabsTrigger
-            value="movimientos"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
-            Movimientos
-          </TabsTrigger>
-          <TabsTrigger
-            value="conciliacion"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
-            Conciliación
-          </TabsTrigger>
-          <TabsTrigger
-            value="cuentas_pagar"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
+          <TabsTrigger value="cuentas_pagar" className={TAB_CLS}>
             Cuentas a pagar
           </TabsTrigger>
-          <TabsTrigger
-            value="egresos"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
-          >
+          <TabsTrigger value="impuestos" className={TAB_CLS}>
+            Impuestos
+          </TabsTrigger>
+          <TabsTrigger value="resumen" className={TAB_CLS}>
+            P&L
+          </TabsTrigger>
+
+          <span
+            aria-hidden
+            className="hidden md:block w-px self-stretch bg-[#e4c9b0]/70 mx-1.5"
+          />
+
+          {/* Tesorería */}
+          <TabsTrigger value="caja_fuerte" className={TAB_CLS}>
+            Caja fuerte
+          </TabsTrigger>
+          <TabsTrigger value="por_cobrar" className={TAB_CLS}>
+            Por cobrar
+          </TabsTrigger>
+          <TabsTrigger value="cuentas_bancarias" className={TAB_CLS}>
+            Cuentas
+          </TabsTrigger>
+          <TabsTrigger value="movimientos" className={TAB_CLS}>
+            Movimientos
+          </TabsTrigger>
+          <TabsTrigger value="conciliacion" className={TAB_CLS}>
+            Conciliación
+          </TabsTrigger>
+          <TabsTrigger value="egresos" className={TAB_CLS}>
             Egresos
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tablero">
           <TabTableroDirectivo desde={rango.desde} hasta={rango.hasta} />
+        </TabsContent>
+        <TabsContent value="comprobantes">
+          <TabComprobantes />
+        </TabsContent>
+        <TabsContent value="cuentas_pagar">
+          <TabCuentasAPagar />
+        </TabsContent>
+        <TabsContent value="impuestos">
+          <TabImpuestos />
         </TabsContent>
         <TabsContent value="resumen">
           <TabResumen desde={rango.desde} hasta={rango.hasta} />
@@ -197,9 +198,6 @@ export function PantallaFinanzas() {
         </TabsContent>
         <TabsContent value="conciliacion">
           <TabConciliacionBancaria />
-        </TabsContent>
-        <TabsContent value="cuentas_pagar">
-          <TabCuentasAPagar />
         </TabsContent>
         <TabsContent value="egresos">
           <TabEgresos desde={rango.desde} hasta={rango.hasta} />

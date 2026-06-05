@@ -13,11 +13,35 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { BadgeEstadoStock } from '@/components/shared/BadgeEstadoStock'
+import { Sparkline } from './Sparkline'
 import type {
   FiltrosInventario,
   ProductoConStock,
 } from '@/lib/queries/inventario'
 import { cn } from '@/lib/utils'
+
+type NivelCobertura = 'sin_datos' | 'critico' | 'bajo' | 'normal'
+
+function nivelCobertura(dias: number | null): NivelCobertura {
+  if (dias == null) return 'sin_datos'
+  if (dias < 3) return 'critico'
+  if (dias < 7) return 'bajo'
+  return 'normal'
+}
+
+const COLOR_COBERTURA: Record<NivelCobertura, string> = {
+  sin_datos: '#c8a58a',
+  critico: '#c43e2c',
+  bajo: '#e4a42a',
+  normal: '#2f8f4e',
+}
+
+function formatearDias(dias: number | null): string {
+  if (dias == null) return 'Sin ventas'
+  if (dias >= 999) return '>999 d'
+  if (dias < 1) return `${dias.toFixed(1)} d`
+  return `${Math.round(dias)} d`
+}
 
 interface Props {
   productos: ProductoConStock[] | undefined
@@ -92,6 +116,14 @@ export function TablaStock({
                     )
                   }
                 />
+                <TableHead className="text-[#391511] font-semibold">
+                  <span className="inline-flex flex-col">
+                    Cobertura
+                    <span className="text-[10px] font-normal text-[#c8a58a]">
+                      14d
+                    </span>
+                  </span>
+                </TableHead>
                 <TableHead className="text-right text-[#391511] font-semibold">
                   Stock mín.
                 </TableHead>
@@ -139,6 +171,13 @@ export function TablaStock({
                     <TableCell className="text-right tabular-nums font-semibold text-[#391511] text-base">
                       {p.stock_actual}
                     </TableCell>
+                    <TableCell>
+                      <CeldaCobertura
+                        dias={p.dias_cobertura}
+                        serie={p.serie_14d}
+                        promedio={p.promedio_diario}
+                      />
+                    </TableCell>
                     <TableCell className="text-right tabular-nums text-[#6f3a2a]">
                       {p.stock_minimo}
                     </TableCell>
@@ -184,6 +223,52 @@ export function TablaStock({
           </Table>
         </div>
       )}
+    </div>
+  )
+}
+
+function CeldaCobertura({
+  dias,
+  serie,
+  promedio,
+}: {
+  dias: number | null
+  serie: number[]
+  promedio: number
+}) {
+  const nivel = nivelCobertura(dias)
+  const color = COLOR_COBERTURA[nivel]
+  const sinVentas = nivel === 'sin_datos'
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="flex flex-col leading-tight min-w-[58px]">
+        <span
+          className={cn(
+            'font-bold tabular-nums text-sm',
+            sinVentas && 'text-[#c8a58a] italic font-medium text-xs'
+          )}
+          style={!sinVentas ? { color } : undefined}
+          title={
+            sinVentas
+              ? 'Sin ventas en los últimos 14 días'
+              : `${promedio.toFixed(1)} unid/día promedio`
+          }
+        >
+          {formatearDias(dias)}
+        </span>
+        {!sinVentas && (
+          <span className="text-[10px] text-[#c8a58a] tabular-nums">
+            {promedio.toFixed(1)}/día
+          </span>
+        )}
+      </div>
+      <Sparkline
+        datos={serie}
+        ancho={70}
+        alto={18}
+        color={sinVentas ? '#c8a58a' : color}
+        ariaLabel={`Ventas de los últimos 14 días`}
+      />
     </div>
   )
 }

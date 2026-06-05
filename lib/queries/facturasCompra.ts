@@ -43,19 +43,77 @@ export interface LineaFacturaPayload extends EntradaLinea {
   cantidad: number
 }
 
+/** Datos formales del comprobante (cabecera AFIP). Todos opcionales. */
+export interface DatosComprobante {
+  tipo_comprobante: string | null
+  punto_venta: string | null
+  numero_comprobante: string | null
+  cae: string | null
+  cuit_proveedor: string | null
+}
+
 export interface GuardarFacturaPayload {
   cuenta_id: number
   pedido_id: number
   proveedor_id: number | null
+  /** Fecha de EMISIÓN del comprobante (define el período fiscal). */
   fecha: string
   afecta_precio_venta: boolean
   usuario_id: string
   lineas: LineaFacturaPayload[]
+  /** Datos formales del comprobante; si se omiten, no se tocan. */
+  comprobante?: DatosComprobante
 }
 
 export interface FacturaCompraCompleta {
   factura: FacturaCompraRow
   items: ItemFacturaCompraRow[]
+}
+
+export interface ComprobanteCargado {
+  cuenta_id: number | null
+  pedido_id: number | null
+  proveedor_id: number | null
+  proveedor_nombre: string | null
+  fecha: string
+  tipo_comprobante: string | null
+  punto_venta: string | null
+  numero_comprobante: string | null
+  cae: string | null
+  neto: number
+  iva_total: number
+  total: number
+}
+
+/** Lista las facturas de compra cargadas, con el nombre del proveedor. */
+export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('facturas_compra')
+    .select(
+      'cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, proveedores(nombre)'
+    )
+    .order('fecha', { ascending: false })
+  if (error) throw error
+
+  type FilaCruda = Omit<ComprobanteCargado, 'proveedor_nombre'> & {
+    proveedores: { nombre: string } | null
+  }
+
+  return ((data ?? []) as unknown as FilaCruda[]).map((f) => ({
+    cuenta_id: f.cuenta_id,
+    pedido_id: f.pedido_id,
+    proveedor_id: f.proveedor_id,
+    proveedor_nombre: f.proveedores?.nombre ?? null,
+    fecha: f.fecha,
+    tipo_comprobante: f.tipo_comprobante,
+    punto_venta: f.punto_venta,
+    numero_comprobante: f.numero_comprobante,
+    cae: f.cae,
+    neto: Number(f.neto),
+    iva_total: Number(f.iva_total),
+    total: Number(f.total),
+  }))
 }
 
 /** Devuelve la factura guardada para una cuenta a pagar (o null). */
@@ -92,6 +150,35 @@ export async function guardarFacturaCompra(
   payload: GuardarFacturaPayload
 ): Promise<void> {
   const supabase = createClient()
+  const comp = payload.comprobante
+
+  // 1. Anti-duplicado: si el comprobante está identificado por completo,
+  //    no puede existir el mismo (CUIT + tipo + punto + número) en OTRA
+  //    cuenta. Re-guardar la misma cuenta sí es válido.
+  if (
+    comp?.cuit_proveedor &&
+    comp.tipo_comprobante &&
+    comp.punto_venta &&
+    comp.numero_comprobante
+  ) {
+    const { data: dup, error: errDup } = await supabase
+      .from('facturas_compra')
+      .select('cuenta_id')
+      .eq('cuit_proveedor', comp.cuit_proveedor)
+      .eq('tipo_comprobante', comp.tipo_comprobante)
+      .eq('punto_venta', comp.punto_venta)
+      .eq('numero_comprobante', comp.numero_comprobante)
+      .neq('cuenta_id', payload.cuenta_id)
+      .maybeSingle<{ cuenta_id: number | null }>()
+    if (errDup) throw errDup
+    if (dup) {
+      throw new Error(
+        `Ese comprobante (${comp.tipo_comprobante} ${comp.punto_venta}-${comp.numero_comprobante}) ya fue cargado para otra cuenta.`
+      )
+    }
+  }
+
+  // 2. RPC de costos/precios (NO toca los campos formales).
   const { error } = await supabase.rpc('fn_guardar_factura_compra', {
     p_cuenta_id: payload.cuenta_id,
     p_pedido_id: payload.pedido_id,
@@ -111,4 +198,19 @@ export async function guardarFacturaCompra(
     })) as unknown as Json,
   })
   if (error) throw error
+
+  // 3. Cabecera formal del comprobante (UPDATE aditivo por cuenta_id).
+  if (comp) {
+    const { error: errComp } = await supabase
+      .from('facturas_compra')
+      .update({
+        tipo_comprobante: comp.tipo_comprobante,
+        punto_venta: comp.punto_venta,
+        numero_comprobante: comp.numero_comprobante,
+        cae: comp.cae,
+        cuit_proveedor: comp.cuit_proveedor,
+      })
+      .eq('cuenta_id', payload.cuenta_id)
+    if (errComp) throw errComp
+  }
 }

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import type {
+  CoberturaStockRow,
   MovimientoStockRow,
   ProductoRow,
   TipoMovimiento,
@@ -21,6 +22,12 @@ export interface ProductoConStock {
   categoria_nombre: string | null
   proveedor_nombre: string | null
   estado_stock: EstadoStock
+  /** Días de cobertura = stock_actual / promedio_diario. NULL si no hubo ventas. */
+  dias_cobertura: number | null
+  /** Promedio diario de unidades vendidas (últimos 14 días). */
+  promedio_diario: number
+  /** Serie de ventas por día (14 valores, antiguo → reciente). */
+  serie_14d: number[]
 }
 
 export interface FiltrosInventario {
@@ -39,6 +46,45 @@ export function calcularEstadoStock(
   if (stock_actual <= 0) return 'critico'
   if (stock_actual < stock_minimo) return 'bajo'
   return 'normal'
+}
+
+/**
+ * Trae las métricas de cobertura para todos los productos activos.
+ * Devuelve un Map indexado por producto_id para mergear con la lista de stock.
+ */
+export async function getCoberturaStock(): Promise<Map<number, CoberturaStockRow>> {
+  const supabase = createClient()
+  const filas = await traerTodo<CoberturaStockRow>(() =>
+    supabase
+      .from('vista_cobertura_stock')
+      .select('producto_id, stock_actual, ventas_14d, promedio_diario, dias_cobertura, serie_14d')
+  )
+  const mapa = new Map<number, CoberturaStockRow>()
+  for (const f of filas) mapa.set(f.producto_id, f)
+  return mapa
+}
+
+/** Cobertura de un solo producto. NULL si el producto no es activo o no existe. */
+export async function getCoberturaProducto(
+  producto_id: number
+): Promise<CoberturaStockRow | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('vista_cobertura_stock')
+    .select('producto_id, stock_actual, ventas_14d, promedio_diario, dias_cobertura, serie_14d')
+    .eq('producto_id', producto_id)
+    .maybeSingle()
+  if (error) throw error
+  return data ?? null
+}
+
+const COBERTURA_VACIA: Pick<
+  ProductoConStock,
+  'dias_cobertura' | 'promedio_diario' | 'serie_14d'
+> = {
+  dias_cobertura: null,
+  promedio_diario: 0,
+  serie_14d: Array(14).fill(0),
 }
 
 export async function getProductosConStock(
@@ -64,22 +110,26 @@ export async function getProductosConStock(
     proveedores: { nombre: string } | null
   }
 
-  // Paginamos para soportar catálogos > 1000 productos
-  const data = await traerTodo<FilaCruda>(() => {
-    let q = supabase
-      .from('productos')
-      .select(
-        'id, nombre, codigo_barras, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, categorias(nombre), proveedores(nombre)'
-      )
-    if (filtros.solo_activos !== false) q = q.eq('activo', true)
-    if (patron) q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
-    if (filtros.categoria_id != null) q = q.eq('categoria_id', filtros.categoria_id)
-    if (filtros.proveedor_id != null) q = q.eq('proveedor_id', filtros.proveedor_id)
-    return q
-  })
+  // Paginamos productos y traemos cobertura en paralelo
+  const [data, cobertura] = await Promise.all([
+    traerTodo<FilaCruda>(() => {
+      let q = supabase
+        .from('productos')
+        .select(
+          'id, nombre, codigo_barras, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, categorias(nombre), proveedores(nombre)'
+        )
+      if (filtros.solo_activos !== false) q = q.eq('activo', true)
+      if (patron) q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
+      if (filtros.categoria_id != null) q = q.eq('categoria_id', filtros.categoria_id)
+      if (filtros.proveedor_id != null) q = q.eq('proveedor_id', filtros.proveedor_id)
+      return q
+    }),
+    getCoberturaStock(),
+  ])
 
-  const productos: ProductoConStock[] = data.map(
-    (p) => ({
+  const productos: ProductoConStock[] = data.map((p) => {
+    const cob = cobertura.get(p.id)
+    return {
       id: p.id,
       nombre: p.nombre,
       codigo_barras: p.codigo_barras,
@@ -92,8 +142,11 @@ export async function getProductosConStock(
       categoria_nombre: p.categorias?.nombre ?? null,
       proveedor_nombre: p.proveedores?.nombre ?? null,
       estado_stock: calcularEstadoStock(p.stock_actual, p.stock_minimo),
-    })
-  )
+      dias_cobertura: cob?.dias_cobertura ?? COBERTURA_VACIA.dias_cobertura,
+      promedio_diario: cob?.promedio_diario ?? COBERTURA_VACIA.promedio_diario,
+      serie_14d: cob?.serie_14d ?? COBERTURA_VACIA.serie_14d,
+    }
+  })
 
   // Filtro por estado se hace en memoria (depende del cálculo)
   let filtrados = productos

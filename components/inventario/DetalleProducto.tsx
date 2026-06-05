@@ -30,6 +30,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { BadgeEstadoStock } from '@/components/shared/BadgeEstadoStock'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import {
+  useCoberturaProducto,
   useHistorialMovimientos,
   useProductoDetalle,
 } from '@/lib/hooks/useInventario'
@@ -38,6 +39,7 @@ import { calcularEstadoStock } from '@/lib/queries/inventario'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
+import { Sparkline } from './Sparkline'
 import { cn } from '@/lib/utils'
 import type { TipoMovimiento } from '@/types/database'
 
@@ -81,6 +83,7 @@ const CONFIG_TIPO: Record<
 export function DetalleProducto({ productoId }: Props) {
   const { data: producto, isLoading: cargandoProd, isError } =
     useProductoDetalle(productoId)
+  const { data: cobertura } = useCoberturaProducto(productoId)
   const { data: usuario } = useUsuario()
   const [pagina, setPagina] = useState(0)
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState(false)
@@ -208,6 +211,9 @@ export function DetalleProducto({ productoId }: Props) {
           )}
         </div>
       </div>
+
+      {/* Velocidad de venta */}
+      <PanelCobertura cobertura={cobertura ?? null} />
 
       {/* Gráfico de evolución */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">
@@ -366,6 +372,100 @@ export function DetalleProducto({ productoId }: Props) {
           stock_actual: producto.stock_actual,
         }}
       />
+    </div>
+  )
+}
+
+function PanelCobertura({
+  cobertura,
+}: {
+  cobertura:
+    | {
+        promedio_diario: number
+        dias_cobertura: number | null
+        serie_14d: number[]
+        ventas_14d: number
+      }
+    | null
+}) {
+  const dias = cobertura?.dias_cobertura ?? null
+  const promedio = cobertura?.promedio_diario ?? 0
+  const serie = cobertura?.serie_14d ?? Array(14).fill(0)
+  const ventas14d = cobertura?.ventas_14d ?? 0
+  const sinVentas = dias == null
+
+  const { color, etiqueta } = (() => {
+    if (sinVentas) return { color: '#c8a58a', etiqueta: 'Sin ventas' }
+    if (dias! < 3) return { color: '#c43e2c', etiqueta: 'Crítico' }
+    if (dias! < 7) return { color: '#e4a42a', etiqueta: 'Apretado' }
+    return { color: '#2f8f4e', etiqueta: 'Holgado' }
+  })()
+
+  const diasTexto = sinVentas
+    ? '—'
+    : dias! >= 999
+      ? '>999'
+      : dias! < 1
+        ? dias!.toFixed(1)
+        : String(Math.round(dias!))
+
+  return (
+    <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">
+      <div className="flex items-center gap-2 mb-3">
+        <TrendingUp className="h-4 w-4 text-[#f9b44c]" />
+        <h2 className="text-[#391511] font-bold">Velocidad de venta</h2>
+        <span className="text-xs text-[#6f3a2a]">· últimos 14 días</span>
+      </div>
+      <div className="flex items-center gap-5 flex-wrap">
+        <div className="flex flex-col leading-none">
+          <span
+            className="font-extrabold tabular-nums text-4xl"
+            style={!sinVentas ? { color } : { color: '#c8a58a' }}
+          >
+            {diasTexto}
+            {!sinVentas && (
+              <span className="text-base font-bold ml-1 text-[#6f3a2a]">días</span>
+            )}
+          </span>
+          <span
+            className="text-[10px] uppercase tracking-wider font-bold mt-1.5"
+            style={{ color }}
+          >
+            {etiqueta}
+          </span>
+        </div>
+
+        <div className="h-12 w-px bg-[#e4c9b0]/60" />
+
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+            Promedio diario
+          </span>
+          <span className="text-[#391511] font-extrabold text-xl tabular-nums">
+            {promedio.toFixed(1)}
+            <span className="text-xs font-medium text-[#6f3a2a] ml-1">unid/día</span>
+          </span>
+        </div>
+
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+            Total 14 días
+          </span>
+          <span className="text-[#391511] font-extrabold text-xl tabular-nums">
+            {Math.round(ventas14d)}
+          </span>
+        </div>
+
+        <div className="ml-auto">
+          <Sparkline
+            datos={serie}
+            ancho={180}
+            alto={42}
+            color={sinVentas ? '#c8a58a' : color}
+            ariaLabel="Ventas de los últimos 14 días"
+          />
+        </div>
+      </div>
     </div>
   )
 }

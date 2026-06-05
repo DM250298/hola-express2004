@@ -447,6 +447,21 @@ export type VistaTableroUsuarioRow = VistaTableroRow & {
   mi_rol: RolTablero | null
 }
 
+// ─── cobertura de stock (mig. 060) ───────────────────────────────────────────
+// Vista: para cada producto activo, métricas de venta últimos 14 días y días
+// de cobertura. Se mergea contra `productos` para enriquecer la tabla de stock.
+
+export type CoberturaStockRow = {
+  producto_id: number
+  stock_actual: number
+  ventas_14d: number
+  promedio_diario: number
+  /** stock_actual / promedio_diario, NULL si no hubo ventas. */
+  dias_cobertura: number | null
+  /** Array de 14 valores diarios (cantidad vendida), antiguo → reciente. */
+  serie_14d: number[]
+}
+
 // ─── terminales de cobro (FASE 6) ────────────────────────────────────────────
 
 export type TerminalRow = {
@@ -1235,6 +1250,38 @@ export type ConfigComprasUpdate = {
   exige_factura?: boolean
 }
 
+// ─── config_fiscal (singleton) ───────────────────────────────────────────────
+
+export type ConfigFiscalRow = {
+  id: number
+  cuit: string
+  razon_social: string
+  condicion_iva: string
+  iibb_jurisdiccion: string
+  iibb_alicuota: number
+  iva_alicuota_general: number
+  iva_dia_vencimiento: number
+  iibb_dia_vencimiento: number
+  actividad: string
+  updated_at: string
+}
+
+export type ConfigFiscalInsert = {
+  id?: number
+  cuit?: string
+  razon_social?: string
+  condicion_iva?: string
+  iibb_jurisdiccion?: string
+  iibb_alicuota?: number
+  iva_alicuota_general?: number
+  iva_dia_vencimiento?: number
+  iibb_dia_vencimiento?: number
+  actividad?: string
+  updated_at?: string
+}
+
+export type ConfigFiscalUpdate = Partial<Omit<ConfigFiscalInsert, 'id'>>
+
 // ─── medios_pago (dinámicos) ─────────────────────────────────────────────────
 
 export type MedioPagoRow = {
@@ -1700,12 +1747,19 @@ export type FacturaCompraRow = {
   cuenta_id: number | null
   pedido_id: number | null
   proveedor_id: number | null
+  /** Fecha de EMISIÓN del comprobante (define el período fiscal). */
   fecha: string
   neto: number
   iva_total: number
   total: number
   afecta_precio_venta: boolean
   usuario_id: string | null
+  /** Letra del comprobante AFIP: 'A' | 'B' | 'C' | 'M' | 'E'. */
+  tipo_comprobante: string | null
+  punto_venta: string | null
+  numero_comprobante: string | null
+  cae: string | null
+  cuit_proveedor: string | null
   created_at: string
   updated_at: string
 }
@@ -1721,6 +1775,11 @@ export type FacturaCompraInsert = {
   total?: number
   afecta_precio_venta?: boolean
   usuario_id?: string | null
+  tipo_comprobante?: string | null
+  punto_venta?: string | null
+  numero_comprobante?: string | null
+  cae?: string | null
+  cuit_proveedor?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -2033,6 +2092,12 @@ export interface Database {
         Row: ConfigComprasRow
         Insert: ConfigComprasInsert
         Update: ConfigComprasUpdate
+        Relationships: []
+      }
+      config_fiscal: {
+        Row: ConfigFiscalRow
+        Insert: ConfigFiscalInsert
+        Update: ConfigFiscalUpdate
         Relationships: []
       }
       clientes: {
@@ -2402,6 +2467,10 @@ export interface Database {
       }
       vista_tableros_usuario: {
         Row: VistaTableroUsuarioRow
+        Relationships: []
+      }
+      vista_cobertura_stock: {
+        Row: CoberturaStockRow
         Relationships: []
       }
       vista_tareas: {

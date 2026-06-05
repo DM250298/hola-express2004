@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   ajustarStock,
+  getCoberturaProducto,
   getEvolucionStock,
   getHistorialMovimientos,
   getProductoDetalle,
@@ -49,6 +50,9 @@ export function useAjustarStock() {
       queryClient.invalidateQueries({
         queryKey: ['evolucion-stock', variables.producto_id],
       })
+      queryClient.invalidateQueries({
+        queryKey: ['cobertura-producto', variables.producto_id],
+      })
       toast.success('Stock ajustado')
     },
     onError: (error: Error) => {
@@ -81,6 +85,18 @@ export function useProductoDetalle(id: number | undefined) {
     queryFn: () => {
       if (!id) return null
       return getProductoDetalle(id)
+    },
+    enabled: !!id,
+    staleTime: 60 * 1000,
+  })
+}
+
+export function useCoberturaProducto(id: number | undefined) {
+  return useQuery({
+    queryKey: ['cobertura-producto', id],
+    queryFn: () => {
+      if (!id) return null
+      return getCoberturaProducto(id)
     },
     enabled: !!id,
     staleTime: 60 * 1000,

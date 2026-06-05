@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Download } from 'lucide-react'
-import Link from 'next/link'
+import { Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -30,33 +29,22 @@ export function PantallaMovimientos() {
 
   function cambiarFiltros(nuevosFiltros: FiltrosMovimientos) {
     setFiltros(nuevosFiltros)
-    setPagina(0) // Volver a la primera página al filtrar
+    setPagina(0)
   }
 
   const totalPaginas = data ? Math.ceil(data.total / porPagina) : 0
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/inventario"
-            className="p-2 rounded-xl hover:bg-[#f9d2a2]/40 text-[#6f3a2a] transition-colors"
-            title="Volver al inventario"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-[#391511] text-2xl font-extrabold tracking-tight">
-              Movimientos de stock
-            </h1>
-            <p className="text-[#6f3a2a] text-sm">
-              Historial completo de entradas, salidas, ajustes y mermas
-            </p>
-          </div>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[#391511] font-bold text-lg">
+            Historial de movimientos
+          </h2>
+          <p className="text-[#6f3a2a] text-sm">
+            Entradas, salidas, ajustes y mermas — registro completo.
+          </p>
         </div>
-
         <Button
           variant="outline"
           size="sm"

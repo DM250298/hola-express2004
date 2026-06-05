@@ -5,7 +5,6 @@ import { TabPlanCuentas } from './TabPlanCuentas'
 import { TabLibroDiario } from './TabLibroDiario'
 import { TabConciliacion } from './TabConciliacion'
 import { TabActivos } from './TabActivos'
-import { TabImpuestos } from './TabImpuestos'
 import { TabCierreAuditoria } from './TabCierreAuditoria'
 
 export function PantallaContabilidad() {
@@ -14,7 +13,8 @@ export function PantallaContabilidad() {
       <header>
         <h1 className="text-[#391511] text-2xl font-bold">Contabilidad</h1>
         <p className="text-[#6f3a2a] text-sm mt-1">
-          Plan de cuentas, asientos, conciliación, activos fijos e impuestos.
+          Plan de cuentas, asientos, conciliación, activos fijos y cierre.
+          Los impuestos (IVA / IIBB) se gestionan en Finanzas.
         </p>
       </header>
 
@@ -45,12 +45,6 @@ export function PantallaContabilidad() {
             Activos fijos
           </TabsTrigger>
           <TabsTrigger
-            value="impuestos"
-            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
-          >
-            Impuestos
-          </TabsTrigger>
-          <TabsTrigger
             value="cierre"
             className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
           >
@@ -69,9 +63,6 @@ export function PantallaContabilidad() {
         </TabsContent>
         <TabsContent value="activos">
           <TabActivos />
-        </TabsContent>
-        <TabsContent value="impuestos">
-          <TabImpuestos />
         </TabsContent>
         <TabsContent value="cierre">
           <TabCierreAuditoria />

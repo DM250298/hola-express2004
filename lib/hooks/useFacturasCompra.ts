@@ -3,10 +3,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  getComprobantesCargados,
   getFacturaCompra,
   guardarFacturaCompra,
   type GuardarFacturaPayload,
 } from '@/lib/queries/facturasCompra'
+
+export function useComprobantesCargados() {
+  return useQuery({
+    queryKey: ['comprobantes-cargados'],
+    queryFn: getComprobantesCargados,
+    staleTime: 30 * 1000,
+  })
+}
 
 export function useFacturaCompra(cuentaId: number | null) {
   return useQuery({
@@ -27,6 +36,8 @@ export function useGuardarFacturaCompra() {
       guardarFacturaCompra(payload),
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ['factura-compra', vars.cuenta_id] })
+      qc.invalidateQueries({ queryKey: ['comprobantes-cargados'] })
+      qc.invalidateQueries({ queryKey: ['resumen-fiscal'] })
       qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
       qc.invalidateQueries({ queryKey: ['resumen-financiero'] })
       qc.invalidateQueries({ queryKey: ['pedidos'] })

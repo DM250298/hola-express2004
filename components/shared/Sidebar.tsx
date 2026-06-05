@@ -13,7 +13,7 @@ import {
   Users,
   Package,
   ArrowDownWideNarrow,
-  ArrowLeftRight,
+  SlidersHorizontal,
   CalendarX,
   Tag,
   DollarSign,
@@ -96,9 +96,9 @@ const SECCIONES: Seccion[] = [
         permiso: 'inventario',
       },
       {
-        href: '/inventario/movimientos',
-        etiqueta: 'Movimientos',
-        icono: ArrowLeftRight,
+        href: '/inventario/control',
+        etiqueta: 'Control de stock',
+        icono: SlidersHorizontal,
         permiso: 'inventario',
       },
       {
@@ -227,7 +227,7 @@ export function Sidebar({ permisos }: SidebarProps) {
     // Coincidencia exacta o sub-ruta directa, pero no si hay un item
     // más específico registrado que también coincida con la ruta actual.
     if (!pathname.startsWith(href)) return false
-    // Evitar que "/inventario" se marque activo en "/inventario/movimientos"
+    // Evitar que "/inventario" se marque activo en "/inventario/control"
     // si existe un item con ese href más largo.
     const todosLosItems = SECCIONES.flatMap((s) => s.items)
     const hayMasEspecifico = todosLosItems.some(
