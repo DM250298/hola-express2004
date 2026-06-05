@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Loader2 } from 'lucide-react'
+import { FileText, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -96,6 +96,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const [afectaVenta, setAfectaVenta] = useState(true)
   const [lineas, setLineas] = useState<Record<number, LineaState>>({})
   const [cab, setCab] = useState<CabeceraState>(CABECERA_DEFAULT)
+  // Items quitados de la factura (productos del pedido que el comprobante
+  // no trae). No se guardan ni suman al total.
+  const [quitados, setQuitados] = useState<Set<number>>(new Set())
 
   function setCabCampo(campo: keyof CabeceraState, valor: string) {
     setCab((prev) => ({ ...prev, [campo]: valor }))
@@ -106,6 +109,23 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
 
   function cantidadDe(it: (typeof items)[number]): number {
     return it.cantidad_recibida ?? it.cantidad_pedida
+  }
+
+  // Solo las líneas que la factura sí incluye (las quitadas no entran).
+  const itemsVisibles = useMemo(
+    () => items.filter((it) => !quitados.has(it.id)),
+    [items, quitados]
+  )
+
+  function quitarLinea(itemId: number) {
+    setQuitados((prev) => {
+      const s = new Set(prev)
+      s.add(itemId)
+      return s
+    })
+  }
+  function restaurarLineas() {
+    setQuitados(new Set())
   }
 
   // Inicializar las líneas: factura guardada si existe, sino defaults.
@@ -133,6 +153,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       }
     }
     setLineas(inicial)
+    setQuitados(new Set())
     if (facturaGuardada) {
       setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
       const f = facturaGuardada.factura
@@ -157,8 +178,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     }))
   }
 
-  // Cálculo por línea
-  const calculadas = items.map((it) => {
+  // Cálculo por línea (solo sobre las visibles)
+  const calculadas = itemsVisibles.map((it) => {
     const e = lineas[it.id] ?? LINEA_DEFAULT
     const calc = calcularLinea({
       costo_sin_iva: Number(e.costo) || 0,
@@ -338,6 +359,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </div>
           </div>
 
+          {quitados.size > 0 && itemsVisibles.length > 0 && (
+            <div className="flex items-center justify-between rounded-lg border border-[#f9b44c]/40 bg-[#f9b44c]/10 px-3 py-2 text-xs text-[#6f3a2a]">
+              <span>
+                {quitados.size} producto{quitados.size === 1 ? '' : 's'} quitado
+                {quitados.size === 1 ? '' : 's'} de la factura.
+              </span>
+              <button
+                type="button"
+                onClick={restaurarLineas}
+                className="font-semibold text-[#c43e2c] hover:underline"
+              >
+                Restaurar
+              </button>
+            </div>
+          )}
+
           {cargando || !pedido ? (
             <div className="space-y-2">
               {[0, 1, 2].map((i) => (
@@ -348,6 +385,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             <p className="text-sm text-[#6f3a2a] py-6 text-center">
               Este pedido no tiene items.
             </p>
+          ) : itemsVisibles.length === 0 ? (
+            <div className="py-6 text-center text-sm text-[#6f3a2a]">
+              Quitaste todas las líneas — no queda nada para facturar.
+              <button
+                type="button"
+                onClick={restaurarLineas}
+                className="ml-1 font-semibold text-[#c43e2c] hover:underline"
+              >
+                Restaurar
+              </button>
+            </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#e4c9b0]/60">
               <table className="w-full text-xs">
@@ -385,12 +433,24 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       className="border-b border-[#e4c9b0]/40 bg-white"
                     >
                       <td className="p-2 text-[#391511] font-medium min-w-[180px]">
-                        {it.producto?.nombre ?? 'Producto eliminado'}
-                        {it.producto?.codigo_barras && (
-                          <span className="block text-[#c8a58a] font-mono text-[10px]">
-                            {it.producto.codigo_barras}
-                          </span>
-                        )}
+                        <div className="flex items-start gap-2">
+                          <button
+                            type="button"
+                            onClick={() => quitarLinea(it.id)}
+                            title="Quitar de la factura (no vino en el comprobante)"
+                            className="mt-0.5 shrink-0 text-[#c8a58a] transition-colors hover:text-[#c43e2c]"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                          <div className="min-w-0">
+                            {it.producto?.nombre ?? 'Producto eliminado'}
+                            {it.producto?.codigo_barras && (
+                              <span className="block text-[#c8a58a] font-mono text-[10px]">
+                                {it.producto.codigo_barras}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="p-2 text-center tabular-nums text-[#6f3a2a]">
                         {cantidad}
@@ -502,7 +562,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </Button>
             <Button
               onClick={handleGuardar}
-              disabled={guardar.isPending || items.length === 0}
+              disabled={guardar.isPending || itemsVisibles.length === 0}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
               {guardar.isPending ? (
