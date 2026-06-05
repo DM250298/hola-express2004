@@ -74,7 +74,6 @@ export interface ComprobanteCargado {
   cuenta_id: number | null
   pedido_id: number | null
   proveedor_id: number | null
-  proveedor_nombre: string | null
   fecha: string
   tipo_comprobante: string | null
   punto_venta: string | null
@@ -85,26 +84,26 @@ export interface ComprobanteCargado {
   total: number
 }
 
-/** Lista las facturas de compra cargadas, con el nombre del proveedor. */
+/**
+ * Lista las facturas de compra cargadas. NO embebe `proveedores` porque
+ * `facturas_compra.proveedor_id` no tiene FK declarada hacia esa tabla
+ * (migración 012), así que PostgREST no resuelve el embed y la query
+ * fallaría. El nombre del proveedor se resuelve en la UI por proveedor_id.
+ */
 export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('facturas_compra')
     .select(
-      'cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, proveedores(nombre)'
+      'cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total'
     )
     .order('fecha', { ascending: false })
   if (error) throw error
 
-  type FilaCruda = Omit<ComprobanteCargado, 'proveedor_nombre'> & {
-    proveedores: { nombre: string } | null
-  }
-
-  return ((data ?? []) as unknown as FilaCruda[]).map((f) => ({
+  return ((data ?? []) as unknown as ComprobanteCargado[]).map((f) => ({
     cuenta_id: f.cuenta_id,
     pedido_id: f.pedido_id,
     proveedor_id: f.proveedor_id,
-    proveedor_nombre: f.proveedores?.nombre ?? null,
     fecha: f.fecha,
     tipo_comprobante: f.tipo_comprobante,
     punto_venta: f.punto_venta,

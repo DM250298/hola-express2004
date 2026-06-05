@@ -23,6 +23,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { useCuentasAPagar } from '@/lib/hooks/useFinanzas'
 import { useComprobantesCargados } from '@/lib/hooks/useFacturasCompra'
+import { useProveedores } from '@/lib/hooks/useProveedores'
 import { ModalEditarFactura } from './ModalEditarFactura'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
 
@@ -41,6 +42,7 @@ export function TabComprobantes() {
   const { data: cuentas, isLoading: cargandoCuentas } = useCuentasAPagar(null)
   const { data: comprobantes, isLoading: cargandoComp } =
     useComprobantesCargados()
+  const { data: proveedores } = useProveedores()
   const [cuentaEditar, setCuentaEditar] =
     useState<CuentaAPagarConProveedor | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -51,6 +53,26 @@ export function TabComprobantes() {
     for (const c of cuentas ?? []) m.set(c.id, c)
     return m
   }, [cuentas])
+
+  // Mapa proveedor_id → nombre (respaldo cuando no hay cuenta asociada)
+  const proveedoresPorId = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const p of proveedores ?? []) m.set(p.id, p.nombre)
+    return m
+  }, [proveedores])
+
+  // Resuelve el nombre del proveedor de un comprobante: primero por la
+  // cuenta a pagar asociada, luego por proveedor_id contra el catálogo.
+  function nombreProveedor(c: {
+    cuenta_id: number | null
+    proveedor_id: number | null
+  }): string | null {
+    const porCuenta =
+      c.cuenta_id != null ? cuentasPorId.get(c.cuenta_id)?.proveedor_nombre : null
+    if (porCuenta) return porCuenta
+    if (c.proveedor_id != null) return proveedoresPorId.get(c.proveedor_id) ?? null
+    return null
+  }
 
   // Cuentas que YA tienen comprobante cargado
   const cuentasConFactura = useMemo(() => {
@@ -79,7 +101,7 @@ export function TabComprobantes() {
       c.numero_comprobante
     )
     return (
-      (c.proveedor_nombre ?? '').toLowerCase().includes(q) ||
+      (nombreProveedor(c) ?? '').toLowerCase().includes(q) ||
       (nro ?? '').toLowerCase().includes(q)
     )
   })
@@ -236,7 +258,7 @@ export function TabComprobantes() {
                       className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
                     >
                       <TableCell className="font-medium text-[#391511]">
-                        {c.proveedor_nombre ?? (
+                        {nombreProveedor(c) ?? (
                           <span className="text-[#c8a58a] italic">—</span>
                         )}
                       </TableCell>
