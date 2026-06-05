@@ -145,3 +145,185 @@ export async function getResumenFiscal(
     retenciones_totales: r2(retencionesIibb),
   }
 }
+
+// ─── Libro IVA Compras (export, discriminado por alícuota) ───────────
+
+export interface LineaLibroIva {
+  fecha: string
+  tipo_comprobante: string | null
+  punto_venta: string | null
+  numero_comprobante: string | null
+  cae: string | null
+  cuit_proveedor: string | null
+  proveedor_nombre: string
+  neto21: number
+  iva21: number
+  neto105: number
+  iva105: number
+  neto27: number
+  iva27: number
+  /** Neto no gravado / exento / alícuotas no estándar. */
+  exento: number
+  total: number
+}
+
+export interface TotalesLibroIva {
+  neto21: number
+  iva21: number
+  neto105: number
+  iva105: number
+  neto27: number
+  iva27: number
+  exento: number
+  total: number
+}
+
+export interface LibroIvaCompras {
+  lineas: LineaLibroIva[]
+  totales: TotalesLibroIva
+}
+
+/**
+ * Libro IVA Compras de un período (desde inclusive, hastaExcl exclusivo).
+ * Una fila por comprobante de `facturas_compra`, con el neto y el IVA
+ * discriminados por alícuota (21 / 10,5 / 27) a partir de sus items. El
+ * resto del neto (alícuota 0 u otras) cae en "exento". `proveedor_id` no
+ * tiene FK → la razón social se resuelve en cliente.
+ */
+export async function getLibroIvaCompras(
+  desde: string,
+  hastaExcl: string
+): Promise<LibroIvaCompras> {
+  const supabase = createClient()
+
+  type FacturaRow = {
+    id: number
+    fecha: string
+    tipo_comprobante: string | null
+    punto_venta: string | null
+    numero_comprobante: string | null
+    cae: string | null
+    cuit_proveedor: string | null
+    proveedor_id: number | null
+    neto: number
+    total: number
+  }
+
+  const { data: facturasData, error } = await supabase
+    .from('facturas_compra')
+    .select(
+      'id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, cuit_proveedor, proveedor_id, neto, total'
+    )
+    .gte('fecha', desde)
+    .lt('fecha', hastaExcl)
+    .order('fecha', { ascending: true })
+  if (error) throw error
+  const facturas = (facturasData ?? []) as unknown as FacturaRow[]
+
+  const cero: TotalesLibroIva = {
+    neto21: 0,
+    iva21: 0,
+    neto105: 0,
+    iva105: 0,
+    neto27: 0,
+    iva27: 0,
+    exento: 0,
+    total: 0,
+  }
+  if (facturas.length === 0) return { lineas: [], totales: cero }
+
+  type ItemRow = {
+    factura_id: number
+    cantidad: number
+    costo_sin_iva: number
+    descuento_porcentaje: number
+    iva_compra_porcentaje: number
+  }
+  const ids = facturas.map((f) => f.id)
+  const { data: itemsData, error: e2 } = await supabase
+    .from('items_factura_compra')
+    .select(
+      'factura_id, cantidad, costo_sin_iva, descuento_porcentaje, iva_compra_porcentaje'
+    )
+    .in('factura_id', ids)
+  if (e2) throw e2
+  const items = (itemsData ?? []) as unknown as ItemRow[]
+
+  type ProvRow = { id: number; nombre: string; razon_social: string | null }
+  const { data: provData, error: e3 } = await supabase
+    .from('proveedores')
+    .select('id, nombre, razon_social')
+  if (e3) throw e3
+  const provById = new Map(
+    ((provData ?? []) as unknown as ProvRow[]).map((p) => [p.id, p])
+  )
+
+  const itemsPorFactura = new Map<number, ItemRow[]>()
+  for (const it of items) {
+    const arr = itemsPorFactura.get(it.factura_id) ?? []
+    arr.push(it)
+    itemsPorFactura.set(it.factura_id, arr)
+  }
+
+  const lineas: LineaLibroIva[] = facturas.map((f) => {
+    let neto21 = 0
+    let iva21 = 0
+    let neto105 = 0
+    let iva105 = 0
+    let neto27 = 0
+    let iva27 = 0
+    for (const it of itemsPorFactura.get(f.id) ?? []) {
+      const netoItem =
+        Number(it.costo_sin_iva) *
+        (1 - Number(it.descuento_porcentaje || 0) / 100) *
+        Number(it.cantidad)
+      const alic = Math.round(Number(it.iva_compra_porcentaje) * 10) / 10
+      if (alic === 21) {
+        neto21 += netoItem
+        iva21 += netoItem * 0.21
+      } else if (alic === 10.5) {
+        neto105 += netoItem
+        iva105 += netoItem * 0.105
+      } else if (alic === 27) {
+        neto27 += netoItem
+        iva27 += netoItem * 0.27
+      }
+      // alícuota 0 u otras → quedan en "exento" vía la resta de abajo
+    }
+    const netoTotal = Number(f.neto)
+    const exento = Math.max(0, netoTotal - (neto21 + neto105 + neto27))
+    const prov = provById.get(f.proveedor_id ?? -1)
+    return {
+      fecha: f.fecha,
+      tipo_comprobante: f.tipo_comprobante,
+      punto_venta: f.punto_venta,
+      numero_comprobante: f.numero_comprobante,
+      cae: f.cae,
+      cuit_proveedor: f.cuit_proveedor,
+      proveedor_nombre: prov?.razon_social || prov?.nombre || '—',
+      neto21: r2(neto21),
+      iva21: r2(iva21),
+      neto105: r2(neto105),
+      iva105: r2(iva105),
+      neto27: r2(neto27),
+      iva27: r2(iva27),
+      exento: r2(exento),
+      total: Number(f.total),
+    }
+  })
+
+  const sum = (sel: (l: LineaLibroIva) => number) =>
+    r2(lineas.reduce((s, l) => s + sel(l), 0))
+  const totales: TotalesLibroIva = {
+    neto21: sum((l) => l.neto21),
+    iva21: sum((l) => l.iva21),
+    neto105: sum((l) => l.neto105),
+    iva105: sum((l) => l.iva105),
+    neto27: sum((l) => l.neto27),
+    iva27: sum((l) => l.iva27),
+    exento: sum((l) => l.exento),
+    total: sum((l) => l.total),
+  }
+
+  return { lineas, totales }
+}

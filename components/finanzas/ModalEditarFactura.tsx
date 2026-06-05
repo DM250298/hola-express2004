@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
 import { useProductos } from '@/lib/hooks/useProductos'
+import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
   useFacturaCompra,
@@ -120,6 +121,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     busqueda: busqueda || undefined,
   })
 
+  // Proveedor de la cuenta → para autocompletar su CUIT en el comprobante.
+  const { data: proveedores } = useProveedores()
+  const proveedorCuenta = proveedores?.find(
+    (p) => p.id === cuenta?.proveedor_id
+  )
+
   function setCabCampo(campo: keyof CabeceraState, valor: string) {
     setCab((prev) => ({ ...prev, [campo]: valor }))
   }
@@ -175,14 +182,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         punto_venta: f.punto_venta ?? '',
         numero_comprobante: f.numero_comprobante ?? '',
         cae: f.cae ?? '',
-        cuit_proveedor: f.cuit_proveedor ?? '',
+        cuit_proveedor: f.cuit_proveedor || proveedorCuenta?.cuit || '',
         fecha_emision: f.fecha ?? hoyIso(),
       })
     } else {
-      setCab(CABECERA_DEFAULT)
+      setCab({
+        ...CABECERA_DEFAULT,
+        cuit_proveedor: proveedorCuenta?.cuit ?? '',
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierto, cargando, facturaGuardada])
+  }, [abierto, cargando, facturaGuardada, proveedorCuenta?.cuit])
 
   function setLineaCampo(key: string, campo: CampoEditable, valor: string) {
     setLineas((prev) =>

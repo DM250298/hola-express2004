@@ -6,15 +6,21 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   CalendarClock,
+  Download,
   Landmark,
+  Loader2,
   Receipt,
   ShieldCheck,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useConfigFiscal, useResumenFiscal } from '@/lib/hooks/useFiscal'
+import { getLibroIvaCompras } from '@/lib/queries/fiscal'
+import { exportarLibroIvaCompras } from '@/lib/utils/libroIvaCompras'
 import { cn } from '@/lib/utils'
 
 function mesActual(): string {
@@ -65,6 +71,30 @@ export function TabImpuestos() {
   const jurisdiccion = cfg?.iibb_jurisdiccion ?? 'La Rioja'
   const alicuotaIva = cfg?.iva_alicuota_general ?? 21
 
+  const [exportando, setExportando] = useState(false)
+
+  async function handleExportarLibroIva() {
+    setExportando(true)
+    try {
+      const libro = await getLibroIvaCompras(desde, hastaExcl)
+      if (libro.lineas.length === 0) {
+        toast.info('No hay comprobantes de compra en el período.')
+        return
+      }
+      exportarLibroIvaCompras(libro, mes, {
+        razon_social: cfg?.razon_social ?? 'Hola Express',
+        cuit: cfg?.cuit ?? '',
+      })
+      toast.success('Libro IVA Compras exportado.')
+    } catch (e) {
+      toast.error(
+        `No se pudo exportar: ${e instanceof Error ? e.message : 'error'}`
+      )
+    } finally {
+      setExportando(false)
+    }
+  }
+
   const { data, isLoading } = useResumenFiscal(
     desde,
     hastaExcl,
@@ -106,16 +136,32 @@ export function TabImpuestos() {
             IVA, Ingresos Brutos {jurisdiccion} y retenciones soportadas.
           </p>
         </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-            Período
-          </Label>
-          <Input
-            type="month"
-            value={mes}
-            onChange={(e) => setMes(e.target.value || mesActual())}
-            className="w-[170px] border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
-          />
+        <div className="flex items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+              Período
+            </Label>
+            <Input
+              type="month"
+              value={mes}
+              onChange={(e) => setMes(e.target.value || mesActual())}
+              className="w-[170px] border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleExportarLibroIva}
+            disabled={exportando}
+            className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+          >
+            {exportando ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Libro IVA Compras
+          </Button>
         </div>
       </div>
 

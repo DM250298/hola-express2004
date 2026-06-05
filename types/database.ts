@@ -87,6 +87,10 @@ export type ProveedorRow = {
   email: string | null
   dias_entrega: number | null
   condicion_pago: string | null
+  cuit: string | null
+  razon_social: string | null
+  condicion_iva: string | null
+  domicilio: string | null
   created_at: string
 }
 
@@ -97,6 +101,10 @@ export type ProveedorInsert = {
   email?: string | null
   dias_entrega?: number | null
   condicion_pago?: string | null
+  cuit?: string | null
+  razon_social?: string | null
+  condicion_iva?: string | null
+  domicilio?: string | null
   created_at?: string
 }
 
@@ -106,6 +114,10 @@ export type ProveedorUpdate = {
   email?: string | null
   dias_entrega?: number | null
   condicion_pago?: string | null
+  cuit?: string | null
+  razon_social?: string | null
+  condicion_iva?: string | null
+  domicilio?: string | null
 }
 
 // ─── clientes (FASE 3 — CRM) ─────────────────────────────────────────────────

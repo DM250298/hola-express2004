@@ -17,6 +17,13 @@ import { ModalCatalogoProveedor } from './ModalCatalogoProveedor'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import type { ProveedorRow } from '@/types/database'
 
+const COND_IVA_LABEL: Record<string, string> = {
+  responsable_inscripto: 'Resp. Inscripto',
+  monotributo: 'Monotributo',
+  exento: 'Exento',
+  consumidor_final: 'Cons. Final',
+}
+
 export function TablaProveedores() {
   const { data: proveedores, isLoading, isError } = useProveedores()
   const [drawerAbierto, setDrawerAbierto] = useState(false)
@@ -63,7 +70,7 @@ export function TablaProveedores() {
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
         {isLoading ? (
           <div className="p-6">
-            <SkeletonTabla filas={5} columnas={5} />
+            <SkeletonTabla filas={5} columnas={6} />
           </div>
         ) : isError ? (
           <div className="p-10 text-center text-[#c43e2c] text-sm">
@@ -84,6 +91,7 @@ export function TablaProveedores() {
             <TableHeader>
               <TableRow className="border-b-[#e4c9b0]/60 bg-[#fdfaf6] hover:bg-[#fdfaf6]">
                 <TableHead className="text-[#391511] font-semibold">Nombre</TableHead>
+                <TableHead className="text-[#391511] font-semibold">CUIT</TableHead>
                 <TableHead className="text-[#391511] font-semibold">Contacto</TableHead>
                 <TableHead className="text-[#391511] font-semibold">
                   Días entrega
@@ -104,6 +112,20 @@ export function TablaProveedores() {
                 >
                   <TableCell className="font-medium text-[#391511]">
                     {p.nombre}
+                  </TableCell>
+                  <TableCell className="text-[#6f3a2a] text-sm">
+                    {p.cuit ? (
+                      <div className="flex flex-col leading-tight">
+                        <span className="tabular-nums">{p.cuit}</span>
+                        {p.condicion_iva && (
+                          <span className="text-[#c8a58a] text-xs">
+                            {COND_IVA_LABEL[p.condicion_iva] ?? p.condicion_iva}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[#c8a58a] italic">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-[#6f3a2a] text-sm">
                     {p.email || p.telefono ? (
