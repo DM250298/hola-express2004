@@ -208,19 +208,33 @@ export async function ejecutarImportacion(
   const conCodigo = filasValidas.filter((f) => f.codigo_barras !== null)
   const sinCodigo = filasValidas.filter((f) => f.codigo_barras === null)
 
+  // El costo va a costos_producto (tabla gateada), no a productos.
   const armarPayload = (f: FilaProcesada) => ({
     nombre: f.producto,
     codigo_barras: f.codigo_barras,
     categoria_id: f.categoria ? catNombreAId.get(normalizar(f.categoria)) ?? null : null,
     proveedor_id: f.proveedor ? provNombreAId.get(normalizar(f.proveedor)) ?? null : null,
     precio_venta: f.precio_venta,
-    precio_costo: f.precio_costo,
     stock_actual: f.stock_actual,
     stock_minimo: 5,
     tipo: f.tipo ?? 'simple',
     unidad: f.unidad ?? 'unidad',
     activo: true,
   })
+
+  /** Guarda los costos en costos_producto para una tanda de ids. */
+  async function guardarCostos(
+    filas: { producto_id: number; precio_costo: number }[]
+  ) {
+    if (filas.length === 0) return
+    await supabase.from('costos_producto').upsert(
+      filas.map((f) => ({
+        producto_id: f.producto_id,
+        precio_costo: f.precio_costo,
+      })),
+      { onConflict: 'producto_id' }
+    )
+  }
 
   // 3a. Upsert (con códigos) — Supabase resuelve insert vs update por conflict
   let productos_actualizados = 0
@@ -235,13 +249,15 @@ export async function ejecutarImportacion(
     // Procesar en chunks para no exceder límites de Supabase
     const CHUNK = 100
     for (let i = 0; i < conCodigo.length; i += CHUNK) {
-      const chunk = conCodigo.slice(i, i + CHUNK).map(armarPayload)
-      const { error } = await supabase
+      const fchunk = conCodigo.slice(i, i + CHUNK)
+      const chunk = fchunk.map(armarPayload)
+      const { data: upserted, error } = await supabase
         .from('productos')
         .upsert(chunk, { onConflict: 'codigo_barras' })
+        .select('id, codigo_barras')
 
       if (error) {
-        for (const f of conCodigo.slice(i, i + CHUNK)) {
+        for (const f of fchunk) {
           errores.push({
             fila: f.fila_origen,
             producto: f.producto,
@@ -249,7 +265,19 @@ export async function ejecutarImportacion(
           })
         }
       } else {
-        for (const f of conCodigo.slice(i, i + CHUNK)) {
+        // Costos por código de barras
+        const idPorCodigo = new Map(
+          (upserted ?? []).map((p) => [p.codigo_barras, p.id])
+        )
+        await guardarCostos(
+          fchunk
+            .map((f) => ({
+              producto_id: idPorCodigo.get(f.codigo_barras) ?? 0,
+              precio_costo: f.precio_costo,
+            }))
+            .filter((x) => x.producto_id > 0)
+        )
+        for (const f of fchunk) {
           if (f.codigo_barras && setExistentes.has(f.codigo_barras)) {
             productos_actualizados++
           } else {
@@ -264,11 +292,15 @@ export async function ejecutarImportacion(
   if (sinCodigo.length > 0) {
     const CHUNK = 100
     for (let i = 0; i < sinCodigo.length; i += CHUNK) {
-      const chunk = sinCodigo.slice(i, i + CHUNK).map(armarPayload)
-      const { error } = await supabase.from('productos').insert(chunk)
+      const fchunk = sinCodigo.slice(i, i + CHUNK)
+      const chunk = fchunk.map(armarPayload)
+      const { data: insertados, error } = await supabase
+        .from('productos')
+        .insert(chunk)
+        .select('id')
 
       if (error) {
-        for (const f of sinCodigo.slice(i, i + CHUNK)) {
+        for (const f of fchunk) {
           errores.push({
             fila: f.fila_origen,
             producto: f.producto,
@@ -276,6 +308,13 @@ export async function ejecutarImportacion(
           })
         }
       } else {
+        // Costos por orden de inserción
+        await guardarCostos(
+          (insertados ?? []).map((p, idx) => ({
+            producto_id: p.id,
+            precio_costo: fchunk[idx]?.precio_costo ?? 0,
+          }))
+        )
         productos_creados += chunk.length
       }
     }

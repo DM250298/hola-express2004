@@ -511,7 +511,8 @@ export type ProductoInsert = {
   categoria_id?: number | null
   proveedor_id?: number | null
   precio_venta: number
-  precio_costo: number
+  /** El costo se guarda en costos_producto (tabla gateada), no en productos. */
+  precio_costo?: number
   stock_actual?: number
   stock_minimo?: number
   activo?: boolean
@@ -1073,6 +1074,25 @@ export type CuentaAPagarUpdate = {
   estado?: EstadoCuentaPagar
   provisoria?: boolean
   tiene_factura?: boolean
+}
+
+// ─── costos_producto (precio de costo gateado por RLS) ───────────────────────
+
+export type CostoProductoRow = {
+  producto_id: number
+  precio_costo: number
+  updated_at: string
+}
+
+export type CostoProductoInsert = {
+  producto_id: number
+  precio_costo?: number
+  updated_at?: string
+}
+
+export type CostoProductoUpdate = {
+  precio_costo?: number
+  updated_at?: string
 }
 
 // ─── proveedor_producto (catálogo N:M) ───────────────────────────────────────
@@ -1927,6 +1947,12 @@ export interface Database {
         Row: ProveedorProductoRow
         Insert: ProveedorProductoInsert
         Update: ProveedorProductoUpdate
+        Relationships: []
+      }
+      costos_producto: {
+        Row: CostoProductoRow
+        Insert: CostoProductoInsert
+        Update: CostoProductoUpdate
         Relationships: []
       }
       historial_costos: {

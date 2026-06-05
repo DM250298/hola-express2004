@@ -184,18 +184,40 @@ export async function getProductoByBarcode(
   }
 }
 
+/** Guarda el costo en la tabla gateada costos_producto. */
+async function guardarCosto(
+  supabase: ReturnType<typeof createClient>,
+  productoId: number,
+  precioCosto: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('costos_producto')
+    .upsert(
+      {
+        producto_id: productoId,
+        precio_costo: precioCosto,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'producto_id' }
+    )
+  if (error) throw error
+}
+
 export async function createProducto(
   datos: ProductoInsert
 ): Promise<ProductoRow> {
   const supabase = createClient()
+  // El costo va a costos_producto (tabla gateada), no a productos.
+  const { precio_costo, ...resto } = datos
   const { data, error } = await supabase
     .from('productos')
-    .insert(datos)
+    .insert(resto)
     .select()
     .single<ProductoRow>()
 
   if (error) throw error
-  return data
+  if (precio_costo != null) await guardarCosto(supabase, data.id, precio_costo)
+  return { ...data, precio_costo: precio_costo ?? 0 }
 }
 
 export async function updateProducto(
@@ -203,15 +225,17 @@ export async function updateProducto(
   datos: ProductoUpdate
 ): Promise<ProductoRow> {
   const supabase = createClient()
+  const { precio_costo, ...resto } = datos
   const { data, error } = await supabase
     .from('productos')
-    .update({ ...datos, updated_at: new Date().toISOString() })
+    .update({ ...resto, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single<ProductoRow>()
 
   if (error) throw error
-  return data
+  if (precio_costo != null) await guardarCosto(supabase, id, precio_costo)
+  return { ...data, precio_costo: precio_costo ?? 0 }
 }
 
 export async function toggleProductoActivo(
