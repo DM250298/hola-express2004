@@ -96,11 +96,18 @@ RPCs Postgres (`supabase.rpc('fn_...')`) en lugar de múltiples inserts del
 cliente. Este es el patrón crítico — la falta de transacciones en el
 cliente Supabase obliga a empujar la lógica al server.
 
-RPCs principales: `fn_crear_venta`, `fn_anular_venta`, `fn_recibir_pedido`,
-`fn_guardar_factura_compra`, `fn_pagar_cuenta`, `fn_crear_movimiento`,
-`fn_crear_transferencia`, `fn_validar_arqueo`, `fn_generar_remesa`,
-`fn_acreditar_pago`, `fn_aprobar_conteo`, `fn_crear_ajuste_stock`,
-`fn_crear_egreso`, `fn_crear_asiento`, `fn_crear_activo`.
+RPCs principales: `fn_crear_venta`, `fn_anular_venta`, `fn_crear_devolucion`,
+`fn_recibir_pedido`, `fn_guardar_factura_compra`, `fn_pagar_cuenta`,
+`fn_crear_movimiento`, `fn_crear_transferencia`, `fn_validar_arqueo`,
+`fn_generar_remesa`, `fn_acreditar_pago`, `fn_aplicar_conciliacion`,
+`fn_aprobar_conteo`, `fn_crear_ajuste_stock`, `fn_crear_egreso`,
+`fn_crear_asiento`, `fn_crear_activo`, `fn_cerrar_periodo`,
+`fn_reabrir_periodo`.
+
+Helpers SQL transversales: `fn_tiene_permiso(clave)` y `fn_mi_rol()`
+(usados por las policies RLS), `fn_costo(producto_id)` / `fn_set_costo(...)`
+(leer/escribir el costo gateado), `fn_periodo_cerrado(fecha)` (guarda de
+cierre), `fn_auditar(...)` + `fn_ip()` (log de auditoría).
 
 ### Sistema de permisos
 
@@ -116,7 +123,16 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
 - **Sidebar**: filtra items por permiso. Soporta `permisosAlt` para items
   visibles con cualquiera de N permisos (ej: `/compras` se ve con
   `compras`, `pedidos` o `recepcion`).
-- **RLS**: la frontera de seguridad real está a nivel DB.
+- **RLS real (migración 047+)**: las tablas sensibles dejaron de ser
+  `using(true)`. Ahora están gateadas por permiso vía
+  `fn_tiene_permiso(clave)` (que lee `usuarios.rol` + `roles.permisos`;
+  **admin = acceso total** hardcodeado). Gateadas: finanzas (cuentas,
+  movimientos_cuenta, cuentas_a_pagar, acreditaciones, arqueos, remesas,
+  extractos), contabilidad (asientos, plan_cuentas, activos), rrhh
+  (empleados, liquidaciones, sueldos, ctacte), costos (`costos_producto`).
+  `egresos`/`sangrias`: el cajero ve solo los de su turno. Los RPCs son
+  `security definer` → **bypassean RLS**, así que el POS/anular/recepción
+  no se afectan.
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
@@ -157,6 +173,13 @@ peso), apertura/cierre de caja con conteo de billetes, **sangrías**
 (retiros a caja fuerte que descuentan del cierre), gastos del turno,
 selector de cliente, atajos F1–F12, modo offline. La venta crea asiento
 contable automático.
+
+**Devoluciones** (permiso `devoluciones`): se busca la venta original, se
+eligen items y cantidades, cada uno va **a stock** (repone) o **merma** (se
+da de baja). Reembolso por **efectivo** (egreso del turno) o **reverso a
+tarjeta** (ajusta/cancela las acreditaciones pendientes de esa venta).
+Genera contra-asiento y comprobante térmico. RPC `fn_crear_devolucion`.
+*(La nota de crédito existe en el schema pero se quitó de la UI.)*
 
 ### 2. Ventas (`/ventas`)
 Listado con filtros, drawer de detalle, anulación con asiento contable
@@ -199,6 +222,10 @@ Generación e impresión de etiquetas de precio masivo.
 
 ### 8. **Finanzas y Tesorería (`/finanzas`) — unificado**
 Tabs:
+- **Tablero (directivo)**: centro de mando solo-lectura — resultado del
+  período, posición de caja, capital inmovilizado en inventario (a costo),
+  por cobrar, flujo del período, deudas corto plazo (7/15/30 días),
+  comisiones, diferencias de arqueo
 - **Resumen**: P&L del período
 - **Caja fuerte**: KPIs (en buzón, en caja fuerte, arqueado, remesado),
   arqueo con nota de ajuste obligatoria si hay diferencia, generación de
@@ -206,18 +233,28 @@ Tabs:
 - **Por cobrar (Clearing digital)**: acreditaciones pendientes de ventas
   con tarjeta/MP. Cada medio de pago tiene `dias_acreditacion` y
   `comision_porcentaje`. Las ventas con plazo > 0 generan una
-  `acreditacion` pendiente en vez de impactar el saldo; el responsable la
-  marca como cobrada cuando llega al extracto y la plata neta entra al
-  banco
+  `acreditacion` pendiente en vez de impactar el saldo; se acredita (manual
+  o al conciliar) y la plata neta entra al banco
 - **Cuentas**: cuentas bancarias / billeteras / caja con saldos
 - **Movimientos**: filtros por cuenta/tipo/categoría
+- **Conciliación**: importa el reporte/extracto de Mercado Pago (CSV/Excel,
+  parser con auto-detección de columnas), cruza contra acreditaciones
+  pendientes (las acredita) y movimientos no conciliados, marca anomalías.
+  RPC `fn_aplicar_conciliacion`. Tablas `extractos_bancarios`,
+  `lineas_extracto`
 - **Cuentas a pagar**: deudas a proveedores con `provisoria` /
   `tiene_factura`
 - **Egresos**: gastos categorizados
 
+Sidebar: sección **"Finanzas y Tesorería"** agrupa Finanzas + Contabilidad.
+
 ### 9. Contabilidad (`/contabilidad`)
 Plan de cuentas jerárquico, libro diario (asientos automáticos + manuales),
-conciliación bancaria, activos fijos con depreciación, impuestos.
+conciliación bancaria, activos fijos con depreciación, impuestos, y
+**Cierre y auditoría**: candar meses (`periodos_contables`) — con un mes
+cerrado `fn_anular_venta` y `fn_guardar_factura_compra` rechazan operar
+sobre ese período; + log de **auditoría** (anulaciones, arqueos, remesas,
+cierres) con usuario, fecha e IP. Solo admin cierra/reabre.
 
 ### 10. RRHH (`/rrhh`)
 Empleados, novedades (horas extra, faltas, adelantos), liquidación de
@@ -260,6 +297,13 @@ de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
   estándar con `<SelectItem>` children.
 - **Toasts**: importar `toast` desde `sonner`. Mostrar success/error desde
   los callbacks `onSuccess`/`onError` del **hook**, no del componente.
+- **Precio de costo**: ⚠️ `precio_costo` **ya NO es columna de `productos`**
+  (migración 052). Vive en la tabla gateada `costos_producto`, oculta a los
+  cajeros por RLS. Las queries lo leen vía embed `costos_producto(precio_costo)`
+  y lo mapean con `costoDesdeEmbed()` (en `lib/queries/productos.ts`) — para
+  un cajero el embed viene null → costo 0. Las escrituras (`createProducto`,
+  `updateProducto`, importación) hacen upsert en `costos_producto`, no en
+  productos. En los RPCs se usa `fn_costo()` / `fn_set_costo()`.
 
 ---
 
@@ -290,7 +334,26 @@ firmas viejas, falta este `notify`.
 ### Tipos `database.ts`
 Mantener `Database` con `Tables`, `Functions`, `Enums` y `CompositeTypes`
 (aunque `CompositeTypes` esté vacío). Sin ellas, `supabase-js` v2.105+
-devuelve `never[]`.
+devuelve `never[]`. Toda tabla nueva debe registrarse en `Tables` o
+`supabase.from('x')` no compila.
+
+### RLS: borrar policies viejas antes de gatear
+RLS combina policies permissive con **OR**. Si dejás la vieja `using(true)`
+y agregás una restrictiva, todos pasan igual por la vieja. Hay que
+**dropear todas las policies** de la tabla antes de crear la gateada.
+
+### Auditar funciones duplicadas (chequeo T1)
+Después de reissuear RPCs, correr:
+`select proname, count(*) from pg_proc p join pg_namespace n on
+n.oid=p.pronamespace where n.nspname='public' and proname like 'fn_%'
+group by proname having count(*)>1;` — debe dar 0 filas.
+
+### Reissue de RPCs: el costo y los enums
+Al reescribir una función que toca el costo, leer con `fn_costo(id)` y
+escribir con `fn_set_costo(id, costo)` (no `productos.precio_costo`). Al
+insertar en `movimientos_stock.tipo` desde una **variable** text, castear
+`v_tipo::public.tipo_movimiento` (los literales `'venta'` castean solos,
+las variables no).
 
 ### shadcn Button + Link
 `<Button asChild><Link/></Button>` **no funciona** acá. Patrón correcto:
@@ -320,17 +383,30 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-44 migraciones corridas, ~300 archivos fuente, deploy en Vercel:
+53 migraciones corridas, ~320 archivos fuente, deploy en Vercel:
 `hola-express2004.vercel.app`.
 
-Módulos completos: POS (con offline), Ventas, Clientes, Inventario (con
-movimientos y ABC), Vencimientos, Compras (unificado con 3-way match,
-catálogo N:M, monitor de costos, escaneo, supervisor), Etiquetas, Finanzas
-(con Caja Fuerte y Clearing Digital), Contabilidad (con asientos
-automáticos), RRHH, Reportes, Proyectos, Terminales MP, Configuración,
-Tienda online pública.
+Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,
+Inventario (con movimientos y ABC), Vencimientos, **Compras unificado**
+(3-way match, catálogo N:M, monitor de costos, escaneo, supervisor),
+Etiquetas, **Finanzas y Tesorería** (Tablero directivo, Caja Fuerte,
+Clearing Digital, Conciliación CSV de MP, P&L, cuentas, egresos),
+Contabilidad (asientos automáticos + **cierre de período y auditoría**),
+RRHH, Reportes, Proyectos, Terminales MP, Configuración, Tienda online.
 
-**Fases pendientes del manual de Tesorería:**
-- Fase 3: Conciliación bancaria automática por CSV (import + cruce + flags
-  de anomalías)
-- Fase 4: Cierre de período inalterable + log de auditoría con IP/usuario
+Los 2 manuales operativos (Compras, Tesorería) están **implementados
+completos**.
+
+### Revisión integral R0–R5 (completada)
+Se auditó el ERP y se corrigió por fases:
+- **R0** Integridad: anular venta cancela acreditaciones + contra-asiento +
+  repone lotes; comisiones de clearing se asientan como gasto (mig. 046)
+- **R1.1** Seguridad: RLS real por permiso en tablas sensibles (mig. 047)
+- **R1.2** Costo blindado: `precio_costo` movido a `costos_producto`
+  gateada, en 4 partes (migs. 050–052)
+- **R2** Devoluciones en POS (migs. 048–049)
+- **R3** Tablero directivo (solo frontend)
+- **R5** Cierre de período + auditoría (mig. 053)
+
+**Backlog: vacío.** Próximas mejoras posibles (no críticas): devolución sin
+ticket, notas de crédito de proveedor, multi-sucursal.
