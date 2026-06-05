@@ -96,7 +96,7 @@ begin
     from public.cuentas_a_pagar c
     left join public.proveedores p on p.id = c.proveedor_id
     where c.id = p_cuenta_id
-    for update;
+    for update of c;  -- solo bloquea cuentas_a_pagar; FOR UPDATE no admite el lado nullable del LEFT JOIN
   if v_monto is null then
     raise exception 'La cuenta no existe.';
   end if;
