@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import {
   Calendar,
+  Check,
   ChevronLeft,
   ClipboardList,
   CreditCard,
@@ -69,6 +70,10 @@ export function DetallePedido({ pedidoId }: Props) {
     (acc, it) => acc + (it.cantidad_recibida ?? 0) * it.precio_costo,
     0
   )
+  // En 'recibido' y 'recepcion_parcial' mostramos lo efectivamente recibido
+  // (que es lo que se debe), no el total pedido original.
+  const mostrarRecibido =
+    pedido.estado === 'recibido' || pedido.estado === 'recepcion_parcial'
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-5">
@@ -111,13 +116,29 @@ export function DetallePedido({ pedidoId }: Props) {
                 Marcar como enviado
               </Button>
             )}
-            {pedido.estado === 'enviado' && (
+            {(pedido.estado === 'enviado' ||
+              pedido.estado === 'recepcion_parcial') && (
               <Button
                 onClick={() => setModalRecepcionAbierto(true)}
                 className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
               >
                 <PackageCheck className="h-4 w-4" />
-                Registrar recepción
+                {pedido.estado === 'recepcion_parcial'
+                  ? 'Recibir faltante'
+                  : 'Registrar recepción'}
+              </Button>
+            )}
+            {pedido.estado === 'recepcion_parcial' && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
+                }
+                disabled={cambiarEstado.isPending}
+                className="border-[#6f3a2a]/30 text-[#6f3a2a] hover:bg-[#6f3a2a]/10 hover:text-[#391511] gap-1.5"
+              >
+                <Check className="h-4 w-4" />
+                Cerrar recepción
               </Button>
             )}
             {(pedido.estado === 'borrador' || pedido.estado === 'enviado') && (
@@ -252,17 +273,16 @@ export function DetallePedido({ pedidoId }: Props) {
 
         <div className="px-5 py-3 border-t border-[#e4c9b0]/60 bg-[#fdfaf6] flex items-baseline justify-between">
           <span className="text-[#6f3a2a] text-sm font-medium uppercase tracking-wider">
-            {pedido.estado === 'recibido' ? 'Total recibido' : 'Total pedido'}
+            {mostrarRecibido ? 'Total recibido' : 'Total pedido'}
           </span>
           <span className="text-[#391511] text-2xl font-extrabold tabular-nums">
-            <MontoARS
-              monto={pedido.estado === 'recibido' ? totalRecibido : pedido.total}
-            />
+            <MontoARS monto={mostrarRecibido ? totalRecibido : pedido.total} />
           </span>
         </div>
       </div>
 
-      {pedido.estado === 'enviado' && (
+      {(pedido.estado === 'enviado' ||
+        pedido.estado === 'recepcion_parcial') && (
         <ModalRecepcion
           abierto={modalRecepcionAbierto}
           onCambioAbierto={setModalRecepcionAbierto}
