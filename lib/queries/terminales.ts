@@ -103,6 +103,15 @@ export interface OrdenPagoCliente {
       payment_method?: { id?: string; type?: string }
     }>
   }
+  /**
+   * Comisión + IIBB REALES que cobró MP, adjuntados por el endpoint cuando
+   * la orden queda aprobada. Si no vino, el POS usa la tabla de medios.
+   */
+  cobro_real?: {
+    comision: number
+    iibb: number
+    neto: number | null
+  }
 }
 
 /** Crea una orden de cobro en una terminal. */

@@ -47,8 +47,15 @@ interface Props {
   total: number
   /** Total de la venta completa. Si difiere de `total`, indica cobro parcial. */
   totalVenta?: number
-  /** Llamado cuando el pago en la terminal fue aprobado. */
-  onAprobado: (medioPago: string) => void
+  /**
+   * Llamado cuando el pago en la terminal fue aprobado. `cobroReal` trae la
+   * comisión + IIBB exactos que cobró MP (si los pudo leer); la venta los usa
+   * en vez de la estimación de la tabla.
+   */
+  onAprobado: (
+    medioPago: string,
+    cobroReal?: { comision: number; iibb: number } | null
+  ) => void
   /** true si la venta se está registrando luego de la aprobación. */
   procesandoVenta?: boolean
 }
@@ -185,9 +192,9 @@ export function ModalCobroTerminal({
     if (aprobado && !yaAvisoExito && medioPago) {
       setYaAvisoExito(true)
       const codigoFinal = medioAutoDetectado?.codigo ?? medioPago
-      onAprobado(codigoFinal)
+      onAprobado(codigoFinal, orden?.cobro_real ?? null)
     }
-  }, [aprobado, yaAvisoExito, medioPago, medioAutoDetectado, onAprobado])
+  }, [aprobado, yaAvisoExito, medioPago, medioAutoDetectado, orden?.cobro_real, onAprobado])
 
   // Cuando la orden llega a un estado final, dejar de seguirla localmente.
   useEffect(() => {

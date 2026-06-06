@@ -191,6 +191,89 @@ export async function consultarOrdenPago(
   return mpFetch<OrdenPago>(`/v1/orders/${ordenId}`)
 }
 
+// ─── Detalle real del pago (comisión + IIBB exactos) ─────────────────────────
+
+/** Comisión e impuestos REALES que cobró MP en un pago puntual. */
+export interface CobroRealMP {
+  /** Comisión MP real (suma de cargos tipo fee), en pesos. */
+  comision: number
+  /** Retenciones impositivas reales (IIBB, etc.), en pesos. */
+  iibb: number
+  /** Neto que MP acredita (bruto − comisión − impuestos), si lo informa. */
+  neto: number | null
+}
+
+interface PagoMP {
+  transaction_amount?: string | number
+  /** Detalle de comisiones MP. */
+  fee_details?: Array<{ type?: string; amount?: string | number }>
+  /**
+   * Desglose unificado (cargos y retenciones). MP devuelve acá tanto la
+   * comisión (type 'fee'/'financing_fee') como las retenciones impositivas
+   * (type 'tax', name con 'iibb'/'ingresos_brutos').
+   */
+  charges_details?: Array<{
+    name?: string
+    type?: string
+    amounts?: { original?: string | number; refunded?: string | number }
+  }>
+  transaction_details?: { net_received_amount?: string | number }
+}
+
+function aNum(v: string | number | undefined | null): number {
+  if (v == null) return 0
+  const n = typeof v === 'number' ? v : parseFloat(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+/**
+ * Consulta un pago y devuelve la comisión + IIBB REALES que cobró MP.
+ * Robusto ante variantes de respuesta: prefiere `charges_details` (desglose
+ * fee vs tax); si no, usa `fee_details` para la comisión.
+ */
+export async function consultarCobroRealMP(
+  paymentId: string
+): Promise<CobroRealMP> {
+  const pago = await mpFetch<PagoMP>(`/v1/payments/${paymentId}`)
+
+  let comision = 0
+  let iibb = 0
+
+  const cargos = pago.charges_details ?? []
+  if (cargos.length > 0) {
+    for (const c of cargos) {
+      const bruto = aNum(c.amounts?.original)
+      const dev = aNum(c.amounts?.refunded)
+      const monto = Math.max(0, bruto - dev)
+      const tipo = (c.type ?? '').toLowerCase()
+      const nombre = (c.name ?? '').toLowerCase()
+      const esImpuesto =
+        tipo === 'tax' ||
+        nombre.includes('iibb') ||
+        nombre.includes('ingresos_brutos') ||
+        nombre.includes('ingresos brutos') ||
+        nombre.includes('retencion') ||
+        nombre.includes('percepcion')
+      if (esImpuesto) iibb += monto
+      else comision += monto
+    }
+  } else {
+    // Fallback: solo fee_details (sin desglose de impuestos)
+    for (const f of pago.fee_details ?? []) comision += aNum(f.amount)
+  }
+
+  const neto =
+    pago.transaction_details?.net_received_amount != null
+      ? aNum(pago.transaction_details.net_received_amount)
+      : null
+
+  return {
+    comision: Math.round(comision * 100) / 100,
+    iibb: Math.round(iibb * 100) / 100,
+    neto,
+  }
+}
+
 /** Cancela una orden pendiente en la terminal. */
 export async function cancelarOrdenPago(ordenId: string): Promise<void> {
   await mpFetch(`/v1/orders/${ordenId}/cancel`, {

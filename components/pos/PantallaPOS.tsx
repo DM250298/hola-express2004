@@ -371,7 +371,10 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   }
 
   /** Llamado por ModalCobroTerminal cuando la maquinita aprobó el pago. */
-  function confirmarVentaTerminal(medioPago: string) {
+  function confirmarVentaTerminal(
+    medioPago: string,
+    cobroReal?: { comision: number; iibb: number } | null
+  ) {
     if (carrito.length === 0 || !turno) return
     const items = carrito.map((it) => ({
       producto_id: it.producto_id,
@@ -383,10 +386,16 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     // Si hay un cobro parcial pre-cargado (modo "mixto"), combinamos los
     // pagos no-maquinita con la línea de la maquinita aprobada.
     const montoMaq = montoMaquinita > 0 ? montoMaquinita : totalCarrito
+    // Comisión + IIBB reales que cobró MP (si los pudo leer); van solo en la
+    // línea de la maquinita, no en los pagos previos (efectivo, etc.).
+    const lineaMaq: PagoPayload = {
+      medio_pago: medioPago,
+      monto: pagosPrevios.length > 0 ? montoMaq : totalCarrito,
+      comision_monto: cobroReal?.comision ?? null,
+      iibb_monto: cobroReal?.iibb ?? null,
+    }
     const pagos: PagoPayload[] =
-      pagosPrevios.length > 0
-        ? [...pagosPrevios, { medio_pago: medioPago, monto: montoMaq }]
-        : [{ medio_pago: medioPago, monto: totalCarrito }]
+      pagosPrevios.length > 0 ? [...pagosPrevios, lineaMaq] : [lineaMaq]
 
     crearVenta.mutate(
       {

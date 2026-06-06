@@ -2,13 +2,18 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase/server'
 import {
   cancelarOrdenPago,
+  consultarCobroRealMP,
   consultarOrdenPago,
   liberarDispositivo,
+  type CobroRealMP,
+  type OrdenPago,
 } from '@/lib/mercadopago/point'
 
 interface Ctx {
   params: Promise<{ id: string }>
 }
+
+type OrdenConCobroReal = OrdenPago & { cobro_real?: CobroRealMP }
 
 async function verificarSesion(): Promise<boolean> {
   const supabase = await createServerClient()
@@ -27,6 +32,22 @@ export async function GET(_request: Request, ctx: Ctx) {
 
   try {
     const orden = await consultarOrdenPago(id)
+
+    // Si el cobro fue aprobado, consultar la comisión + IIBB REALES que cobró
+    // MP para ese pago, y adjuntarlas. Best-effort: si falla, el POS cae a la
+    // estimación de la tabla de medios de pago.
+    if (orden.status === 'processed') {
+      const pagoId = orden.transactions?.payments?.[0]?.id
+      if (pagoId != null) {
+        try {
+          const cobroReal = await consultarCobroRealMP(String(pagoId))
+          ;(orden as OrdenConCobroReal).cobro_real = cobroReal
+        } catch {
+          // sin detalle real → el POS usa la tabla
+        }
+      }
+    }
+
     return NextResponse.json({ orden })
   } catch (error) {
     return NextResponse.json(

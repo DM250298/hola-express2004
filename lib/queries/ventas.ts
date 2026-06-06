@@ -16,6 +16,13 @@ export interface PagoPayload {
   monto: number
   /** Solo para medio_pago === 'nota_credito': código del vale a consumir. */
   nc_codigo?: string | null
+  /**
+   * Comisión REAL en pesos (cobro con terminal MP). Si viene, la venta la
+   * usa en vez de calcularla con el % de la tabla de medios de pago.
+   */
+  comision_monto?: number | null
+  /** Retención de IIBB REAL en pesos (cobro con terminal MP). Override de la tabla. */
+  iibb_monto?: number | null
 }
 
 export interface CrearVentaPayload {
@@ -138,6 +145,8 @@ export async function crearVenta(
         medio_pago: p.medio_pago,
         monto: p.monto,
         nc_codigo: p.nc_codigo ?? null,
+        comision_monto: p.comision_monto ?? null,
+        iibb_monto: p.iibb_monto ?? null,
       })) as unknown as Json,
       p_items: payload.items.map((it) => ({
         producto_id: it.producto_id,
