@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Scale } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -34,6 +34,11 @@ export function ModalIngresoPeso({
 }: Props) {
   // Almacenamos los gramos como string para el teclado numérico
   const [gramos, setGramos] = useState('')
+  // Ref espejo para leer el valor actual desde el listener de teclado.
+  const gramosRef = useRef('')
+  useEffect(() => {
+    gramosRef.current = gramos
+  }, [gramos])
 
   useEffect(() => {
     if (abierto) {
@@ -44,15 +49,21 @@ export function ModalIngresoPeso({
     }
   }, [abierto, pesoActualKg])
 
+  /** Agrega dígitos (uno o "00") respetando el máximo de 50 kg. */
+  function agregarDigitos(d: string) {
+    setGramos((prev) => {
+      const nuevo = prev + d
+      if (Number(nuevo) > 50000) return prev // máx 50 000 g = 50 kg
+      return nuevo
+    })
+  }
+
   function presionar(tecla: string) {
     if (tecla === '⌫') {
       setGramos((prev) => prev.slice(0, -1))
       return
     }
-    const nuevo = gramos + tecla
-    // Máximo razonable: 50 000 g = 50 kg
-    if (Number(nuevo) > 50000) return
-    setGramos(nuevo)
+    agregarDigitos(tecla)
   }
 
   const gramosNum = Number(gramos) || 0
@@ -65,6 +76,29 @@ export function ModalIngresoPeso({
     onConfirmar(kg)
     onCambioAbierto(false)
   }
+
+  // Teclado físico: dígitos escriben gramos, Backspace borra, Enter confirma.
+  useEffect(() => {
+    if (!abierto) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key >= '0' && e.key <= '9') {
+        e.preventDefault()
+        agregarDigitos(e.key)
+      } else if (e.key === 'Backspace') {
+        e.preventDefault()
+        setGramos((prev) => prev.slice(0, -1))
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        const g = Number(gramosRef.current) || 0
+        if (g > 0) {
+          onConfirmar(g / 1000)
+          onCambioAbierto(false)
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [abierto, onConfirmar, onCambioAbierto])
 
   return (
     <Dialog open={abierto} onOpenChange={onCambioAbierto}>
@@ -121,6 +155,11 @@ export function ModalIngresoPeso({
               </button>
             ))}
           </div>
+
+          <p className="text-[10px] text-[#c8a58a] text-center">
+            También podés escribir el peso (en gramos) con el teclado · Enter
+            para agregar
+          </p>
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-5 py-3 flex gap-2">
