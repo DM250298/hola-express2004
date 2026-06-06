@@ -34,7 +34,12 @@ alter table public.cuentas
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Columnas de cantidad/stock → numeric(12,3)
+--    La vista_cobertura_stock (060) depende de productos.stock_actual e
+--    items_venta.cantidad, así que hay que dropearla antes de alterar y
+--    recrearla después (Postgres no deja alterar columnas usadas por views).
 -- ─────────────────────────────────────────────────────────────────────
+drop view if exists public.vista_cobertura_stock;
+
 alter table public.productos        alter column stock_actual    type numeric(12,3);
 alter table public.items_venta      alter column cantidad        type numeric(12,3);
 alter table public.movimientos_stock alter column cantidad       type numeric(12,3);
@@ -43,6 +48,56 @@ alter table public.lotes            alter column cantidad_inicial type numeric(1
 alter table public.items_ajuste_stock alter column cantidad       type numeric(12,3);
 alter table public.items_ajuste_stock alter column stock_anterior type numeric(12,3);
 alter table public.items_ajuste_stock alter column stock_final    type numeric(12,3);
+
+-- Recrear la vista idéntica a la 060 (ahora sobre las columnas numeric)
+create view public.vista_cobertura_stock as
+with serie as (
+  select generate_series(
+    (current_date - interval '13 days')::date, current_date, interval '1 day'
+  )::date as dia
+),
+ventas_por_dia as (
+  select
+    iv.producto_id,
+    (v.fecha at time zone 'America/Argentina/La_Rioja')::date as dia,
+    sum(iv.cantidad)::numeric as cantidad
+  from public.items_venta iv
+  join public.ventas v on v.id = iv.venta_id
+  where v.estado = 'completada'
+    and v.fecha >= (current_date - interval '13 days')::timestamptz
+  group by iv.producto_id, (v.fecha at time zone 'America/Argentina/La_Rioja')::date
+),
+productos_dias as (
+  select distinct vd.producto_id, s.dia
+  from ventas_por_dia vd cross join serie s
+),
+combinado as (
+  select pd.producto_id, pd.dia, coalesce(vd.cantidad, 0)::numeric as cantidad
+  from productos_dias pd
+  left join ventas_por_dia vd on vd.producto_id = pd.producto_id and vd.dia = pd.dia
+),
+agregado as (
+  select
+    producto_id,
+    sum(cantidad)::numeric as ventas_14d,
+    round((sum(cantidad) / 14.0)::numeric, 3) as promedio_diario,
+    jsonb_agg(cantidad::numeric order by dia) as serie_14d
+  from combinado group by producto_id
+)
+select
+  p.id as producto_id,
+  p.stock_actual,
+  coalesce(a.ventas_14d, 0)::numeric as ventas_14d,
+  coalesce(a.promedio_diario, 0)::numeric as promedio_diario,
+  case when coalesce(a.promedio_diario, 0) = 0 then null
+       else round((p.stock_actual / a.promedio_diario)::numeric, 1) end as dias_cobertura,
+  coalesce(a.serie_14d, '[0,0,0,0,0,0,0,0,0,0,0,0,0,0]'::jsonb) as serie_14d
+from public.productos p
+left join agregado a on a.producto_id = p.id
+where p.activo = true;
+
+comment on view public.vista_cobertura_stock is
+  'Cobertura de stock por producto activo. Calcula días de cobertura y serie de ventas últimos 14 días.';
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 2. fn_crear_venta v7 = v6 (058, IIBB) con cantidad/stock numeric
