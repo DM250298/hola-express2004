@@ -246,6 +246,9 @@
   font-size: 9pt;
   line-height: 1.35;
   page: informe;
+  /* Todo el texto en negrita para que la impresora térmica lo saque negro
+     sólido y parejo (las fuentes finas salen grises en térmica). */
+  font-weight: 700;
 }
 .comprobante-titulo {
   font-size: 12pt;
