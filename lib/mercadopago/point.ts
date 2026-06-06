@@ -134,7 +134,10 @@ export interface OrdenPago {
   }
   transactions?: {
     payments?: Array<{
+      /** id ULID de la Orders API (NO sirve para /v1/payments). */
       id?: string | number
+      /** id numérico clásico del pago — ESTE sirve para /v1/payments/{id}. */
+      reference_id?: string | number
       amount?: string | number
       status?: string
       payment_method?: { id?: string; type?: string }

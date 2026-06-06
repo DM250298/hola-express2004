@@ -37,7 +37,10 @@ export async function GET(_request: Request, ctx: Ctx) {
     // MP para ese pago, y adjuntarlas. Best-effort: si falla, el POS cae a la
     // estimación de la tabla de medios de pago.
     if (orden.status === 'processed') {
-      const pagoId = orden.transactions?.payments?.[0]?.id
+      const pago = orden.transactions?.payments?.[0]
+      // OJO: /v1/payments usa el reference_id NUMÉRICO, no el id ULID de la
+      // Orders API (ese da 404). Verificado contra la API real de MP.
+      const pagoId = pago?.reference_id ?? pago?.id
       if (pagoId != null) {
         try {
           const cobroReal = await consultarCobroRealMP(String(pagoId))
