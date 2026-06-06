@@ -26,6 +26,13 @@
 -- ╚════════════════════════════════════════════════════════════════════╝
 
 -- ─────────────────────────────────────────────────────────────────────
+-- 0. Dependencia de la 058 (IIBB): la fn_crear_venta de abajo la usa.
+--    Idempotente: si ya corriste la 058, no hace nada.
+-- ─────────────────────────────────────────────────────────────────────
+alter table public.cuentas
+  add column if not exists retencion_iibb_porcentaje numeric(5,2) not null default 0;
+
+-- ─────────────────────────────────────────────────────────────────────
 -- 1. Columnas de cantidad/stock → numeric(12,3)
 -- ─────────────────────────────────────────────────────────────────────
 alter table public.productos        alter column stock_actual    type numeric(12,3);
