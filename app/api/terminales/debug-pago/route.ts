@@ -4,13 +4,13 @@ import { createServerClient } from '@/lib/supabase/server'
 /**
  * Endpoint TEMPORAL de diagnóstico de comisión real.
  *
- * Uso: hacé un cobro con la terminal, luego abrí en el navegador:
- *   /api/terminales/debug-pago
- * (toma la orden más reciente) o
- *   /api/terminales/debug-pago?order_id=XXXX
+ * Uso: hacé un cobro con la terminal, luego abrí:
+ *   /api/terminales/debug-pago            (toma la última orden PROCESADA)
+ *   /api/terminales/debug-pago?order_id=ORD...
  *
- * Devuelve el JSON CRUDO de la orden y del pago tal cual los manda MP, para
- * ver dónde está la comisión/IIBB real y por qué el parser no la encuentra.
+ * Devuelve el JSON CRUDO de la orden y del/los pago(s) consultados por sus
+ * distintos ids (reference_id numérico vs id ULID), para ver cuál funciona
+ * en /v1/payments y dónde viene la comisión/IIBB real.
  */
 export async function GET(request: Request) {
   const supabase = await createServerClient()
@@ -43,10 +43,21 @@ export async function GET(request: Request) {
     return { status: res.status, body }
   }
 
+  type Pago = {
+    id?: string
+    reference_id?: string
+    status?: string
+    payment_method?: { id?: string; type?: string }
+  }
+  type Orden = {
+    id?: string
+    status?: string
+    transactions?: { payments?: Pago[] }
+  }
+
   let orderId = new URL(request.url).searchParams.get('order_id')?.trim() || ''
 
-  // Si no pasaron order_id, tomar la orden más reciente de los últimos 2 días.
-  let listaReciente: unknown = null
+  // Si no pasaron order_id, tomar la última orden PROCESADA del listado.
   if (!orderId) {
     const ahora = new Date()
     const hace2 = new Date(ahora.getTime() - 2 * 24 * 60 * 60 * 1000)
@@ -54,55 +65,42 @@ export async function GET(request: Request) {
     const lista = await getJson(
       `${base}/v1/orders?begin_date=${encodeURIComponent(
         fmt(hace2)
-      )}&end_date=${encodeURIComponent(fmt(ahora))}&limit=10`
+      )}&end_date=${encodeURIComponent(fmt(ahora))}&limit=20`
     )
-    listaReciente = lista.body
-    const lb = lista.body as {
-      elements?: Array<{ id?: string }>
-      results?: Array<{ id?: string }>
-    } | null
-    const arr = lb?.elements ?? lb?.results ?? []
-    orderId = arr[0]?.id ?? ''
-  }
-
-  if (!orderId) {
-    return NextResponse.json({
-      error: 'No se encontró ninguna orden reciente. Pasá ?order_id=XXXX',
-      listaReciente,
-    })
+    // El listado viene en data.data[]
+    const arr =
+      ((lista.body as { data?: Orden[] } | null)?.data ?? []) as Orden[]
+    const procesada = arr.find((o) => o.status === 'processed') ?? arr[0]
+    orderId = procesada?.id ?? ''
+    if (!orderId) {
+      return NextResponse.json({
+        error: 'No se encontró orden. Pasá ?order_id=ORD...',
+        primerasOrdenes: arr.slice(0, 3),
+      })
+    }
   }
 
   // 1. Orden cruda
   const orden = await getJson(`${base}/v1/orders/${orderId}`)
+  const ordenBody = orden.body as Orden | null
+  const pago = ordenBody?.transactions?.payments?.[0]
 
-  // 2. Buscar el payment id en TODAS las rutas posibles del JSON de la orden.
-  const ob = orden.body as Record<string, unknown>
-  const candidatosPagoId: Array<{ ruta: string; id: string }> = []
-  const transactions = ob?.transactions as
-    | { payments?: Array<Record<string, unknown>> }
-    | undefined
-  for (const [i, p] of (transactions?.payments ?? []).entries()) {
-    if (p?.id != null)
-      candidatosPagoId.push({ ruta: `transactions.payments[${i}].id`, id: String(p.id) })
-    if (p?.payment_id != null)
-      candidatosPagoId.push({
-        ruta: `transactions.payments[${i}].payment_id`,
-        id: String(p.payment_id),
-      })
+  // 2. Probar /v1/payments con AMBOS ids para ver cuál anda.
+  const intentos: Array<{ campo: string; id: string; status: number; body: unknown }> = []
+  if (pago?.reference_id) {
+    const r = await getJson(`${base}/v1/payments/${pago.reference_id}`)
+    intentos.push({ campo: 'reference_id', id: pago.reference_id, status: r.status, body: r.body })
   }
-
-  // 3. Para cada candidato, intentar /v1/payments/{id}
-  const pagos: Array<{ ruta: string; id: string; status: number; body: unknown }> = []
-  for (const c of candidatosPagoId) {
-    const pago = await getJson(`${base}/v1/payments/${c.id}`)
-    pagos.push({ ruta: c.ruta, id: c.id, status: pago.status, body: pago.body })
+  if (pago?.id) {
+    const r = await getJson(`${base}/v1/payments/${pago.id}`)
+    intentos.push({ campo: 'id', id: pago.id, status: r.status, body: r.body })
   }
 
   return NextResponse.json({
     orderId,
-    ordenStatus: orden.status,
-    ordenCruda: orden.body,
-    candidatosPagoId,
-    pagosConsultados: pagos,
+    ordenStatus: ordenBody?.status,
+    payment_method: pago?.payment_method,
+    pagoEnOrden: pago,
+    intentosPayments: intentos,
   })
 }
