@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog'
 import { ModalCliente } from '@/components/clientes/ModalCliente'
 import { useClientes } from '@/lib/hooks/useClientes'
+import { cn } from '@/lib/utils'
 
 export interface ClienteSeleccionado {
   id: number
@@ -36,11 +37,14 @@ export function SelectorCliente({
   const [busquedaInput, setBusquedaInput] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [modalNuevo, setModalNuevo] = useState(false)
+  // Índice del cliente resaltado para navegación con teclado (↑/↓ + Enter).
+  const [indiceSeleccionado, setIndiceSeleccionado] = useState(0)
 
   useEffect(() => {
     if (abierto) {
       setBusquedaInput('')
       setBusqueda('')
+      setIndiceSeleccionado(0)
     }
   }, [abierto])
 
@@ -56,9 +60,33 @@ export function SelectorCliente({
 
   const resultados = (clientes ?? []).slice(0, MAX_RESULTADOS)
 
+  // Al cambiar los resultados, volver el resaltado al primero.
+  useEffect(() => {
+    setIndiceSeleccionado(0)
+  }, [busqueda])
+
   function elegir(c: ClienteSeleccionado | null) {
     onSeleccionar(c)
     onCambioAbierto(false)
+  }
+
+  /** Navegación por teclado sobre la lista de clientes. */
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'ArrowDown' && resultados.length > 0) {
+      e.preventDefault()
+      setIndiceSeleccionado((i) => Math.min(i + 1, resultados.length - 1))
+    } else if (e.key === 'ArrowUp' && resultados.length > 0) {
+      e.preventDefault()
+      setIndiceSeleccionado((i) => Math.max(0, i - 1))
+    } else if (e.key === 'Enter' && resultados.length > 0) {
+      e.preventDefault()
+      const c = resultados[Math.min(indiceSeleccionado, resultados.length - 1)]
+      elegir({ id: c.id, nombre: c.nombre })
+    } else if (e.key === 'Escape' && busquedaInput) {
+      // Primer Esc limpia la búsqueda; el segundo (sin texto) cierra el modal.
+      e.preventDefault()
+      setBusquedaInput('')
+    }
   }
 
   return (
@@ -81,6 +109,7 @@ export function SelectorCliente({
                 autoFocus
                 value={busquedaInput}
                 onChange={(e) => setBusquedaInput(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder="Buscar por nombre, teléfono o documento…"
                 className="pl-9 pr-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
               />
@@ -122,12 +151,18 @@ export function SelectorCliente({
                 </div>
               ) : (
                 <ul className="divide-y divide-[#e4c9b0]/40">
-                  {resultados.map((c) => (
+                  {resultados.map((c, idx) => (
                     <li key={c.id}>
                       <button
                         type="button"
                         onClick={() => elegir({ id: c.id, nombre: c.nombre })}
-                        className="w-full px-4 py-2.5 flex items-center justify-between gap-3 text-left hover:bg-[#fdfaf6]"
+                        onMouseEnter={() => setIndiceSeleccionado(idx)}
+                        className={cn(
+                          'w-full px-4 py-2.5 flex items-center justify-between gap-3 text-left',
+                          idx === indiceSeleccionado
+                            ? 'bg-[#f9d2a2]/40'
+                            : 'hover:bg-[#fdfaf6]'
+                        )}
                       >
                         <div className="min-w-0">
                           <div className="font-medium text-[#391511] text-sm truncate">
@@ -149,6 +184,20 @@ export function SelectorCliente({
                 </ul>
               )}
             </div>
+
+            {resultados.length > 0 && (
+              <p className="text-[10px] text-[#c8a58a] text-center">
+                Usá{' '}
+                <kbd className="px-1 py-0 bg-[#fdfaf6] border border-[#e4c9b0] rounded text-[9px] font-mono">
+                  ↑↓
+                </kbd>{' '}
+                para navegar ·{' '}
+                <kbd className="px-1 py-0 bg-[#fdfaf6] border border-[#e4c9b0] rounded text-[9px] font-mono">
+                  ↵
+                </kbd>{' '}
+                para elegir
+              </p>
+            )}
 
             <Button
               type="button"

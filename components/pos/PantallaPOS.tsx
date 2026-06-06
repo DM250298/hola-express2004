@@ -229,6 +229,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         cuandoEscribe: true,
       },
       {
+        tecla: 'F5',
+        accion: () => setSelectorClienteAbierto(true),
+        cuandoEscribe: true,
+      },
+      {
         tecla: 'F6',
         accion: agregarOrden,
         cuandoEscribe: true,

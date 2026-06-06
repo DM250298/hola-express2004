@@ -38,8 +38,17 @@ const GRUPOS: GrupoAtajo[] = [
     items: [
       { teclas: ['F3'], descripcion: 'Ver ventas del turno' },
       { teclas: ['F4'], descripcion: 'Abrir cobro' },
+      { teclas: ['F5'], descripcion: 'Elegir cliente de la venta' },
       { teclas: ['F8'], descripcion: 'Vaciar carrito (orden activa)' },
       { teclas: ['F9'], descripcion: 'Cerrar turno' },
+    ],
+  },
+  {
+    titulo: 'En el selector de cliente',
+    items: [
+      { teclas: ['↑', '↓'], descripcion: 'Navegar clientes' },
+      { teclas: ['Enter'], descripcion: 'Elegir cliente resaltado' },
+      { teclas: ['Esc'], descripcion: 'Limpiar búsqueda / cerrar' },
     ],
   },
   {
