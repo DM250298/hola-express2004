@@ -314,6 +314,8 @@
   font-family: var(--font-bricolage), system-ui, sans-serif;
   font-size: 9pt;
   line-height: 1.35;
+  /* Todo el ticket en negrita para impresión térmica negra y pareja. */
+  font-weight: 700;
 }
 .ticket-marca {
   text-align: center;
@@ -446,6 +448,10 @@
   .imprimir-termico,
   .imprimir-termico * {
     visibility: visible;
+    /* Todo lo impreso en negro sólido — el navegador no debe aclararlo. */
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .etiquetas-imprimir,
   .imprimir-termico {
