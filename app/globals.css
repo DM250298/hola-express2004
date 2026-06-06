@@ -167,6 +167,9 @@
   background: #fff;
   line-height: 1.15;
   border: 1px dashed #888;
+  /* Todo el texto de las etiquetas en negrita. Los elementos que declaran
+     un peso mayor (800) lo mantienen; el resto (código, pie) hereda 700. */
+  font-weight: 700;
 }
 
 .etiqueta-producto {
