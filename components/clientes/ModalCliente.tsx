@@ -53,7 +53,8 @@ export function ModalCliente({
   }, [abierto, cliente])
 
   const procesando = crear.isPending || actualizar.isPending
-  const puedeGuardar = nombre.trim().length > 0 && !procesando
+  const puedeGuardar =
+    nombre.trim().length > 0 && documento.trim().length > 0 && !procesando
 
   function guardar() {
     if (!puedeGuardar) return
@@ -98,7 +99,7 @@ export function ModalCliente({
         <div className="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="space-y-1.5">
             <Label className="text-[#391511] font-medium text-sm">
-              Nombre y apellido
+              Nombre y apellido <span className="text-[#c43e2c]">*</span>
             </Label>
             <Input
               value={nombre}
@@ -124,12 +125,12 @@ export function ModalCliente({
             </div>
             <div className="space-y-1.5">
               <Label className="text-[#391511] font-medium text-sm">
-                DNI / CUIT
+                DNI / CUIT <span className="text-[#c43e2c]">*</span>
               </Label>
               <Input
                 value={documento}
                 onChange={(e) => setDocumento(e.target.value)}
-                placeholder="Opcional"
+                placeholder="Obligatorio"
                 disabled={procesando}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
               />
