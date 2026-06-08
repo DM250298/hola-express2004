@@ -28,4 +28,9 @@ export const ENTIDAD_CATEGORIAS: DefinicionEntidad = {
   permisoImport: 'configuracion',
   permisoExport: 'configuracion',
   nombreArchivo: 'categorias',
+  ejemplos: [
+    { nombre: 'Bebidas sin alcohol', descripcion: 'Gaseosas, aguas, jugos' },
+    { nombre: 'Fiambrería' },
+    { nombre: 'Limpieza' },
+  ],
 }

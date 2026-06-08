@@ -64,4 +64,14 @@ export const ENTIDAD_CLIENTES: DefinicionEntidad = {
   permisoImport: 'clientes',
   permisoExport: 'clientes',
   nombreArchivo: 'clientes',
+  ejemplos: [
+    {
+      documento: '20304050607',
+      nombre: 'Juan Pérez',
+      telefono: '3804123456',
+      email: 'juan@mail.com',
+      activo: 'true',
+    },
+    { documento: '27111222333', nombre: 'María Gómez', activo: 'true' },
+  ],
 }

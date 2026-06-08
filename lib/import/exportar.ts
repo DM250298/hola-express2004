@@ -77,3 +77,41 @@ export async function exportarEntidadSimple(def: DefinicionEntidad): Promise<voi
   else throw new Error(`Export no implementado para ${def.clave}`)
   descargar([{ nombre: def.clave, def, filas }], def.nombreArchivo)
 }
+
+/**
+ * Descarga una plantilla vacía (encabezados + filas de ejemplo + hoja de
+ * instrucciones) para la carga inicial. No requiere datos en la base.
+ */
+export function descargarPlantilla(def: DefinicionEntidad): void {
+  const header = def.columnas.map((c) => c.etiqueta)
+  const ejemplos = (def.ejemplos ?? []).map((e) =>
+    def.columnas.map((c) => {
+      const v = e[c.campo]
+      return v === undefined || v === null ? '' : v
+    })
+  )
+  const wsDatos = XLSX.utils.aoa_to_sheet([header, ...ejemplos])
+  wsDatos['!cols'] = def.columnas.map((c) => ({
+    wch: Math.max(12, Math.min(40, c.etiqueta.length + 4)),
+  }))
+
+  const instr: (string | number)[][] = [
+    [`Plantilla de ${def.etiqueta} — ¡Hola! Express`],
+    [def.descripcion],
+    [],
+    ['Columna', '¿Obligatoria?'],
+    ...def.columnas.map((c) => [c.etiqueta, c.requerida ? 'Sí' : 'No']),
+    [],
+    ['Las filas de ejemplo son ilustrativas: reemplazalas por tus datos.'],
+    ['No cambies los nombres del encabezado; las columnas que no uses podés dejarlas vacías.'],
+  ]
+  const wsInstr = XLSX.utils.aoa_to_sheet(instr)
+  wsInstr['!cols'] = [{ wch: 28 }, { wch: 14 }]
+
+  const wb = XLSX.utils.book_new()
+  // La hoja de datos va primera y con el nombre de la entidad (el importador
+  // la prioriza por nombre al volver a subir el archivo).
+  XLSX.utils.book_append_sheet(wb, wsDatos, def.clave)
+  XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones')
+  XLSX.writeFile(wb, `plantilla-${def.nombreArchivo}.xlsx`)
+}

@@ -58,4 +58,13 @@ export const ENTIDAD_PROVEEDORES: DefinicionEntidad = {
   permisoImport: 'configuracion',
   permisoExport: 'configuracion',
   nombreArchivo: 'proveedores',
+  ejemplos: [
+    {
+      nombre: 'Distribuidora La Rioja',
+      cuit: '30711842884',
+      telefono: '3804111222',
+      condicion_iva: 'responsable_inscripto',
+    },
+    { nombre: 'Lácteos del Valle', condicion_iva: 'monotributo' },
+  ],
 }

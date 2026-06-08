@@ -56,6 +56,8 @@ export interface DefinicionEntidad {
    * dependen de varios campos, ej. es_perecedero ⇒ dias_vencimiento).
    */
   posProcesar?: (datos: Record<string, unknown>) => void
+  /** Filas de ejemplo (keys = `campo`) para la plantilla descargable. */
+  ejemplos?: Record<string, string | number>[]
 }
 
 export interface FilaProcesadaGen {

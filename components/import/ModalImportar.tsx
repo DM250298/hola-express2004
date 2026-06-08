@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   AlertTriangle,
   CheckCircle2,
+  Download,
   FileSpreadsheet,
   Loader2,
   Upload,
@@ -26,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { leerArchivo } from '@/lib/import/motor'
+import { descargarPlantilla } from '@/lib/import/exportar'
 import { useEjecutarImport, useResumenImport } from '@/lib/hooks/useImportador'
 import type {
   DefinicionEntidad,
@@ -173,6 +175,18 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
                   </p>
                 </>
               )}
+            </div>
+
+            <div className="mt-3 flex items-center justify-center gap-1.5 text-sm">
+              <span className="text-[#6f3a2a]">¿No tenés el archivo?</span>
+              <button
+                type="button"
+                onClick={() => descargarPlantilla(def)}
+                className="inline-flex items-center gap-1 font-semibold text-[#c43e2c] hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar plantilla
+              </button>
             </div>
 
             {errorParseo && (
