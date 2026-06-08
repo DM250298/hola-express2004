@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { SlidersHorizontal } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { TabStockInventario } from './TabStockInventario'
+import { BotonesImportExport } from '@/components/import/BotonesImportExport'
+import { ENTIDAD_PRODUCTOS } from '@/lib/import/entidades'
 import { cn } from '@/lib/utils'
 
 export function PantallaInventario() {
@@ -16,16 +18,19 @@ export function PantallaInventario() {
             Vista operativa del catálogo con alertas, filtros y acciones por producto.
           </p>
         </div>
-        <Link
-          href="/inventario/control"
-          className={cn(
-            buttonVariants({ variant: 'outline', size: 'sm' }),
-            'gap-1.5 border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40'
-          )}
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          Control de stock
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <BotonesImportExport def={ENTIDAD_PRODUCTOS} />
+          <Link
+            href="/inventario/control"
+            className={cn(
+              buttonVariants({ variant: 'outline', size: 'sm' }),
+              'gap-1.5 border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40'
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Control de stock
+          </Link>
+        </div>
       </header>
 
       <TabStockInventario />

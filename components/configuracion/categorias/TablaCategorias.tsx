@@ -12,6 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
+import { BotonesImportExport } from '@/components/import/BotonesImportExport'
+import { ENTIDAD_CATEGORIAS } from '@/lib/import/entidades'
 import { DrawerCategoria } from './DrawerCategoria'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import type { CategoriaRow } from '@/types/database'
@@ -42,13 +44,16 @@ export function TablaCategorias() {
             Agrupan productos para reportes y filtros.
           </p>
         </div>
-        <Button
-          onClick={abrirNueva}
-          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva categoría
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <BotonesImportExport def={ENTIDAD_CATEGORIAS} size="default" />
+          <Button
+            onClick={abrirNueva}
+            className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva categoría
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">

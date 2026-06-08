@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   CalendarClock,
-  FileSpreadsheet,
   Package,
   Pencil,
   Plus,
@@ -33,8 +32,9 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { DrawerProducto } from './DrawerProducto'
-import { ModalImportarProductos } from './ModalImportarProductos'
 import { ModalVencimientoMinimoMasivo } from './ModalVencimientoMinimoMasivo'
+import { BotonesImportExport } from '@/components/import/BotonesImportExport'
+import { ENTIDAD_PRODUCTOS } from '@/lib/import/entidades'
 import {
   PaginadorTabla,
   paginarArreglo,
@@ -60,7 +60,6 @@ export function TablaProductos() {
   const [tipoFiltro, setTipoFiltro] = useState<string>(TODAS)
   const [unidadFiltro, setUnidadFiltro] = useState<string>(TODAS)
   const [drawerAbierto, setDrawerAbierto] = useState(false)
-  const [modalImportarAbierto, setModalImportarAbierto] = useState(false)
   const [modalVencMinAbierto, setModalVencMinAbierto] = useState(false)
   const [productoEditar, setProductoEditar] =
     useState<ProductoConRelaciones | null>(null)
@@ -159,14 +158,7 @@ export function TablaProductos() {
             <CalendarClock className="h-4 w-4" />
             Vencimiento mín.
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setModalImportarAbierto(true)}
-            className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#fdfaf6] gap-1.5"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Importar Excel
-          </Button>
+          <BotonesImportExport def={ENTIDAD_PRODUCTOS} size="default" />
           <Button
             onClick={abrirNuevo}
             className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
@@ -466,11 +458,6 @@ export function TablaProductos() {
         abierto={drawerAbierto}
         onCambioAbierto={setDrawerAbierto}
         producto={productoEditar}
-      />
-
-      <ModalImportarProductos
-        abierto={modalImportarAbierto}
-        onCambioAbierto={setModalImportarAbierto}
       />
 
       <ModalVencimientoMinimoMasivo

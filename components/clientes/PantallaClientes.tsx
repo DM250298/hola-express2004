@@ -16,6 +16,8 @@ import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalCliente } from './ModalCliente'
 import { ModalDetalleCliente } from './ModalDetalleCliente'
+import { BotonesImportExport } from '@/components/import/BotonesImportExport'
+import { ENTIDAD_CLIENTES } from '@/lib/import/entidades'
 import { useClientes } from '@/lib/hooks/useClientes'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -63,13 +65,16 @@ export function PantallaClientes() {
             Registro de clientes e historial de compras.
           </p>
         </div>
-        <Button
-          onClick={abrirNuevo}
-          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo cliente
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <BotonesImportExport def={ENTIDAD_CLIENTES} size="default" />
+          <Button
+            onClick={abrirNuevo}
+            className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo cliente
+          </Button>
+        </div>
       </header>
 
       {/* Buscador */}

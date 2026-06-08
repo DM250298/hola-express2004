@@ -10,6 +10,7 @@ import {
   getProductoDetalle,
   getProductosConStock,
   getResumenAlertasStock,
+  getUbicaciones,
   type AjusteStockPayload,
   type FiltrosInventario,
 } from '@/lib/queries/inventario'
@@ -30,6 +31,14 @@ export function useResumenAlertasStock() {
     queryKey: ALERTAS_STOCK_KEY,
     queryFn: getResumenAlertasStock,
     staleTime: 30 * 1000,
+  })
+}
+
+export function useUbicaciones() {
+  return useQuery({
+    queryKey: [...INVENTARIO_KEY, 'ubicaciones'],
+    queryFn: getUbicaciones,
+    staleTime: 60 * 1000,
   })
 }
 

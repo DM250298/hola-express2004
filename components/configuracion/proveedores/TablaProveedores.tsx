@@ -14,6 +14,8 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { DrawerProveedor } from './DrawerProveedor'
 import { ModalCatalogoProveedor } from './ModalCatalogoProveedor'
+import { BotonesImportExport } from '@/components/import/BotonesImportExport'
+import { ENTIDAD_PROVEEDORES } from '@/lib/import/entidades'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import type { ProveedorRow } from '@/types/database'
 
@@ -58,13 +60,16 @@ export function TablaProveedores() {
             Datos comerciales y plazos de entrega.
           </p>
         </div>
-        <Button
-          onClick={abrirNuevo}
-          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Nuevo proveedor
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <BotonesImportExport def={ENTIDAD_PROVEEDORES} size="default" />
+          <Button
+            onClick={abrirNuevo}
+            className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo proveedor
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">

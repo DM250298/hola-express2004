@@ -19,7 +19,7 @@ import { PanelAlertas } from './PanelAlertas'
 import { TablaStock } from './TablaStock'
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalImprimirEtiquetaPrecio } from './ModalImprimirEtiquetaPrecio'
-import { useProductosConStock } from '@/lib/hooks/useInventario'
+import { useProductosConStock, useUbicaciones } from '@/lib/hooks/useInventario'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import type {
@@ -30,6 +30,7 @@ import type {
 
 const TODAS_CAT = '__todas__'
 const TODOS_PROV = '__todos__'
+const TODAS_UBIC = '__todas_ubic__'
 type OrdenInv = NonNullable<FiltrosInventario['orden']>
 
 const ORDEN_ITEMS: Record<OrdenInv, string> = {
@@ -44,6 +45,7 @@ export function TabStockInventario() {
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>(TODAS_CAT)
   const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS_PROV)
+  const [ubicacionFiltro, setUbicacionFiltro] = useState<string>(TODAS_UBIC)
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoStock | null>(null)
   const [orden, setOrden] = useState<OrdenInv>('nombre')
   const [pagina, setPagina] = useState(0)
@@ -65,16 +67,24 @@ export function TabStockInventario() {
         categoriaFiltro === TODAS_CAT ? undefined : Number(categoriaFiltro),
       proveedor_id:
         proveedorFiltro === TODOS_PROV ? undefined : Number(proveedorFiltro),
+      ubicacion: ubicacionFiltro === TODAS_UBIC ? undefined : ubicacionFiltro,
       estado_stock: estadoFiltro,
       orden,
       solo_activos: true,
     }),
-    [busqueda, categoriaFiltro, proveedorFiltro, estadoFiltro, orden]
+    [busqueda, categoriaFiltro, proveedorFiltro, ubicacionFiltro, estadoFiltro, orden]
   )
 
   const { data: productos, isLoading, isError } = useProductosConStock(filtros)
   const { data: categorias } = useCategorias()
   const { data: proveedores } = useProveedores()
+  const { data: ubicaciones } = useUbicaciones()
+
+  const itemsUbicacion = useMemo(() => {
+    const r: Record<string, string> = { [TODAS_UBIC]: 'Todas las ubicaciones' }
+    for (const u of ubicaciones ?? []) r[u] = u
+    return r
+  }, [ubicaciones])
 
   const itemsCategoria = useMemo(() => {
     const r: Record<string, string> = { [TODAS_CAT]: 'Todas las categorías' }
@@ -101,6 +111,7 @@ export function TabStockInventario() {
     !!busqueda ||
     categoriaFiltro !== TODAS_CAT ||
     proveedorFiltro !== TODOS_PROV ||
+    ubicacionFiltro !== TODAS_UBIC ||
     estadoFiltro !== null
 
   return (
@@ -157,6 +168,26 @@ export function TabStockInventario() {
             ))}
           </SelectContent>
         </Select>
+
+        {ubicaciones && ubicaciones.length > 0 && (
+          <Select
+            items={itemsUbicacion}
+            value={ubicacionFiltro}
+            onValueChange={(v) => setUbicacionFiltro(v ?? TODAS_UBIC)}
+          >
+            <SelectTrigger className="w-[180px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+              <SelectValue placeholder="Ubicación" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODAS_UBIC}>Todas las ubicaciones</SelectItem>
+              {ubicaciones.map((u) => (
+                <SelectItem key={u} value={u}>
+                  {u}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         <Select
           items={ORDEN_ITEMS}

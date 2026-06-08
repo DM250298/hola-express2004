@@ -13,6 +13,8 @@ export interface ProductoConStock {
   id: number
   nombre: string
   codigo_barras: string | null
+  marca: string | null
+  ubicacion: string | null
   categoria_id: number | null
   proveedor_id: number | null
   precio_venta: number
@@ -34,6 +36,7 @@ export interface FiltrosInventario {
   busqueda?: string
   categoria_id?: number | null
   proveedor_id?: number | null
+  ubicacion?: string | null
   estado_stock?: EstadoStock | null
   orden?: 'nombre' | 'stock_asc' | 'stock_desc' | 'categoria'
   solo_activos?: boolean
@@ -100,6 +103,8 @@ export async function getProductosConStock(
     id: number
     nombre: string
     codigo_barras: string | null
+    marca: string | null
+    ubicacion: string | null
     categoria_id: number | null
     proveedor_id: number | null
     precio_venta: number
@@ -116,7 +121,7 @@ export async function getProductosConStock(
       let q = supabase
         .from('productos')
         .select(
-          'id, nombre, codigo_barras, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, categorias(nombre), proveedores(nombre)'
+          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, categorias(nombre), proveedores(nombre)'
         )
       if (filtros.solo_activos !== false) q = q.eq('activo', true)
       if (patron) q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
@@ -133,6 +138,8 @@ export async function getProductosConStock(
       id: p.id,
       nombre: p.nombre,
       codigo_barras: p.codigo_barras,
+      marca: p.marca,
+      ubicacion: p.ubicacion,
       categoria_id: p.categoria_id,
       proveedor_id: p.proveedor_id,
       precio_venta: p.precio_venta,
@@ -152,6 +159,9 @@ export async function getProductosConStock(
   let filtrados = productos
   if (filtros.estado_stock) {
     filtrados = productos.filter((p) => p.estado_stock === filtros.estado_stock)
+  }
+  if (filtros.ubicacion) {
+    filtrados = filtrados.filter((p) => p.ubicacion === filtros.ubicacion)
   }
 
   // Ordenamiento en memoria
@@ -174,6 +184,20 @@ export async function getProductosConStock(
   })
 
   return filtrados
+}
+
+/** Ubicaciones distintas presentes en el catálogo activo (para el filtro). */
+export async function getUbicaciones(): Promise<string[]> {
+  const supabase = createClient()
+  const filas = await traerTodo<{ ubicacion: string | null }>(() =>
+    supabase.from('productos').select('ubicacion').eq('activo', true)
+  )
+  const set = new Set<string>()
+  for (const f of filas) {
+    const u = f.ubicacion?.trim()
+    if (u) set.add(u)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'es-AR'))
 }
 
 export interface ResumenAlertasStock {

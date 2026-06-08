@@ -105,6 +105,9 @@ export function TablaStock({
                   ordenes={['categoria']}
                   onClick={() => onCambiarOrden('categoria')}
                 />
+                <TableHead className="text-[#391511] font-semibold">
+                  Ubicación
+                </TableHead>
                 <ColumnaOrdenable
                   etiqueta="Stock actual"
                   align="right"
@@ -156,15 +159,27 @@ export function TablaStock({
                         >
                           {p.nombre}
                         </Link>
-                        {p.codigo_barras && (
-                          <span className="text-[#c8a58a] text-xs font-mono mt-0.5">
-                            {p.codigo_barras}
-                          </span>
-                        )}
+                        <span className="flex items-center gap-1.5 mt-0.5">
+                          {p.marca && (
+                            <span className="text-[#6f3a2a] text-xs font-medium">
+                              {p.marca}
+                            </span>
+                          )}
+                          {p.codigo_barras && (
+                            <span className="text-[#c8a58a] text-xs font-mono">
+                              {p.codigo_barras}
+                            </span>
+                          )}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-[#6f3a2a] text-sm">
                       {p.categoria_nombre ?? (
+                        <span className="text-[#c8a58a] italic">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-[#6f3a2a] text-sm">
+                      {p.ubicacion ?? (
                         <span className="text-[#c8a58a] italic">—</span>
                       )}
                     </TableCell>

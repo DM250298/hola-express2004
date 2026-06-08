@@ -167,11 +167,15 @@ export async function getProductoByBarcode(
   codigo: string
 ): Promise<ProductoConRelaciones | null> {
   const supabase = createClient()
+  const cod = codigo.trim()
   try {
+    // Busca tanto en el código principal como en el secundario (codigo_barras_2),
+    // así un EAN de fábrica cargado como secundario también se escanea en el POS.
     const { data, error } = await supabase
       .from('productos')
       .select(SELECT_PRODUCTO)
-      .eq('codigo_barras', codigo.trim())
+      .or(`codigo_barras.eq.${cod},codigo_barras_2.eq.${cod}`)
+      .limit(1)
       .maybeSingle()
 
     if (error) throw error
@@ -209,6 +213,10 @@ export async function createProducto(
   const supabase = createClient()
   // El costo va a costos_producto (tabla gateada), no a productos.
   const { precio_costo, ...resto } = datos
+  // Sin código de barras → omitir la key para que la DB autogenere (HEX-…).
+  if (!resto.codigo_barras || resto.codigo_barras.trim() === '') {
+    delete resto.codigo_barras
+  }
   const { data, error } = await supabase
     .from('productos')
     .insert(resto)

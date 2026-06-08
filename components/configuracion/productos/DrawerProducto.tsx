@@ -50,6 +50,11 @@ const esquemaProducto = z.object({
     .max(50, 'Máximo 50 caracteres')
     .optional()
     .or(z.literal('')),
+  codigo_barras_2: z.string().trim().max(50).optional().or(z.literal('')),
+  codigo_interno: z.string().trim().max(50).optional().or(z.literal('')),
+  marca: z.string().trim().max(100).optional().or(z.literal('')),
+  subcategoria: z.string().trim().max(100).optional().or(z.literal('')),
+  ubicacion: z.string().trim().max(100).optional().or(z.literal('')),
   nombre: z
     .string()
     .trim()
@@ -137,6 +142,11 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
     resolver: zodResolver(esquemaProducto),
     defaultValues: {
       codigo_barras: '',
+      codigo_barras_2: '',
+      codigo_interno: '',
+      marca: '',
+      subcategoria: '',
+      ubicacion: '',
       nombre: '',
       categoria_id: SIN_VALOR,
       proveedor_id: SIN_VALOR,
@@ -154,6 +164,11 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
     if (!abierto) return
     reset({
       codigo_barras: producto?.codigo_barras ?? '',
+      codigo_barras_2: producto?.codigo_barras_2 ?? '',
+      codigo_interno: producto?.codigo_interno ?? '',
+      marca: producto?.marca ?? '',
+      subcategoria: producto?.subcategoria ?? '',
+      ubicacion: producto?.ubicacion ?? '',
       nombre: producto?.nombre ?? '',
       categoria_id:
         producto?.categoria_id != null
@@ -235,10 +250,14 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
         monto: r2(Number(a.monto) || 0),
       }))
 
+    const limpiar = (v: string | undefined) => (v?.trim() ? v.trim() : null)
     const payload = {
-      codigo_barras: validado.codigo_barras?.trim()
-        ? validado.codigo_barras
-        : null,
+      codigo_barras: limpiar(validado.codigo_barras),
+      codigo_barras_2: limpiar(validado.codigo_barras_2),
+      codigo_interno: limpiar(validado.codigo_interno),
+      marca: limpiar(validado.marca),
+      subcategoria: limpiar(validado.subcategoria),
+      ubicacion: limpiar(validado.ubicacion),
       nombre: validado.nombre,
       categoria_id: validado.categoria_id,
       proveedor_id: validado.proveedor_id,
@@ -411,6 +430,76 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
                   </Select>
                 )}
               />
+            </div>
+          </div>
+
+          {/* ── Datos de catálogo ── */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-3">
+            <h3 className="text-[#391511] font-bold text-sm">Datos de catálogo</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="marca" className="text-[#391511] font-medium">
+                  Marca
+                </Label>
+                <Input
+                  id="marca"
+                  {...register('marca')}
+                  placeholder="Ej: Coca-Cola"
+                  disabled={guardando}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ubicacion" className="text-[#391511] font-medium">
+                  Ubicación
+                </Label>
+                <Input
+                  id="ubicacion"
+                  {...register('ubicacion')}
+                  placeholder="Ej: Góndola 3 / Heladera 2"
+                  disabled={guardando}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="subcategoria" className="text-[#391511] font-medium">
+                  Subcategoría
+                </Label>
+                <Input
+                  id="subcategoria"
+                  {...register('subcategoria')}
+                  placeholder="Opcional"
+                  disabled={guardando}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="codigo_interno" className="text-[#391511] font-medium">
+                  Código interno
+                </Label>
+                <Input
+                  id="codigo_interno"
+                  {...register('codigo_interno')}
+                  placeholder="Opcional"
+                  disabled={guardando}
+                  className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="codigo_barras_2" className="text-[#391511] font-medium">
+                  Código de barras secundario
+                </Label>
+                <Input
+                  id="codigo_barras_2"
+                  {...register('codigo_barras_2')}
+                  placeholder="EAN del fabricante, si difiere del código principal"
+                  disabled={guardando}
+                  className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+                <p className="text-[11px] text-[#c8a58a]">
+                  También se reconoce al escanear en el POS.
+                </p>
+              </div>
             </div>
           </div>
 

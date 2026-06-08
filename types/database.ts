@@ -511,13 +511,18 @@ export type CostoAdicional = {
 export type ProductoRow = {
   id: number
   codigo_barras: string | null
+  codigo_barras_2: string | null
+  codigo_interno: string | null
   nombre: string
+  marca: string | null
   categoria_id: number | null
+  subcategoria: string | null
   proveedor_id: number | null
   precio_venta: number
   precio_costo: number
   stock_actual: number
   stock_minimo: number
+  ubicacion: string | null
   activo: boolean
   tipo: string
   unidad: string
@@ -534,14 +539,19 @@ export type ProductoRow = {
 export type ProductoInsert = {
   id?: number
   codigo_barras?: string | null
+  codigo_barras_2?: string | null
+  codigo_interno?: string | null
   nombre: string
+  marca?: string | null
   categoria_id?: number | null
+  subcategoria?: string | null
   proveedor_id?: number | null
   precio_venta: number
   /** El costo se guarda en costos_producto (tabla gateada), no en productos. */
   precio_costo?: number
   stock_actual?: number
   stock_minimo?: number
+  ubicacion?: string | null
   activo?: boolean
   tipo?: string
   unidad?: string
@@ -557,13 +567,18 @@ export type ProductoInsert = {
 
 export type ProductoUpdate = {
   codigo_barras?: string | null
+  codigo_barras_2?: string | null
+  codigo_interno?: string | null
   nombre?: string
+  marca?: string | null
   categoria_id?: number | null
+  subcategoria?: string | null
   proveedor_id?: number | null
   precio_venta?: number
   precio_costo?: number
   stock_actual?: number
   stock_minimo?: number
+  ubicacion?: string | null
   activo?: boolean
   tipo?: string
   unidad?: string
@@ -2791,6 +2806,22 @@ export interface Database {
           p_usuario_id: string
         }
         Returns: ActivoFijoRow
+      }
+      fn_importar_productos: {
+        Args: { p_filas: Json }
+        Returns: Json
+      }
+      fn_importar_clientes: {
+        Args: { p_filas: Json }
+        Returns: Json
+      }
+      fn_importar_categorias: {
+        Args: { p_filas: Json }
+        Returns: Json
+      }
+      fn_importar_proveedores: {
+        Args: { p_filas: Json }
+        Returns: Json
       }
     }
     Enums: {

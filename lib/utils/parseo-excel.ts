@@ -66,6 +66,79 @@ export function parsearTextoOpcional(valor: unknown): string | null {
   return s
 }
 
+/**
+ * Interpreta un valor como booleano tolerante al castellano y a planillas:
+ * "sí", "si", "x", "true", "verdadero", "1", "kg" → true.
+ * vacío, "no", "false", "0", "-" → false.
+ */
+export function parsearBooleano(valor: unknown): boolean {
+  if (valor === null || valor === undefined || valor === '') return false
+  if (typeof valor === 'boolean') return valor
+  if (typeof valor === 'number') return valor !== 0
+  const s = String(valor).trim().toLowerCase()
+  return ['sí', 'si', 'x', 'true', 'verdadero', '1', 'kg', 'peso'].includes(s)
+}
+
+/** Entero opcional ≥ 0 ("20 días" → 20, vacío/"-" → null). */
+export function parsearEnteroOpcional(valor: unknown): number | null {
+  if (valor === null || valor === undefined || valor === '') return null
+  if (typeof valor === 'number') {
+    return Number.isFinite(valor) ? Math.max(0, Math.trunc(valor)) : null
+  }
+  const s = String(valor).trim()
+  if (!s || s === '-') return null
+  const match = s.match(RE_NUMERO)
+  if (!match) return null
+  return Math.max(0, Math.trunc(parsearPrecio(match[0])))
+}
+
+/**
+ * Normaliza una alícuota de IVA a porcentaje.
+ * - Fracción ≤ 1 ("0.21", "0,21") → 21
+ * - Porcentaje ("21", "21%") → 21
+ * - vacío / inválido → 21 (default RI)
+ */
+export function parsearIva(valor: unknown): number {
+  if (valor === null || valor === undefined || valor === '') return 21
+  const n = parsearPrecio(valor)
+  if (!Number.isFinite(n) || n <= 0) return 21
+  return n <= 1 ? Math.round(n * 100) : Math.round(n)
+}
+
+/**
+ * Normaliza un documento (CUIT/DNI): deja solo dígitos.
+ * "20-12.345.678-9" → "20123456789". vacío/"-" → null.
+ */
+export function parsearDocumento(valor: unknown): string | null {
+  if (valor === null || valor === undefined || valor === '') return null
+  if (typeof valor === 'number') return String(Math.trunc(valor))
+  const soloDigitos = String(valor).replace(/\D/g, '')
+  return soloDigitos.length > 0 ? soloDigitos : null
+}
+
+/**
+ * Convierte una fecha de planilla a ISO "yyyy-MM-dd".
+ * Acepta Date (cellDates de SheetJS), "dd/mm/aaaa", "aaaa-mm-dd". vacío → null.
+ */
+export function parsearFecha(valor: unknown): string | null {
+  if (valor === null || valor === undefined || valor === '') return null
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    return valor.toISOString().slice(0, 10)
+  }
+  const s = String(valor).trim()
+  if (!s || s === '-') return null
+  // dd/mm/aaaa o dd-mm-aaaa
+  const m = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})$/)
+  if (m) {
+    const [, d, mes, a] = m
+    const anio = a.length === 2 ? `20${a}` : a
+    return `${anio}-${mes.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+  // aaaa-mm-dd ya viene bien
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10)
+  return null
+}
+
 // ─── Tipos del flujo de importación ─────────────────────────────────
 
 export interface FilaExcel {
@@ -74,28 +147,45 @@ export interface FilaExcel {
   precio_costo: number
   precio_venta: number
   stock_actual: number
+  stock_minimo: number
   tipo: string | null
   unidad: string | null
   categoria: string | null
   codigo_barras: string | null
   proveedor: string | null
+  venta_por_peso: boolean
+  dias_vencimiento_minimo: number | null
 }
+
+/** Stock mínimo por defecto cuando la columna está ausente o vacía. */
+export const STOCK_MINIMO_DEFAULT = 5
 
 export interface FilaProcesada extends FilaExcel {
   errores: string[]
   saltada: boolean // reservado para futuras reglas; los combos ya se importan
 }
 
+// El orden importa: detectarColumnas evalúa campo por campo y findIndex toma
+// el PRIMER header que matchee. Para evitar que "Stock mínimo" caiga en
+// stock_actual o "Venta por peso" en precio_venta, los patrones son
+// específicos y en la plantilla "Precio venta" siempre va antes que el resto.
 const HEADERS_ESPERADOS: Record<keyof Omit<FilaExcel, 'fila_origen'>, RegExp[]> = {
   producto: [/^producto/i, /^nombre/i],
   precio_costo: [/precio.*costo/i, /^costo/i],
-  precio_venta: [/precio.*venta/i, /^venta/i, /^precio$/i],
+  precio_venta: [/precio.*venta/i, /^venta$/i, /^precio$/i],
   stock_actual: [/stock.*actual/i, /^stock$/i, /existencia/i],
+  stock_minimo: [/stock.*m[ií]nimo/i, /stock.*min/i, /^m[ií]nimo$/i],
   tipo: [/tipo.*producto/i, /^tipo$/i],
   unidad: [/^unidad$/i, /^unidades$/i, /medida/i],
   categoria: [/categor[ií]a/i],
   codigo_barras: [/^c[oó]digo$/i, /c[oó]digo.*barras/i, /barcode/i],
   proveedor: [/proveedor/i, /c[oó]digo.*secundario/i],
+  venta_por_peso: [/venta.*peso/i, /por.*peso/i, /pesable/i, /vende.*peso/i],
+  dias_vencimiento_minimo: [
+    /vencimiento.*m[ií]nimo/i,
+    /venc.*min/i,
+    /d[ií]as.*vencimiento/i,
+  ],
 }
 
 /**
@@ -153,6 +243,15 @@ export function procesarFilas(
     const precio_venta = parsearPrecio(fila[mapeo.precio_venta])
     const precio_costo = parsearPrecio(fila[mapeo.precio_costo])
     const stock_actual = parsearStock(fila[mapeo.stock_actual])
+
+    // Stock mínimo: si la columna falta o la celda está vacía, usar el default.
+    // Un 0 explícito sí se respeta (producto que no se repone).
+    const rawMin = mapeo.stock_minimo >= 0 ? fila[mapeo.stock_minimo] : undefined
+    const stock_minimo =
+      rawMin === undefined || rawMin === null || String(rawMin).trim() === ''
+        ? STOCK_MINIMO_DEFAULT
+        : parsearStock(rawMin)
+
     const tipo = normalizarTipo(parsearTextoOpcional(fila[mapeo.tipo]))
     const unidad =
       mapeo.unidad >= 0
@@ -161,6 +260,14 @@ export function procesarFilas(
     const categoria = parsearTextoOpcional(fila[mapeo.categoria])
     const codigo_barras = parsearCodigoBarras(fila[mapeo.codigo_barras])
     const proveedor = parsearTextoOpcional(fila[mapeo.proveedor])
+    const venta_por_peso =
+      mapeo.venta_por_peso >= 0
+        ? parsearBooleano(fila[mapeo.venta_por_peso])
+        : false
+    const dias_vencimiento_minimo =
+      mapeo.dias_vencimiento_minimo >= 0
+        ? parsearEnteroOpcional(fila[mapeo.dias_vencimiento_minimo])
+        : null
 
     if (precio_venta <= 0) errores.push('Precio de venta inválido')
     if (precio_costo < 0) errores.push('Precio de costo negativo')
@@ -173,11 +280,14 @@ export function procesarFilas(
       precio_costo,
       precio_venta,
       stock_actual,
+      stock_minimo,
       tipo,
       unidad,
       categoria,
       codigo_barras,
       proveedor,
+      venta_por_peso,
+      dias_vencimiento_minimo,
       errores,
       saltada,
     })
