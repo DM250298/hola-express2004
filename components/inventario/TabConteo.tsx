@@ -36,8 +36,12 @@ export function TabConteo() {
   const { data: conteos, isLoading } = useConteos()
   const [modalNuevo, setModalNuevo] = useState(false)
   const [conteoAbierto, setConteoAbierto] = useState<number | null>(null)
+  const [filtroEstado, setFiltroEstado] = useState<EstadoConteo | 'todos'>('todos')
 
   const esAdmin = tienePermiso(usuario?.permisos, 'conteo_gestion')
+  const conteosFiltrados = (conteos ?? []).filter(
+    (c) => filtroEstado === 'todos' || c.estado === filtroEstado
+  )
 
   return (
     <div className="space-y-5">
@@ -61,6 +65,33 @@ export function TabConteo() {
         )}
       </div>
 
+      {conteos && conteos.length > 0 && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {(
+            [
+              ['todos', 'Todos'],
+              ['pendiente', 'Pendientes'],
+              ['contado', 'Por aprobar'],
+              ['aprobado', 'Aprobados'],
+            ] as const
+          ).map(([valor, etiqueta]) => (
+            <button
+              key={valor}
+              type="button"
+              onClick={() => setFiltroEstado(valor)}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-bold transition-all border',
+                filtroEstado === valor
+                  ? 'bg-[#391511] text-white border-[#391511]'
+                  : 'bg-white text-[#6f3a2a] border-[#e4c9b0] hover:bg-[#fdfaf6]'
+              )}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
@@ -79,9 +110,16 @@ export function TabConteo() {
               : 'Cuando te asignen un conteo va a aparecer acá.'}
           </p>
         </div>
+      ) : conteosFiltrados.length === 0 ? (
+        <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-10 text-center">
+          <ClipboardList className="h-6 w-6 text-[#c8a58a] mx-auto mb-2" />
+          <p className="text-[#6f3a2a] text-sm">
+            No hay conteos en este estado.
+          </p>
+        </div>
       ) : (
         <ul className="space-y-2">
-          {conteos.map((c) => {
+          {conteosFiltrados.map((c) => {
             const info = ESTADO_INFO[c.estado]
             const esAsignado = usuario?.id === c.usuario_asignado
             const puedeContar = c.estado === 'pendiente' && esAsignado

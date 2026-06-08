@@ -1,8 +1,16 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { CalendarCheck, CalendarPlus, CheckCircle2, Database } from 'lucide-react'
+import {
+  CalendarCheck,
+  CalendarPlus,
+  CheckCircle2,
+  Database,
+  Search,
+  XOctagon,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ResumenVencimientos } from './ResumenVencimientos'
@@ -18,18 +26,27 @@ export function PantallaVencimientos() {
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false)
   const [modalSincAbierto, setModalSincAbierto] = useState(false)
   const [loteBaja, setLoteBaja] = useState<LoteConProducto | null>(null)
+  const [busqueda, setBusqueda] = useState('')
 
   const agrupados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    const vencidos: LoteConProducto[] = []
     const proximos: LoteConProducto[] = []
     const atencion: LoteConProducto[] = []
     const ok: LoteConProducto[] = []
     for (const l of lotes ?? []) {
-      if (l.clase === 'vencido' || l.clase === 'rojo') proximos.push(l)
+      if (q) {
+        const nombre = l.producto.nombre.toLowerCase()
+        const cod = (l.producto.codigo_barras ?? '').toLowerCase()
+        if (!nombre.includes(q) && !cod.includes(q)) continue
+      }
+      if (l.clase === 'vencido') vencidos.push(l)
+      else if (l.clase === 'rojo') proximos.push(l)
       else if (l.clase === 'amarillo') atencion.push(l)
       else ok.push(l)
     }
-    return { proximos, atencion, ok }
-  }, [lotes])
+    return { vencidos, proximos, atencion, ok }
+  }, [lotes, busqueda])
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -65,9 +82,32 @@ export function PantallaVencimientos() {
 
       <ResumenVencimientos />
 
+      {/* Buscador */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
+        <Input
+          placeholder="Buscar por nombre o código…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
+        />
+      </div>
+
       {/* Tabs */}
       <Tabs defaultValue="proximos" className="space-y-4">
-        <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto">
+        <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
+          <TabsTrigger
+            value="vencidos"
+            className="gap-1.5 data-[state=active]:bg-[#391511]/10 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+          >
+            <XOctagon className="h-3.5 w-3.5 text-[#391511]" />
+            Vencidos
+            {agrupados.vencidos.length > 0 && (
+              <span className="ml-1 text-[10px] font-bold bg-[#391511]/15 text-[#391511] rounded-full px-1.5 py-0.5 tabular-nums">
+                {agrupados.vencidos.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger
             value="proximos"
             className="gap-1.5 data-[state=active]:bg-[#c43e2c]/10 data-[state=active]:text-[#c43e2c] data-[state=active]:shadow-sm"
@@ -121,6 +161,19 @@ export function PantallaVencimientos() {
           </div>
         ) : (
           <>
+            <TabsContent value="vencidos">
+              <GridLotes
+                lotes={agrupados.vencidos}
+                vacio={
+                  <Vacio
+                    icono={CheckCircle2}
+                    titulo="Nada vencido"
+                    descripcion="No hay lotes con fecha de vencimiento pasada."
+                  />
+                }
+                onDarDeBaja={setLoteBaja}
+              />
+            </TabsContent>
             <TabsContent value="proximos">
               <GridLotes
                 lotes={agrupados.proximos}

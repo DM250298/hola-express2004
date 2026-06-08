@@ -15,13 +15,16 @@ import {
   paginarArreglo,
   type PorPagina,
 } from '@/components/shared/PaginadorTabla'
-import { PanelAlertas } from './PanelAlertas'
+import { PanelPendientes } from './PanelPendientes'
 import { TablaStock } from './TablaStock'
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalImprimirEtiquetaPrecio } from './ModalImprimirEtiquetaPrecio'
 import { useProductosConStock, useUbicaciones } from '@/lib/hooks/useInventario'
+import { useProductosConLotesPorVencer } from '@/lib/hooks/useVencimientos'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import type {
   EstadoStock,
   FiltrosInventario,
@@ -79,6 +82,14 @@ export function TabStockInventario() {
   const { data: categorias } = useCategorias()
   const { data: proveedores } = useProveedores()
   const { data: ubicaciones } = useUbicaciones()
+  const { data: usuario } = useUsuario()
+  const { data: idsPorVencerArr } = useProductosConLotesPorVencer(
+    tienePermiso(usuario?.permisos, 'vencimientos')
+  )
+  const idsPorVencer = useMemo(
+    () => new Set(idsPorVencerArr ?? []),
+    [idsPorVencerArr]
+  )
 
   const itemsUbicacion = useMemo(() => {
     const r: Record<string, string> = { [TODAS_UBIC]: 'Todas las ubicaciones' }
@@ -116,7 +127,7 @@ export function TabStockInventario() {
 
   return (
     <div className="space-y-5">
-      <PanelAlertas
+      <PanelPendientes
         estadoFiltro={estadoFiltro}
         onCambiarFiltro={setEstadoFiltro}
       />
@@ -225,6 +236,7 @@ export function TabStockInventario() {
         onAjustar={setProductoAjustar}
         onImprimirEtiqueta={setProductoEtiqueta}
         hayFiltros={hayFiltros}
+        idsPorVencer={idsPorVencer}
       />
 
       {productos && productos.length > 0 && (
@@ -254,6 +266,7 @@ export function TabStockInventario() {
       <ModalImprimirEtiquetaPrecio
         abierto={productoEtiqueta !== null}
         onCambioAbierto={(v) => !v && setProductoEtiqueta(null)}
+        productoId={productoEtiqueta?.id ?? null}
         producto={
           productoEtiqueta
             ? {

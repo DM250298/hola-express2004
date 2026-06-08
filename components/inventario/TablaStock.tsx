@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowUpDown, Package, Pencil, Eye, Tag } from 'lucide-react'
+import { ArrowUpDown, CalendarClock, Package, Pencil, Eye, Tag } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Table,
@@ -52,6 +52,8 @@ interface Props {
   onAjustar: (producto: ProductoConStock) => void
   onImprimirEtiqueta: (producto: ProductoConStock) => void
   hayFiltros: boolean
+  /** IDs de productos con lotes por vencer (<7 días), para marcar la fila. */
+  idsPorVencer?: Set<number>
 }
 
 export function TablaStock({
@@ -63,6 +65,7 @@ export function TablaStock({
   onAjustar,
   onImprimirEtiqueta,
   hayFiltros,
+  idsPorVencer,
 }: Props) {
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
@@ -121,9 +124,9 @@ export function TablaStock({
                 />
                 <TableHead className="text-[#391511] font-semibold">
                   <span className="inline-flex flex-col">
-                    Cobertura
+                    Días de stock
                     <span className="text-[10px] font-normal text-[#c8a58a]">
-                      14d
+                      te dura · 14d
                     </span>
                   </span>
                 </TableHead>
@@ -168,6 +171,15 @@ export function TablaStock({
                           {p.codigo_barras && (
                             <span className="text-[#c8a58a] text-xs font-mono">
                               {p.codigo_barras}
+                            </span>
+                          )}
+                          {idsPorVencer?.has(p.id) && (
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded-full bg-[#c43e2c]/10 text-[#c43e2c] text-[10px] font-semibold px-1.5 py-0.5"
+                              title="Tiene mercadería por vencer"
+                            >
+                              <CalendarClock className="h-3 w-3" />
+                              por vencer
                             </span>
                           )}
                         </span>

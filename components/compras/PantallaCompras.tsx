@@ -29,7 +29,12 @@ const TABS: TabDef[] = [
   { value: 'costos', etiqueta: 'Costos', icono: TrendingUp, permiso: 'compras' },
 ]
 
-export function PantallaCompras() {
+interface Props {
+  /** Tab inicial (viene de ?tab= en la URL, ej. desde "Ir a comprar"). */
+  tabInicial?: string
+}
+
+export function PantallaCompras({ tabInicial }: Props) {
   const { data: usuario } = useUsuario()
   const permisos = usuario?.permisos ?? []
 
@@ -41,7 +46,11 @@ export function PantallaCompras() {
       : TABS.filter((t) => permisos.includes(t.permiso))
 
   const tabsAMostrar = tabsVisibles.length > 0 ? tabsVisibles : TABS
-  const [tab, setTab] = useState(tabsAMostrar[0]?.value ?? 'recepcion')
+  const [tab, setTab] = useState(() =>
+    tabInicial && TABS.some((t) => t.value === tabInicial)
+      ? tabInicial
+      : tabsAMostrar[0]?.value ?? 'recepcion'
+  )
 
   // Si el tab activo dejó de estar disponible, saltar al primero visible.
   const tabActivo = tabsAMostrar.some((t) => t.value === tab)

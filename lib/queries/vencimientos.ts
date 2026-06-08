@@ -121,6 +121,19 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
   }
 }
 
+/**
+ * IDs de productos que tienen al menos un lote por vencer o vencido (< 7 días).
+ * Se usa para marcar esas filas en la tabla de Stock.
+ */
+export async function getProductosConLotesPorVencer(): Promise<number[]> {
+  const lotes = await getLotesActivos()
+  const set = new Set<number>()
+  for (const l of lotes) {
+    if (l.dias_restantes < 7) set.add(l.producto.id)
+  }
+  return [...set]
+}
+
 export interface NuevoLotePayload {
   producto_id: number
   fecha_vencimiento: string // ISO yyyy-MM-dd

@@ -18,7 +18,12 @@ const OPCIONES_PERIODO: { dias: number; etiqueta: string }[] = [
   { dias: 90, etiqueta: '90 días' },
 ]
 
-export function PantallaABC() {
+interface Props {
+  /** True cuando se renderiza dentro de una pestaña (oculta breadcrumb y título). */
+  embebido?: boolean
+}
+
+export function PantallaABC({ embebido = false }: Props) {
   const [dias, setDias] = useState(30)
   const queryClient = useQueryClient()
   const { data, isLoading, isError, isFetching } = useClasificacionABC(dias)
@@ -31,23 +36,29 @@ export function PantallaABC() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/inventario"
-            className="p-2 rounded-xl hover:bg-[#f9d2a2]/40 text-[#6f3a2a] transition-colors"
-            title="Volver al inventario"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="text-[#391511] text-2xl font-extrabold tracking-tight">
-              Clasificación ABC
-            </h1>
-            <p className="text-[#6f3a2a] text-sm">
-              Análisis de Pareto por ingreso de ventas
-            </p>
+        {embebido ? (
+          <p className="text-[#6f3a2a] text-sm">
+            Tus productos ordenados por lo que más venden (últimos {dias} días).
+          </p>
+        ) : (
+          <div className="flex items-center gap-3">
+            <Link
+              href="/inventario"
+              className="p-2 rounded-xl hover:bg-[#f9d2a2]/40 text-[#6f3a2a] transition-colors"
+              title="Volver al inventario"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <div>
+              <h1 className="text-[#391511] text-2xl font-extrabold tracking-tight">
+                Ranking de ventas
+              </h1>
+              <p className="text-[#6f3a2a] text-sm">
+                Qué productos te dejan más plata (análisis ABC por ingresos)
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Selector de período */}

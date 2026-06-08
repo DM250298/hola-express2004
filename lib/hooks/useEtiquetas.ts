@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   getEtiquetasPendientes,
+  marcarColocadaPorProducto,
   quitarEtiquetaPendiente,
 } from '@/lib/queries/etiquetas'
 
@@ -27,6 +28,20 @@ export function useQuitarEtiqueta() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo actualizar: ${error.message}`)
+    },
+  })
+}
+
+/**
+ * Sincroniza la cola al imprimir desde Stock/Detalle: si el producto tenía una
+ * etiqueta pendiente, se quita. Silencioso (sin toast) — es un efecto del print.
+ */
+export function useMarcarEtiquetaColocadaPorProducto() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (productoId: number) => marcarColocadaPorProducto(productoId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ETIQUETAS_PENDIENTES_KEY })
     },
   })
 }

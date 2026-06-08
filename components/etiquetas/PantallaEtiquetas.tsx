@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
-import { ArrowRight, Check, Loader2, Printer, Tag } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ArrowRight, Check, Loader2, Printer, Search, Tag } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalImprimirEtiquetaPrecio } from '@/components/inventario/ModalImprimirEtiquetaPrecio'
@@ -18,6 +19,18 @@ export function PantallaEtiquetas() {
   const quitar = useQuitarEtiqueta()
   const [productoImprimir, setProductoImprimir] =
     useState<DatosEtiquetaPrecio | null>(null)
+  const [idImprimir, setIdImprimir] = useState<number | null>(null)
+  const [busqueda, setBusqueda] = useState('')
+
+  const filtradas = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return etiquetas ?? []
+    return (etiquetas ?? []).filter(
+      (e) =>
+        e.producto_nombre.toLowerCase().includes(q) ||
+        (e.codigo_barras ?? '').toLowerCase().includes(q)
+    )
+  }, [etiquetas, busqueda])
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
@@ -54,14 +67,25 @@ export function PantallaEtiquetas() {
         </div>
       ) : (
         <>
-          <p className="text-sm text-[#6f3a2a]">
-            <span className="font-bold text-[#391511]">
-              {etiquetas.length}
-            </span>{' '}
-            etiqueta(s) pendiente(s) de colocar
-          </p>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm text-[#6f3a2a]">
+              <span className="font-bold text-[#391511]">
+                {etiquetas.length}
+              </span>{' '}
+              etiqueta(s) pendiente(s) de colocar
+            </p>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
+              <Input
+                placeholder="Buscar por nombre o código…"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
+              />
+            </div>
+          </div>
           <ul className="space-y-2">
-            {etiquetas.map((e) => (
+            {filtradas.map((e) => (
               <li
                 key={e.id}
                 className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-4 flex items-center gap-3 flex-wrap"
@@ -98,13 +122,14 @@ export function PantallaEtiquetas() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
+                  onClick={() => {
                     setProductoImprimir({
                       nombre: e.producto_nombre,
                       codigo_barras: e.codigo_barras,
                       precio_venta: e.precio,
                     })
-                  }
+                    setIdImprimir(e.producto_id)
+                  }}
                   className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
                 >
                   <Printer className="h-3.5 w-3.5" />
@@ -131,7 +156,13 @@ export function PantallaEtiquetas() {
 
       <ModalImprimirEtiquetaPrecio
         abierto={productoImprimir !== null}
-        onCambioAbierto={(v) => !v && setProductoImprimir(null)}
+        onCambioAbierto={(v) => {
+          if (!v) {
+            setProductoImprimir(null)
+            setIdImprimir(null)
+          }
+        }}
+        productoId={idImprimir}
         producto={productoImprimir}
       />
     </div>

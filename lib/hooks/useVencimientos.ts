@@ -6,6 +6,7 @@ import {
   crearLote,
   darDeBajaLote,
   getLotesActivos,
+  getProductosConLotesPorVencer,
   getResumenVencimientos,
   obtenerPlanSincronizacionStock,
   sincronizarStockConLotes,
@@ -15,6 +16,16 @@ import {
 
 export const LOTES_KEY = ['lotes-activos'] as const
 export const RESUMEN_VENC_KEY = ['resumen-vencimientos'] as const
+export const PRODUCTOS_POR_VENCER_KEY = ['productos-por-vencer'] as const
+
+export function useProductosConLotesPorVencer(habilitado = true) {
+  return useQuery({
+    queryKey: PRODUCTOS_POR_VENCER_KEY,
+    queryFn: getProductosConLotesPorVencer,
+    enabled: habilitado,
+    staleTime: 60 * 1000,
+  })
+}
 
 export function useLotesActivos() {
   return useQuery({

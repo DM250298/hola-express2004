@@ -53,9 +53,9 @@ const RAZON_ITEMS: Record<string, string> = Object.fromEntries(
   RAZONES_AJUSTE.map((r) => [r.valor, r.etiqueta])
 )
 const TIPO_ITEMS: Record<TipoAjuste, string> = {
-  entrada: 'Entrada (+)',
-  salida: 'Salida (−)',
-  ajuste: 'Fijar stock',
+  entrada: 'Sumar (+)',
+  salida: 'Restar (−)',
+  ajuste: 'Establecer a',
 }
 
 function uid() {
@@ -353,11 +353,11 @@ export function TabAjustes() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="entrada">
-                                Entrada (+)
+                                Sumar (+)
                               </SelectItem>
-                              <SelectItem value="salida">Salida (−)</SelectItem>
+                              <SelectItem value="salida">Restar (−)</SelectItem>
                               <SelectItem value="ajuste">
-                                Fijar stock
+                                Establecer a
                               </SelectItem>
                             </SelectContent>
                           </Select>

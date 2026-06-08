@@ -75,6 +75,24 @@ export function FiltrosMovimientosBar({
     onChange({ ...filtros, tipos: nuevos.length > 0 ? nuevos : undefined })
   }
 
+  function isoLocal(d: Date) {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
+  function presetFecha(dias: number) {
+    const hasta = new Date()
+    const desde = new Date()
+    desde.setDate(desde.getDate() - (dias - 1))
+    onChange({
+      ...filtros,
+      fecha_desde: isoLocal(desde),
+      fecha_hasta: isoLocal(hasta),
+    })
+  }
+
   const hayFiltrosActivos =
     !!filtros.busqueda ||
     (filtros.tipos && filtros.tipos.length > 0) ||
@@ -124,6 +142,31 @@ export function FiltrosMovimientosBar({
 
       {/* Fila 2: turno, usuario, categoría, fechas */}
       <div className="flex flex-wrap items-end gap-3">
+        {/* Períodos rápidos */}
+        <div className="space-y-1">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-[#6f3a2a]">
+            Período rápido
+          </label>
+          <div className="flex items-center gap-1">
+            {(
+              [
+                ['Hoy', 1],
+                ['7 días', 7],
+                ['30 días', 30],
+              ] as const
+            ).map(([etiqueta, dias]) => (
+              <button
+                key={dias}
+                type="button"
+                onClick={() => presetFecha(dias)}
+                className="px-2.5 h-9 rounded-lg text-xs font-bold border border-[#e4c9b0] bg-white text-[#6f3a2a] hover:bg-[#fdfaf6] transition-all"
+              >
+                {etiqueta}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Turno */}
         <div className="space-y-1 min-w-[130px]">
           <label className="text-[10px] font-bold uppercase tracking-wider text-[#6f3a2a]">

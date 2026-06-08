@@ -1,9 +1,7 @@
-import { PantallaABC } from '@/components/inventario/clasificacion-abc/PantallaABC'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Clasificación ABC — ¡Hola! Express',
-}
-
-export default function PaginaClasificacionABC() {
-  return <PantallaABC />
+// La Clasificación ABC ahora vive como pestaña "Ranking de ventas" dentro de
+// Stock. Se mantiene la ruta vieja con redirect para no romper bookmarks.
+export default function PaginaClasificacionAbcLegacy() {
+  redirect('/inventario?tab=ranking')
 }
