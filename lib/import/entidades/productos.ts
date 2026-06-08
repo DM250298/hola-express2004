@@ -1,8 +1,8 @@
 // Definición de la entidad "Productos" para el motor de importación.
-// Las columnas están ORDENADAS de más específica a más genérica para que la
-// detección por encabezado (que toma el primer header libre que matchea) no
-// confunda, p. ej., "codigo_barras_2" con "codigo_barras", o "subcategoria"
-// con "categoria".
+// El array `columnas` está ORDENADO de más específico a más genérico para que
+// la detección por encabezado no confunda (ej. "codigo_barras_2" con
+// "codigo_barras"). El campo `orden` define la presentación en la plantilla/
+// export (obligatorios primero), independiente del orden de detección.
 
 import {
   parsearBooleano,
@@ -10,7 +10,6 @@ import {
   parsearEnteroOpcional,
   parsearIva,
   parsearPrecio,
-  parsearStock,
   parsearTextoOpcional,
 } from '@/lib/utils/parseo-excel'
 import type { ColumnaDef, DefinicionEntidad } from '../tipos'
@@ -39,24 +38,30 @@ function boolTriestado(valor: unknown): boolean | null {
 }
 
 const columnas: ColumnaDef[] = [
-  // ── Identificadores (específicos primero) ──
+  // ── Identificadores (específicos primero para la DETECCIÓN) ──
   {
     campo: 'codigo_barras_2',
     etiqueta: 'codigo_barras_2',
     aliases: [/c[oó]digo.*barras.*2/i, /barras.*2/i, /c[oó]digo.*secundario/i],
     parser: parsearCodigoBarras,
+    orden: 18,
+    ayuda: 'Código de barras adicional (ej. EAN de fábrica). Se reconoce al escanear en el POS. Opcional.',
   },
   {
     campo: 'codigo_interno',
     etiqueta: 'Codigo Interno',
     aliases: [/c[oó]digo.*interno/i],
     parser: parsearTextoOpcional,
+    orden: 19,
+    ayuda: 'Código interno propio del negocio. Opcional.',
   },
   {
     campo: 'codigo_proveedor',
     etiqueta: 'codigo_proveedor',
     aliases: [/c[oó]digo.*proveedor/i],
     parser: parsearTextoOpcional,
+    orden: 10,
+    ayuda: 'Código del producto en el catálogo del proveedor. Opcional.',
   },
   {
     // SKU = código de barras (clave de identidad). Vacío → autogenera el RPC.
@@ -70,6 +75,8 @@ const columnas: ColumnaDef[] = [
       /^c[oó]digo$/i,
     ],
     parser: parsearCodigoBarras,
+    orden: 1,
+    ayuda: 'Código único del producto (SKU o código de barras). Si lo dejás VACÍO, el sistema genera uno automático (HEX-000001…).',
   },
   // ── Texto descriptivo ──
   {
@@ -77,18 +84,24 @@ const columnas: ColumnaDef[] = [
     etiqueta: 'subcategoria',
     aliases: [/subcategor[ií]a/i],
     parser: parsearTextoOpcional,
+    orden: 7,
+    ayuda: 'Sub-rubro (texto libre). Opcional.',
   },
   {
     campo: 'categoria',
     etiqueta: 'categoria',
     aliases: [/^categor[ií]a/i],
     parser: parsearTextoOpcional,
+    orden: 6,
+    ayuda: 'Rubro del producto. Si no existe, se crea automáticamente.',
   },
   {
     campo: 'marca',
     etiqueta: 'marca',
     aliases: [/^marca$/i],
     parser: parsearTextoOpcional,
+    orden: 8,
+    ayuda: 'Marca del producto. Opcional.',
   },
   {
     campo: 'nombre',
@@ -96,18 +109,24 @@ const columnas: ColumnaDef[] = [
     aliases: [/^nombre/i, /^producto/i, /descripci[oó]n/i],
     parser: parsearTextoOpcional,
     requerida: true,
+    orden: 2,
+    ayuda: 'OBLIGATORIO. Nombre del producto como se ve en el punto de venta.',
   },
   {
     campo: 'proveedor',
     etiqueta: 'proveedor',
     aliases: [/^proveedor/i],
     parser: parsearTextoOpcional,
+    orden: 9,
+    ayuda: 'Proveedor principal. Si no existe, se crea automáticamente.',
   },
   {
     campo: 'unidad',
     etiqueta: 'unidad_medida',
     aliases: [/unidad.*medida/i, /^unidad$/i, /^unidades$/i, /medida/i],
     parser: normalizarUnidad,
+    orden: 11,
+    ayuda: 'unidad, kg, g, lt, ml, docena o caja. Vacío = unidad.',
   },
   {
     campo: 'venta_por_peso',
@@ -115,6 +134,8 @@ const columnas: ColumnaDef[] = [
     aliases: [/es.*fraccionad/i, /fraccionad/i, /venta.*peso/i, /por.*peso/i, /pesable/i],
     parser: parsearBooleano,
     exportar: (v) => (v ? 'true' : 'false'),
+    orden: 12,
+    ayuda: 'true si se vende por peso (fiambres, verdura). Vacío = false.',
   },
   // ── Números ──
   {
@@ -122,6 +143,8 @@ const columnas: ColumnaDef[] = [
     etiqueta: 'precio_costo',
     aliases: [/precio.*costo/i, /^costo$/i],
     parser: (v) => (v == null || String(v).trim() === '' ? null : parsearPrecio(v)),
+    orden: 4,
+    ayuda: 'Costo neto sin IVA. No se muestra a cajeros. Opcional.',
   },
   {
     campo: 'iva',
@@ -130,6 +153,8 @@ const columnas: ColumnaDef[] = [
     parser: parsearIva,
     // Round-trip: el sistema guarda 21, el Excel del usuario usa 0.21
     exportar: (v) => Number(v ?? 21) / 100,
+    orden: 5,
+    ayuda: 'Alícuota de IVA: podés poner 0.21 (= 21%) o 21. Vacío = 21%.',
   },
   {
     campo: 'precio_venta',
@@ -138,25 +163,33 @@ const columnas: ColumnaDef[] = [
     parser: parsearPrecio,
     requerida: true,
     validar: (v) =>
-      typeof v === 'number' && v > 0 ? null : 'Precio de venta inválido',
+      typeof v === 'number' && v > 0 ? null : 'Falta el precio de venta (obligatorio)',
+    orden: 3,
+    ayuda: 'OBLIGATORIO. Precio final de venta, mayor a 0.',
   },
   {
     campo: 'stock_actual',
     etiqueta: 'stock_inicial',
     aliases: [/stock.*inicial/i, /stock.*actual/i, /^stock$/i, /existencia/i],
     parser: parsearPrecio, // numeric(12,3): preserva decimales de fraccionados
+    orden: 13,
+    ayuda: 'Unidades que tenés hoy. Acepta decimales si es por peso. Vacío = 0.',
   },
   {
     campo: 'stock_minimo',
     etiqueta: 'stock_minimo',
     aliases: [/stock.*m[ií]nimo/i, /stock.*min/i, /^m[ií]nimo$/i],
     parser: parsearEnteroOpcional, // null si vacío → el RPC conserva / pone 5
+    orden: 14,
+    ayuda: 'Cantidad mínima para alertar reposición. Vacío = 5.',
   },
   {
     campo: 'ubicacion',
     etiqueta: 'ubicacion',
     aliases: [/ubicaci[oó]n/i, /g[oó]ndola/i, /pasillo/i],
     parser: parsearTextoOpcional,
+    orden: 15,
+    ayuda: 'Góndola, heladera o pasillo donde está el producto. Opcional.',
   },
   {
     campo: 'es_perecedero',
@@ -164,6 +197,8 @@ const columnas: ColumnaDef[] = [
     aliases: [/perecedero/i],
     parser: boolTriestado,
     exportar: (v) => (v ? 'true' : 'false'),
+    orden: 16,
+    ayuda: 'true si el producto vence. Si es false, no se controla vencimiento.',
   },
   {
     campo: 'dias_vencimiento_minimo',
@@ -176,6 +211,8 @@ const columnas: ColumnaDef[] = [
       /d[ií]as.*vencimiento/i,
     ],
     parser: parsearEnteroOpcional,
+    orden: 17,
+    ayuda: 'Días para alertar antes de vencer (solo si es perecedero). Opcional.',
   },
   {
     campo: 'activo',
@@ -183,6 +220,8 @@ const columnas: ColumnaDef[] = [
     aliases: [/^activo$/i, /habilitado/i],
     parser: (v) => (v == null || String(v).trim() === '' ? true : parsearBooleano(v)),
     exportar: (v) => (v ? 'true' : 'false'),
+    orden: 20,
+    ayuda: 'true o false. Vacío = true (producto activo, visible en el POS).',
   },
 ]
 

@@ -278,8 +278,11 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
                         </TableCell>
                         <TableCell className="text-center">
                           {f.errores.length > 0 ? (
-                            <span className="text-[#c43e2c]" title={f.errores.join('; ')}>
-                              Error
+                            <span
+                              className="text-[#c43e2c] text-xs"
+                              title={f.errores.join('; ')}
+                            >
+                              {f.errores[0]}
                             </span>
                           ) : (
                             <span className="text-[#6f3a2a]">OK</span>

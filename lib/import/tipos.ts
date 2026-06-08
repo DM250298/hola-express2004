@@ -24,6 +24,13 @@ export interface ColumnaDef {
   validar?: (valor: unknown, datos: Record<string, unknown>) => string | null
   /** Cómo serializar el valor al exportar (default: String(valor)). */
   exportar?: (valor: unknown) => string | number
+  /**
+   * Posición de la columna en la plantilla/export (orden de PRESENTACIÓN,
+   * distinto del orden del array, que es de DETECCIÓN). Menor = más a la izq.
+   */
+  orden?: number
+  /** Observación de qué poner en la columna (se muestra en la hoja Guía). */
+  ayuda?: string
 }
 
 /** Estrategia de escritura en la base (todas las entidades usan RPC atómico). */

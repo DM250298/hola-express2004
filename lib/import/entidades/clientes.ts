@@ -11,6 +11,8 @@ const columnas: ColumnaDef[] = [
     etiqueta: 'documento',
     aliases: [/documento/i, /^dni$/i, /^cuit$/i, /^cuil$/i, /^doc$/i],
     parser: parsearDocumento,
+    orden: 2,
+    ayuda: 'DNI o CUIT (solo números). Es la clave: si ya existe, se actualiza el cliente.',
   },
   {
     campo: 'nombre',
@@ -18,30 +20,40 @@ const columnas: ColumnaDef[] = [
     aliases: [/^nombre/i, /raz[oó]n.*social/i, /^cliente/i, /apellido/i],
     parser: parsearTextoOpcional,
     requerida: true,
+    orden: 1,
+    ayuda: 'OBLIGATORIO. Nombre o razón social del cliente.',
   },
   {
     campo: 'telefono',
     etiqueta: 'telefono',
     aliases: [/tel[eé]fono/i, /celular/i, /contacto/i, /^tel/i],
     parser: parsearTextoOpcional,
+    orden: 3,
+    ayuda: 'Teléfono de contacto. Opcional.',
   },
   {
     campo: 'email',
     etiqueta: 'email',
     aliases: [/e-?mail/i, /correo/i],
     parser: parsearTextoOpcional,
+    orden: 4,
+    ayuda: 'Correo electrónico. Opcional.',
   },
   {
     campo: 'direccion',
     etiqueta: 'direccion',
     aliases: [/direcci[oó]n/i, /domicilio/i],
     parser: parsearTextoOpcional,
+    orden: 5,
+    ayuda: 'Domicilio. Opcional.',
   },
   {
     campo: 'notas',
     etiqueta: 'notas',
     aliases: [/notas?/i, /observaci/i, /comentario/i],
     parser: parsearTextoOpcional,
+    orden: 6,
+    ayuda: 'Observaciones libres. Opcional.',
   },
   {
     campo: 'activo',
@@ -49,6 +61,8 @@ const columnas: ColumnaDef[] = [
     aliases: [/^activo$/i, /habilitado/i],
     parser: (v) => (v == null || String(v).trim() === '' ? true : parsearBooleano(v)),
     exportar: (v) => (v ? 'true' : 'false'),
+    orden: 7,
+    ayuda: 'true o false. Vacío = true (cliente activo).',
   },
 ]
 

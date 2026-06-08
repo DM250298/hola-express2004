@@ -8,12 +8,16 @@ const columnas: ColumnaDef[] = [
     aliases: [/^nombre/i, /categor[ií]a/i, /rubro/i],
     parser: parsearTextoOpcional,
     requerida: true,
+    orden: 1,
+    ayuda: 'OBLIGATORIO. Nombre del rubro. Es la clave (no distingue mayúsculas).',
   },
   {
     campo: 'descripcion',
     etiqueta: 'descripcion',
     aliases: [/descripci[oó]n/i, /detalle/i],
     parser: parsearTextoOpcional,
+    orden: 2,
+    ayuda: 'Detalle del rubro. Opcional.',
   },
 ]
 

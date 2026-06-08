@@ -127,7 +127,10 @@ export async function leerArchivo(
     }
   }
 
-  const filas = procesarFilas(aoa.slice(filaInicio - 2), mapeo, def, filaInicio)
+  // filaInicio es la fila (1-indexed) donde empiezan los DATOS; aoa es
+  // 0-indexed, así que el primer dato está en aoa[filaInicio - 1]. (Antes
+  // restaba 2 y colaba la fila de encabezados como primer dato.)
+  const filas = procesarFilas(aoa.slice(filaInicio - 1), mapeo, def, filaInicio)
   return { filas, mapeo }
 }
 

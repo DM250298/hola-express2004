@@ -4,7 +4,7 @@
 // lib/utils/cotizacion.ts.
 
 import * as XLSX from 'xlsx'
-import type { DefinicionEntidad } from './tipos'
+import type { ColumnaDef, DefinicionEntidad } from './tipos'
 import type { FilaExport } from '@/lib/queries/exportar-maestros'
 import { ENTIDAD_CATEGORIAS } from './entidades/categorias'
 import { ENTIDAD_PROVEEDORES } from './entidades/proveedores'
@@ -15,11 +15,18 @@ import {
   getProveedoresExport,
 } from '@/lib/queries/exportar-maestros'
 
+/** Columnas en orden de PRESENTACIÓN (obligatorios primero); el array de la
+ *  entidad está en orden de detección. */
+function columnasOrdenadas(def: DefinicionEntidad): ColumnaDef[] {
+  return [...def.columnas].sort((a, b) => (a.orden ?? 999) - (b.orden ?? 999))
+}
+
 /** Construye el array-of-arrays (encabezado + filas) para una entidad. */
 function construirAoa(def: DefinicionEntidad, filas: FilaExport[]): (string | number)[][] {
-  const header = def.columnas.map((c) => c.etiqueta)
+  const cols = columnasOrdenadas(def)
+  const header = cols.map((c) => c.etiqueta)
   const cuerpo = filas.map((fila) =>
-    def.columnas.map((c) => {
+    cols.map((c) => {
       const v = fila[c.campo]
       if (c.exportar) return c.exportar(v)
       if (v === null || v === undefined) return ''
@@ -30,8 +37,8 @@ function construirAoa(def: DefinicionEntidad, filas: FilaExport[]): (string | nu
 }
 
 /** Ancho de columnas razonable según la etiqueta. */
-function anchos(def: DefinicionEntidad) {
-  return def.columnas.map((c) => ({ wch: Math.max(12, Math.min(40, c.etiqueta.length + 4)) }))
+function anchosDesde(cols: ColumnaDef[]) {
+  return cols.map((c) => ({ wch: Math.max(12, Math.min(40, c.etiqueta.length + 4)) }))
 }
 
 interface HojaExport {
@@ -44,7 +51,7 @@ function descargar(hojas: HojaExport[], nombreArchivo: string) {
   const wb = XLSX.utils.book_new()
   for (const h of hojas) {
     const ws = XLSX.utils.aoa_to_sheet(construirAoa(h.def, h.filas))
-    ws['!cols'] = anchos(h.def)
+    ws['!cols'] = anchosDesde(columnasOrdenadas(h.def))
     XLSX.utils.book_append_sheet(wb, ws, h.nombre)
   }
   const fecha = new Date().toISOString().slice(0, 10)
@@ -79,39 +86,50 @@ export async function exportarEntidadSimple(def: DefinicionEntidad): Promise<voi
 }
 
 /**
- * Descarga una plantilla vacía (encabezados + filas de ejemplo + hoja de
- * instrucciones) para la carga inicial. No requiere datos en la base.
+ * Descarga una plantilla para la carga inicial:
+ * - Hoja "Instrucciones": campos obligatorios destacados + observación de cada
+ *   columna (qué poner).
+ * - Hoja de datos (nombre de la entidad): encabezados en orden lógico +
+ *   filas de ejemplo. El importador prioriza esta hoja por su nombre.
  */
 export function descargarPlantilla(def: DefinicionEntidad): void {
-  const header = def.columnas.map((c) => c.etiqueta)
+  const cols = columnasOrdenadas(def)
+
+  // ── Hoja de datos: encabezados + ejemplos ──
+  const header = cols.map((c) => c.etiqueta)
   const ejemplos = (def.ejemplos ?? []).map((e) =>
-    def.columnas.map((c) => {
+    cols.map((c) => {
       const v = e[c.campo]
       return v === undefined || v === null ? '' : v
     })
   )
   const wsDatos = XLSX.utils.aoa_to_sheet([header, ...ejemplos])
-  wsDatos['!cols'] = def.columnas.map((c) => ({
-    wch: Math.max(12, Math.min(40, c.etiqueta.length + 4)),
-  }))
+  wsDatos['!cols'] = anchosDesde(cols)
 
-  const instr: (string | number)[][] = [
+  // ── Hoja de instrucciones ──
+  const obligatorias = cols.filter((c) => c.requerida).map((c) => c.etiqueta)
+  const instr: string[][] = [
     [`Plantilla de ${def.etiqueta} — ¡Hola! Express`],
     [def.descripcion],
     [],
-    ['Columna', '¿Obligatoria?'],
-    ...def.columnas.map((c) => [c.etiqueta, c.requerida ? 'Sí' : 'No']),
+    ['CAMPOS OBLIGATORIOS:', obligatorias.join('   ·   ')],
     [],
-    ['Las filas de ejemplo son ilustrativas: reemplazalas por tus datos.'],
-    ['No cambies los nombres del encabezado; las columnas que no uses podés dejarlas vacías.'],
+    ['Columna', 'Obligatorio', 'Qué poner en esta columna'],
+    ...cols.map((c) => [c.etiqueta, c.requerida ? '★ SÍ' : '—', c.ayuda ?? '']),
+    [],
+    ['Cómo cargar:'],
+    [`• Completá la hoja "${def.clave}" desde la fila 2 (una fila por registro).`],
+    ['• No cambies los nombres de la fila de encabezado.'],
+    ['• Las columnas que no uses, dejalas vacías.'],
+    ['• Las filas de ejemplo son ilustrativas: reemplazalas por tus datos o borralas.'],
   ]
   const wsInstr = XLSX.utils.aoa_to_sheet(instr)
-  wsInstr['!cols'] = [{ wch: 28 }, { wch: 14 }]
+  wsInstr['!cols'] = [{ wch: 22 }, { wch: 13 }, { wch: 66 }]
 
   const wb = XLSX.utils.book_new()
-  // La hoja de datos va primera y con el nombre de la entidad (el importador
-  // la prioriza por nombre al volver a subir el archivo).
-  XLSX.utils.book_append_sheet(wb, wsDatos, def.clave)
+  // Instrucciones primero (para que se lea al abrir); la hoja de datos lleva el
+  // nombre de la entidad y el importador la detecta por nombre, no por posición.
   XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones')
+  XLSX.utils.book_append_sheet(wb, wsDatos, def.clave)
   XLSX.writeFile(wb, `plantilla-${def.nombreArchivo}.xlsx`)
 }
