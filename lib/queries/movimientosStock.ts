@@ -77,10 +77,18 @@ export async function getMovimientosStock(
   const desde = pagina * porPagina
   const hasta = desde + porPagina - 1
 
+  // Si filtramos por producto (búsqueda o categoría) usamos !inner, así el
+  // filtro Y el count corren en el servidor sobre TODA la base y no sobre la
+  // página visible. Sin ese filtro, embed normal para no perder movimientos
+  // de productos eliminados.
+  const busqueda = filtros.busqueda?.trim()
+  const filtraProducto = !!busqueda || filtros.categoria_id != null
+  const embed = filtraProducto ? 'productos!inner' : 'productos'
+
   let query = supabase
     .from('movimientos_stock')
     .select(
-      '*, productos(nombre, codigo_barras, categoria_id, categorias(nombre)), usuarios(nombre)',
+      `*, ${embed}(nombre, codigo_barras, categoria_id, categorias(nombre)), usuarios(nombre)`,
       { count: 'exact' }
     )
     .order('created_at', { ascending: false })
@@ -106,6 +114,18 @@ export async function getMovimientosStock(
     query = query.lt('created_at', hasta.toISOString())
   }
 
+  // Filtros de producto, en el servidor (sobre el embed !inner)
+  if (busqueda) {
+    const patron = `%${busqueda.replace(/[%_]/g, '\\$&')}%`
+    query = query.or(
+      `nombre.ilike.${patron},codigo_barras.ilike.${patron}`,
+      { referencedTable: 'productos' }
+    )
+  }
+  if (filtros.categoria_id != null) {
+    query = query.eq('productos.categoria_id', filtros.categoria_id)
+  }
+
   // Paginación
   query = query.range(desde, hasta)
 
@@ -125,7 +145,6 @@ export async function getMovimientosStock(
 
   const filas = (data ?? []) as unknown as FilaCruda[]
 
-  // Filtros en memoria (búsqueda y categoría — no se pueden hacer en la query directamente)
   let movimientos: MovimientoCompleto[] = filas.map((f) => ({
     ...f,
     producto_nombre: f.productos?.nombre ?? 'Producto eliminado',
@@ -139,31 +158,8 @@ export async function getMovimientosStock(
     usuarios: undefined as never,
   }))
 
-  // Filtro por búsqueda de producto
-  if (filtros.busqueda?.trim()) {
-    const q = filtros.busqueda.trim().toLowerCase()
-    movimientos = movimientos.filter(
-      (m) =>
-        m.producto_nombre.toLowerCase().includes(q) ||
-        (m.producto_codigo_barras &&
-          m.producto_codigo_barras.toLowerCase().includes(q))
-    )
-  }
-
-  // Filtro por categoría
-  if (filtros.categoria_id != null) {
-    // Necesitamos el categoria_id original
-    const catId = filtros.categoria_id
-    const filasConCat = filas.filter(
-      (f) => f.productos?.categoria_id === catId
-    )
-    const idsProducto = new Set(filasConCat.map((f) => f.producto_id))
-    movimientos = movimientos.filter((m) =>
-      idsProducto.has(m.producto_id)
-    )
-  }
-
-  // Filtro por turno
+  // El turno se infiere de la hora del movimiento; PostgREST no permite
+  // filtrarlo en el servidor, así que se aplica sobre la página actual.
   if (filtros.turno) {
     movimientos = movimientos.filter((m) => m.turno === filtros.turno)
   }

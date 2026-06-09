@@ -76,6 +76,10 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     isError,
   } = useTurnoActivo(usuarioId)
   const crearVenta = useCrearVenta()
+  // Guard síncrono anti doble-tap: el botón se deshabilita con isPending, pero
+  // eso es asíncrono; este ref bloquea un segundo disparo en el mismo tick
+  // (evita 2 ventas con cliente_uuid distinto que el RPC no deduplicaría).
+  const enviandoVentaRef = useRef(false)
   const { data: usuario } = useUsuario()
   const { data: terminales } = useTerminales()
   const puedeGasto = tienePermiso(usuario?.permisos, 'pos_gasto')
@@ -345,6 +349,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
 
   function confirmarVenta(pagos: PagoPayload[], vueltoEfectivo: number) {
     if (carrito.length === 0 || !turno) return
+    if (enviandoVentaRef.current) return
+    enviandoVentaRef.current = true
     const items = carrito.map((it) => ({
       producto_id: it.producto_id,
       cantidad: it.cantidad,
@@ -371,6 +377,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           setModalCobroAbierto(false)
           setTicketAbierto(true)
         },
+        onSettled: () => {
+          enviandoVentaRef.current = false
+        },
       }
     )
   }
@@ -381,6 +390,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     cobroReal?: { comision: number; iibb: number } | null
   ) {
     if (carrito.length === 0 || !turno) return
+    if (enviandoVentaRef.current) return
+    enviandoVentaRef.current = true
     const items = carrito.map((it) => ({
       producto_id: it.producto_id,
       cantidad: it.cantidad,
@@ -420,6 +431,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           setPagosPrevios([])
           setMontoMaquinita(0)
           setTicketAbierto(true)
+        },
+        onSettled: () => {
+          enviandoVentaRef.current = false
         },
       }
     )

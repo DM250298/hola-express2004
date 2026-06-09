@@ -3,6 +3,7 @@ import { traerTodo } from '@/lib/supabase/paginacion'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type {
   CoberturaStockRow,
+  Json,
   MovimientoStockRow,
   ProductoRow,
   TipoMovimiento,
@@ -240,89 +241,35 @@ export interface AjusteStockPayload {
 }
 
 /**
- * Aplica un ajuste manual de stock y registra el movimiento.
+ * Aplica un ajuste manual de stock de UN producto, de forma atómica vía el
+ * RPC `fn_crear_ajuste_stock` (cabecera + stock + movimiento + item del
+ * ajuste, todo en una transacción). Es el mismo camino que usa la tab de
+ * Ajustes multi-producto, así que no hay dos lógicas divergentes.
  *
  * Para tipo:
- * - 'entrada': stock_nuevo = stock_actual + cantidad
- * - 'salida': stock_nuevo = stock_actual - cantidad (rechaza si dejaría negativo)
- * - 'ajuste': cantidad ES el nuevo stock total; se registra la diferencia absoluta
+ * - 'entrada': suma la cantidad al stock
+ * - 'salida': resta la cantidad (el RPC rechaza si dejaría stock negativo)
+ * - 'ajuste': la cantidad ES el nuevo stock total
  *
- * Nota técnica: idealmente debería ser una stored procedure transaccional.
- * Si falla el INSERT de movimientos_stock después del UPDATE de stock_actual,
- * el stock queda actualizado sin registro de auditoría — el admin puede
- * corregir manualmente.
+ * Reemplaza el lee-modifica-escribe anterior, que tenía una race condition con
+ * el POS vendiendo en paralelo y podía dejar el stock cambiado sin movimiento.
+ * La nota libre del modal se guarda como detalle de la razón del ajuste.
  */
-export async function ajustarStock(
-  payload: AjusteStockPayload
-): Promise<{ stock_anterior: number; stock_nuevo: number }> {
+export async function ajustarStock(payload: AjusteStockPayload): Promise<void> {
   const supabase = createClient()
-
-  // 1. Obtener stock actual
-  const { data: producto, error: errProducto } = await supabase
-    .from('productos')
-    .select('stock_actual')
-    .eq('id', payload.producto_id)
-    .single<{ stock_actual: number }>()
-
-  if (errProducto) throw errProducto
-
-  const stockAnterior = producto.stock_actual
-  let stockNuevo: number
-  let cantidadMovimiento: number
-
-  switch (payload.tipo) {
-    case 'entrada':
-      stockNuevo = stockAnterior + payload.cantidad
-      cantidadMovimiento = payload.cantidad
-      break
-    case 'salida':
-      if (payload.cantidad > stockAnterior) {
-        throw new Error(
-          `No hay stock suficiente: querés sacar ${payload.cantidad} pero hay ${stockAnterior}.`
-        )
-      }
-      stockNuevo = stockAnterior - payload.cantidad
-      cantidadMovimiento = payload.cantidad
-      break
-    case 'ajuste':
-      if (payload.cantidad < 0) {
-        throw new Error('El nuevo stock no puede ser negativo.')
-      }
-      stockNuevo = payload.cantidad
-      cantidadMovimiento = Math.abs(stockNuevo - stockAnterior)
-      if (cantidadMovimiento === 0) {
-        throw new Error('El nuevo stock es igual al actual: no hay nada que ajustar.')
-      }
-      break
-  }
-
-  // 2. UPDATE productos
-  const ahora = new Date().toISOString()
-  const { error: errUpdate } = await supabase
-    .from('productos')
-    .update({ stock_actual: stockNuevo, updated_at: ahora })
-    .eq('id', payload.producto_id)
-
-  if (errUpdate) throw errUpdate
-
-  // 3. INSERT movimientos_stock
-  const { error: errMov } = await supabase.from('movimientos_stock').insert({
-    producto_id: payload.producto_id,
-    tipo: payload.tipo,
-    cantidad: cantidadMovimiento,
-    stock_anterior: stockAnterior,
-    stock_nuevo: stockNuevo,
-    usuario_id: payload.usuario_id,
-    nota: payload.nota,
+  const { error } = await supabase.rpc('fn_crear_ajuste_stock', {
+    p_usuario_id: payload.usuario_id,
+    p_razon: 'otra',
+    p_razon_detalle: payload.nota,
+    p_items: [
+      {
+        producto_id: payload.producto_id,
+        tipo: payload.tipo,
+        cantidad: payload.cantidad,
+      },
+    ] as unknown as Json,
   })
-
-  if (errMov) {
-    throw new Error(
-      `Stock actualizado pero falló registrar el movimiento: ${errMov.message}`
-    )
-  }
-
-  return { stock_anterior: stockAnterior, stock_nuevo: stockNuevo }
+  if (error) throw error
 }
 
 export interface MovimientoConUsuario extends MovimientoStockRow {
