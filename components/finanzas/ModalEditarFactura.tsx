@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
 import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
@@ -351,6 +352,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               Afectar precio de venta
             </label>
           </div>
+
+          {/* Comprobante escaneado en la recepción (se puede agregar más acá) */}
+          <GaleriaComprobantes
+            pedidoId={cuenta?.pedido_id}
+            usuarioId={usuario?.id ?? null}
+          />
 
           {/* Datos formales del comprobante */}
           <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3">

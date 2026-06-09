@@ -1307,6 +1307,26 @@ export type HistorialCostoUpdate = {
   variacion_pct?: number
 }
 
+// ─── pedido_comprobantes (imágenes de factura/remito del pedido) ──────────────
+
+export type PedidoComprobanteRow = {
+  id: number
+  pedido_id: number
+  storage_path: string
+  usuario_id: string | null
+  created_at: string
+}
+
+export type PedidoComprobanteInsert = {
+  id?: number
+  pedido_id: number
+  storage_path: string
+  usuario_id?: string | null
+  created_at?: string
+}
+
+export type PedidoComprobanteUpdate = Partial<PedidoComprobanteInsert>
+
 // ─── config_compras (singleton) ──────────────────────────────────────────────
 
 export type ConfigComprasRow = {
@@ -2174,6 +2194,12 @@ export interface Database {
         Row: ConfigComprasRow
         Insert: ConfigComprasInsert
         Update: ConfigComprasUpdate
+        Relationships: []
+      }
+      pedido_comprobantes: {
+        Row: PedidoComprobanteRow
+        Insert: PedidoComprobanteInsert
+        Update: PedidoComprobanteUpdate
         Relationships: []
       }
       config_fiscal: {

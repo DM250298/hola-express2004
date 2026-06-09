@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
+import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
 import { useActualizarEstadoPedido, useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { parsearDiasCondicionPago } from '@/lib/queries/pedidos'
@@ -378,6 +379,12 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
               podés ajustar las cantidades a mano abajo.
             </p>
           </div>
+
+          {/* Comprobante: escanear/subir foto de la factura o el remito */}
+          <GaleriaComprobantes
+            pedidoId={pedido.id}
+            usuarioId={usuario?.id ?? null}
+          />
 
           {/* Aviso de autorización de supervisor concedida */}
           {excesoAutorizado && autorizadoPor && (
