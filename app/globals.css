@@ -211,12 +211,12 @@
 
 /* ─── Etiqueta de precio para góndola ─────────────────────────────── */
 .etiqueta-precio-nombre {
-  font-size: 10pt;
+  font-size: 13pt;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
   text-align: center;
   word-break: break-word;
-  margin-bottom: 1mm;
+  margin-bottom: 1.5mm;
 }
 .etiqueta-precio-monto {
   font-size: 30pt;
@@ -233,6 +233,16 @@
   font-size: 8pt;
   text-align: center;
   letter-spacing: 0.5px;
+}
+/* La etiqueta de precio tiene tamaño físico fijo 58×35mm. El nombre y el
+   precio se autoajustan (font-size inline) para no desbordar ese alto. */
+.etiqueta-precio {
+  width: 58mm;
+  height: 35mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
 }
 
 /* ─── Comprobante térmico 80mm (cierre de turno) ──────────────────── */
@@ -435,6 +445,11 @@
     size: 80mm auto;
     margin: 0;
   }
+  /* Etiqueta de precio: página fija de 58×35mm (impresora de etiquetas). */
+  @page etiqueta-precio {
+    size: 58mm 35mm;
+    margin: 0;
+  }
   html, body {
     background: #fff;
     margin: 0;
@@ -468,6 +483,10 @@
   /* El ticket de venta usa la página de 80mm. */
   .ticket-termico {
     page: informe;
+  }
+  /* La etiqueta de precio usa la página fija de 58×35mm. */
+  .etiqueta-precio {
+    page: etiqueta-precio;
   }
   /* Los productos vendidos se ven en pantalla pero no se imprimen. */
   .comprobante-productos {

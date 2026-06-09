@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Minus, Plus, Printer, Tag, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -29,11 +30,24 @@ export function ModalImprimirEtiquetaPrecio({
   productoId,
 }: Props) {
   const [cantidad, setCantidad] = useState(1)
+  // Datos editables de la etiqueta (no cambian el producto, solo lo que se imprime)
+  const [nombre, setNombre] = useState('')
+  const [precio, setPrecio] = useState(0)
   const marcarColocada = useMarcarEtiquetaColocadaPorProducto()
 
   useEffect(() => {
-    if (abierto) setCantidad(1)
-  }, [abierto])
+    if (abierto && producto) {
+      setCantidad(1)
+      setNombre(producto.nombre)
+      setPrecio(producto.precio_venta)
+    }
+  }, [abierto, producto])
+
+  const datosEtiqueta: DatosEtiquetaPrecio = {
+    nombre,
+    codigo_barras: producto?.codigo_barras ?? null,
+    precio_venta: precio,
+  }
 
   function imprimir() {
     if (cantidad < 1) return
@@ -59,8 +73,40 @@ export function ModalImprimirEtiquetaPrecio({
           <div className="px-6 py-5 space-y-4">
             {/* Vista previa */}
             <div className="flex justify-center bg-[#fdfaf6] rounded-xl p-4 border border-[#e4c9b0]/60">
-              <EtiquetaPrecio datos={producto} />
+              <EtiquetaPrecio datos={datosEtiqueta} />
             </div>
+
+            {/* Editar lo que se imprime */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1 sm:col-span-2">
+                <Label htmlFor="etq-nombre" className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                  Nombre en la etiqueta
+                </Label>
+                <Input
+                  id="etq-nombre"
+                  value={nombre}
+                  onChange={(e) => setNombre(e.target.value)}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="etq-precio" className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                  Precio
+                </Label>
+                <Input
+                  id="etq-precio"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={precio}
+                  onChange={(e) => setPrecio(Math.max(0, Number(e.target.value) || 0))}
+                  className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-[#c8a58a]">
+              Se imprime redondeado, sin centavos. Editar acá no cambia el precio del producto.
+            </p>
 
             {/* Cantidad */}
             <div className="flex items-center justify-between">
@@ -126,7 +172,7 @@ export function ModalImprimirEtiquetaPrecio({
       {abierto && producto && (
         <div className="etiquetas-imprimir" aria-hidden>
           {Array.from({ length: cantidad }).map((_, i) => (
-            <EtiquetaPrecio key={i} datos={producto} />
+            <EtiquetaPrecio key={i} datos={datosEtiqueta} />
           ))}
         </div>
       )}
