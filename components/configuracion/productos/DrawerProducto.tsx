@@ -31,6 +31,7 @@ import {
 } from '@/lib/hooks/useProductos'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
+import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CostoAdicional } from '@/types/database'
 
@@ -79,6 +80,10 @@ const esquemaProducto = z.object({
     .transform((v) => (v === '' ? NaN : Number(v)))
     .pipe(z.number().int('Solo enteros').min(0, 'No puede ser negativo')),
   venta_por_peso: z.boolean().default(false),
+  visible_tienda: z.boolean().default(true),
+  controlar_stock: z.boolean().default(true),
+  no_ofrecer_ventas: z.boolean().default(false),
+  notas: z.string().trim().max(500).optional().or(z.literal('')),
   dias_vencimiento_minimo: z
     .union([z.string(), z.number(), z.null()])
     .optional()
@@ -130,6 +135,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
   const [adicionales, setAdicionales] = useState<AdicionalState[]>([])
   const [ivaVenta, setIvaVenta] = useState('21')
   const [margen, setMargen] = useState('0')
+  const [imagenUrl, setImagenUrl] = useState<string | null>(null)
 
   const {
     register,
@@ -157,6 +163,10 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       unidad: 'unidad',
       activo: true,
       venta_por_peso: false,
+      visible_tienda: true,
+      controlar_stock: true,
+      no_ofrecer_ventas: false,
+      notas: '',
     },
   })
 
@@ -188,12 +198,17 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       unidad: producto?.unidad ?? 'unidad',
       activo: producto?.activo ?? true,
       venta_por_peso: producto?.venta_por_peso ?? false,
+      visible_tienda: producto?.visible_tienda ?? true,
+      controlar_stock: producto?.controlar_stock ?? true,
+      no_ofrecer_ventas: producto?.no_ofrecer_ventas ?? false,
+      notas: producto?.notas ?? '',
     })
 
     // Bloque de costo / precio
     setIvaCompra(String(producto?.iva_compra ?? 21))
     setIvaVenta(String(producto?.iva_venta ?? 21))
     setMargen(String(producto?.margen ?? 0))
+    setImagenUrl(producto?.imagen_url ?? null)
     const adic = (producto?.costos_adicionales ?? []) as CostoAdicional[]
     setAdicionales(
       adic.map((a) => ({ descripcion: a.descripcion, monto: String(a.monto) }))
@@ -274,6 +289,11 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       unidad: validado.unidad,
       activo: validado.activo,
       venta_por_peso: validado.venta_por_peso,
+      visible_tienda: validado.visible_tienda,
+      controlar_stock: validado.controlar_stock,
+      no_ofrecer_ventas: validado.no_ofrecer_ventas,
+      notas: validado.notas?.trim() ? validado.notas.trim() : null,
+      imagen_url: imagenUrl,
     }
 
     try {
@@ -362,6 +382,16 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
             {errors.nombre && (
               <p className="text-[#c43e2c] text-xs mt-1">{errors.nombre.message}</p>
             )}
+          </div>
+
+          {/* Imagen */}
+          <div className="space-y-1.5">
+            <Label className="text-[#391511] font-medium">Imagen del producto</Label>
+            <SubirImagenProducto
+              value={imagenUrl}
+              onChange={setImagenUrl}
+              disabled={guardando}
+            />
           </div>
 
           {/* Categoría + Proveedor */}
@@ -822,6 +852,96 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
                   onCheckedChange={field.onChange}
                   disabled={guardando}
                   className="data-[state=checked]:bg-[#f9b44c]"
+                />
+              )}
+            />
+          </div>
+
+          {/* Notas */}
+          <div className="space-y-1.5">
+            <Label htmlFor="notas" className="text-[#391511] font-medium">
+              Notas
+            </Label>
+            <textarea
+              id="notas"
+              rows={2}
+              {...register('notas')}
+              disabled={guardando}
+              placeholder="Observaciones internas (opcional)"
+              className="w-full rounded-md border border-[#e4c9b0] bg-white px-3 py-2 text-sm text-[#391511] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c] disabled:opacity-50"
+            />
+          </div>
+
+          {/* Toggle visible en tienda */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
+            <div>
+              <Label htmlFor="visible_tienda" className="text-[#391511] font-medium cursor-pointer">
+                Visible en la tienda online
+              </Label>
+              <p className="text-[#6f3a2a] text-xs mt-0.5">
+                Si lo apagás, no aparece en la tienda web (sí en el POS).
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="visible_tienda"
+              render={({ field }) => (
+                <Switch
+                  id="visible_tienda"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={guardando}
+                  className="data-[state=checked]:bg-[#f9b44c]"
+                />
+              )}
+            />
+          </div>
+
+          {/* Toggle controlar stock */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
+            <div>
+              <Label htmlFor="controlar_stock" className="text-[#391511] font-medium cursor-pointer">
+                Controlar stock
+              </Label>
+              <p className="text-[#6f3a2a] text-xs mt-0.5">
+                Si lo apagás, se vende sin descontar stock (servicios, granel sin control).
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="controlar_stock"
+              render={({ field }) => (
+                <Switch
+                  id="controlar_stock"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={guardando}
+                  className="data-[state=checked]:bg-[#f9b44c]"
+                />
+              )}
+            />
+          </div>
+
+          {/* Toggle no ofrecer en ventas */}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
+            <div>
+              <Label htmlFor="no_ofrecer_ventas" className="text-[#391511] font-medium cursor-pointer">
+                No ofrecer en ventas
+              </Label>
+              <p className="text-[#6f3a2a] text-xs mt-0.5">
+                Lo oculta del punto de venta (no se puede vender), pero sigue en el stock.
+              </p>
+            </div>
+            <Controller
+              control={control}
+              name="no_ofrecer_ventas"
+              render={({ field }) => (
+                <Switch
+                  id="no_ofrecer_ventas"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  disabled={guardando}
+                  className="data-[state=checked]:bg-[#c43e2c]"
                 />
               )}
             />

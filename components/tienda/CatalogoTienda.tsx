@@ -16,6 +16,7 @@ interface ProductoCatalogo {
   precio_venta: number
   stock_actual: number
   categoria_id: number | null
+  imagen_url: string | null
   categorias: { id: number; nombre: string } | null
 }
 
@@ -210,6 +211,20 @@ function TarjetaProducto({
 
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm flex flex-col">
+      {/* Imagen */}
+      <div className="aspect-square bg-[#fdfaf6] overflow-hidden flex items-center justify-center">
+        {producto.imagen_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={producto.imagen_url}
+            alt={producto.nombre}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <ShoppingBag className="h-10 w-10 text-[#e4c9b0]" />
+        )}
+      </div>
+
       {/* Info del producto */}
       <div className="p-3 flex-1">
         {catNombre && (

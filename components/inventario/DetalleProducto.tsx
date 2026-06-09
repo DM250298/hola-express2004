@@ -35,9 +35,12 @@ import {
   useProductoDetalle,
 } from '@/lib/hooks/useInventario'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import { calcularEstadoStock } from '@/lib/queries/inventario'
+import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { ModalAjusteStock } from './ModalAjusteStock'
+import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
 import { Sparkline } from './Sparkline'
 import { cn } from '@/lib/utils'
@@ -87,6 +90,7 @@ export function DetalleProducto({ productoId }: Props) {
   const { data: usuario } = useUsuario()
   const [pagina, setPagina] = useState(0)
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState(false)
+  const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
 
   const { data: historial, isLoading: cargandoHist } = useHistorialMovimientos(
     productoId,
@@ -124,6 +128,19 @@ export function DetalleProducto({ productoId }: Props) {
     producto.stock_minimo
   )
   const puedeVerCosto = usuario?.rol !== 'cajero'
+  const puedeEditar = tienePermiso(usuario?.permisos, 'configuracion')
+
+  // Margen / ganancia: el precio de venta es con IVA; lo bajamos a neto para
+  // compararlo contra el costo (neto) y sacar el % de ganancia sobre costo.
+  const precioSinIva =
+    producto.iva_venta > 0
+      ? producto.precio_venta / (1 + producto.iva_venta / 100)
+      : producto.precio_venta
+  const gananciaUnidad = precioSinIva - producto.precio_costo
+  const margenPct =
+    producto.precio_costo > 0
+      ? (gananciaUnidad / producto.precio_costo) * 100
+      : null
 
   const totalPaginas = Math.ceil((historial?.total ?? 0) / POR_PAGINA)
   const hayPaginaAnterior = pagina > 0
@@ -145,7 +162,16 @@ export function DetalleProducto({ productoId }: Props) {
       {/* Header del producto */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
-          <div className="min-w-0">
+          <div className="flex items-start gap-3 min-w-0">
+            {producto.imagen_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={producto.imagen_url}
+                alt={producto.nombre}
+                className="h-16 w-16 shrink-0 rounded-xl object-cover border border-[#e4c9b0]"
+              />
+            )}
+            <div className="min-w-0">
             <h1 className="text-[#391511] text-2xl font-bold leading-tight">
               {producto.nombre}
             </h1>
@@ -161,18 +187,31 @@ export function DetalleProducto({ productoId }: Props) {
                 </span>
               )}
             </div>
+            </div>
           </div>
-          <Button
-            onClick={() => setModalAjusteAbierto(true)}
-            className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-          >
-            <Pencil className="h-4 w-4" />
-            Ajustar stock
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {puedeEditar && (
+              <Button
+                variant="outline"
+                onClick={() => setModalEditarAbierto(true)}
+                className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40 gap-1.5"
+              >
+                <Pencil className="h-4 w-4" />
+                Editar producto
+              </Button>
+            )}
+            <Button
+              onClick={() => setModalAjusteAbierto(true)}
+              className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+            >
+              <Box className="h-4 w-4" />
+              Ajustar stock
+            </Button>
+          </div>
         </div>
 
         {/* Stats grid */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatBlock
             etiqueta="Stock actual"
             valor={String(producto.stock_actual)}
@@ -191,6 +230,30 @@ export function DetalleProducto({ productoId }: Props) {
             <StatBlock
               etiqueta="Precio costo"
               valor={<MontoARS monto={producto.precio_costo} />}
+            />
+          )}
+          {puedeVerCosto && (
+            <StatBlock
+              etiqueta="Ganancia"
+              valor={
+                margenPct != null ? (
+                  <span
+                    className={
+                      margenPct >= 0 ? 'text-[#2f8f4e]' : 'text-[#c43e2c]'
+                    }
+                  >
+                    {margenPct >= 0 ? '+' : ''}
+                    {margenPct.toFixed(0)}%
+                  </span>
+                ) : (
+                  '—'
+                )
+              }
+              badge={
+                <span className="text-[11px] text-[#6f3a2a]">
+                  <MontoARS monto={gananciaUnidad} /> /u
+                </span>
+              }
             />
           )}
         </div>
@@ -372,6 +435,26 @@ export function DetalleProducto({ productoId }: Props) {
           stock_actual: producto.stock_actual,
         }}
       />
+
+      {puedeEditar && (
+        <DrawerProducto
+          abierto={modalEditarAbierto}
+          onCambioAbierto={setModalEditarAbierto}
+          producto={
+            {
+              ...producto,
+              categorias:
+                producto.categoria_id != null
+                  ? { id: producto.categoria_id, nombre: producto.categoria_nombre ?? '' }
+                  : null,
+              proveedores:
+                producto.proveedor_id != null
+                  ? { id: producto.proveedor_id, nombre: producto.proveedor_nombre ?? '' }
+                  : null,
+            } as ProductoConRelaciones
+          }
+        />
+      )}
     </div>
   )
 }

@@ -55,6 +55,8 @@ export interface FiltrosProducto {
   tipo?: string | null
   unidad?: string | null
   activo?: boolean
+  /** Solo para el POS: excluye los productos marcados "no ofrecer en ventas". */
+  solo_vendibles?: boolean
 }
 
 /** Trae productos del servidor (sin fallback offline). Lanza si no hay red. */
@@ -90,6 +92,9 @@ async function fetchProductosRemoto(
     }
     if (filtros.activo !== undefined) {
       q = q.eq('activo', filtros.activo)
+    }
+    if (filtros.solo_vendibles) {
+      q = q.eq('no_ofrecer_ventas', false)
     }
     return q
   })
@@ -164,25 +169,26 @@ export async function getOpcionesTipoUnidad(): Promise<{
 }
 
 export async function getProductoByBarcode(
-  codigo: string
+  codigo: string,
+  soloVendible = false
 ): Promise<ProductoConRelaciones | null> {
   const supabase = createClient()
   const cod = codigo.trim()
   try {
     // Busca tanto en el código principal como en el secundario (codigo_barras_2),
     // así un EAN de fábrica cargado como secundario también se escanea en el POS.
-    const { data, error } = await supabase
+    let q = supabase
       .from('productos')
       .select(SELECT_PRODUCTO)
       .or(`codigo_barras.eq.${cod},codigo_barras_2.eq.${cod}`)
-      .limit(1)
-      .maybeSingle()
+    if (soloVendible) q = q.eq('no_ofrecer_ventas', false)
+    const { data, error } = await q.limit(1).maybeSingle()
 
     if (error) throw error
     return data ? mapearCosto(data as unknown as ProductoRaw) : null
   } catch (error) {
     if (esErrorDeRed(error)) {
-      return buscarPorBarcodeLocal(codigo)
+      return buscarPorBarcodeLocal(codigo, soloVendible)
     }
     throw error
   }

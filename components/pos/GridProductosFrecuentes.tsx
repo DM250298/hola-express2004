@@ -32,10 +32,11 @@ function datosProducto(p: ProductoGrid) {
 export function GridProductosFrecuentes({ turnoId, onSeleccionar }: Props) {
   const { data: frecuentes, isLoading: cargandoFrecuentes } =
     useProductosFrecuentesTurno(turnoId)
-  // El catálogo activo completo: alimenta el snapshot offline y sirve de
-  // respaldo cuando todavía no hay frecuentes (turno nuevo o sin conexión).
+  // Catálogo activo vendible: respaldo cuando todavía no hay frecuentes
+  // (turno nuevo o sin conexión). Excluye los "no ofrecer en ventas".
   const { data: catalogo, isLoading: cargandoCatalogo } = useProductos({
     activo: true,
+    solo_vendibles: true,
   })
 
   const hayFrecuentes = (frecuentes ?? []).length > 0

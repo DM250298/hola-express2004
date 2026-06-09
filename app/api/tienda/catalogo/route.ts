@@ -13,8 +13,9 @@ export async function GET() {
     // Productos activos con stock
     const { data: productos, error: errProd } = await supabase
       .from('productos')
-      .select('id, nombre, codigo_barras, precio_venta, stock_actual, categoria_id, categorias(id, nombre)')
+      .select('id, nombre, codigo_barras, precio_venta, stock_actual, categoria_id, imagen_url, categorias(id, nombre)')
       .eq('activo', true)
+      .eq('visible_tienda', true)
       .gt('stock_actual', 0)
       .order('nombre')
 

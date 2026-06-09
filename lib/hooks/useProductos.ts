@@ -37,6 +37,7 @@ export function useCreateProducto() {
     mutationFn: (datos: ProductoInsert) => createProducto(datos),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
       toast.success('Producto creado')
     },
     onError: (error: Error) => {
@@ -51,8 +52,12 @@ export function useUpdateProducto() {
   return useMutation({
     mutationFn: ({ id, datos }: { id: number; datos: ProductoUpdate }) =>
       updateProducto(id, datos),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({
+        queryKey: ['producto-detalle', variables.id],
+      })
       toast.success('Producto actualizado')
     },
     onError: (error: Error) => {

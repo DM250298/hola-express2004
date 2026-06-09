@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type {
   CoberturaStockRow,
   MovimientoStockRow,
@@ -377,7 +378,9 @@ export async function getProductoDetalle(
   const supabase = createClient()
   const { data, error } = await supabase
     .from('productos')
-    .select('*, categorias(nombre), proveedores(nombre)')
+    .select(
+      '*, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
+    )
     .eq('id', id)
     .maybeSingle()
 
@@ -387,10 +390,14 @@ export async function getProductoDetalle(
   type FilaCruda = ProductoRow & {
     categorias: { nombre: string } | null
     proveedores: { nombre: string } | null
+    costos_producto: CostoEmbed
   }
   const fila = data as unknown as FilaCruda
   return {
     ...fila,
+    // El costo vive en costos_producto (gateado por RLS). Para un cajero el
+    // embed viene null → 0 (no ve el costo).
+    precio_costo: costoDesdeEmbed(fila.costos_producto),
     categoria_nombre: fila.categorias?.nombre ?? null,
     proveedor_nombre: fila.proveedores?.nombre ?? null,
   }

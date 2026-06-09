@@ -61,6 +61,7 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
     const { data: productos, isLoading } = useProductos({
       busqueda: busqueda || undefined,
       activo: true,
+      solo_vendibles: true,
     })
 
     const resultados = (busqueda.length > 0 ? productos ?? [] : []).slice(
@@ -71,6 +72,10 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
     function agregarProducto(p: ProductoConRelaciones) {
       if (!p.activo) {
         toast.error(`"${p.nombre}" está inactivo.`)
+        return
+      }
+      if (p.no_ofrecer_ventas) {
+        toast.error(`"${p.nombre}" no está disponible para la venta.`)
         return
       }
       if (p.stock_actual <= 0) {
@@ -89,7 +94,7 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
       // 1. Si parece barcode (scanner), buscar directo en BD
       if (pareceBarcode(valor)) {
         try {
-          const producto = await getProductoByBarcode(valor)
+          const producto = await getProductoByBarcode(valor, true)
           if (producto) {
             agregarProducto(producto)
             return

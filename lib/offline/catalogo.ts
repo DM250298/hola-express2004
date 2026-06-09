@@ -76,16 +76,24 @@ export function filtrarProductosLocal(
       if (filtros.unidad && p.unidad !== filtros.unidad) return false
       if (filtros.activo !== undefined && p.activo !== filtros.activo)
         return false
+      if (filtros.solo_vendibles && p.no_ofrecer_ventas) return false
       return true
     })
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
-/** Busca un producto por código de barras exacto en el snapshot offline. */
+/** Busca un producto por código (principal o secundario) en el snapshot offline. */
 export async function buscarPorBarcodeLocal(
-  codigo: string
+  codigo: string,
+  soloVendible = false
 ): Promise<ProductoConRelaciones | null> {
   const productos = await leerCatalogo()
   const limpio = codigo.trim()
-  return productos.find((p) => p.codigo_barras === limpio) ?? null
+  return (
+    productos.find(
+      (p) =>
+        (p.codigo_barras === limpio || p.codigo_barras_2 === limpio) &&
+        (!soloVendible || !p.no_ofrecer_ventas)
+    ) ?? null
+  )
 }

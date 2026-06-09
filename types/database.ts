@@ -532,6 +532,11 @@ export type ProductoRow = {
   costos_adicionales: CostoAdicional[]
   dias_vencimiento_minimo: number | null
   venta_por_peso: boolean
+  visible_tienda: boolean
+  controlar_stock: boolean
+  no_ofrecer_ventas: boolean
+  notas: string | null
+  imagen_url: string | null
   created_at: string
   updated_at: string
 }
@@ -561,6 +566,11 @@ export type ProductoInsert = {
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
   venta_por_peso?: boolean
+  visible_tienda?: boolean
+  controlar_stock?: boolean
+  no_ofrecer_ventas?: boolean
+  notas?: string | null
+  imagen_url?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -588,6 +598,11 @@ export type ProductoUpdate = {
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
   venta_por_peso?: boolean
+  visible_tienda?: boolean
+  controlar_stock?: boolean
+  no_ofrecer_ventas?: boolean
+  notas?: string | null
+  imagen_url?: string | null
   updated_at?: string
 }
 
