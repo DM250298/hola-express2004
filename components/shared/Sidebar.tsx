@@ -12,7 +12,6 @@ import {
   Receipt,
   Users,
   Package,
-  SlidersHorizontal,
   CalendarX,
   Tag,
   DollarSign,
@@ -92,12 +91,6 @@ const SECCIONES: Seccion[] = [
         href: '/inventario',
         etiqueta: 'Stock',
         icono: Package,
-        permiso: 'inventario',
-      },
-      {
-        href: '/inventario/control',
-        etiqueta: 'Control de stock',
-        icono: SlidersHorizontal,
         permiso: 'inventario',
       },
       {
