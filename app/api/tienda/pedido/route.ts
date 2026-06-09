@@ -1,4 +1,4 @@
-import { createServerClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse, type NextRequest } from 'next/server'
 
 interface ItemPedido {
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createServerClient()
+    const supabase = createAdminClient()
 
     // Validar stock de cada producto
     const productoIds = body.items.map((i) => i.producto_id)

@@ -1,14 +1,15 @@
-import { createServerClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
 /**
  * GET /api/tienda/catalogo
- * Devuelve productos activos con stock > 0 agrupados por categoría.
- * Es público (no requiere auth) — la tienda es para clientes.
+ * Devuelve productos activos, visibles en tienda y con stock > 0.
+ * Es público (no requiere auth) — la tienda es para clientes. Usa el cliente
+ * service-role: la lectura ya está acotada por los filtros y no expone costo.
  */
 export async function GET() {
   try {
-    const supabase = await createServerClient()
+    const supabase = createAdminClient()
 
     // Productos activos con stock
     const { data: productos, error: errProd } = await supabase
