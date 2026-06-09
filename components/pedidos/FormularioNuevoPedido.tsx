@@ -34,6 +34,7 @@ import {
   useProductosSugeridos,
 } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tomarHandoffReposicion } from '@/lib/compras/handoffReposicion'
 import { cn } from '@/lib/utils'
 import type { ProveedorRow } from '@/types/database'
 
@@ -81,6 +82,17 @@ export function FormularioNuevoPedido() {
     busqueda: busqueda || undefined,
   })
 
+  // Pre-carga desde Reposición (handoff). Corre una sola vez al montar, antes
+  // de que el usuario toque nada. No hay efecto que limpie items al cambiar de
+  // proveedor (eso ahora vive en el onValueChange del Select), así que la
+  // selección sobrevive a este set.
+  useEffect(() => {
+    const handoff = tomarHandoffReposicion()
+    if (!handoff) return
+    setProveedorIdStr(String(handoff.proveedor_id))
+    setItems(handoff.items)
+  }, [])
+
   // Auto-calcular fecha de entrega al elegir proveedor
   useEffect(() => {
     if (proveedor?.dias_entrega != null) {
@@ -89,12 +101,6 @@ export function FormularioNuevoPedido() {
       setFechaEntrega('')
     }
   }, [proveedor])
-
-  // Al cambiar de proveedor: limpiar items
-  useEffect(() => {
-    setItems([])
-    setBusqueda('')
-  }, [proveedorIdStr])
 
   const total = useMemo(
     () => items.reduce((acc, it) => acc + it.cantidad_pedida * it.precio_costo, 0),
@@ -215,7 +221,15 @@ export function FormularioNuevoPedido() {
             <Label className="text-[#391511] font-medium">
               Proveedor <span className="text-[#c43e2c]">*</span>
             </Label>
-            <Select value={proveedorIdStr} onValueChange={(v) => setProveedorIdStr(v ?? SIN_PROVEEDOR)}>
+            <Select
+              value={proveedorIdStr}
+              onValueChange={(v) => {
+                // Cambiar de proveedor a mano reinicia el pedido.
+                setProveedorIdStr(v ?? SIN_PROVEEDOR)
+                setItems([])
+                setBusqueda('')
+              }}
+            >
               <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
                 <SelectValue placeholder="Seleccionar proveedor…" />
               </SelectTrigger>

@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   FileSpreadsheet,
   FileText,
-  Loader2,
   ShoppingBag,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,15 +27,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
-import { toast } from 'sonner'
 import { useProductosAReponer } from '@/lib/hooks/useCompras'
 import { useProveedores } from '@/lib/hooks/useProveedores'
-import { useCrearPedido } from '@/lib/hooks/usePedidos'
-import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
   generarCotizacionExcel,
   generarCotizacionPDF,
 } from '@/lib/utils/cotizacion'
+import { guardarHandoffReposicion } from '@/lib/compras/handoffReposicion'
 import { cn } from '@/lib/utils'
 
 const TODOS = '__todos__'
@@ -46,7 +44,7 @@ interface FilaSel {
 }
 
 export function TabReposicion() {
-  const { data: usuario } = useUsuario()
+  const router = useRouter()
   const { data: proveedores } = useProveedores()
   const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS)
   const [seleccion, setSeleccion] = useState<Record<number, FilaSel>>({})
@@ -57,7 +55,6 @@ export function TabReposicion() {
     isLoading,
     isError,
   } = useProductosAReponer(proveedorId)
-  const crearPedido = useCrearPedido()
 
   const itemsProveedor = useMemo(() => {
     const r: Record<string, string> = { [TODOS]: 'Todos los proveedores' }
@@ -132,32 +129,28 @@ export function TabReposicion() {
     )
   }
 
-  function crearBorrador() {
-    if (!puedeGenerar || !usuario || proveedorId == null) return
-    crearPedido.mutate(
-      {
-        proveedor_id: proveedorId,
-        usuario_id: usuario.id,
-        fecha_entrega_esperada: null,
-        estado: 'borrador',
-        items: itemsSel.map(({ p, cantidad }) => ({
-          producto_id: p.id,
-          cantidad_pedida: cantidad,
-          precio_costo: p.precio_costo,
-        })),
-      },
-      {
-        onSuccess: () =>
-          toast.success('Pedido borrador creado — revisalo en Órdenes'),
-      }
-    )
+  function armarOrden() {
+    if (!puedeGenerar || proveedorId == null) return
+    // Pasamos la selección al editor único de orden, donde el usuario revisa
+    // costos y la crea/envía. Evita el rebote del borrador suelto.
+    guardarHandoffReposicion({
+      proveedor_id: proveedorId,
+      items: itemsSel.map(({ p, cantidad }) => ({
+        producto_id: p.id,
+        nombre: p.nombre,
+        codigo_barras: p.codigo_barras,
+        cantidad_pedida: cantidad,
+        precio_costo: p.precio_costo,
+      })),
+    })
+    router.push('/pedidos/nuevo')
   }
 
   return (
     <div className="space-y-5">
       <p className="text-[#6f3a2a] text-sm">
         Productos por debajo del stock mínimo. Generá la cotización para el
-        proveedor o un pedido borrador.
+        proveedor o armá la orden de compra.
       </p>
 
       <div className="flex flex-wrap items-end gap-3">
@@ -333,16 +326,12 @@ export function TabReposicion() {
               Cotización PDF
             </Button>
             <Button
-              onClick={crearBorrador}
-              disabled={!puedeGenerar || crearPedido.isPending}
+              onClick={armarOrden}
+              disabled={!puedeGenerar}
               className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5 disabled:opacity-40"
             >
-              {crearPedido.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ShoppingBag className="h-4 w-4" />
-              )}
-              Crear pedido borrador
+              <ShoppingBag className="h-4 w-4" />
+              Armar orden de compra
             </Button>
           </div>
         </div>
