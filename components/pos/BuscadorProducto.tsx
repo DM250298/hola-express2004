@@ -5,6 +5,7 @@ import { Loader2, Package, Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ImagenProductoPOS } from './ImagenProductoPOS'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { getProductoByBarcode } from '@/lib/queries/productos'
 import { cn } from '@/lib/utils'
@@ -196,6 +197,12 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
                             : 'border-transparent hover:bg-[#fdfaf6]'
                         )}
                       >
+                        <ImagenProductoPOS
+                          url={p.imagen_url}
+                          nombre={p.nombre}
+                          className="h-10 w-10 rounded-lg border border-[#e4c9b0]/60"
+                          iconClassName="h-4 w-4"
+                        />
                         <div className="min-w-0 flex-1">
                           <div className="font-medium text-[#391511] truncate">
                             {p.nombre}

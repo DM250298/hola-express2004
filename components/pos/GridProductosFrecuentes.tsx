@@ -3,6 +3,7 @@
 import { Package, Sparkles } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ImagenProductoPOS } from './ImagenProductoPOS'
 import { useProductosFrecuentesTurno } from '@/lib/hooks/useVentas'
 import { useProductos } from '@/lib/hooks/useProductos'
 import type { ProductoFrecuente } from '@/lib/queries/ventas'
@@ -26,6 +27,7 @@ function datosProducto(p: ProductoGrid) {
     precio: p.precio_venta,
     stock: p.stock_actual,
     venta_por_peso: ('venta_por_peso' in p ? p.venta_por_peso : false) ?? false,
+    imagen_url: p.imagen_url ?? null,
   }
 }
 
@@ -88,24 +90,32 @@ export function GridProductosFrecuentes({ turnoId, onSeleccionar }: Props) {
                 onClick={() => !sinStock && onSeleccionar(p)}
                 disabled={sinStock}
                 className={cn(
-                  'aspect-square rounded-xl border bg-white p-2.5 flex flex-col justify-between text-left transition-all',
+                  'rounded-xl border bg-white flex flex-col text-left transition-all overflow-hidden',
                   sinStock
                     ? 'opacity-50 cursor-not-allowed border-[#e4c9b0]/60'
                     : 'border-[#e4c9b0]/60 hover:border-[#f9b44c] hover:shadow-md active:scale-95 active:bg-[#f9d2a2]/40'
                 )}
               >
-                <div className="text-[#391511] font-medium text-xs leading-tight line-clamp-3">
-                  {d.nombre}
-                </div>
-                <div>
-                  <div className="text-[#391511] font-bold text-sm tabular-nums">
-                    <MontoARS monto={d.precio} />
-                    {d.venta_por_peso && (
-                      <span className="text-[10px] text-[#6f3a2a] font-normal">/kg</span>
-                    )}
+                <ImagenProductoPOS
+                  url={d.imagen_url}
+                  nombre={d.nombre}
+                  className="aspect-square w-full"
+                  iconClassName="h-8 w-8"
+                />
+                <div className="p-2.5 flex flex-col gap-1 flex-1">
+                  <div className="text-[#391511] font-medium text-xs leading-tight line-clamp-2 flex-1">
+                    {d.nombre}
                   </div>
-                  <div className="text-[10px] text-[#c8a58a] mt-0.5">
-                    {d.venta_por_peso ? `${d.stock} kg disp.` : `Stock: ${d.stock}`}
+                  <div>
+                    <div className="text-[#391511] font-bold text-sm tabular-nums">
+                      <MontoARS monto={d.precio} />
+                      {d.venta_por_peso && (
+                        <span className="text-[10px] text-[#6f3a2a] font-normal">/kg</span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-[#c8a58a] mt-0.5">
+                      {d.venta_por_peso ? `${d.stock} kg disp.` : `Stock: ${d.stock}`}
+                    </div>
                   </div>
                 </div>
               </button>
