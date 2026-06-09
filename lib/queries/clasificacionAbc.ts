@@ -72,20 +72,23 @@ export async function calcularClasificacionABC(
   desde.setDate(desde.getDate() - dias)
   const fechaDesde = desde.toISOString()
 
-  // 1. Traer items_venta del período (solo ventas completadas)
-  const { data: itemsVenta, error: errorItems } = await supabase
-    .from('items_venta')
-    .select(`
-      producto_id,
-      cantidad,
-      precio_unitario,
-      subtotal,
-      venta:ventas!inner(id, fecha, estado)
-    `)
-    .gte('venta.fecha', fechaDesde)
-    .eq('venta.estado', 'completada')
-
-  if (errorItems) throw new Error(errorItems.message)
+  // 1. Traer items_venta del período (solo ventas completadas).
+  //    Paginado con traerTodo: en períodos largos los items superan el límite
+  //    de 1000 filas de PostgREST y el ranking ABC quedaría subcontado.
+  const itemsVenta = await traerTodo<{
+    producto_id: number
+    cantidad: number
+    precio_unitario: number
+    subtotal: number | null
+  }>(() =>
+    supabase
+      .from('items_venta')
+      .select(
+        `producto_id, cantidad, precio_unitario, subtotal, venta:ventas!inner(id, fecha, estado)`
+      )
+      .gte('venta.fecha', fechaDesde)
+      .eq('venta.estado', 'completada')
+  )
 
   // 2. Agrupar por producto_id → sumar ingresos y unidades
   const mapa = new Map<
@@ -93,7 +96,7 @@ export async function calcularClasificacionABC(
     { unidades: number; ingresos: number }
   >()
 
-  for (const item of itemsVenta ?? []) {
+  for (const item of itemsVenta) {
     const prev = mapa.get(item.producto_id) ?? {
       unidades: 0,
       ingresos: 0,

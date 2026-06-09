@@ -112,7 +112,9 @@ export function ModalCobro({
   // Totales
   const sumaPagos = pagos.reduce((acc, p) => acc + (Number(p.monto) || 0), 0)
   const restante = Math.max(0, total - sumaPagos)
-  const cubierto = sumaPagos >= total
+  // Tolerancia de medio centavo: con split payment las sumas de floats pueden
+  // quedar 0.001 por debajo del total y trabar el botón sin motivo visible.
+  const cubierto = sumaPagos >= total - 0.005
 
   // Vuelto: total efectivo - lo que el efectivo necesita cubrir
   const totalEfectivo = pagos

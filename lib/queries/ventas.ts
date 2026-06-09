@@ -173,6 +173,7 @@ export async function crearVenta(
         {
           turno_id: payload.turno_id,
           usuario_id: payload.usuario_id,
+          cliente_id: payload.cliente_id ?? null,
           pagos: payload.pagos,
           items: payload.items,
           total,

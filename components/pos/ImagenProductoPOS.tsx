@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Package } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -26,6 +26,9 @@ export function ImagenProductoPOS({
   iconClassName,
 }: Props) {
   const [error, setError] = useState(false)
+  // Si cambia la URL (p. ej. el catálogo refresca con otra foto para el mismo
+  // producto), reintentar la carga en vez de quedar pegado en el ícono.
+  useEffect(() => setError(false), [url])
   const mostrarImagen = url && !error
 
   return (
