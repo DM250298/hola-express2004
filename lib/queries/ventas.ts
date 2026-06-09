@@ -241,6 +241,7 @@ export async function getProductosFrecuentesTurno(
     .eq('ventas.turno_id', turnoId)
     .eq('ventas.estado', 'completada')
     .eq('productos.activo', true)
+    .eq('productos.no_ofrecer_ventas', false)
 
   // Offline: los frecuentes son un "nice to have"; sin red devolvemos vacío.
   if (error) {
