@@ -20,6 +20,11 @@ export type EstadoPedido =
   | 'recepcion_parcial'
   | 'cancelado'
 export type EstadoCuentaPagar = 'pendiente' | 'pagada' | 'vencida'
+export type EstadoSugerencia =
+  | 'pendiente'
+  | 'en_proceso'
+  | 'resuelta'
+  | 'descartada'
 
 /** Valor JSON genérico (para argumentos jsonb de funciones RPC). */
 export type Json =
@@ -1327,6 +1332,34 @@ export type PedidoComprobanteInsert = {
 
 export type PedidoComprobanteUpdate = Partial<PedidoComprobanteInsert>
 
+// ─── sugerencias_producto (demanda de mostrador) ──────────────────────────────
+
+export type SugerenciaProductoRow = {
+  id: number
+  texto: string
+  nota: string | null
+  estado: EstadoSugerencia
+  proveedor_id: number | null
+  producto_id: number | null
+  usuario_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SugerenciaProductoInsert = {
+  id?: number
+  texto: string
+  nota?: string | null
+  estado?: EstadoSugerencia
+  proveedor_id?: number | null
+  producto_id?: number | null
+  usuario_id?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type SugerenciaProductoUpdate = Partial<SugerenciaProductoInsert>
+
 // ─── config_compras (singleton) ──────────────────────────────────────────────
 
 export type ConfigComprasRow = {
@@ -2200,6 +2233,12 @@ export interface Database {
         Row: PedidoComprobanteRow
         Insert: PedidoComprobanteInsert
         Update: PedidoComprobanteUpdate
+        Relationships: []
+      }
+      sugerencias_producto: {
+        Row: SugerenciaProductoRow
+        Insert: SugerenciaProductoInsert
+        Update: SugerenciaProductoUpdate
         Relationships: []
       }
       config_fiscal: {

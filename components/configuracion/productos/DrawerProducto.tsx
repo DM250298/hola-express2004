@@ -33,7 +33,7 @@ import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
-import type { CostoAdicional } from '@/types/database'
+import type { CostoAdicional, ProductoRow } from '@/types/database'
 
 const SIN_VALOR = '__sin_valor__'
 const r2 = (n: number) => Math.round(n * 100) / 100
@@ -106,6 +106,12 @@ interface Props {
   abierto: boolean
   onCambioAbierto: (abierto: boolean) => void
   producto: ProductoConRelaciones | null
+  /** Prefill del nombre para alta desde una sugerencia (solo si producto es null). */
+  nombreInicial?: string
+  /** Prefill del proveedor para alta desde una sugerencia (solo si producto es null). */
+  proveedorIdInicial?: number | null
+  /** Se llama con el producto recién creado (para vincularlo a la sugerencia). */
+  onCreado?: (producto: ProductoRow) => void
 }
 
 interface AdicionalState {
@@ -121,7 +127,14 @@ function generarCodigoBarrasSimulado(): string {
   return codigo
 }
 
-export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
+export function DrawerProducto({
+  abierto,
+  onCambioAbierto,
+  producto,
+  nombreInicial,
+  proveedorIdInicial,
+  onCreado,
+}: Props) {
   const esEdicion = producto !== null
   const crear = useCreateProducto()
   const actualizar = useUpdateProducto()
@@ -179,7 +192,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       marca: producto?.marca ?? '',
       subcategoria: producto?.subcategoria ?? '',
       ubicacion: producto?.ubicacion ?? '',
-      nombre: producto?.nombre ?? '',
+      nombre: producto?.nombre ?? nombreInicial ?? '',
       categoria_id:
         producto?.categoria_id != null
           ? String(producto.categoria_id)
@@ -187,7 +200,9 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       proveedor_id:
         producto?.proveedor_id != null
           ? String(producto.proveedor_id)
-          : SIN_VALOR,
+          : proveedorIdInicial != null
+            ? String(proveedorIdInicial)
+            : SIN_VALOR,
       stock_actual: String(producto?.stock_actual ?? 0),
       stock_minimo: String(producto?.stock_minimo ?? 5),
       dias_vencimiento_minimo:
@@ -217,7 +232,7 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
     const sumaAdic = adic.reduce((s, a) => s + (Number(a.monto) || 0), 0)
     const base = (producto?.precio_costo ?? 0) - sumaAdic
     setCostoBase(producto ? String(r2(base)) : '')
-  }, [abierto, producto, reset])
+  }, [abierto, producto, reset, nombreInicial, proveedorIdInicial])
 
   const guardando = crear.isPending || actualizar.isPending
 
@@ -300,7 +315,8 @@ export function DrawerProducto({ abierto, onCambioAbierto, producto }: Props) {
       if (esEdicion && producto) {
         await actualizar.mutateAsync({ id: producto.id, datos: payload })
       } else {
-        await crear.mutateAsync(payload)
+        const creado = await crear.mutateAsync(payload)
+        onCreado?.(creado)
       }
       onCambioAbierto(false)
     } catch {

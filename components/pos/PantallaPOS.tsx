@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react'
 import {
   ArrowDownToLine,
   Keyboard,
+  Lightbulb,
   Loader2,
   LockKeyhole,
   Plus,
@@ -32,6 +33,7 @@ import { ModalCobro } from './ModalCobro'
 import { ModalVentasTurno } from './ModalVentasTurno'
 import { ModalGastoPOS } from './ModalGastoPOS'
 import { ModalSangria } from './ModalSangria'
+import { ModalSugerirProducto } from './ModalSugerirProducto'
 import { ModalDevolucion } from './ModalDevolucion'
 import { TicketResumen } from './TicketResumen'
 import { OverlayAtajos } from './OverlayAtajos'
@@ -99,6 +101,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [modalVentasTurnoAbierto, setModalVentasTurnoAbierto] = useState(false)
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false)
   const [modalSangriaAbierto, setModalSangriaAbierto] = useState(false)
+  const [modalSugerirAbierto, setModalSugerirAbierto] = useState(false)
   const [modalDevolucionAbierto, setModalDevolucionAbierto] = useState(false)
   const [ticketAbierto, setTicketAbierto] = useState(false)
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
@@ -526,6 +529,16 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             <ArrowDownToLine className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Sangría</span>
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setModalSugerirAbierto(true)}
+            title="Sugerir un producto que pidió un cliente"
+            className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5"
+          >
+            <Lightbulb className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Sugerir</span>
+          </Button>
           {puedeDevolver && (
             <Button
               variant="ghost"
@@ -706,6 +719,12 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         abierto={modalSangriaAbierto}
         onCambioAbierto={setModalSangriaAbierto}
         turnoId={turno.id}
+        usuarioId={usuarioId}
+      />
+
+      <ModalSugerirProducto
+        abierto={modalSugerirAbierto}
+        onCambioAbierto={setModalSugerirAbierto}
         usuarioId={usuarioId}
       />
 

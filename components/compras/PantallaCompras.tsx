@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   ClipboardList,
   FileText,
+  Lightbulb,
   PackageCheck,
   ShoppingBag,
   TrendingUp,
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabReposicion } from './TabReposicion'
 import { TabMonitorCostos } from './TabMonitorCostos'
 import { TabFacturas, BadgePendientesFactura } from './TabFacturas'
+import { TabSugerencias, BadgeSugerenciasPendientes } from './TabSugerencias'
 import { PantallaPedidos } from '@/components/pedidos/PantallaPedidos'
 import { PantallaRecepcion } from '@/components/recepcion/PantallaRecepcion'
 import { useUsuario } from '@/lib/hooks/useUsuario'
@@ -30,6 +32,7 @@ const TABS: TabDef[] = [
   { value: 'recepcion', etiqueta: 'Recepción', icono: PackageCheck, permiso: 'recepcion' },
   { value: 'facturas', etiqueta: 'Facturas', icono: FileText, permiso: 'finanzas' },
   { value: 'costos', etiqueta: 'Costos', icono: TrendingUp, permiso: 'compras' },
+  { value: 'sugerencias', etiqueta: 'Sugerencias', icono: Lightbulb, permiso: 'compras' },
 ]
 
 interface Props {
@@ -84,6 +87,7 @@ export function PantallaCompras({ tabInicial }: Props) {
               <Icono className="h-3.5 w-3.5" />
               {etiqueta}
               {value === 'facturas' && <BadgePendientesFactura />}
+              {value === 'sugerencias' && <BadgeSugerenciasPendientes />}
             </TabsTrigger>
           ))}
         </TabsList>
@@ -111,6 +115,11 @@ export function PantallaCompras({ tabInicial }: Props) {
         {tabsAMostrar.some((t) => t.value === 'costos') && (
           <TabsContent value="costos">
             <TabMonitorCostos />
+          </TabsContent>
+        )}
+        {tabsAMostrar.some((t) => t.value === 'sugerencias') && (
+          <TabsContent value="sugerencias">
+            <TabSugerencias />
           </TabsContent>
         )}
       </Tabs>
