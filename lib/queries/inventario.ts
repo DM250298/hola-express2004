@@ -220,8 +220,11 @@ export async function getResumenAlertasStock(): Promise<ResumenAlertasStock> {
       .eq('activo', true)
   )
 
+  // "A reponer" = bajo pero CON stock; los agotados van aparte (disjuntos),
+  // igual que calcularEstadoStock (<=0 crítico, >0 y <mínimo bajo). Evita que
+  // el KPI "A reponer" doble-cuente los que ya están sin stock.
   const bajo_stock = lista.filter(
-    (p) => p.stock_actual < p.stock_minimo
+    (p) => p.stock_actual > 0 && p.stock_actual < p.stock_minimo
   ).length
   const agotados = lista.filter((p) => p.stock_actual <= 0).length
 
