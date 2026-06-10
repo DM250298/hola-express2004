@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { convertir, esUnidadCanonica, type UnidadCanonica } from '@/lib/utils/unidades'
 import type {
+  DesfasajeProduccionRow,
   EstadoOrdenProduccion,
   ItemOrdenProdRow,
   Json,
@@ -483,27 +484,82 @@ export async function iniciarOrden(
   return data as unknown as ResultadoIniciar
 }
 
+export interface ConsumoReal {
+  item_id: number
+  cantidad_real: number
+  motivo: string | null
+}
+
 export interface ResultadoCerrar {
   orden_id: number
   lote_id: number | null
   costo_unitario: number
+  costo_total: number
   merma: number
 }
 
 export async function cerrarOrden(
   orden_id: number,
   cantidad_producida: number,
-  usuario_id: string
+  usuario_id: string,
+  consumos: ConsumoReal[] = []
 ): Promise<ResultadoCerrar> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('fn_cerrar_orden_produccion', {
     p_orden_id: orden_id,
     p_cantidad_producida: cantidad_producida,
     p_usuario_id: usuario_id,
+    p_consumos: consumos as unknown as Json,
   })
   if (error) throw error
   if (!data) throw new Error('No se pudo cerrar la orden.')
   return data as unknown as ResultadoCerrar
+}
+
+// ─── Desfasajes (real vs receta) ────────────────────────────────────────────────
+
+export interface DesfasajeLinea {
+  id: number
+  orden_id: number
+  fecha: string | null
+  elaborado: string
+  insumo: string
+  unidad: string
+  teorico: number
+  real: number
+  diferencia: number
+  costo_unitario: number
+  diferencia_costo: number
+  motivo: string | null
+}
+
+/** Líneas de desfasaje (consumo real ≠ receta) en órdenes cerradas, por impacto en $. */
+export async function getDesfasajes(): Promise<DesfasajeLinea[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('vista_desfasajes_produccion')
+    .select('*')
+    .order('id', { ascending: false })
+    .limit(200)
+
+  if (error) throw error
+
+  return ((data ?? []) as DesfasajeProduccionRow[])
+    .map((d) => ({
+      id: d.id,
+      orden_id: d.orden_id,
+      fecha: d.fecha_cierre,
+      elaborado: d.elaborado_nombre,
+      insumo: d.insumo_nombre,
+      unidad: d.insumo_unidad,
+      teorico: d.teorico,
+      real: d.real_usado ?? 0,
+      diferencia: d.diferencia,
+      costo_unitario: d.costo_unitario,
+      diferencia_costo: d.diferencia_costo,
+      motivo: d.motivo_desfasaje,
+    }))
+    .sort((a, b) => Math.abs(b.diferencia_costo) - Math.abs(a.diferencia_costo))
 }
 
 export interface ResultadoCancelar {

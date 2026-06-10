@@ -1,6 +1,6 @@
 'use client'
 
-import { TrendingUp } from 'lucide-react'
+import { Scale, TrendingUp } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -12,9 +12,21 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { Semaforo } from '@/components/shared/Semaforo'
-import { useOrdenes, useProductosProduccion } from '@/lib/hooks/useProduccion'
+import {
+  useDesfasajes,
+  useOrdenes,
+  useProductosProduccion,
+} from '@/lib/hooks/useProduccion'
 
 const UMBRAL_MARGEN = 30
+
+const MOTIVO_LABEL: Record<string, string> = {
+  desperdicio: 'Desperdicio',
+  se_quemo: 'Se quemó',
+  mal_porcionado: 'Mal porcionado',
+  error_carga: 'Error de carga',
+  otro: 'Otro',
+}
 
 export function TabAnalisis() {
   const { data: productos, isLoading } = useProductosProduccion([
@@ -22,6 +34,7 @@ export function TabAnalisis() {
     'elaborado',
   ])
   const { data: cerradas } = useOrdenes({ estado: 'cerrada' })
+  const { data: desfasajes } = useDesfasajes()
 
   return (
     <div className="space-y-6">
@@ -152,6 +165,72 @@ export function TabAnalisis() {
                     </TableRow>
                   )
                 })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+      </section>
+
+      {/* Desfasajes de insumos (real vs receta) */}
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-[#391511] flex items-center gap-1.5">
+          <Scale className="h-4 w-4 text-[#f9b44c]" />
+          Desfasajes de insumos (real vs receta)
+        </h2>
+        <div className="rounded-xl border border-[#e4c9b0]/60 bg-white overflow-hidden">
+          {!desfasajes || desfasajes.length === 0 ? (
+            <div className="p-8 text-center text-[#6f3a2a] text-sm">
+              Sin desfasajes. Aparecen cuando el consumo real difiere de la
+              receta al cerrar una orden.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-[#e4c9b0]/40">
+                  <TableHead className="text-[#6f3a2a]">Insumo</TableHead>
+                  <TableHead className="text-[#6f3a2a]">Elaborado</TableHead>
+                  <TableHead className="text-[#6f3a2a] text-right">Receta</TableHead>
+                  <TableHead className="text-[#6f3a2a] text-right">Real</TableHead>
+                  <TableHead className="text-[#6f3a2a]">Motivo</TableHead>
+                  <TableHead className="text-[#6f3a2a] text-right">Impacto $</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {desfasajes.slice(0, 30).map((d) => (
+                  <TableRow key={d.id} className="border-[#e4c9b0]/30">
+                    <TableCell className="font-medium text-[#391511]">
+                      {d.insumo}
+                    </TableCell>
+                    <TableCell className="text-[#6f3a2a]">{d.elaborado}</TableCell>
+                    <TableCell className="text-right text-[#6f3a2a] tabular-nums">
+                      {d.teorico} {d.unidad}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <span
+                        className={
+                          d.diferencia > 0 ? 'text-[#c45e14]' : 'text-[#2f8f4e]'
+                        }
+                      >
+                        {d.real} {d.unidad}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-[#6f3a2a] text-xs">
+                      {d.motivo ? MOTIVO_LABEL[d.motivo] ?? d.motivo : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span
+                        className={
+                          d.diferencia_costo > 0
+                            ? 'text-[#c45e14] font-semibold'
+                            : 'text-[#2f8f4e] font-semibold'
+                        }
+                      >
+                        {d.diferencia_costo > 0 ? '+' : ''}
+                        <MontoARS monto={d.diferencia_costo} />
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           )}

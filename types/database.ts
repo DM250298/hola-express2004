@@ -1082,6 +1082,8 @@ export type ItemOrdenProdRow = {
   orden_id: number
   insumo_id: number
   cantidad_consumida: number
+  cantidad_real: number | null
+  motivo_desfasaje: string | null
   costo_unitario: number
   subtotal: number
   created_at: string
@@ -1092,6 +1094,8 @@ export type ItemOrdenProdInsert = {
   orden_id: number
   insumo_id: number
   cantidad_consumida: number
+  cantidad_real?: number | null
+  motivo_desfasaje?: string | null
   costo_unitario?: number
   subtotal?: number
   created_at?: string
@@ -1099,8 +1103,28 @@ export type ItemOrdenProdInsert = {
 
 export type ItemOrdenProdUpdate = {
   cantidad_consumida?: number
+  cantidad_real?: number | null
+  motivo_desfasaje?: string | null
   costo_unitario?: number
   subtotal?: number
+}
+
+export type DesfasajeProduccionRow = {
+  id: number
+  orden_id: number
+  elaborado_id: number
+  elaborado_nombre: string
+  insumo_id: number
+  insumo_nombre: string
+  insumo_unidad: string
+  teorico: number
+  real_usado: number | null
+  diferencia: number
+  costo_unitario: number
+  diferencia_costo: number
+  motivo_desfasaje: string | null
+  usuario_id: string | null
+  fecha_cierre: string | null
 }
 
 // ─── egresos ─────────────────────────────────────────────────────────────────
@@ -2794,6 +2818,10 @@ export interface Database {
         Row: CoberturaStockRow
         Relationships: []
       }
+      vista_desfasajes_produccion: {
+        Row: DesfasajeProduccionRow
+        Relationships: []
+      }
       vista_tareas: {
         Row: VistaTareaRow
         Relationships: []
@@ -2906,11 +2934,13 @@ export interface Database {
           p_orden_id: number
           p_cantidad_producida: number
           p_usuario_id: string
+          p_consumos?: Json
         }
         Returns: {
           orden_id: number
           lote_id: number | null
           costo_unitario: number
+          costo_total: number
           merma: number
         }
       }

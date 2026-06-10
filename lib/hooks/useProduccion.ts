@@ -7,6 +7,7 @@ import {
   cerrarOrden,
   crearOrden,
   generarReposicion,
+  getDesfasajes,
   getDisponibilidadInsumos,
   getOrdenDetalle,
   getOrdenes,
@@ -16,6 +17,7 @@ import {
   guardarReceta,
   iniciarOrden,
   previewCostoReceta,
+  type ConsumoReal,
   type FiltrosOrdenes,
   type GuardarRecetaPayload,
   type NuevaOrdenPayload,
@@ -166,17 +168,20 @@ export function useCerrarOrden() {
       orden_id,
       cantidad_producida,
       usuario_id,
+      consumos,
     }: {
       orden_id: number
       cantidad_producida: number
       usuario_id: string
-    }) => cerrarOrden(orden_id, cantidad_producida, usuario_id),
+      consumos?: ConsumoReal[]
+    }) => cerrarOrden(orden_id, cantidad_producida, usuario_id, consumos ?? []),
     onSuccess: (_d, variables) => {
       invalidarStock(qc)
       qc.invalidateQueries({ queryKey: ['orden-prod', variables.orden_id] })
       qc.invalidateQueries({ queryKey: ['vencimientos'] })
       qc.invalidateQueries({ queryKey: ['historial-costos'] })
       qc.invalidateQueries({ queryKey: ['costo-receta'] })
+      qc.invalidateQueries({ queryKey: ['desfasajes'] })
       toast.success('Producción cerrada · stock ingresado')
     },
     onError: (error: Error) => {
@@ -216,5 +221,13 @@ export function useGenerarReposicion() {
     onError: (error: Error) => {
       toast.error(`No se pudo generar la reposición: ${error.message}`)
     },
+  })
+}
+
+export function useDesfasajes() {
+  return useQuery({
+    queryKey: ['desfasajes'],
+    queryFn: () => getDesfasajes(),
+    staleTime: 30 * 1000,
   })
 }
