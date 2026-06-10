@@ -266,7 +266,6 @@ export function TabStockInventario() {
       <ModalImprimirEtiquetaPrecio
         abierto={productoEtiqueta !== null}
         onCambioAbierto={(v) => !v && setProductoEtiqueta(null)}
-        productoId={productoEtiqueta?.id ?? null}
         producto={
           productoEtiqueta
             ? {

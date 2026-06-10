@@ -13,27 +13,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { EtiquetaPrecio, type DatosEtiquetaPrecio } from './EtiquetaPrecio'
-import { useMarcarEtiquetaColocadaPorProducto } from '@/lib/hooks/useEtiquetas'
 
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   producto: DatosEtiquetaPrecio | null
-  /** Id del producto, para sincronizar la cola de etiquetas pendientes al imprimir. */
-  productoId?: number | null
 }
 
 export function ModalImprimirEtiquetaPrecio({
   abierto,
   onCambioAbierto,
   producto,
-  productoId,
 }: Props) {
   const [cantidad, setCantidad] = useState(1)
   // Datos editables de la etiqueta (no cambian el producto, solo lo que se imprime)
   const [nombre, setNombre] = useState('')
   const [precio, setPrecio] = useState(0)
-  const marcarColocada = useMarcarEtiquetaColocadaPorProducto()
 
   useEffect(() => {
     if (abierto && producto) {
@@ -52,8 +47,8 @@ export function ModalImprimirEtiquetaPrecio({
   function imprimir() {
     if (cantidad < 1) return
     window.print()
-    // Si el producto tenía una etiqueta pendiente en la cola, se quita.
-    if (productoId) marcarColocada.mutate(productoId)
+    // Imprimir no marca la etiqueta como colocada: eso se hace explícito con
+    // el botón "Ya colocada" en la pantalla de Etiquetas.
   }
 
   return (

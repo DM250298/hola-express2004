@@ -44,17 +44,3 @@ export async function quitarEtiquetaPendiente(id: number): Promise<void> {
     .eq('id', id)
   if (error) throw error
 }
-
-/**
- * Quita de la cola la etiqueta pendiente de un producto (si la hubiera).
- * Se llama al imprimir la etiqueta desde Stock/Detalle, para que las dos vías
- * de impresión queden sincronizadas. No falla si el producto no estaba en cola.
- */
-export async function marcarColocadaPorProducto(productoId: number): Promise<void> {
-  const supabase = createClient()
-  const { error } = await supabase
-    .from('etiquetas_pendientes')
-    .delete()
-    .eq('producto_id', productoId)
-  if (error) throw error
-}

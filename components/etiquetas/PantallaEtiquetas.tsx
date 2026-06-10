@@ -21,7 +21,6 @@ export function PantallaEtiquetas() {
   const quitar = useQuitarEtiqueta()
   const [productoImprimir, setProductoImprimir] =
     useState<DatosEtiquetaPrecio | null>(null)
-  const [idImprimir, setIdImprimir] = useState<number | null>(null)
 
   // ── Buscador de la cola de pendientes ──
   const [busqueda, setBusqueda] = useState('')
@@ -50,20 +49,19 @@ export function PantallaEtiquetas() {
     staleTime: 30 * 1000,
   })
 
-  // `id` solo se pasa desde la cola de pendientes (al imprimir, se marca
-  // colocada). Desde el buscador de catálogo va null → no toca la cola.
+  // Imprimir NUNCA saca una etiqueta de la cola de pendientes: solo el botón
+  // "Ya colocada" la marca como colocada. Por eso no le pasamos productoId al
+  // modal (si lo hiciéramos, al imprimir se quitaría de pendientes).
   function abrirImpresion(
     nombre: string,
     codigoBarras: string | null,
-    precioVenta: number,
-    id: number | null
+    precioVenta: number
   ) {
     setProductoImprimir({
       nombre,
       codigo_barras: codigoBarras,
       precio_venta: precioVenta,
     })
-    setIdImprimir(id)
   }
 
   return (
@@ -161,8 +159,7 @@ export function PantallaEtiquetas() {
                       abrirImpresion(
                         e.producto_nombre,
                         e.codigo_barras,
-                        e.precio,
-                        e.producto_id
+                        e.precio
                       )
                     }
                     className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
@@ -249,12 +246,7 @@ export function PantallaEtiquetas() {
                   variant="outline"
                   size="sm"
                   onClick={() =>
-                    abrirImpresion(
-                      p.nombre,
-                      p.codigo_barras,
-                      p.precio_venta,
-                      null
-                    )
+                    abrirImpresion(p.nombre, p.codigo_barras, p.precio_venta)
                   }
                   className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
                 >
@@ -270,12 +262,8 @@ export function PantallaEtiquetas() {
       <ModalImprimirEtiquetaPrecio
         abierto={productoImprimir !== null}
         onCambioAbierto={(v) => {
-          if (!v) {
-            setProductoImprimir(null)
-            setIdImprimir(null)
-          }
+          if (!v) setProductoImprimir(null)
         }}
-        productoId={idImprimir}
         producto={productoImprimir}
       />
     </div>
