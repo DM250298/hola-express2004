@@ -209,7 +209,7 @@ export function DrawerProducto({
         producto?.dias_vencimiento_minimo != null
           ? String(producto.dias_vencimiento_minimo)
           : '',
-      tipo: producto?.tipo ?? 'simple',
+      tipo: producto?.tipo ?? 'reventa',
       unidad: producto?.unidad ?? 'unidad',
       activo: producto?.activo ?? true,
       venta_por_peso: producto?.venta_por_peso ?? false,
@@ -734,14 +734,15 @@ export function DrawerProducto({
                 id="tipo"
                 list="opciones-tipo"
                 {...register('tipo')}
-                placeholder="simple"
+                placeholder="reventa"
                 disabled={guardando}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
               />
               <datalist id="opciones-tipo">
-                <option value="simple" />
-                <option value="combo" />
-                <option value="variante" />
+                <option value="reventa" />
+                <option value="insumo" />
+                <option value="semi_elaborado" />
+                <option value="elaborado" />
               </datalist>
               {errors.tipo && (
                 <p className="text-[#c43e2c] text-xs mt-1">{errors.tipo.message}</p>

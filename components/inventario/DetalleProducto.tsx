@@ -81,6 +81,16 @@ const CONFIG_TIPO: Record<
     icono: ShoppingCart,
     clase: 'text-[#6f3a2a] bg-[#ebd5a1]/40',
   },
+  consumo_produccion: {
+    etiqueta: 'Consumo prod.',
+    icono: ArrowDown,
+    clase: 'text-[#9e2f25] bg-[#c43e2c]/15',
+  },
+  ingreso_produccion: {
+    etiqueta: 'Producción',
+    icono: Box,
+    clase: 'text-[#6f3a2a] bg-[#f9b44c]/20',
+  },
 }
 
 export function DetalleProducto({ productoId }: Props) {

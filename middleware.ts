@@ -22,6 +22,7 @@ const PERMISO_RUTA: Record<string, string[]> = {
   etiquetas: ['/etiquetas'],
   pedidos: ['/pedidos', '/compras'],
   recepcion: ['/recepcion', '/compras'],
+  produccion: ['/produccion'],
   finanzas: ['/finanzas'],
   contabilidad: ['/contabilidad'],
   rrhh: ['/rrhh'],

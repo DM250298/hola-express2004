@@ -20,6 +20,7 @@ import {
   Briefcase,
   CreditCard,
   Settings,
+  ChefHat,
   ChevronDown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -98,6 +99,12 @@ const SECCIONES: Seccion[] = [
         etiqueta: 'Vencimientos',
         icono: CalendarX,
         permiso: 'vencimientos',
+      },
+      {
+        href: '/produccion',
+        etiqueta: 'Producción',
+        icono: ChefHat,
+        permiso: 'produccion',
       },
       {
         href: '/etiquetas',

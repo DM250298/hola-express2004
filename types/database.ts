@@ -12,7 +12,14 @@ export type EstadoTurno = 'abierto' | 'cerrado'
 export type MedioPago = string
 export type EstadoVenta = 'completada' | 'anulada'
 export type EstadoLote = 'activo' | 'agotado' | 'vencido' | 'dado_de_baja'
-export type TipoMovimiento = 'entrada' | 'salida' | 'ajuste' | 'merma' | 'venta'
+export type TipoMovimiento =
+  | 'entrada'
+  | 'salida'
+  | 'ajuste'
+  | 'merma'
+  | 'venta'
+  | 'consumo_produccion'
+  | 'ingreso_produccion'
 export type EstadoPedido =
   | 'borrador'
   | 'enviado'
@@ -531,6 +538,7 @@ export type ProductoRow = {
   activo: boolean
   tipo: string
   unidad: string
+  dimension: string
   iva_compra: number
   iva_venta: number
   margen: number
@@ -565,6 +573,7 @@ export type ProductoInsert = {
   activo?: boolean
   tipo?: string
   unidad?: string
+  dimension?: string | null
   iva_compra?: number
   iva_venta?: number
   margen?: number
@@ -597,6 +606,7 @@ export type ProductoUpdate = {
   activo?: boolean
   tipo?: string
   unidad?: string
+  dimension?: string | null
   iva_compra?: number
   iva_venta?: number
   margen?: number
@@ -956,6 +966,140 @@ export type ItemPedidoUpdate = {
   cantidad_pedida?: number
   cantidad_recibida?: number | null
   precio_costo?: number
+  subtotal?: number
+}
+
+// ─── producción (recetas, órdenes) ────────────────────────────────────────────
+
+export type EstadoOrdenProduccion = 'borrador' | 'iniciada' | 'cerrada' | 'cancelada'
+export type DimensionUnidad = 'peso' | 'volumen' | 'conteo'
+export type TipoProducto = 'insumo' | 'semi_elaborado' | 'elaborado' | 'reventa'
+
+export type RecetaRow = {
+  id: number
+  producto_id: number
+  rendimiento: number
+  unidad_rendimiento: string
+  vida_util_dias: number
+  activa: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type RecetaInsert = {
+  id?: number
+  producto_id: number
+  rendimiento: number
+  unidad_rendimiento: string
+  vida_util_dias?: number
+  activa?: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export type RecetaUpdate = {
+  rendimiento?: number
+  unidad_rendimiento?: string
+  vida_util_dias?: number
+  activa?: boolean
+  updated_at?: string
+}
+
+export type RecetaIngredienteRow = {
+  id: number
+  receta_id: number
+  insumo_id: number
+  cantidad: number
+  unidad: string
+  merma_pct: number
+  created_at: string
+}
+
+export type RecetaIngredienteInsert = {
+  id?: number
+  receta_id: number
+  insumo_id: number
+  cantidad: number
+  unidad: string
+  merma_pct?: number
+  created_at?: string
+}
+
+export type RecetaIngredienteUpdate = {
+  cantidad?: number
+  unidad?: string
+  merma_pct?: number
+}
+
+export type OrdenProduccionRow = {
+  id: number
+  producto_id: number
+  receta_id: number | null
+  cantidad_planificada: number
+  cantidad_producida: number | null
+  estado: EstadoOrdenProduccion
+  lote_id: number | null
+  costo_total: number
+  usuario_id: string | null
+  fecha_inicio: string | null
+  fecha_cierre: string | null
+  nota: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type OrdenProduccionInsert = {
+  id?: number
+  producto_id: number
+  receta_id?: number | null
+  cantidad_planificada: number
+  cantidad_producida?: number | null
+  estado?: EstadoOrdenProduccion
+  lote_id?: number | null
+  costo_total?: number
+  usuario_id?: string | null
+  fecha_inicio?: string | null
+  fecha_cierre?: string | null
+  nota?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export type OrdenProduccionUpdate = {
+  cantidad_planificada?: number
+  cantidad_producida?: number | null
+  estado?: EstadoOrdenProduccion
+  lote_id?: number | null
+  costo_total?: number
+  fecha_inicio?: string | null
+  fecha_cierre?: string | null
+  nota?: string | null
+  updated_at?: string
+}
+
+export type ItemOrdenProdRow = {
+  id: number
+  orden_id: number
+  insumo_id: number
+  cantidad_consumida: number
+  costo_unitario: number
+  subtotal: number
+  created_at: string
+}
+
+export type ItemOrdenProdInsert = {
+  id?: number
+  orden_id: number
+  insumo_id: number
+  cantidad_consumida: number
+  costo_unitario?: number
+  subtotal?: number
+  created_at?: string
+}
+
+export type ItemOrdenProdUpdate = {
+  cantidad_consumida?: number
+  costo_unitario?: number
   subtotal?: number
 }
 
@@ -2223,6 +2367,30 @@ export interface Database {
         Update: HistorialCostoUpdate
         Relationships: []
       }
+      recetas: {
+        Row: RecetaRow
+        Insert: RecetaInsert
+        Update: RecetaUpdate
+        Relationships: []
+      }
+      receta_ingredientes: {
+        Row: RecetaIngredienteRow
+        Insert: RecetaIngredienteInsert
+        Update: RecetaIngredienteUpdate
+        Relationships: []
+      }
+      ordenes_produccion: {
+        Row: OrdenProduccionRow
+        Insert: OrdenProduccionInsert
+        Update: OrdenProduccionUpdate
+        Relationships: []
+      }
+      items_orden_prod: {
+        Row: ItemOrdenProdRow
+        Insert: ItemOrdenProdInsert
+        Update: ItemOrdenProdUpdate
+        Relationships: []
+      }
       config_compras: {
         Row: ConfigComprasRow
         Insert: ConfigComprasInsert
@@ -2715,6 +2883,54 @@ export interface Database {
             variacion_pct: number
           }[]
         }
+      }
+      fn_costo_receta: {
+        Args: {
+          p_producto_id: number
+          p_depth?: number
+        }
+        Returns: number
+      }
+      fn_iniciar_orden_produccion: {
+        Args: {
+          p_orden_id: number
+          p_usuario_id: string
+        }
+        Returns: {
+          orden_id: number
+          costo_total: number
+        }
+      }
+      fn_cerrar_orden_produccion: {
+        Args: {
+          p_orden_id: number
+          p_cantidad_producida: number
+          p_usuario_id: string
+        }
+        Returns: {
+          orden_id: number
+          lote_id: number | null
+          costo_unitario: number
+          merma: number
+        }
+      }
+      fn_cancelar_orden_produccion: {
+        Args: {
+          p_orden_id: number
+          p_usuario_id: string
+        }
+        Returns: {
+          orden_id: number
+          estado: string
+        }
+      }
+      fn_convertir_unidad: {
+        Args: {
+          p_cantidad: number
+          p_desde: string
+          p_hacia: string
+        }
+        Returns: number
       }
       fn_guardar_factura_compra: {
         Args: {

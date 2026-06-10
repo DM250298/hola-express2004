@@ -35,6 +35,14 @@ const BADGE_TIPO: Record<
     label: 'Merma',
     className: 'bg-[#e97318]/15 text-[#c45e14] border-[#e97318]/30',
   },
+  consumo_produccion: {
+    label: 'Consumo prod.',
+    className: 'bg-[#391511]/10 text-[#391511] border-[#391511]/30',
+  },
+  ingreso_produccion: {
+    label: 'Producción',
+    className: 'bg-[#2f8f4e]/15 text-[#2f8f4e] border-[#2f8f4e]/30',
+  },
 }
 
 const ETIQUETA_TURNO: Record<Turno, { label: string; icon: string }> = {
@@ -53,6 +61,7 @@ function cantidadConSigno(mov: MovimientoCompleto): {
 } {
   const esPositivo =
     mov.tipo === 'entrada' ||
+    mov.tipo === 'ingreso_produccion' ||
     (mov.tipo === 'ajuste' && mov.stock_nuevo > mov.stock_anterior)
 
   const signo = esPositivo ? '+' : '−'
