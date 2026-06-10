@@ -9,8 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { InputNumero } from './InputNumero'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useCerrarOrden } from '@/lib/hooks/useProduccion'
 import { useUsuario } from '@/lib/hooks/useUsuario'
@@ -66,13 +66,11 @@ export function ModalCierreOrden({ orden, open, onOpenChange }: Props) {
 
           <div className="space-y-1.5">
             <Label className="text-[#6f3a2a]">Producido real ({unidad})</Label>
-            <Input
-              type="number"
+            <InputNumero
               min={0}
               step="0.001"
               value={producida}
-              onChange={(e) => setProducida(Number(e.target.value))}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+              onChange={setProducida}
               autoFocus
             />
           </div>

@@ -9,8 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { InputNumero } from './InputNumero'
 import { TablaDisponibilidad } from './TablaDisponibilidad'
 import { useCrearOrden, useRecetas } from '@/lib/hooks/useProduccion'
 import { useUsuario } from '@/lib/hooks/useUsuario'
@@ -87,13 +87,11 @@ export function AsistenteNuevaOrden({ open, onOpenChange }: Props) {
               Cantidad a producir{' '}
               {recetaSel ? `(${recetaSel.unidad_rendimiento})` : ''}
             </Label>
-            <Input
-              type="number"
+            <InputNumero
               min={0}
               step="0.001"
               value={cantidad}
-              onChange={(e) => setCantidad(Number(e.target.value))}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+              onChange={setCantidad}
             />
           </div>
 

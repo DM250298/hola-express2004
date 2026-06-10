@@ -10,9 +10,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { BuscadorInsumo } from './BuscadorInsumo'
+import { InputNumero } from './InputNumero'
 import { PanelCostoReceta } from './PanelCostoReceta'
 import {
   useGuardarReceta,
@@ -191,23 +191,19 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-[#6f3a2a]">Rinde ({unidadProducto})</Label>
-              <Input
-                type="number"
+              <InputNumero
                 min={0}
                 step="0.001"
                 value={rendimiento}
-                onChange={(e) => setRendimiento(Number(e.target.value))}
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                onChange={setRendimiento}
               />
             </div>
             <div className="space-y-1.5">
               <Label className="text-[#6f3a2a]">Vida útil (días)</Label>
-              <Input
-                type="number"
+              <InputNumero
                 min={0}
                 value={vidaUtil}
-                onChange={(e) => setVidaUtil(Number(e.target.value))}
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                onChange={setVidaUtil}
               />
             </div>
           </div>
@@ -230,15 +226,12 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
                         stock en {ing.unidad_stock}
                       </div>
                     </div>
-                    <Input
-                      type="number"
+                    <InputNumero
                       min={0}
                       step="0.0001"
                       value={ing.cantidad}
-                      onChange={(e) =>
-                        actualizarIng(idx, { cantidad: Number(e.target.value) })
-                      }
-                      className="w-24 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      onChange={(n) => actualizarIng(idx, { cantidad: n })}
+                      className="w-24"
                     />
                     <select
                       value={ing.unidad}
@@ -252,15 +245,12 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
                       ))}
                     </select>
                     <div className="flex items-center gap-1">
-                      <Input
-                        type="number"
+                      <InputNumero
                         min={0}
                         max={99}
                         value={ing.merma_pct}
-                        onChange={(e) =>
-                          actualizarIng(idx, { merma_pct: Number(e.target.value) })
-                        }
-                        className="w-16 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        onChange={(n) => actualizarIng(idx, { merma_pct: n })}
+                        className="w-16"
                         title="Merma %"
                       />
                       <span className="text-xs text-[#c8a58a]">%</span>
