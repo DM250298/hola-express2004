@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ClipboardList, Play, Plus, X } from 'lucide-react'
+import { ClipboardList, Play, Plus, RefreshCw, X } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -18,6 +18,7 @@ import { AsistenteNuevaOrden } from './AsistenteNuevaOrden'
 import { ModalCierreOrden } from './ModalCierreOrden'
 import {
   useCancelarOrden,
+  useGenerarReposicion,
   useIniciarOrden,
   useOrdenes,
 } from '@/lib/hooks/useProduccion'
@@ -29,6 +30,7 @@ export function TabProducir() {
   const { data: ordenes, isLoading } = useOrdenes()
   const iniciar = useIniciarOrden()
   const cancelar = useCancelarOrden()
+  const reponer = useGenerarReposicion()
 
   const [asistente, setAsistente] = useState(false)
   const [cierre, setCierre] = useState<OrdenConProducto | null>(null)
@@ -54,18 +56,32 @@ export function TabProducir() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-[#6f3a2a]">
-          Órdenes de producción. Iniciar descuenta insumos; cerrar ingresa lo
-          producido.
+          Órdenes de producción. Los elaborados bajo el mínimo generan una
+          orden en borrador automáticamente; iniciar descuenta insumos, cerrar
+          ingresa lo producido.
         </p>
-        <Button
-          onClick={() => setAsistente(true)}
-          className="bg-[#391511] hover:bg-[#4a1d16] text-white gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Nueva orden
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            onClick={() => reponer.mutate()}
+            disabled={reponer.isPending}
+            className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${reponer.isPending ? 'animate-spin' : ''}`}
+            />
+            Generar reposición
+          </Button>
+          <Button
+            onClick={() => setAsistente(true)}
+            className="bg-[#391511] hover:bg-[#4a1d16] text-white gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nueva orden
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-[#e4c9b0]/60 bg-white overflow-hidden">
@@ -94,7 +110,17 @@ export function TabProducir() {
               {ordenes.map((o) => (
                 <TableRow key={o.id} className="border-[#e4c9b0]/30">
                   <TableCell className="font-medium text-[#391511]">
-                    {o.producto?.nombre ?? '—'}
+                    <div className="flex items-center gap-1.5">
+                      <span>{o.producto?.nombre ?? '—'}</span>
+                      {o.nota?.includes('Reposición automática') && (
+                        <span
+                          className="text-[9px] font-semibold uppercase tracking-wide text-[#b07d1e] bg-[#f9b44c]/20 border border-[#f9b44c]/40 rounded px-1 py-0.5"
+                          title="Creada automáticamente por stock bajo el mínimo"
+                        >
+                          Auto
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right text-[#6f3a2a] tabular-nums">
                     {o.cantidad_planificada} {o.producto?.unidad ?? ''}

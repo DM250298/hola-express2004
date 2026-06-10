@@ -6,6 +6,7 @@ import {
   cancelarOrden,
   cerrarOrden,
   crearOrden,
+  generarReposicion,
   getDisponibilidadInsumos,
   getOrdenDetalle,
   getOrdenes,
@@ -196,6 +197,24 @@ export function useCancelarOrden() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo cancelar la orden: ${error.message}`)
+    },
+  })
+}
+
+export function useGenerarReposicion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => generarReposicion(),
+    onSuccess: (count) => {
+      qc.invalidateQueries({ queryKey: ORDENES_KEY })
+      if (count > 0) {
+        toast.success(`${count} orden(es) de reposición creada(s) en borrador`)
+      } else {
+        toast('No hay elaborados bajo el mínimo (o ya tienen una orden abierta).')
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo generar la reposición: ${error.message}`)
     },
   })
 }

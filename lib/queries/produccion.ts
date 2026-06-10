@@ -524,3 +524,11 @@ export async function cancelarOrden(
   if (!data) throw new Error('No se pudo cancelar la orden.')
   return data as unknown as ResultadoCancelar
 }
+
+/** Genera órdenes en borrador para los elaborados/semi bajo el mínimo. Devuelve cuántas creó. */
+export async function generarReposicion(): Promise<number> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_generar_ordenes_reposicion')
+  if (error) throw error
+  return Number(data ?? 0)
+}

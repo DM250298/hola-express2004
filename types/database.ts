@@ -2932,6 +2932,10 @@ export interface Database {
         }
         Returns: number
       }
+      fn_generar_ordenes_reposicion: {
+        Args: Record<string, never>
+        Returns: number
+      }
       fn_guardar_factura_compra: {
         Args: {
           p_cuenta_id: number
