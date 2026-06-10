@@ -93,7 +93,7 @@ export function PantallaRecepcion() {
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto">
           <TabsTrigger
             value="pendientes"
-            className="gap-1.5 data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="gap-1.5 data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm"
           >
             <PackageCheck className="h-3.5 w-3.5" />
             Por recibir
@@ -105,7 +105,7 @@ export function PantallaRecepcion() {
           </TabsTrigger>
           <TabsTrigger
             value="recibidos"
-            className="gap-1.5 data-[state=active]:bg-[#6f3a2a]/10 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="gap-1.5 data-active:bg-[#6f3a2a]/10 data-active:text-[#391511] data-active:shadow-sm"
           >
             <History className="h-3.5 w-3.5" />
             Recibidos

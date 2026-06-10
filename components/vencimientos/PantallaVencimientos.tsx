@@ -98,7 +98,7 @@ export function PantallaVencimientos() {
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           <TabsTrigger
             value="vencidos"
-            className="gap-1.5 data-[state=active]:bg-[#391511]/10 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="gap-1.5 data-active:bg-[#391511]/10 data-active:text-[#391511] data-active:shadow-sm"
           >
             <XOctagon className="h-3.5 w-3.5 text-[#391511]" />
             Vencidos
@@ -110,7 +110,7 @@ export function PantallaVencimientos() {
           </TabsTrigger>
           <TabsTrigger
             value="proximos"
-            className="gap-1.5 data-[state=active]:bg-[#c43e2c]/10 data-[state=active]:text-[#c43e2c] data-[state=active]:shadow-sm"
+            className="gap-1.5 data-active:bg-[#c43e2c]/10 data-active:text-[#c43e2c] data-active:shadow-sm"
           >
             <span className="h-2 w-2 rounded-full bg-[#c43e2c]" />
             Próximos a vencer
@@ -122,7 +122,7 @@ export function PantallaVencimientos() {
           </TabsTrigger>
           <TabsTrigger
             value="atencion"
-            className="gap-1.5 data-[state=active]:bg-[#e4a42a]/15 data-[state=active]:text-[#6f3a2a] data-[state=active]:shadow-sm"
+            className="gap-1.5 data-active:bg-[#e4a42a]/15 data-active:text-[#6f3a2a] data-active:shadow-sm"
           >
             <span className="h-2 w-2 rounded-full bg-[#e4a42a]" />
             Atención
@@ -134,7 +134,7 @@ export function PantallaVencimientos() {
           </TabsTrigger>
           <TabsTrigger
             value="ok"
-            className="gap-1.5 data-[state=active]:bg-[#f9b44c]/15 data-[state=active]:text-[#6f3a2a] data-[state=active]:shadow-sm"
+            className="gap-1.5 data-active:bg-[#f9b44c]/15 data-active:text-[#6f3a2a] data-active:shadow-sm"
           >
             <span className="h-2 w-2 rounded-full bg-[#6f3a2a]" />
             OK

@@ -82,7 +82,7 @@ export function PantallaCompras({ tabInicial }: Props) {
             <TabsTrigger
               key={value}
               value={value}
-              className="gap-1.5 data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+              className="gap-1.5 data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm"
             >
               <Icono className="h-3.5 w-3.5" />
               {etiqueta}

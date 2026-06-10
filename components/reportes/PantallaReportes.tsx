@@ -60,25 +60,25 @@ export function PantallaReportes() {
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           <TabsTrigger
             value="ventas"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm"
           >
             Ventas
           </TabsTrigger>
           <TabsTrigger
             value="top"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm"
           >
             Top 20
           </TabsTrigger>
           <TabsTrigger
             value="rotacion"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm"
           >
             Rotación
           </TabsTrigger>
           <TabsTrigger
             value="mermas"
-            className="data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm"
           >
             Mermas
           </TabsTrigger>

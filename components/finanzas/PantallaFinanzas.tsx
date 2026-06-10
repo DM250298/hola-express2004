@@ -31,7 +31,7 @@ import {
 } from '@/lib/utils/periodos'
 
 const TAB_CLS =
-  'data-[state=active]:bg-[#f9b44c]/20 data-[state=active]:text-[#391511] data-[state=active]:shadow-sm'
+  'data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm'
 
 function isoLocalAHoy(): string {
   const d = new Date()
