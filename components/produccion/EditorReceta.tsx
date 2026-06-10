@@ -178,6 +178,13 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
                 {nombreProducto}
               </div>
             )}
+            {esNueva && (elaborables?.length ?? 0) === 0 && (
+              <p className="text-xs text-[#c45e14] leading-snug">
+                No tenés productos marcados como “elaborado” o “semi-elaborado”.
+                Marcá el producto que vas a hacer en Configuración › Productos
+                (campo <span className="font-medium">Tipo</span>) y volvé acá.
+              </p>
+            )}
           </div>
 
           {/* Rendimiento + vida útil */}
@@ -283,6 +290,16 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
 
           <PanelCostoReceta productoId={productoId} unidad={unidadProducto} />
         </div>
+
+        {!puedeGuardar && !guardar.isPending && (
+          <p className="text-xs text-[#c45e14] text-right">
+            {!productoId
+              ? 'Elegí el producto a elaborar para poder guardar.'
+              : ingredientes.length === 0
+                ? 'Agregá al menos un ingrediente.'
+                : 'Completá el rinde (debe ser mayor a 0).'}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 pt-2 border-t border-[#e4c9b0]/40">
           <Button
