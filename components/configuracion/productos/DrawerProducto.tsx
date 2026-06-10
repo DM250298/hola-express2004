@@ -730,20 +730,23 @@ export function DrawerProducto({
               <Label htmlFor="tipo" className="text-[#391511] font-medium">
                 Tipo
               </Label>
-              <Input
+              <select
                 id="tipo"
-                list="opciones-tipo"
                 {...register('tipo')}
-                placeholder="reventa"
                 disabled={guardando}
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-              />
-              <datalist id="opciones-tipo">
-                <option value="reventa" />
-                <option value="insumo" />
-                <option value="semi_elaborado" />
-                <option value="elaborado" />
-              </datalist>
+                className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
+              >
+                <option value="reventa">Reventa (compra-venta)</option>
+                <option value="insumo">Insumo (ingrediente)</option>
+                <option value="semi_elaborado">Semi-elaborado</option>
+                <option value="elaborado">Elaborado (se vende hecho)</option>
+                {producto?.tipo &&
+                  !['reventa', 'insumo', 'semi_elaborado', 'elaborado'].includes(
+                    producto.tipo
+                  ) && (
+                    <option value={producto.tipo}>{producto.tipo} (actual)</option>
+                  )}
+              </select>
               {errors.tipo && (
                 <p className="text-[#c43e2c] text-xs mt-1">{errors.tipo.message}</p>
               )}
@@ -753,23 +756,22 @@ export function DrawerProducto({
               <Label htmlFor="unidad" className="text-[#391511] font-medium">
                 Unidad
               </Label>
-              <Input
+              <select
                 id="unidad"
-                list="opciones-unidad"
                 {...register('unidad')}
-                placeholder="unidad"
                 disabled={guardando}
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-              />
-              <datalist id="opciones-unidad">
-                <option value="unidad" />
-                <option value="kg" />
-                <option value="g" />
-                <option value="lt" />
-                <option value="ml" />
-                <option value="docena" />
-                <option value="caja" />
-              </datalist>
+                className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
+              >
+                <option value="unidad">Unidad (por pieza)</option>
+                <option value="kg">Kilogramo (kg)</option>
+                <option value="g">Gramo (g)</option>
+                <option value="lt">Litro (lt)</option>
+                <option value="ml">Mililitro (ml)</option>
+                {producto?.unidad &&
+                  !['unidad', 'kg', 'g', 'lt', 'ml'].includes(producto.unidad) && (
+                    <option value={producto.unidad}>{producto.unidad} (actual)</option>
+                  )}
+              </select>
               {errors.unidad && (
                 <p className="text-[#c43e2c] text-xs mt-1">{errors.unidad.message}</p>
               )}
