@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import { TabTableroDirectivo } from './TabTableroDirectivo'
 import { TabFlujoProyectado } from './TabFlujoProyectado'
 import { TabComprobantes } from './TabComprobantes'
@@ -29,8 +29,29 @@ import {
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
 
-const TAB_CLS =
-  'flex-none data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm'
+const GRUPOS: { titulo: string; tabs: { value: string; label: string }[] }[] = [
+  { titulo: 'Mi negocio', tabs: [{ value: 'tablero', label: 'Tablero' }] },
+  {
+    titulo: 'Plata que entra y sale',
+    tabs: [
+      { value: 'caja_fuerte', label: 'Caja fuerte' },
+      { value: 'por_cobrar', label: 'Por cobrar' },
+      { value: 'cuentas_bancarias', label: 'Cuentas' },
+      { value: 'movimientos', label: 'Movimientos' },
+      { value: 'conciliacion', label: 'Conciliar Mercado Pago' },
+      { value: 'egresos', label: 'Egresos' },
+    ],
+  },
+  {
+    titulo: 'Lo que debo e impuestos',
+    tabs: [
+      { value: 'cuentas_pagar', label: 'Cuentas a pagar' },
+      { value: 'comprobantes', label: 'Facturas de proveedores' },
+      { value: 'impuestos', label: 'Impuestos' },
+      { value: 'flujo', label: 'Flujo proyectado' },
+    ],
+  },
+]
 
 function isoLocalAHoy(): string {
   const d = new Date()
@@ -125,103 +146,62 @@ export function PantallaFinanzas() {
         </div>
       </header>
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v ?? 'tablero')}
-        className="space-y-4"
-      >
-        <TabsList className="flex w-full flex-wrap justify-start bg-white border border-[#e4c9b0]/60 p-1 h-auto gap-0.5">
-          <GrupoEtiqueta>Mi negocio</GrupoEtiqueta>
-          <TabsTrigger value="tablero" className={TAB_CLS}>
-            Tablero
-          </TabsTrigger>
+      <div className="space-y-4">
+        {/* Barra de tabs agrupada (botones propios, no el TabsList de base-ui) */}
+        <div className="rounded-lg border border-[#e4c9b0]/60 bg-white p-2 space-y-2">
+          {GRUPOS.map((g) => (
+            <div key={g.titulo} className="space-y-1">
+              <div className="px-1 text-[10px] font-bold uppercase tracking-wider text-[#c8a58a]">
+                {g.titulo}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {g.tabs.map((t) => (
+                  <button
+                    key={t.value}
+                    type="button"
+                    onClick={() => setTab(t.value)}
+                    className={cn(
+                      'rounded-md px-2.5 py-1 text-sm font-medium transition-colors',
+                      tab === t.value
+                        ? 'bg-[#f9b44c]/20 text-[#391511] shadow-sm'
+                        : 'text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]'
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
 
-          <GrupoEtiqueta>Plata que entra y sale</GrupoEtiqueta>
-          <TabsTrigger value="caja_fuerte" className={TAB_CLS}>
-            Caja fuerte
-          </TabsTrigger>
-          <TabsTrigger value="por_cobrar" className={TAB_CLS}>
-            Por cobrar
-          </TabsTrigger>
-          <TabsTrigger value="cuentas_bancarias" className={TAB_CLS}>
-            Cuentas
-          </TabsTrigger>
-          <TabsTrigger value="movimientos" className={TAB_CLS}>
-            Movimientos
-          </TabsTrigger>
-          <TabsTrigger value="conciliacion" className={TAB_CLS}>
-            Conciliar Mercado Pago
-          </TabsTrigger>
-          <TabsTrigger value="egresos" className={TAB_CLS}>
-            Egresos
-          </TabsTrigger>
-
-          <GrupoEtiqueta>Lo que debo e impuestos</GrupoEtiqueta>
-          <TabsTrigger value="cuentas_pagar" className={TAB_CLS}>
-            Cuentas a pagar
-          </TabsTrigger>
-          <TabsTrigger value="comprobantes" className={TAB_CLS}>
-            Facturas de proveedores
-          </TabsTrigger>
-          <TabsTrigger value="impuestos" className={TAB_CLS}>
-            Impuestos
-          </TabsTrigger>
-          <TabsTrigger value="flujo" className={TAB_CLS}>
-            Flujo proyectado
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="tablero">
+        {/* Panel activo */}
+        {tab === 'tablero' && (
           <TabTableroDirectivo
             desde={rango.desde}
             hasta={rango.hasta}
             navegar={setTab}
           />
-        </TabsContent>
-        <TabsContent value="flujo">
-          <TabFlujoProyectado />
-        </TabsContent>
-        <TabsContent value="comprobantes">
+        )}
+        {tab === 'flujo' && <TabFlujoProyectado />}
+        {tab === 'comprobantes' && (
           <TabComprobantes desde={rango.desde} hasta={rango.hasta} />
-        </TabsContent>
-        <TabsContent value="cuentas_pagar">
-          <TabCuentasAPagar />
-        </TabsContent>
-        <TabsContent value="impuestos">
+        )}
+        {tab === 'cuentas_pagar' && <TabCuentasAPagar />}
+        {tab === 'impuestos' && (
           <TabImpuestos desde={rango.desde} hasta={rango.hasta} />
-        </TabsContent>
-        <TabsContent value="caja_fuerte">
-          <TabCajaFuerte />
-        </TabsContent>
-        <TabsContent value="por_cobrar">
-          <TabPorCobrar />
-        </TabsContent>
-        <TabsContent value="cuentas_bancarias">
-          <TabCuentas />
-        </TabsContent>
-        <TabsContent value="movimientos">
+        )}
+        {tab === 'caja_fuerte' && <TabCajaFuerte />}
+        {tab === 'por_cobrar' && <TabPorCobrar />}
+        {tab === 'cuentas_bancarias' && <TabCuentas />}
+        {tab === 'movimientos' && (
           <TabMovimientos desde={rango.desde} hasta={rango.hasta} />
-        </TabsContent>
-        <TabsContent value="conciliacion">
-          <TabConciliacionBancaria />
-        </TabsContent>
-        <TabsContent value="egresos">
+        )}
+        {tab === 'conciliacion' && <TabConciliacionBancaria />}
+        {tab === 'egresos' && (
           <TabEgresos desde={rango.desde} hasta={rango.hasta} />
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </div>
-  )
-}
-
-/**
- * Rótulo de grupo en la barra de tabs. Ocupa una fila completa (basis-full)
- * para separar visualmente los grupos. Funciona porque el TabsList está en
- * w-full (si fuera w-fit de base-ui, basis-full rompería el layout).
- */
-function GrupoEtiqueta({ children }: { children: ReactNode }) {
-  return (
-    <span className="w-full basis-full px-1.5 pb-0.5 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-[#c8a58a] first:pt-0.5">
-      {children}
-    </span>
   )
 }
