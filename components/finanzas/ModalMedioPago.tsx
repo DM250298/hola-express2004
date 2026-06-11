@@ -134,6 +134,12 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
           </DialogDescription>
         </DialogHeader>
 
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            guardar()
+          }}
+        >
         <div className="px-6 py-5 space-y-4">
           {/* Nombre */}
           <div className="space-y-1.5">
@@ -285,7 +291,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="mp-type" className="text-[#391511] text-xs font-medium">
-                    payment_method.type
+                    Tipo de pago (MP)
                   </Label>
                   <Input
                     id="mp-type"
@@ -306,7 +312,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="mp-method" className="text-[#391511] text-xs font-medium">
-                    payment_method.id
+                    Tarjeta o medio (MP)
                   </Label>
                   <Input
                     id="mp-method"
@@ -341,6 +347,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={() => onCambioAbierto(false)}
             disabled={procesando}
@@ -349,7 +356,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             Cancelar
           </Button>
           <Button
-            onClick={guardar}
+            type="submit"
             disabled={!puedeGuardar}
             className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
           >
@@ -365,6 +372,7 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             )}
           </Button>
         </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

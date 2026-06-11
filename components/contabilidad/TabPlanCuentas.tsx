@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { ModalCuentaContable } from './ModalCuentaContable'
 import {
   useEliminarCuentaContable,
@@ -26,6 +27,7 @@ export function TabPlanCuentas() {
 
   const [modalAbierto, setModalAbierto] = useState(false)
   const [cuentaEditar, setCuentaEditar] = useState<PlanCuentaRow | null>(null)
+  const [cuentaBorrar, setCuentaBorrar] = useState<PlanCuentaRow | null>(null)
 
   function abrirNueva() {
     setCuentaEditar(null)
@@ -34,10 +36,6 @@ export function TabPlanCuentas() {
   function abrirEdicion(c: PlanCuentaRow) {
     setCuentaEditar(c)
     setModalAbierto(true)
-  }
-  function borrar(c: PlanCuentaRow) {
-    if (!confirm(`¿Eliminar la cuenta "${c.codigo} ${c.nombre}"?`)) return
-    eliminar.mutate(c.id)
   }
 
   return (
@@ -123,7 +121,7 @@ export function TabPlanCuentas() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => borrar(c)}
+                      onClick={() => setCuentaBorrar(c)}
                       disabled={eliminar.isPending}
                       className="h-7 w-7 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
                       title="Eliminar"
@@ -142,6 +140,28 @@ export function TabPlanCuentas() {
         abierto={modalAbierto}
         onCambioAbierto={setModalAbierto}
         cuenta={cuentaEditar}
+      />
+
+      <ConfirmacionAccion
+        abierto={cuentaBorrar !== null}
+        onCambioAbierto={(v) => {
+          if (!v) setCuentaBorrar(null)
+        }}
+        titulo={
+          cuentaBorrar
+            ? `Eliminar la cuenta "${cuentaBorrar.codigo} ${cuentaBorrar.nombre}"`
+            : ''
+        }
+        descripcion="La cuenta deja de estar disponible para nuevos asientos. No se puede deshacer."
+        textoConfirmar="Sí, eliminar"
+        destructiva
+        procesando={eliminar.isPending}
+        onConfirmar={() => {
+          if (cuentaBorrar)
+            eliminar.mutate(cuentaBorrar.id, {
+              onSuccess: () => setCuentaBorrar(null),
+            })
+        }}
       />
     </div>
   )

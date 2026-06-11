@@ -27,11 +27,15 @@ export function TabConciliacionBancaria() {
         <div>
           <h3 className="text-[#391511] font-semibold flex items-center gap-2">
             <FileSpreadsheet className="h-4 w-4 text-[#f9b44c]" />
-            Conciliación bancaria
+            Conciliar Mercado Pago
           </h3>
           <p className="text-[#6f3a2a] text-sm mt-1 max-w-xl">
             Importá el reporte de Mercado Pago y el sistema acredita las ventas
             liberadas, concilia los movimientos y marca en rojo lo que no cuadra.
+          </p>
+          <p className="text-[#9b6b53] text-xs mt-1">
+            ¿Buscás cruzar el extracto del banco? Andá a Contabilidad → Conciliar
+            banco.
           </p>
         </div>
         <Button

@@ -8,6 +8,7 @@ import { Banknote, Building2, Loader2, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import {
   Sheet,
   SheetContent,
@@ -281,8 +282,16 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
 
           {/* Retención IIBB */}
           <div className="space-y-1.5">
-            <Label htmlFor="iibb" className="text-[#391511] font-medium">
-              Retención IIBB (%)
+            <Label
+              htmlFor="iibb"
+              className="text-[#391511] font-medium flex items-center gap-1"
+            >
+              Retención de Ingresos Brutos (%)
+              <AyudaContextual titulo="Ingresos Brutos (IIBB)">
+                Es un impuesto provincial que algunos medios te descuentan de
+                cada venta. En La Rioja, Mercado Pago suele retener ~3%. Si es
+                efectivo o no te retienen, dejá 0.
+              </AyudaContextual>
             </Label>
             <div className="relative">
               <Input
@@ -301,10 +310,10 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
               </span>
             </div>
             <p className="text-[10px] text-[#6f3a2a] leading-snug">
-              Tasa que te retiene el agente (ej: MP te descuenta IIBB en cada
-              venta). Se aplica automáticamente sobre el bruto de cada ingreso
-              a esta cuenta, sumado a la comisión. Dejá en <strong>0</strong> si
-              no corresponde.
+              Se descuenta solo de cada ingreso a esta cuenta, además de la
+              comisión. Ejemplo: si entran $100 con 3%, te quedan $97. Dejá en{' '}
+              <strong>0</strong> si no corresponde (efectivo, o medios que no
+              te retienen).
             </p>
           </div>
 

@@ -21,6 +21,7 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { BadgeEstadoCuenta } from '@/components/shared/BadgeEstadoCuenta'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { EstadoError } from '@/components/shared/EstadoError'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { useCuentasAPagar } from '@/lib/hooks/useFinanzas'
 import { ModalEditarFactura } from './ModalEditarFactura'
@@ -58,7 +59,8 @@ export function TabCuentasAPagar() {
         ? null // se filtra en memoria
         : (estadoFiltro as EstadoCuentaDerivado)
 
-  const { data: cuentas, isLoading, isError } = useCuentasAPagar(estadoQuery)
+  const { data: cuentas, isLoading, isError, refetch } =
+    useCuentasAPagar(estadoQuery)
 
   const cuentasFiltradas =
     estadoFiltro === 'pendientes'
@@ -76,6 +78,9 @@ export function TabCuentasAPagar() {
           <h2 className="text-[#391511] font-bold">Cuentas a pagar</h2>
           <p className="text-[#6f3a2a] text-sm">
             Tocá una fila para ver el detalle, registrar pagos y editar plazos.
+          </p>
+          <p className="text-[10px] text-[#c8a58a] mt-0.5">
+            Muestra lo que debés hoy — no depende del período de arriba.
           </p>
         </div>
         <Select
@@ -125,8 +130,11 @@ export function TabCuentasAPagar() {
             <SkeletonTabla filas={5} columnas={5} />
           </div>
         ) : isError ? (
-          <div className="p-10 text-center text-[#c43e2c] text-sm">
-            No se pudieron cargar las cuentas.
+          <div className="p-6">
+            <EstadoError
+              mensaje="No pudimos cargar las cuentas a pagar. Revisá tu conexión e intentá de nuevo."
+              onReintentar={() => refetch()}
+            />
           </div>
         ) : cuentasFiltradas.length === 0 ? (
           <div className="p-12 text-center">

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import { ModalArqueo } from './ModalArqueo'
 import { ModalRemesa } from './ModalRemesa'
 import {
@@ -64,28 +65,28 @@ export function TabCajaFuerte() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCaja
           icono={Inbox}
-          etiqueta="En el buzón"
+          etiqueta="Por contar"
           monto={saldo?.en_buzon ?? 0}
-          detalle="Sangrías sin arquear"
+          detalle="Retiros de cajeros sin contar"
         />
         <KpiCaja
           icono={Vault}
           etiqueta="En caja fuerte"
           monto={saldo?.saldo ?? 0}
-          detalle="Disponible para remesar"
+          detalle="Disponible para depositar"
           destacado
         />
         <KpiCaja
           icono={ShieldCheck}
-          etiqueta="Arqueado (histórico)"
+          etiqueta="Ya contado"
           monto={saldo?.arqueado ?? 0}
-          detalle="Total validado"
+          detalle="Total validado (histórico)"
         />
         <KpiCaja
           icono={Banknote}
-          etiqueta="Remesado (histórico)"
+          etiqueta="Depositado en el banco"
           monto={saldo?.remesado ?? 0}
-          detalle="Depositado al banco"
+          detalle="Total enviado (histórico)"
         />
       </div>
 
@@ -94,7 +95,13 @@ export function TabCajaFuerte() {
         <div className="px-5 py-3 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] flex items-center justify-between gap-3 flex-wrap">
           <h3 className="text-[#391511] font-semibold text-sm flex items-center gap-2">
             <Inbox className="h-4 w-4 text-[#f9b44c]" />
-            Sobres en el buzón
+            Retiros por contar
+            <AyudaContextual titulo="Cómo funciona la caja fuerte">
+              El efectivo sigue este camino: el cajero retira plata de la caja y
+              la deja en el buzón <em>(sangría)</em> → vos la contás y validás{' '}
+              <em>(arqueo)</em> → queda en la caja fuerte → la depositás en el
+              banco <em>(remesa)</em>.
+            </AyudaContextual>
           </h3>
           <div className="flex items-center gap-2">
             <Button
@@ -104,7 +111,7 @@ export function TabCajaFuerte() {
               className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
             >
               <Banknote className="h-3.5 w-3.5" />
-              Generar remesa
+              Depositar en el banco
             </Button>
             <Button
               size="sm"
@@ -113,7 +120,7 @@ export function TabCajaFuerte() {
               className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5 disabled:opacity-40"
             >
               <Calculator className="h-3.5 w-3.5" />
-              Arquear ({idsSeleccionados.length})
+              Contar y validar ({idsSeleccionados.length})
             </Button>
           </div>
         </div>

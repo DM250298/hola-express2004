@@ -136,6 +136,13 @@ export function ModalNuevoAsiento({ abierto, onCambioAbierto }: Props) {
           </DialogDescription>
         </DialogHeader>
 
+        <form
+          className="flex flex-1 flex-col min-h-0"
+          onSubmit={(e) => {
+            e.preventDefault()
+            guardar()
+          }}
+        >
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           <div className="grid grid-cols-[160px_1fr] gap-3">
             <div className="space-y-1.5">
@@ -158,6 +165,7 @@ export function ModalNuevoAsiento({ abierto, onCambioAbierto }: Props) {
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
                 placeholder="Ej: Ajuste de caja"
+                autoFocus
                 disabled={crear.isPending}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
               />
@@ -268,6 +276,7 @@ export function ModalNuevoAsiento({ abierto, onCambioAbierto }: Props) {
           </div>
           <div className="flex gap-2">
             <Button
+              type="button"
               variant="outline"
               onClick={() => onCambioAbierto(false)}
               disabled={crear.isPending}
@@ -276,7 +285,7 @@ export function ModalNuevoAsiento({ abierto, onCambioAbierto }: Props) {
               Cancelar
             </Button>
             <Button
-              onClick={guardar}
+              type="submit"
               disabled={!puedeGuardar}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
@@ -291,6 +300,7 @@ export function ModalNuevoAsiento({ abierto, onCambioAbierto }: Props) {
             </Button>
           </div>
         </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

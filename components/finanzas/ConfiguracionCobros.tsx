@@ -5,6 +5,7 @@ import { Lock, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { ModalMedioPago } from './ModalMedioPago'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import {
@@ -16,6 +17,14 @@ import { resolverIconoMedio } from '@/lib/utils/iconosMedioPago'
 import { cn } from '@/lib/utils'
 import type { MedioPagoRow } from '@/types/database'
 
+/** Traduce los códigos crudos de la API de Mercado Pago a lenguaje del dueño. */
+const ETIQUETA_MP_TIPO: Record<string, string> = {
+  credit_card: 'Crédito',
+  debit_card: 'Débito',
+  account_money: 'Saldo MP',
+  prepaid_card: 'Prepaga',
+}
+
 export function ConfiguracionCobros() {
   const { data: medios, isLoading } = useMediosPago()
   const { data: cuentas } = useCuentas(true)
@@ -24,6 +33,7 @@ export function ConfiguracionCobros() {
 
   const [modalAbierto, setModalAbierto] = useState(false)
   const [medioEditar, setMedioEditar] = useState<MedioPagoRow | null>(null)
+  const [medioBorrar, setMedioBorrar] = useState<MedioPagoRow | null>(null)
 
   const cuentaNombre = useMemo(() => {
     const mapa = new Map<number, string>()
@@ -47,16 +57,6 @@ export function ConfiguracionCobros() {
 
   function toggleTerminal(m: MedioPagoRow, disponible_terminal: boolean) {
     actualizar.mutate({ id: m.id, patch: { disponible_terminal } })
-  }
-
-  function borrar(m: MedioPagoRow) {
-    if (
-      !confirm(
-        `¿Borrar el medio de pago "${m.nombre}"? Esta acción no se puede deshacer.`
-      )
-    )
-      return
-    eliminar.mutate(m.id)
   }
 
   return (
@@ -132,8 +132,8 @@ export function ConfiguracionCobros() {
                       </span>
                     )}
                     {m.disponible_terminal && m.mp_payment_type && (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#f9b44c]/15 text-[#6f3a2a] text-[10px] font-mono">
-                        MP: {m.mp_payment_type}
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#f9b44c]/15 text-[#6f3a2a] text-[10px]">
+                        MP: {ETIQUETA_MP_TIPO[m.mp_payment_type] ?? m.mp_payment_type}
                         {m.mp_payment_method_id ? ` / ${m.mp_payment_method_id}` : ''}
                       </span>
                     )}
@@ -177,7 +177,7 @@ export function ConfiguracionCobros() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => borrar(m)}
+                  onClick={() => setMedioBorrar(m)}
                   disabled={m.protegido || eliminar.isPending}
                   className="h-8 w-8 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c] disabled:opacity-30"
                   title={m.protegido ? 'Medio base — no se puede borrar' : 'Borrar'}
@@ -194,6 +194,26 @@ export function ConfiguracionCobros() {
         abierto={modalAbierto}
         onCambioAbierto={setModalAbierto}
         medio={medioEditar}
+      />
+
+      <ConfirmacionAccion
+        abierto={medioBorrar !== null}
+        onCambioAbierto={(v) => {
+          if (!v) setMedioBorrar(null)
+        }}
+        titulo={
+          medioBorrar ? `Borrar el medio de pago "${medioBorrar.nombre}"` : ''
+        }
+        descripcion="Deja de aparecer en el POS y en el cobro con terminal. No se puede deshacer."
+        textoConfirmar="Sí, borrar"
+        destructiva
+        procesando={eliminar.isPending}
+        onConfirmar={() => {
+          if (medioBorrar)
+            eliminar.mutate(medioBorrar.id, {
+              onSuccess: () => setMedioBorrar(null),
+            })
+        }}
       />
     </div>
   )

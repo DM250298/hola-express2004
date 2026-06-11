@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,7 +14,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabTableroDirectivo } from './TabTableroDirectivo'
 import { TabFlujoProyectado } from './TabFlujoProyectado'
-import { TabResumen } from './TabResumen'
 import { TabComprobantes } from './TabComprobantes'
 import { TabImpuestos } from './TabImpuestos'
 import { TabCuentasAPagar } from './TabCuentasAPagar'
@@ -50,6 +49,7 @@ export function PantallaFinanzas() {
     useState<string>(inicioMesIso())
   const [hastaPersonalizado, setHastaPersonalizado] =
     useState<string>(isoLocalAHoy())
+  const [tab, setTab] = useState<string>('tablero')
 
   const rango = useMemo(() => {
     if (periodo === 'personalizado') {
@@ -125,34 +125,18 @@ export function PantallaFinanzas() {
         </div>
       </header>
 
-      <Tabs defaultValue="tablero" className="space-y-4">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v ?? 'tablero')}
+        className="space-y-4"
+      >
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap gap-0.5">
-          {/* Gestión */}
+          <GrupoEtiqueta>Mi negocio</GrupoEtiqueta>
           <TabsTrigger value="tablero" className={TAB_CLS}>
             Tablero
           </TabsTrigger>
-          <TabsTrigger value="flujo" className={TAB_CLS}>
-            Flujo proyectado
-          </TabsTrigger>
-          <TabsTrigger value="comprobantes" className={TAB_CLS}>
-            Comprobantes
-          </TabsTrigger>
-          <TabsTrigger value="cuentas_pagar" className={TAB_CLS}>
-            Cuentas a pagar
-          </TabsTrigger>
-          <TabsTrigger value="impuestos" className={TAB_CLS}>
-            Impuestos
-          </TabsTrigger>
-          <TabsTrigger value="resumen" className={TAB_CLS}>
-            P&L
-          </TabsTrigger>
 
-          <span
-            aria-hidden
-            className="hidden md:block w-px self-stretch bg-[#e4c9b0]/70 mx-1.5"
-          />
-
-          {/* Tesorería */}
+          <GrupoEtiqueta>Plata que entra y sale</GrupoEtiqueta>
           <TabsTrigger value="caja_fuerte" className={TAB_CLS}>
             Caja fuerte
           </TabsTrigger>
@@ -166,30 +150,45 @@ export function PantallaFinanzas() {
             Movimientos
           </TabsTrigger>
           <TabsTrigger value="conciliacion" className={TAB_CLS}>
-            Conciliación
+            Conciliar Mercado Pago
           </TabsTrigger>
           <TabsTrigger value="egresos" className={TAB_CLS}>
             Egresos
           </TabsTrigger>
+
+          <GrupoEtiqueta>Lo que debo e impuestos</GrupoEtiqueta>
+          <TabsTrigger value="cuentas_pagar" className={TAB_CLS}>
+            Cuentas a pagar
+          </TabsTrigger>
+          <TabsTrigger value="comprobantes" className={TAB_CLS}>
+            Facturas de proveedores
+          </TabsTrigger>
+          <TabsTrigger value="impuestos" className={TAB_CLS}>
+            Impuestos
+          </TabsTrigger>
+          <TabsTrigger value="flujo" className={TAB_CLS}>
+            Flujo proyectado
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tablero">
-          <TabTableroDirectivo desde={rango.desde} hasta={rango.hasta} />
+          <TabTableroDirectivo
+            desde={rango.desde}
+            hasta={rango.hasta}
+            navegar={setTab}
+          />
         </TabsContent>
         <TabsContent value="flujo">
           <TabFlujoProyectado />
         </TabsContent>
         <TabsContent value="comprobantes">
-          <TabComprobantes />
+          <TabComprobantes desde={rango.desde} hasta={rango.hasta} />
         </TabsContent>
         <TabsContent value="cuentas_pagar">
           <TabCuentasAPagar />
         </TabsContent>
         <TabsContent value="impuestos">
-          <TabImpuestos />
-        </TabsContent>
-        <TabsContent value="resumen">
-          <TabResumen desde={rango.desde} hasta={rango.hasta} />
+          <TabImpuestos desde={rango.desde} hasta={rango.hasta} />
         </TabsContent>
         <TabsContent value="caja_fuerte">
           <TabCajaFuerte />
@@ -211,5 +210,14 @@ export function PantallaFinanzas() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/** Rótulo de grupo dentro de la barra de tabs; fuerza un salto de línea. */
+function GrupoEtiqueta({ children }: { children: ReactNode }) {
+  return (
+    <span className="basis-full px-1.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#c8a58a] first:pt-0">
+      {children}
+    </span>
   )
 }

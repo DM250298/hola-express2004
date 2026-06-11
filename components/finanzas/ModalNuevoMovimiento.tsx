@@ -147,7 +147,7 @@ export function ModalNuevoMovimiento({
     (modo !== 'transferencia' || (cuentaDestinoId !== '' && cuentaDestinoId !== cuentaId))
 
   async function confirmar() {
-    if (!puedeConfirmar || !usuario) return
+    if (!puedeConfirmar || errorSaldoNegativo || !usuario) return
 
     try {
       if (modo === 'transferencia') {
@@ -191,6 +191,13 @@ export function ModalNuevoMovimiento({
           </DialogDescription>
         </DialogHeader>
 
+        <form
+          className="flex flex-1 flex-col min-h-0"
+          onSubmit={(e) => {
+            e.preventDefault()
+            confirmar()
+          }}
+        >
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {/* Selector de modo */}
           <div>
@@ -300,6 +307,7 @@ export function ModalNuevoMovimiento({
                 inputMode="decimal"
                 min="0"
                 step="0.01"
+                autoFocus
                 value={monto}
                 onChange={(e) => setMonto(e.target.value)}
                 placeholder="0,00"
@@ -404,7 +412,7 @@ export function ModalNuevoMovimiento({
             Cancelar
           </Button>
           <Button
-            onClick={confirmar}
+            type="submit"
             disabled={!puedeConfirmar || errorSaldoNegativo}
             className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
           >
@@ -418,6 +426,7 @@ export function ModalNuevoMovimiento({
             )}
           </Button>
         </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

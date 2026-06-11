@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { ModalNuevoAsiento } from './ModalNuevoAsiento'
 import { DrawerAsiento } from './DrawerAsiento'
 import { useAnularAsiento, useAsientos } from '@/lib/hooks/useContabilidad'
@@ -24,11 +25,7 @@ export function TabLibroDiario() {
   const anular = useAnularAsiento()
   const [modalAbierto, setModalAbierto] = useState(false)
   const [verId, setVerId] = useState<number | null>(null)
-
-  function handleAnular(id: number) {
-    if (!confirm(`¿Anular el asiento #${id}? No se puede deshacer.`)) return
-    anular.mutate(id)
-  }
+  const [anularId, setAnularId] = useState<number | null>(null)
 
   return (
     <div className="space-y-4">
@@ -136,7 +133,7 @@ export function TabLibroDiario() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleAnular(a.id)}
+                        onClick={() => setAnularId(a.id)}
                         disabled={a.anulado || anular.isPending}
                         className="h-7 w-7 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c] disabled:opacity-30"
                         title="Anular asiento"
@@ -156,6 +153,22 @@ export function TabLibroDiario() {
       <DrawerAsiento
         asientoId={verId}
         onCambioAbierto={(v) => !v && setVerId(null)}
+      />
+
+      <ConfirmacionAccion
+        abierto={anularId !== null}
+        onCambioAbierto={(v) => {
+          if (!v) setAnularId(null)
+        }}
+        titulo={`Anular asiento #${anularId ?? ''}`}
+        descripcion="Se genera un contra-asiento automático que revierte este movimiento. No se puede deshacer."
+        textoConfirmar="Sí, anular"
+        destructiva
+        procesando={anular.isPending}
+        onConfirmar={() => {
+          if (anularId !== null)
+            anular.mutate(anularId, { onSuccess: () => setAnularId(null) })
+        }}
       />
     </div>
   )

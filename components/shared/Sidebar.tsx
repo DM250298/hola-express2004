@@ -32,6 +32,8 @@ interface ItemNav {
   permiso: string
   /** Permisos extra que también habilitan ver este item. */
   permisosAlt?: string[]
+  /** Subtítulo aclaratorio opcional (ej: "Para tu contador"). */
+  nota?: string
 }
 
 interface Seccion {
@@ -142,6 +144,7 @@ const SECCIONES: Seccion[] = [
         etiqueta: 'Contabilidad',
         icono: Calculator,
         permiso: 'contabilidad',
+        nota: 'Para tu contador',
       },
     ],
   },
@@ -308,7 +311,19 @@ export function Sidebar({ permisos }: SidebarProps) {
                         )}
                         size={18}
                       />
-                      {item.etiqueta}
+                      <span className="flex flex-col leading-tight">
+                        <span>{item.etiqueta}</span>
+                        {item.nota && (
+                          <span
+                            className={cn(
+                              'text-[10px] font-normal',
+                              activo ? 'text-[#391511]/70' : 'text-[#c8a58a]'
+                            )}
+                          >
+                            {item.nota}
+                          </span>
+                        )}
+                      </span>
                     </Link>
                   )
                 })}

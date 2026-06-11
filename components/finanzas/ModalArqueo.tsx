@@ -85,7 +85,13 @@ export function ModalArqueo({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-5 space-y-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            confirmar()
+          }}
+        >
+          <div className="px-6 py-5 space-y-4">
           <div className="flex items-center justify-between rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60 px-4 py-3">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
@@ -165,6 +171,7 @@ export function ModalArqueo({
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={() => onCambioAbierto(false)}
             disabled={validar.isPending}
@@ -173,7 +180,7 @@ export function ModalArqueo({
             Cancelar
           </Button>
           <Button
-            onClick={confirmar}
+            type="submit"
             disabled={!puedeValidar}
             className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
           >
@@ -187,6 +194,7 @@ export function ModalArqueo({
             )}
           </Button>
         </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

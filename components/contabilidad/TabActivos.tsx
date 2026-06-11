@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { ModalNuevoActivo } from './ModalNuevoActivo'
 import { useActivos, useDarDeBajaActivo } from '@/lib/hooks/useContabilidad'
 import { calcularDepreciacion } from '@/lib/queries/contabilidad'
@@ -23,12 +24,10 @@ export function TabActivos() {
   const { data: activos, isLoading, isError } = useActivos()
   const darBaja = useDarDeBajaActivo()
   const [modalAbierto, setModalAbierto] = useState(false)
-
-  function handleBaja(id: number, nombre: string) {
-    if (!confirm(`¿Dar de baja "${nombre}"? Deja de amortizar a partir de hoy.`))
-      return
-    darBaja.mutate(id)
-  }
+  const [bajaActivo, setBajaActivo] = useState<{
+    id: number
+    nombre: string
+  } | null>(null)
 
   const valorLibrosTotal = (activos ?? [])
     .filter((a) => a.estado !== 'baja')
@@ -158,7 +157,9 @@ export function TabActivos() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleBaja(a.id, a.nombre)}
+                            onClick={() =>
+                              setBajaActivo({ id: a.id, nombre: a.nombre })
+                            }
                             disabled={darBaja.isPending}
                             className="h-7 text-xs text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
                           >
@@ -176,6 +177,24 @@ export function TabActivos() {
       </div>
 
       <ModalNuevoActivo abierto={modalAbierto} onCambioAbierto={setModalAbierto} />
+
+      <ConfirmacionAccion
+        abierto={bajaActivo !== null}
+        onCambioAbierto={(v) => {
+          if (!v) setBajaActivo(null)
+        }}
+        titulo={bajaActivo ? `Dar de baja "${bajaActivo.nombre}"` : ''}
+        descripcion="El activo deja de amortizar a partir de hoy y sale del valor en libros. Usalo cuando vendés, tirás o dejás de usar el bien."
+        textoConfirmar="Sí, dar de baja"
+        destructiva
+        procesando={darBaja.isPending}
+        onConfirmar={() => {
+          if (bajaActivo)
+            darBaja.mutate(bajaActivo.id, {
+              onSuccess: () => setBajaActivo(null),
+            })
+        }}
+      />
     </div>
   )
 }

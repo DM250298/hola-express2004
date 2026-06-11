@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { ModalNuevoEgreso } from './ModalNuevoEgreso'
 import { useEgresos, useEliminarEgreso } from '@/lib/hooks/useFinanzas'
@@ -45,6 +46,7 @@ export function TabEgresos({ desde, hasta }: Props) {
   const [categoria, setCategoria] = useState<string>(TODAS)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [egresoEditar, setEgresoEditar] = useState<EgresoRow | null>(null)
+  const [egresoBorrar, setEgresoBorrar] = useState<EgresoRow | null>(null)
 
   const {
     data: egresos,
@@ -63,11 +65,6 @@ export function TabEgresos({ desde, hasta }: Props) {
   function abrirEdicion(e: EgresoRow) {
     setEgresoEditar(e)
     setModalAbierto(true)
-  }
-
-  function borrar(e: EgresoRow) {
-    if (!confirm(`¿Eliminar el gasto "${e.descripcion}"?`)) return
-    eliminar.mutate(e.id)
   }
 
   return (
@@ -217,7 +214,7 @@ export function TabEgresos({ desde, hasta }: Props) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => borrar(e)}
+                        onClick={() => setEgresoBorrar(e)}
                         disabled={eliminar.isPending}
                         title="Eliminar gasto"
                         className="h-7 w-7 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
@@ -237,6 +234,26 @@ export function TabEgresos({ desde, hasta }: Props) {
         abierto={modalAbierto}
         onCambioAbierto={setModalAbierto}
         egreso={egresoEditar}
+      />
+
+      <ConfirmacionAccion
+        abierto={egresoBorrar !== null}
+        onCambioAbierto={(v) => {
+          if (!v) setEgresoBorrar(null)
+        }}
+        titulo={
+          egresoBorrar ? `Eliminar el gasto "${egresoBorrar.descripcion}"` : ''
+        }
+        descripcion="El gasto se borra del período y deja de sumar al total de egresos. No se puede deshacer."
+        textoConfirmar="Sí, eliminar"
+        destructiva
+        procesando={eliminar.isPending}
+        onConfirmar={() => {
+          if (egresoBorrar)
+            eliminar.mutate(egresoBorrar.id, {
+              onSuccess: () => setEgresoBorrar(null),
+            })
+        }}
       />
     </div>
   )

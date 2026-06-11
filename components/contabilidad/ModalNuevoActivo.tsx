@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { MontoARS } from '@/components/shared/MontoARS'
 import { useCrearActivo } from '@/lib/hooks/useContabilidad'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 
@@ -86,6 +87,12 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
           </DialogDescription>
         </DialogHeader>
 
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            guardar()
+          }}
+        >
         <div className="px-6 py-5 space-y-4">
           <div className="space-y-1.5">
             <Label className="text-[#391511] font-medium text-sm">Nombre</Label>
@@ -93,6 +100,7 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
               placeholder="Ej: Heladera exhibidora"
+              autoFocus
               disabled={crear.isPending}
               className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
@@ -149,7 +157,7 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-[#391511] font-medium text-sm">
-                Vida útil (meses)
+                Cuánto va a durar (meses)
               </Label>
               <Input
                 type="number"
@@ -159,10 +167,13 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
                 disabled={crear.isPending}
                 className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
               />
+              <p className="text-[10px] text-[#c8a58a]">
+                Ej: heladera 60, estantería 120.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label className="text-[#391511] font-medium text-sm">
-                Valor residual
+                Valor al final (0 si no aplica)
               </Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c8a58a] text-sm">
@@ -180,10 +191,24 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
               </div>
             </div>
           </div>
+
+          {valorNum > 0 && vidaNum > 0 && (
+            <div className="rounded-lg bg-[#fdfaf6] border border-[#e4c9b0]/60 px-3 py-2 flex items-center justify-between">
+              <span className="text-xs text-[#6f3a2a]">
+                Gasto contable mensual estimado
+              </span>
+              <span className="text-sm font-bold text-[#391511] tabular-nums">
+                <MontoARS
+                  monto={(valorNum - (Number(residual) || 0)) / vidaNum}
+                />
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={() => onCambioAbierto(false)}
             disabled={crear.isPending}
@@ -192,7 +217,7 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
             Cancelar
           </Button>
           <Button
-            onClick={guardar}
+            type="submit"
             disabled={!puedeGuardar}
             className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
           >
@@ -206,6 +231,7 @@ export function ModalNuevoActivo({ abierto, onCambioAbierto }: Props) {
             )}
           </Button>
         </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

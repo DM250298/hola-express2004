@@ -109,7 +109,13 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            handlePagar()
+          }}
+        >
           {/* Resumen de saldos */}
           <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3 grid grid-cols-3 gap-2 text-center">
             <div>
@@ -178,6 +184,7 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                 type="number"
                 min="0"
                 step="0.01"
+                autoFocus
                 value={monto}
                 onChange={(e) => setMonto(e.target.value)}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
@@ -223,6 +230,7 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
 
           <div className="flex gap-2 pt-1">
             <Button
+              type="button"
               variant="outline"
               onClick={() => onCambioAbierto(false)}
               disabled={pagar.isPending}
@@ -231,7 +239,7 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
               Cancelar
             </Button>
             <Button
-              onClick={handlePagar}
+              type="submit"
               disabled={!puedeGuardar}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
@@ -247,7 +255,7 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
               )}
             </Button>
           </div>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

@@ -52,10 +52,14 @@ export function TabConciliacion() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-[#391511] font-bold">Conciliación bancaria</h2>
+        <h2 className="text-[#391511] font-bold">Conciliar banco</h2>
         <p className="text-[#6f3a2a] text-sm">
           Elegí una cuenta y tildá los movimientos que figuran en el extracto
           del banco.
+        </p>
+        <p className="text-[#9b6b53] text-xs mt-1">
+          ¿Buscás cruzar el reporte de Mercado Pago? Andá a Finanzas → Conciliar
+          Mercado Pago.
         </p>
       </div>
 

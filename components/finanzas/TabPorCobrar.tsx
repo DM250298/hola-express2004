@@ -29,6 +29,9 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { EstadoError } from '@/components/shared/EstadoError'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
+import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import {
   useAcreditaciones,
   useAcreditarLote,
@@ -47,7 +50,12 @@ export function TabPorCobrar() {
   const { data: medios } = useMediosPago()
   const { data: resumen } = useResumenPorCobrar()
   const [filtroEstado, setFiltroEstado] = useState<string>('pendiente')
-  const { data: acreditaciones, isLoading } = useAcreditaciones(
+  const {
+    data: acreditaciones,
+    isLoading,
+    isError,
+    refetch,
+  } = useAcreditaciones(
     filtroEstado === TODAS
       ? {}
       : { estado: filtroEstado as EstadoAcreditacion }
@@ -55,6 +63,7 @@ export function TabPorCobrar() {
   const acreditarLote = useAcreditarLote()
 
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
+  const [confirmarCobro, setConfirmarCobro] = useState(false)
 
   const nombreMedio = useMemo(() => {
     const m = new Map<string, string>()
@@ -98,7 +107,12 @@ export function TabPorCobrar() {
         usuarioId: usuario.id,
         fecha: null,
       },
-      { onSuccess: () => setSeleccion(new Set()) }
+      {
+        onSuccess: () => {
+          setSeleccion(new Set())
+          setConfirmarCobro(false)
+        },
+      }
     )
   }
 
@@ -107,6 +121,21 @@ export function TabPorCobrar() {
 
   return (
     <div className="space-y-5">
+      <p className="text-[#6f3a2a] text-sm flex items-start gap-1.5">
+        <span>
+          Plata de ventas con tarjeta o Mercado Pago que todavía no entró al
+          banco. Se libera a los pocos días, ya descontada la comisión.
+        </span>
+        <AyudaContextual titulo="Dinero por entrar">
+          Cuando cobrás con tarjeta o QR, la plata no entra al instante: el
+          procesador la retiene unos días y después la deposita ya con la
+          comisión descontada. Acá ves cuánto te falta cobrar y cuándo entra.
+        </AyudaContextual>
+      </p>
+      <p className="text-[10px] text-[#c8a58a] -mt-3">
+        Muestra lo que tenés por entrar hoy — no depende del período de arriba.
+      </p>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi
@@ -176,8 +205,8 @@ export function TabPorCobrar() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pendiente">Pendientes</SelectItem>
-                <SelectItem value="acreditada">Acreditadas</SelectItem>
+                <SelectItem value="pendiente">Por entrar</SelectItem>
+                <SelectItem value="acreditada">Ya entraron</SelectItem>
                 <SelectItem value="cancelada">Canceladas</SelectItem>
                 <SelectItem value={TODAS}>Todas</SelectItem>
               </SelectContent>
@@ -196,7 +225,7 @@ export function TabPorCobrar() {
           </div>
           <Button
             size="sm"
-            onClick={acreditar}
+            onClick={() => setConfirmarCobro(true)}
             disabled={seleccion.size === 0 || acreditarLote.isPending}
             className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5 disabled:opacity-40"
           >
@@ -205,7 +234,7 @@ export function TabPorCobrar() {
             ) : (
               <CheckCircle2 className="h-3.5 w-3.5" />
             )}
-            Marcar como acreditadas ({seleccion.size})
+            Marcar como cobradas ({seleccion.size})
           </Button>
         </div>
 
@@ -213,9 +242,18 @@ export function TabPorCobrar() {
           <div className="p-6">
             <SkeletonTabla filas={6} columnas={7} />
           </div>
+        ) : isError ? (
+          <div className="p-6">
+            <EstadoError
+              mensaje="No pudimos cargar las cobranzas. Revisá tu conexión e intentá de nuevo."
+              onReintentar={() => refetch()}
+            />
+          </div>
         ) : !acreditaciones || acreditaciones.length === 0 ? (
           <div className="p-12 text-center text-[#6f3a2a] text-sm">
-            No hay acreditaciones en este estado.
+            {filtroEstado === 'pendiente'
+              ? 'No hay ventas pendientes de entrar al banco. 🎉'
+              : 'No hay registros en este estado.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -252,7 +290,7 @@ export function TabPorCobrar() {
                     Neto
                   </TableHead>
                   <TableHead className="text-[#391511] font-semibold">
-                    Acreditación
+                    Cuándo entra
                   </TableHead>
                   <TableHead className="text-[#391511] font-semibold">
                     Estado
@@ -344,6 +382,25 @@ export function TabPorCobrar() {
           </div>
         )}
       </div>
+
+      <ConfirmacionAccion
+        abierto={confirmarCobro}
+        onCambioAbierto={setConfirmarCobro}
+        titulo="Marcar como cobradas"
+        descripcion="Confirmá esto solo cuando ya viste la plata acreditada en tu cuenta. No se puede deshacer."
+        textoConfirmar="Sí, ya entraron"
+        procesando={acreditarLote.isPending}
+        onConfirmar={acreditar}
+      >
+        <div className="rounded-lg bg-[#f9b44c]/10 px-3 py-2">
+          <span className="font-bold text-[#391511]">{seleccion.size}</span>{' '}
+          venta(s) por{' '}
+          <span className="font-bold text-[#391511]">
+            <MontoARS monto={totalSel} />
+          </span>{' '}
+          neto.
+        </div>
+      </ConfirmacionAccion>
     </div>
   )
 }
@@ -401,7 +458,7 @@ function BadgeEstado({ estado }: { estado: EstadoAcreditacion }) {
       clase: 'bg-[#f9b44c]/20 text-[#9e6b15] border-[#f9b44c]/50',
     },
     acreditada: {
-      etiqueta: 'Acreditada',
+      etiqueta: 'Ya entró',
       clase: 'bg-[#2f7d4f]/15 text-[#2f7d4f] border-[#2f7d4f]/40',
     },
     cancelada: {

@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { Lock, LockOpen, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import {
   Table,
   TableBody,
@@ -38,6 +40,24 @@ export function TabCierreAuditoria() {
   const reabrir = useReabrirPeriodo()
 
   const esAdmin = usuario?.rol === 'admin'
+
+  // Acción de cierre/reapertura pendiente de confirmar (operación irreversible).
+  const [accionPendiente, setAccionPendiente] = useState<{
+    tipo: 'cerrar' | 'reabrir'
+    anio: number
+    mes: number
+  } | null>(null)
+
+  function confirmarAccion() {
+    if (!accionPendiente || !usuario) return
+    const { tipo, anio, mes } = accionPendiente
+    const opciones = { onSuccess: () => setAccionPendiente(null) }
+    if (tipo === 'cerrar') {
+      cerrar.mutate({ usuarioId: usuario.id, anio, mes }, opciones)
+    } else {
+      reabrir.mutate({ usuarioId: usuario.id, anio, mes }, opciones)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -87,9 +107,8 @@ export function TabCierreAuditoria() {
                         size="sm"
                         variant="outline"
                         onClick={() =>
-                          usuario &&
-                          reabrir.mutate({
-                            usuarioId: usuario.id,
+                          setAccionPendiente({
+                            tipo: 'reabrir',
                             anio: p.anio,
                             mes: p.mes,
                           })
@@ -104,9 +123,8 @@ export function TabCierreAuditoria() {
                       <Button
                         size="sm"
                         onClick={() =>
-                          usuario &&
-                          cerrar.mutate({
-                            usuarioId: usuario.id,
+                          setAccionPendiente({
+                            tipo: 'cerrar',
                             anio: p.anio,
                             mes: p.mes,
                           })
@@ -180,6 +198,31 @@ export function TabCierreAuditoria() {
           </div>
         )}
       </div>
+
+      <ConfirmacionAccion
+        abierto={accionPendiente !== null}
+        onCambioAbierto={(v) => {
+          if (!v) setAccionPendiente(null)
+        }}
+        titulo={
+          accionPendiente
+            ? `${accionPendiente.tipo === 'cerrar' ? 'Cerrar' : 'Reabrir'} ${nombreMes(accionPendiente.mes)} ${accionPendiente.anio}`
+            : ''
+        }
+        descripcion={
+          accionPendiente?.tipo === 'cerrar'
+            ? 'Después de cerrar el mes, nadie va a poder anular ventas ni reeditar facturas de ese período. Lo podés reabrir más adelante si hace falta.'
+            : 'Vas a reabrir el mes: se van a poder volver a anular ventas y editar facturas de ese período.'
+        }
+        textoConfirmar={
+          accionPendiente?.tipo === 'cerrar'
+            ? 'Sí, cerrar el mes'
+            : 'Sí, reabrir el mes'
+        }
+        destructiva={accionPendiente?.tipo === 'cerrar'}
+        procesando={cerrar.isPending || reabrir.isPending}
+        onConfirmar={confirmarAccion}
+      />
     </div>
   )
 }

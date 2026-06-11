@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import {
   Sheet,
   SheetContent,
@@ -123,8 +124,19 @@ export function DrawerCuentaPagar({
                 Factura cargada
               </span>
             ) : (
-              <span className="text-[#c43e2c]">
-                Sin factura {cuenta.provisoria ? '(deuda provisoria)' : ''}
+              <span className="text-[#c43e2c] inline-flex items-center gap-1">
+                Sin factura todavía
+                {cuenta.provisoria && (
+                  <>
+                    {' '}
+                    (monto estimado)
+                    <AyudaContextual titulo="Deuda sin factura">
+                      Esta deuda se registró al recibir la mercadería sin la
+                      factura. El monto es estimado; cuando cargues el
+                      comprobante real, se ajusta al valor exacto.
+                    </AyudaContextual>
+                  </>
+                )}
               </span>
             )}
           </div>

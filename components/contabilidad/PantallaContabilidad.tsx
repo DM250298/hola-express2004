@@ -36,7 +36,7 @@ export function PantallaContabilidad() {
             value="conciliacion"
             className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
           >
-            Conciliación
+            Conciliar banco
           </TabsTrigger>
           <TabsTrigger
             value="activos"

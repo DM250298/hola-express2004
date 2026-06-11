@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import { useConfigFiscal, useResumenFiscal } from '@/lib/hooks/useFiscal'
 import { getLibroIvaCompras } from '@/lib/queries/fiscal'
 import { exportarLibroIvaCompras } from '@/lib/utils/libroIvaCompras'
@@ -56,8 +57,22 @@ interface Vencimiento {
   monto: number
 }
 
-export function TabImpuestos() {
-  const [mes, setMes] = useState(mesActual())
+interface Props {
+  desde: string
+  hasta: string
+}
+
+export function TabImpuestos({ desde: periodoDesde }: Props) {
+  // El mes de impuestos se deriva del período global; el selector de abajo
+  // permite afinar a un mes puntual.
+  const mesGlobal = useMemo(() => {
+    const d = new Date(periodoDesde)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  }, [periodoDesde])
+  const [mes, setMes] = useState(mesGlobal)
+  useEffect(() => {
+    setMes(mesGlobal)
+  }, [mesGlobal])
   const { data: cfg } = useConfigFiscal()
 
   const { desde, hastaExcl } = useMemo(() => {
@@ -139,7 +154,7 @@ export function TabImpuestos() {
         <div className="flex items-end gap-2">
           <div className="space-y-1">
             <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-              Período
+              Mes
             </Label>
             <Input
               type="month"
@@ -163,6 +178,15 @@ export function TabImpuestos() {
             Libro IVA Compras
           </Button>
         </div>
+      </div>
+
+      <div className="flex items-start gap-2 rounded-xl border border-[#f9b44c]/40 bg-[#f9b44c]/10 px-3 py-2 text-xs text-[#6f3a2a]">
+        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-[#9e6b15]" />
+        <p>
+          <strong>Números preliminares.</strong> Es una estimación para que
+          tengas una idea; validá la liquidación final con tu contador antes de
+          pagar.
+        </p>
       </div>
 
       {isLoading || !data ? (
@@ -265,8 +289,13 @@ export function TabImpuestos() {
 
           {/* Detalle IVA */}
           <div className="rounded-2xl border border-[#e4c9b0]/60 bg-white p-5 space-y-3">
-            <h3 className="text-[#391511] font-bold text-sm">
+            <h3 className="text-[#391511] font-bold text-sm flex items-center gap-1">
               Detalle de IVA
+              <AyudaContextual titulo="Cómo se calcula el IVA">
+                <strong>IVA Débito</strong> = el IVA que cobraste en tus ventas.{' '}
+                <strong>IVA Crédito</strong> = el IVA que pagaste en tus
+                compras. Pagás la diferencia (débito − crédito).
+              </AyudaContextual>
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FilaDetalle
@@ -336,8 +365,13 @@ export function TabImpuestos() {
 
           {/* Detalle IIBB */}
           <div className="rounded-2xl border border-[#e4c9b0]/60 bg-white p-5 space-y-3">
-            <h3 className="text-[#391511] font-bold text-sm">
+            <h3 className="text-[#391511] font-bold text-sm flex items-center gap-1">
               Detalle de Ingresos Brutos — {jurisdiccion}
+              <AyudaContextual titulo="Cómo se calcula IIBB">
+                <strong>Base imponible</strong> = lo que vendiste sin IVA.{' '}
+                <strong>Determinado</strong> = el porcentaje de Ingresos Brutos
+                sobre esa base. Le restás lo que ya te retuvieron MP y bancos.
+              </AyudaContextual>
             </h3>
             <div className="space-y-1.5 text-sm">
               <FilaIibb label="Base imponible (ventas netas)" monto={data.iibb.base} />
@@ -379,15 +413,10 @@ export function TabImpuestos() {
             </div>
           </div>
 
-          <div className="flex items-start gap-2 text-[11px] text-[#c8a58a]">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            <p>
-              Estimación orientativa. El IVA débito asume precios de venta con{' '}
-              {alicuotaIva}% incluido; el IIBB usa la alícuota configurada en
-              Configuración → Datos fiscales. Validá la liquidación final con tu
-              contador.
-            </p>
-          </div>
+          <p className="text-[11px] text-[#c8a58a]">
+            El IVA débito asume precios de venta con {alicuotaIva}% incluido; el
+            IIBB usa la alícuota configurada en Configuración → Datos fiscales.
+          </p>
         </>
       )}
     </div>

@@ -98,6 +98,12 @@ export function ModalCuentaContable({ abierto, onCambioAbierto, cuenta }: Props)
           </DialogDescription>
         </DialogHeader>
 
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            guardar()
+          }}
+        >
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-[110px_1fr] gap-3">
             <div className="space-y-1.5">
@@ -108,6 +114,7 @@ export function ModalCuentaContable({ abierto, onCambioAbierto, cuenta }: Props)
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
                 placeholder="1.1.07"
+                autoFocus
                 disabled={procesando}
                 className="font-mono tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
               />
@@ -149,10 +156,12 @@ export function ModalCuentaContable({ abierto, onCambioAbierto, cuenta }: Props)
 
           <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
             <div>
-              <Label className="text-[#391511] font-medium">Imputable</Label>
+              <Label className="text-[#391511] font-medium">
+                Se usa en asientos
+              </Label>
               <p className="text-[#6f3a2a] text-xs mt-0.5">
-                Si está activo, se puede usar en asientos. Las cuentas título
-                (agrupadoras) van desactivadas.
+                Activá esto en las cuentas que registran movimientos (ej: Caja).
+                Las que solo agrupan (ej: Activo) van apagadas.
               </p>
             </div>
             <Switch
@@ -165,6 +174,7 @@ export function ModalCuentaContable({ abierto, onCambioAbierto, cuenta }: Props)
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
           <Button
+            type="button"
             variant="outline"
             onClick={() => onCambioAbierto(false)}
             disabled={procesando}
@@ -173,7 +183,7 @@ export function ModalCuentaContable({ abierto, onCambioAbierto, cuenta }: Props)
             Cancelar
           </Button>
           <Button
-            onClick={guardar}
+            type="submit"
             disabled={!puedeGuardar}
             className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
           >
@@ -189,6 +199,7 @@ export function ModalCuentaContable({ abierto, onCambioAbierto, cuenta }: Props)
             )}
           </Button>
         </div>
+        </form>
       </DialogContent>
     </Dialog>
   )

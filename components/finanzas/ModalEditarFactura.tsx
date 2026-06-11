@@ -86,6 +86,21 @@ function hoyIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function soloDigitos(s: string): string {
+  return s.replace(/\D/g, '')
+}
+
+/** Valida un CUIT argentino: 11 dígitos + dígito verificador. */
+function cuitValido(s: string): boolean {
+  const d = soloDigitos(s)
+  if (d.length !== 11) return false
+  const mult = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
+  const suma = mult.reduce((acc, m, i) => acc + m * Number(d[i]), 0)
+  const resto = suma % 11
+  const verif = resto === 0 ? 0 : resto === 1 ? 9 : 11 - resto
+  return verif === Number(d[10])
+}
+
 const CABECERA_DEFAULT: CabeceraState = {
   tipo_comprobante: 'A',
   punto_venta: '',
@@ -102,6 +117,44 @@ const TIPOS_COMPROBANTE = [
   { valor: 'M', etiqueta: 'Factura M' },
   { valor: 'E', etiqueta: 'Factura E (export.)' },
 ]
+
+/**
+ * Campo numérico con etiqueta arriba — para las tarjetas en mobile, donde no
+ * hay encabezado de columna que diga qué se está cargando. Input alto y
+ * cómodo de tocar; teclado numérico en el celular.
+ */
+function CampoNumero({
+  label,
+  value,
+  onChange,
+  min,
+  step,
+  inputMode = 'decimal',
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  min?: string
+  step?: string
+  inputMode?: 'decimal' | 'numeric'
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#6f3a2a]">
+        {label}
+      </span>
+      <Input
+        type="number"
+        inputMode={inputMode}
+        min={min}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-11 w-full rounded-lg border-[#e4c9b0] px-2.5 text-right text-base tabular-nums"
+      />
+    </label>
+  )
+}
 
 export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) {
   const { data: usuario } = useUsuario()
@@ -279,9 +332,23 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const totalPercepciones = percIibb + percIva + percOtros
   const totalConIva = totales.neto + totales.iva + totalPercepciones
 
+  // Validación de los datos formales (solo si el usuario cargó algo).
+  const cuitError =
+    cab.cuit_proveedor.trim() !== '' && !cuitValido(cab.cuit_proveedor)
+  const ptoError =
+    cab.punto_venta.trim() !== '' && !/^\d{1,5}$/.test(cab.punto_venta.trim())
+  const nroError =
+    cab.numero_comprobante.trim() !== '' &&
+    !/^\d{1,8}$/.test(cab.numero_comprobante.trim())
+  const hayErroresCab = cuitError || ptoError || nroError
+
   function handleGuardar() {
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
     if (lineas.length === 0) return
+    if (hayErroresCab) {
+      toast.error('Revisá los datos del comprobante (CUIT o número).')
+      return
+    }
     const limpio = (s: string) => {
       const t = s.trim()
       return t === '' ? null : t
@@ -392,8 +459,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   placeholder="0001"
                   value={cab.punto_venta}
                   onChange={(e) => setCabCampo('punto_venta', e.target.value)}
-                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                  className={`h-8 bg-white text-xs tabular-nums ${
+                    ptoError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  }`}
                 />
+                {ptoError && (
+                  <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 5 dígitos).</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-[#6f3a2a]">Número</Label>
@@ -404,8 +476,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   onChange={(e) =>
                     setCabCampo('numero_comprobante', e.target.value)
                   }
-                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                  className={`h-8 bg-white text-xs tabular-nums ${
+                    nroError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  }`}
                 />
+                {nroError && (
+                  <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 8 dígitos).</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-[#6f3a2a]">
@@ -418,8 +495,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   onChange={(e) =>
                     setCabCampo('cuit_proveedor', e.target.value)
                   }
-                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                  className={`h-8 bg-white text-xs tabular-nums ${
+                    cuitError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  }`}
                 />
+                {cuitError && (
+                  <p className="text-[9px] text-[#c43e2c]">CUIT inválido (11 dígitos).</p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-[#6f3a2a]">
@@ -493,7 +575,129 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               agregar lo que trae el comprobante.
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#e4c9b0]/60">
+            <>
+            {/* Mobile (< md): cada línea como tarjeta apilada, compra arriba y
+                venta abajo, para no tener que hacer scroll horizontal. */}
+            <div className="space-y-3 md:hidden">
+              {calculadas.map(({ l, calc, cantidad }) => (
+                <div
+                  key={l.key}
+                  className="overflow-hidden rounded-xl border border-[#e4c9b0] bg-white"
+                >
+                  {/* Encabezado: nombre del producto + quitar */}
+                  <div className="flex items-start justify-between gap-2 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold leading-tight text-[#391511]">
+                        {l.nombre}
+                      </div>
+                      {l.codigo_barras && (
+                        <span className="mt-0.5 block font-mono text-[10px] text-[#c8a58a]">
+                          {l.codigo_barras}
+                        </span>
+                      )}
+                      {l.item_pedido_id === null && (
+                        <span className="mt-0.5 inline-block text-[10px] font-semibold text-[#9e6b15]">
+                          Extra (no pedido)
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => quitarLinea(l.key)}
+                      title="Quitar de la factura"
+                      className="-mr-1 shrink-0 rounded-lg p-2 text-[#c8a58a] transition-colors hover:bg-white hover:text-[#c43e2c]"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {/* COMPRA */}
+                  <div className="px-3 pb-3 pt-2.5">
+                    <span className="mb-2 inline-block rounded bg-[#6f3a2a] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#f9d2a2]">
+                      Compra
+                    </span>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <CampoNumero
+                        label="Cantidad"
+                        value={l.cantidad}
+                        onChange={(v) => setLineaCampo(l.key, 'cantidad', v)}
+                        min="0"
+                        step="1"
+                        inputMode="numeric"
+                      />
+                      <CampoNumero
+                        label="Costo s/IVA"
+                        value={l.costo}
+                        onChange={(v) => setLineaCampo(l.key, 'costo', v)}
+                        min="0"
+                        step="0.01"
+                      />
+                      <CampoNumero
+                        label="Desc. %"
+                        value={l.descuento}
+                        onChange={(v) => setLineaCampo(l.key, 'descuento', v)}
+                        min="0"
+                      />
+                      <CampoNumero
+                        label="IVA compra %"
+                        value={l.iva_compra}
+                        onChange={(v) => setLineaCampo(l.key, 'iva_compra', v)}
+                        min="0"
+                      />
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
+                      <span className="text-[#6f3a2a]">Subtotal neto</span>
+                      <span className="font-medium text-[#6f3a2a]">
+                        <MontoARS monto={calc.costoNeto * cantidad} />
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs">
+                      <span className="text-[#6f3a2a]">Costo c/IVA (unit.)</span>
+                      <span className="font-semibold text-[#391511]">
+                        <MontoARS monto={calc.costoConIva} />
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* VENTA */}
+                  <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-3 pb-3 pt-2.5">
+                    <span className="mb-2 inline-block rounded bg-[#c43e2c] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#f9d2a2]">
+                      Venta
+                    </span>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <CampoNumero
+                        label="Margen %"
+                        value={l.margen}
+                        onChange={(v) => setLineaCampo(l.key, 'margen', v)}
+                      />
+                      <CampoNumero
+                        label="IVA venta %"
+                        value={l.iva_venta}
+                        onChange={(v) => setLineaCampo(l.key, 'iva_venta', v)}
+                        min="0"
+                      />
+                    </div>
+                    <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
+                      <span className="text-[#6f3a2a]">Precio s/IVA</span>
+                      <span className="font-medium text-[#6f3a2a]">
+                        <MontoARS monto={calc.precioSinIva} />
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-sm">
+                      <span className="font-semibold text-[#391511]">
+                        Precio c/IVA
+                      </span>
+                      <span className="font-bold text-[#391511]">
+                        <MontoARS monto={calc.precioConIva} />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* md+: tabla completa (sin cambios). */}
+            <div className="hidden overflow-x-auto rounded-xl border border-[#e4c9b0]/60 md:block">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-[#391511] text-[#f9d2a2]">
@@ -637,6 +841,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </div>
 
@@ -709,7 +914,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </Button>
             <Button
               onClick={handleGuardar}
-              disabled={guardar.isPending || lineas.length === 0}
+              disabled={guardar.isPending || lineas.length === 0 || hayErroresCab}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
               {guardar.isPending ? (

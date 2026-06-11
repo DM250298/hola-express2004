@@ -38,7 +38,18 @@ function nroComprobante(
   return `${tipo ?? '?'} ${ptoFmt}-${nroFmt}`
 }
 
-export function TabComprobantes() {
+/** ¿La fecha (date o timestamp) cae dentro del rango [desde, hasta]? */
+function enRango(fecha: string, desde: string, hasta: string): boolean {
+  const ts = new Date(`${fecha.slice(0, 10)}T12:00:00`).getTime()
+  return ts >= new Date(desde).getTime() && ts <= new Date(hasta).getTime()
+}
+
+interface Props {
+  desde: string
+  hasta: string
+}
+
+export function TabComprobantes({ desde, hasta }: Props) {
   const { data: cuentas, isLoading: cargandoCuentas } = useCuentasAPagar(null)
   const { data: comprobantes, isLoading: cargandoComp } =
     useComprobantesCargados()
@@ -94,6 +105,8 @@ export function TabComprobantes() {
 
   const q = busqueda.trim().toLowerCase()
   const comprobantesFiltrados = (comprobantes ?? []).filter((c) => {
+    // El período filtra las facturas YA cargadas (por fecha de emisión).
+    if (!enRango(c.fecha, desde, hasta)) return false
     if (!q) return true
     const nro = nroComprobante(
       c.tipo_comprobante,
@@ -195,6 +208,9 @@ export function TabComprobantes() {
             <h3 className="text-[#391511] font-semibold text-sm">
               Facturas cargadas
             </h3>
+            <span className="text-[10px] text-[#c8a58a] font-medium">
+              del período elegido
+            </span>
           </div>
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#c8a58a]" />
@@ -216,7 +232,7 @@ export function TabComprobantes() {
             <div className="p-10 text-center text-[#6f3a2a] text-sm">
               {q
                 ? 'No hay comprobantes que coincidan con la búsqueda.'
-                : 'Todavía no se cargó ninguna factura.'}
+                : 'No se cargaron facturas en el período elegido.'}
             </div>
           ) : (
             <Table>
