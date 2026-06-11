@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -131,12 +131,14 @@ export function PantallaFinanzas() {
         className="space-y-4"
       >
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap gap-0.5">
-          <GrupoEtiqueta>Mi negocio</GrupoEtiqueta>
           <TabsTrigger value="tablero" className={TAB_CLS}>
             Tablero
           </TabsTrigger>
 
-          <GrupoEtiqueta>Plata que entra y sale</GrupoEtiqueta>
+          <span
+            aria-hidden
+            className="hidden md:block w-px self-stretch bg-[#e4c9b0]/70 mx-1.5"
+          />
           <TabsTrigger value="caja_fuerte" className={TAB_CLS}>
             Caja fuerte
           </TabsTrigger>
@@ -156,7 +158,10 @@ export function PantallaFinanzas() {
             Egresos
           </TabsTrigger>
 
-          <GrupoEtiqueta>Lo que debo e impuestos</GrupoEtiqueta>
+          <span
+            aria-hidden
+            className="hidden md:block w-px self-stretch bg-[#e4c9b0]/70 mx-1.5"
+          />
           <TabsTrigger value="cuentas_pagar" className={TAB_CLS}>
             Cuentas a pagar
           </TabsTrigger>
@@ -210,14 +215,5 @@ export function PantallaFinanzas() {
         </TabsContent>
       </Tabs>
     </div>
-  )
-}
-
-/** Rótulo de grupo dentro de la barra de tabs; fuerza un salto de línea. */
-function GrupoEtiqueta({ children }: { children: ReactNode }) {
-  return (
-    <span className="basis-full px-1.5 pt-1 text-[10px] font-bold uppercase tracking-wider text-[#c8a58a] first:pt-0">
-      {children}
-    </span>
   )
 }
