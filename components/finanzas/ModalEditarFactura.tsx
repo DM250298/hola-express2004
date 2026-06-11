@@ -150,7 +150,7 @@ function CampoNumero({
         step={step}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-lg border-[#e4c9b0] px-2.5 text-right text-base tabular-nums"
+        className="h-11 w-full rounded-lg border-[#e4c9b0] px-2.5 text-left text-base tabular-nums"
       />
     </label>
   )
