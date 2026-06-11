@@ -21,6 +21,7 @@ import {
   useRemesas,
 } from '@/lib/hooks/useCajaFuerte'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { useCuentas } from '@/lib/hooks/useCuentas'
 import { formatearFechaHora } from '@/lib/utils/formato'
 
 export function TabCajaFuerte() {
@@ -29,6 +30,14 @@ export function TabCajaFuerte() {
   const { data: buzon, isLoading: cargandoBuzon } = useSangriasEnBuzon()
   const { data: arqueos } = useArqueos()
   const { data: remesas } = useRemesas()
+  const { data: cuentas } = useCuentas(false)
+
+  // Efectivo real: saldo de las cuentas tipo "caja" (Caja Efectivo). Es la
+  // plata que físicamente está en la caja fuerte, aunque no se haya usado el
+  // circuito formal de sangría/arqueo.
+  const efectivoCajas = (cuentas ?? [])
+    .filter((c) => c.activo && c.tipo === 'caja')
+    .reduce((acc, c) => acc + Number(c.saldo_actual), 0)
 
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
   const [modalArqueo, setModalArqueo] = useState(false)
@@ -61,6 +70,36 @@ export function TabCajaFuerte() {
 
   return (
     <div className="space-y-5">
+      {/* Efectivo real (saldo de la cuenta Caja Efectivo) */}
+      <div className="rounded-2xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/10 p-5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-[#f9b44c]/30">
+            <Vault className="h-5 w-5 text-[#6f3a2a]" />
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1">
+              Efectivo en caja fuerte
+              <AyudaContextual titulo="Tu efectivo">
+                Es el saldo de la cuenta &quot;Caja Efectivo&quot;: todo el
+                efectivo que entró por ventas. Es la plata que tenés físicamente
+                en la caja fuerte. El circuito de abajo (contar y depositar) es
+                opcional, para llevar el control formal de los retiros de los
+                cajeros.
+              </AyudaContextual>
+            </div>
+            <div className="text-xs text-[#6f3a2a]">
+              Saldo de la cuenta Caja Efectivo
+            </div>
+          </div>
+        </div>
+        <div className="text-3xl font-extrabold text-[#391511] tabular-nums">
+          <MontoARS monto={efectivoCajas} />
+        </div>
+      </div>
+
+      <div className="px-1 text-[10px] uppercase tracking-wider text-[#c8a58a] font-semibold">
+        Circuito de conteo y depósito (opcional)
+      </div>
       {/* KPIs de la caja fuerte */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCaja
@@ -71,10 +110,9 @@ export function TabCajaFuerte() {
         />
         <KpiCaja
           icono={Vault}
-          etiqueta="En caja fuerte"
+          etiqueta="Contado sin depositar"
           monto={saldo?.saldo ?? 0}
-          detalle="Disponible para depositar"
-          destacado
+          detalle="Listo para depositar al banco"
         />
         <KpiCaja
           icono={ShieldCheck}
