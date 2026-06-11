@@ -7,6 +7,8 @@ export interface PosicionCaja {
   efectivo: number
   banco: number
   billetera: number
+  /** Total ya depositado al banco (remesado). Se resta del total para no contar doble. */
+  remesado: number
   total: number
 }
 
@@ -67,6 +69,7 @@ export async function getTableroDirectivo(
     pagarRes,
     comisionesRes,
     arqueosRes,
+    remesasRes,
     porCobrar,
   ] = await Promise.all([
     supabase.from('cuentas').select('tipo, saldo_actual').eq('activo', true),
@@ -86,6 +89,7 @@ export async function getTableroDirectivo(
       .select('diferencia, estado')
       .gte('fecha', desde)
       .lte('fecha', hasta),
+    supabase.from('remesas').select('monto'),
     getResumenPorCobrar(),
   ])
 
@@ -94,6 +98,7 @@ export async function getTableroDirectivo(
     efectivo: 0,
     banco: 0,
     billetera: 0,
+    remesado: 0,
     total: 0,
   }
   for (const c of cuentasRes.data ?? []) {
@@ -103,6 +108,15 @@ export async function getTableroDirectivo(
     else if (c.tipo === 'banco') posicion_caja.banco += saldo
     else if (c.tipo === 'billetera_virtual') posicion_caja.billetera += saldo
   }
+  // El efectivo ya remesado (depositado) al banco quedó sumado en dos lados: en
+  // "Caja Efectivo" (que solo sube por ventas, nunca baja) y en la cuenta
+  // bancaria destino. Se resta una vez del total para no contarlo dos veces.
+  // NO modifica saldos persistidos: es solo el cálculo de presentación.
+  posicion_caja.remesado = (remesasRes.data ?? []).reduce(
+    (acc, r) => acc + (Number(r.monto) || 0),
+    0
+  )
+  posicion_caja.total -= posicion_caja.remesado
 
   // Deudas a corto plazo
   const por_pagar: DeudaCortoPlazo = {

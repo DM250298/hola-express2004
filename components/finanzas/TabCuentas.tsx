@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import { DrawerCuenta } from './DrawerCuenta'
 import { ModalNuevoMovimiento } from './ModalNuevoMovimiento'
 import { ConfiguracionCobros } from './ConfiguracionCobros'
@@ -191,8 +192,20 @@ export function TabCuentas({ onVerMovimientos }: Props) {
                       <Icono className="h-4 w-4 text-[#391511]" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-[#391511] leading-tight">
+                      <h3 className="font-bold text-[#391511] leading-tight flex items-center gap-1">
                         {c.nombre}
+                        {c.tipo === 'caja' && (
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <AyudaContextual titulo="Qué muestra este saldo">
+                              Es todo el efectivo que entró por ventas desde
+                              siempre. No baja cuando depositás en el banco, así
+                              que puede ser más alto que la plata que tenés
+                              físicamente en el local. En el Tablero ves el
+                              disponible real (descontando lo ya depositado), y
+                              en Caja fuerte, dónde está parado ese efectivo.
+                            </AyudaContextual>
+                          </span>
+                        )}
                       </h3>
                       <p className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
                         {ETIQUETAS_TIPO[c.tipo]}

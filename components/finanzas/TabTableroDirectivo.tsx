@@ -124,7 +124,7 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
           icono={Scale}
           etiqueta="Posición de caja"
           monto={t?.posicion_caja.total ?? 0}
-          detalle="Efectivo + bancos + billeteras"
+          detalle="Disponible hoy (sin contar lo ya depositado)"
         />
         <Kpi
           icono={Boxes}
@@ -170,6 +170,13 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
             label="Billeteras (MP, etc.)"
             monto={t?.posicion_caja.billetera ?? 0}
           />
+          {(t?.posicion_caja.remesado ?? 0) > 0 && (
+            <Linea
+              label="Menos lo ya depositado (ya figura en Bancos)"
+              monto={-(t?.posicion_caja.remesado ?? 0)}
+              tono="rojo"
+            />
+          )}
           <Linea
             label="Total disponible"
             monto={t?.posicion_caja.total ?? 0}
