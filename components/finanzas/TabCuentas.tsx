@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import {
+  ArrowRight,
   Banknote,
   Building2,
   Pencil,
@@ -33,7 +34,12 @@ const ETIQUETAS_TIPO: Record<TipoCuenta, string> = {
   billetera_virtual: 'Billetera virtual',
 }
 
-export function TabCuentas() {
+interface Props {
+  /** Abre la pestaña Movimientos filtrada por esta cuenta. */
+  onVerMovimientos?: (cuentaId: number) => void
+}
+
+export function TabCuentas({ onVerMovimientos }: Props) {
   const { data: cuentas, isLoading, isError } = useCuentas(false)
   const [drawerAbierto, setDrawerAbierto] = useState(false)
   const [cuentaEditar, setCuentaEditar] = useState<CuentaRow | null>(null)
@@ -155,8 +161,27 @@ export function TabCuentas() {
             return (
               <div
                 key={c.id}
+                onClick={() => onVerMovimientos?.(c.id)}
+                role={onVerMovimientos ? 'button' : undefined}
+                tabIndex={onVerMovimientos ? 0 : undefined}
+                onKeyDown={
+                  onVerMovimientos
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          onVerMovimientos(c.id)
+                        }
+                      }
+                    : undefined
+                }
+                title={
+                  onVerMovimientos
+                    ? 'Ver movimientos de esta cuenta'
+                    : undefined
+                }
                 className={cn(
                   'bg-white border-2 rounded-2xl p-5 shadow-sm transition-all hover:shadow-md',
+                  onVerMovimientos && 'cursor-pointer hover:border-[#f9b44c]/60',
                   enRojo ? 'border-[#c43e2c]/30' : 'border-[#e4c9b0]/60'
                 )}
               >
@@ -178,7 +203,10 @@ export function TabCuentas() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => abrirEdicion(c)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      abrirEdicion(c)
+                    }}
                     className="h-7 w-7 p-0 text-[#6f3a2a] hover:bg-[#f9d2a2]/40"
                     title="Editar cuenta"
                   >
@@ -201,11 +229,21 @@ export function TabCuentas() {
                   </div>
                 )}
 
+                {onVerMovimientos && (
+                  <div className="flex items-center gap-1 text-[10px] font-semibold text-[#9e6b15] mb-2">
+                    Ver movimientos
+                    <ArrowRight className="h-3 w-3" />
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-[#e4c9b0]/40">
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => nuevoMovimiento(c, 'ingreso')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      nuevoMovimiento(c, 'ingreso')
+                    }}
                     className="text-[#6f3a2a] hover:bg-[#f9b44c]/15 hover:text-[#391511] gap-1 text-xs h-8"
                     title="Registrar ingreso"
                   >
@@ -215,7 +253,10 @@ export function TabCuentas() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => nuevoMovimiento(c, 'egreso')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      nuevoMovimiento(c, 'egreso')
+                    }}
                     className="text-[#6f3a2a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c] gap-1 text-xs h-8"
                     title="Registrar egreso"
                   >

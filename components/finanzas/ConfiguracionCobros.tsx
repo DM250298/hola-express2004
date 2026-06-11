@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Lock, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
+import { ChevronDown, Lock, Pencil, Plus, Settings2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -60,29 +60,35 @@ export function ConfiguracionCobros() {
   }
 
   return (
-    <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Settings2 className="h-4 w-4 text-[#f9b44c]" />
-          <h3 className="text-[#391511] font-bold">
-            Medios de pago del POS
-          </h3>
+    <details className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm group">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3">
+        <Settings2 className="h-4 w-4 text-[#c8a58a]" />
+        <h3 className="text-[#391511] font-bold text-sm">
+          Medios de pago del POS
+        </h3>
+        <span className="ml-auto flex items-center gap-1 text-[11px] font-medium text-[#c8a58a]">
+          Configurar
+          <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+        </span>
+      </summary>
+
+      <div className="px-5 pb-5">
+        <p className="text-[#6f3a2a] text-xs mb-3">
+          Activá los medios que ofrecés en el POS y asigná a qué cuenta entra
+          cada cobro. La comisión es informativa y se descuenta como egreso al
+          vender. El switch <strong>Terminal</strong> controla qué formas de
+          pago aparecen al cobrar con el posnet.
+        </p>
+        <div className="flex justify-end mb-3">
+          <Button
+            onClick={abrirNuevo}
+            size="sm"
+            className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Nuevo medio
+          </Button>
         </div>
-        <Button
-          onClick={abrirNuevo}
-          size="sm"
-          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Nuevo medio
-        </Button>
-      </div>
-      <p className="text-[#6f3a2a] text-xs mb-4">
-        Activá los medios que ofrecés en el POS y asigná a qué cuenta entra cada
-        cobro. La comisión es informativa y se descuenta como egreso al vender.
-        El switch <strong>Terminal</strong> controla qué formas de pago aparecen
-        al cobrar con el posnet.
-      </p>
 
       {isLoading ? (
         <div className="space-y-2">
@@ -189,6 +195,7 @@ export function ConfiguracionCobros() {
           })}
         </ul>
       )}
+      </div>
 
       <ModalMedioPago
         abierto={modalAbierto}
@@ -215,6 +222,6 @@ export function ConfiguracionCobros() {
             })
         }}
       />
-    </div>
+    </details>
   )
 }

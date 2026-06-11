@@ -71,6 +71,8 @@ export function PantallaFinanzas() {
   const [hastaPersonalizado, setHastaPersonalizado] =
     useState<string>(isoLocalAHoy())
   const [tab, setTab] = useState<string>('tablero')
+  // Cuenta por la que se filtran los Movimientos al llegar desde una card.
+  const [cuentaMovs, setCuentaMovs] = useState<number | null>(null)
 
   const rango = useMemo(() => {
     if (periodo === 'personalizado') {
@@ -78,6 +80,17 @@ export function PantallaFinanzas() {
     }
     return rangoPredefinido(periodo)
   }, [periodo, desdePersonalizado, hastaPersonalizado])
+
+  // Navegación normal por la barra: sin filtro de cuenta pre-aplicado.
+  function irATab(value: string) {
+    setCuentaMovs(null)
+    setTab(value)
+  }
+  // Desde una cuenta: abre Movimientos ya filtrado por esa cuenta.
+  function verMovimientosDeCuenta(cuentaId: number) {
+    setCuentaMovs(cuentaId)
+    setTab('movimientos')
+  }
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -159,7 +172,7 @@ export function PantallaFinanzas() {
                   <button
                     key={t.value}
                     type="button"
-                    onClick={() => setTab(t.value)}
+                    onClick={() => irATab(t.value)}
                     className={cn(
                       'rounded-md px-2.5 py-1 text-sm font-medium transition-colors',
                       tab === t.value
@@ -180,7 +193,7 @@ export function PantallaFinanzas() {
           <TabTableroDirectivo
             desde={rango.desde}
             hasta={rango.hasta}
-            navegar={setTab}
+            navegar={irATab}
           />
         )}
         {tab === 'flujo' && <TabFlujoProyectado />}
@@ -193,9 +206,15 @@ export function PantallaFinanzas() {
         )}
         {tab === 'caja_fuerte' && <TabCajaFuerte />}
         {tab === 'por_cobrar' && <TabPorCobrar />}
-        {tab === 'cuentas_bancarias' && <TabCuentas />}
+        {tab === 'cuentas_bancarias' && (
+          <TabCuentas onVerMovimientos={verMovimientosDeCuenta} />
+        )}
         {tab === 'movimientos' && (
-          <TabMovimientos desde={rango.desde} hasta={rango.hasta} />
+          <TabMovimientos
+            desde={rango.desde}
+            hasta={rango.hasta}
+            cuentaInicial={cuentaMovs}
+          />
         )}
         {tab === 'conciliacion' && <TabConciliacionBancaria />}
         {tab === 'egresos' && (

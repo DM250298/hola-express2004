@@ -51,6 +51,8 @@ const ITEMS_TIPO: Record<string, string> = {
 interface Props {
   desde: string
   hasta: string
+  /** Si se pasa, la tabla arranca filtrada por esta cuenta (al llegar desde una card). */
+  cuentaInicial?: number | null
 }
 
 const CONFIG_TIPO: Record<
@@ -89,8 +91,14 @@ const CONFIG_TIPO: Record<
   },
 }
 
-export function TabMovimientos({ desde, hasta }: Props) {
-  const [cuentaFiltro, setCuentaFiltro] = useState<string>(TODOS)
+export function TabMovimientos({
+  desde,
+  hasta,
+  cuentaInicial = null,
+}: Props) {
+  const [cuentaFiltro, setCuentaFiltro] = useState<string>(
+    cuentaInicial != null ? String(cuentaInicial) : TODOS
+  )
   const [tipoFiltro, setTipoFiltro] = useState<string>(TODOS)
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(25)
