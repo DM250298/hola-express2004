@@ -175,6 +175,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     iva: '',
     otros: '',
   })
+  // Gastos no debitables (flete, etc.): se prorratean al costo de los productos.
+  const [gastosNoDebitables, setGastosNoDebitables] = useState('')
 
   const { data: productosBusqueda } = useProductos({
     activo: true,
@@ -250,12 +252,16 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         iva: f.percepcion_iva ? String(f.percepcion_iva) : '',
         otros: f.percepcion_otros ? String(f.percepcion_otros) : '',
       })
+      setGastosNoDebitables(
+        f.gastos_no_debitables ? String(f.gastos_no_debitables) : ''
+      )
     } else {
       setCab({
         ...CABECERA_DEFAULT,
         cuit_proveedor: proveedorCuenta?.cuit ?? '',
       })
       setPercepciones({ iibb: '', iva: '', otros: '' })
+      setGastosNoDebitables('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cargando, facturaGuardada, proveedorCuenta?.cuit])
@@ -330,7 +336,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const percIva = Number(percepciones.iva) || 0
   const percOtros = Number(percepciones.otros) || 0
   const totalPercepciones = percIibb + percIva + percOtros
-  const totalConIva = totales.neto + totales.iva + totalPercepciones
+  const gastos = Number(gastosNoDebitables) || 0
+  // % que sube el costo (y por ende el precio) de cada producto al prorratear.
+  const factorGastosPct = totales.neto > 0 ? (gastos / totales.neto) * 100 : 0
+  const totalConIva =
+    totales.neto + totales.iva + totalPercepciones + gastos
 
   // Validación de los datos formales (solo si el usuario cargó algo).
   const cuitError =
@@ -362,6 +372,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         afecta_precio_venta: afectaVenta,
         usuario_id: usuario.id,
         percepciones: { iva: percIva, iibb: percIibb, otros: percOtros },
+        gastos_no_debitables: gastos,
         comprobante: {
           tipo_comprobante: cab.tipo_comprobante || null,
           punto_venta: limpio(cab.punto_venta),
@@ -875,6 +886,30 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             ))}
           </div>
 
+          {/* Gastos no debitables: se prorratean al costo de cada producto */}
+          <div className="flex flex-wrap items-center justify-end gap-2 mb-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mr-1">
+              Gastos no debitables
+            </span>
+            <span className="text-[11px] text-[#c8a58a]">(se suman al costo)</span>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={gastosNoDebitables}
+              onChange={(e) => setGastosNoDebitables(e.target.value)}
+              placeholder="0"
+              className="h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs"
+            />
+          </div>
+          {gastos > 0 && factorGastosPct > 0 && (
+            <p className="text-[11px] text-[#9e6b15] text-right mb-3">
+              Se reparte en el costo de cada producto (+
+              {factorGastosPct.toFixed(1)}% sobre el neto). El precio de venta
+              sube en esa proporción al guardar.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 mb-3 text-sm">
             <span className="text-[#6f3a2a]">
               Importe neto:{' '}
@@ -893,6 +928,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 Percepciones:{' '}
                 <span className="font-semibold text-[#391511] tabular-nums">
                   <MontoARS monto={totalPercepciones} />
+                </span>
+              </span>
+            )}
+            {gastos > 0 && (
+              <span className="text-[#6f3a2a]">
+                Gastos no debit.:{' '}
+                <span className="font-semibold text-[#391511] tabular-nums">
+                  <MontoARS monto={gastos} />
                 </span>
               </span>
             )}

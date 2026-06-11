@@ -178,20 +178,43 @@ export type VistaClienteRow = ClienteRow & {
   ultima_compra: string | null
 }
 
-// ─── empleados (FASE 4 — RR.HH.) ─────────────────────────────────────────────
+// ─── empleados (RR.HH.) ──────────────────────────────────────────────────────
+
+export type UnidadNegocio = 'hola_express' | 'nor_construcciones' | 'otra'
+export type TipoContrato =
+  | 'relacion_dependencia'
+  | 'monotributista'
+  | 'informal_a_regularizar'
+export type TipoDocumentoEmpleado =
+  | 'dni'
+  | 'cuil'
+  | 'contrato'
+  | 'apto_medico'
+  | 'certificado'
+  | 'otro'
 
 export type EmpleadoRow = {
   id: number
+  legajo: string
   nombre: string
+  apellido: string | null
+  dni: string | null
+  /** Documento legacy (se conserva por compatibilidad con cta. cte.). */
   documento: string | null
   cuil: string | null
-  puesto: string | null
-  fecha_ingreso: string | null
-  fecha_egreso: string | null
-  sueldo_basico: number
+  fecha_nacimiento: string | null
   telefono: string | null
   email: string | null
   direccion: string | null
+  unidad_negocio: UnidadNegocio
+  puesto: string | null
+  fecha_ingreso: string | null
+  fecha_egreso: string | null
+  tipo_contrato: TipoContrato
+  banco_cbu_alias: string | null
+  pin_hash: string | null
+  reloj_id: number | null
+  foto_url: string | null
   usuario_id: string | null
   notas: string | null
   activo: boolean
@@ -199,25 +222,84 @@ export type EmpleadoRow = {
   updated_at: string
 }
 
+/**
+ * Empleado con su sueldo embebido (tabla gateada `empleado_sueldo`). Para un
+ * rol sin permiso 'rrhh_sueldos' el embed viene null → sueldo/valor_hora 0:
+ * no ve los montos (RLS, no sólo ocultar en UI). Mismo patrón que el costo.
+ */
+export type EmpleadoConSueldo = EmpleadoRow & {
+  sueldo_basico: number
+  valor_hora: number
+}
+
 export type EmpleadoInsert = {
   id?: number
+  legajo?: string
   nombre: string
+  apellido?: string | null
+  dni?: string | null
   documento?: string | null
   cuil?: string | null
-  puesto?: string | null
-  fecha_ingreso?: string | null
-  fecha_egreso?: string | null
-  sueldo_basico?: number
+  fecha_nacimiento?: string | null
   telefono?: string | null
   email?: string | null
   direccion?: string | null
+  unidad_negocio?: UnidadNegocio
+  puesto?: string | null
+  fecha_ingreso?: string | null
+  fecha_egreso?: string | null
+  tipo_contrato?: TipoContrato
+  banco_cbu_alias?: string | null
+  pin_hash?: string | null
+  reloj_id?: number | null
+  foto_url?: string | null
   usuario_id?: string | null
   notas?: string | null
   activo?: boolean
+  /** Virtual: el query lo escribe en `empleado_sueldo`, no en `empleados`. */
+  sueldo_basico?: number
 }
 
 export type EmpleadoUpdate = Partial<EmpleadoInsert> & {
   updated_at?: string
+}
+
+export type EmpleadoSueldoRow = {
+  empleado_id: number
+  sueldo_basico: number
+  valor_hora: number
+  updated_at: string
+}
+
+export type EmpleadoDocumentoRow = {
+  id: string
+  empleado_id: number
+  tipo: TipoDocumentoEmpleado
+  /** Path dentro del bucket privado `rrhh-docs`. */
+  archivo_url: string
+  nombre_archivo: string | null
+  fecha_vencimiento: string | null
+  notas: string | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type EmpleadoDocumentoInsert = {
+  id?: string
+  empleado_id: number
+  tipo: TipoDocumentoEmpleado
+  archivo_url: string
+  nombre_archivo?: string | null
+  fecha_vencimiento?: string | null
+  notas?: string | null
+  usuario_id?: string | null
+}
+
+export type RrhhConfigRow = {
+  clave: string
+  valor: Json
+  descripcion: string | null
+  updated_at: string
 }
 
 // ─── novedades_empleado ──────────────────────────────────────────────────────
@@ -2060,6 +2142,7 @@ export type FacturaCompraRow = {
   percepcion_iva: number
   percepcion_iibb: number
   percepcion_otros: number
+  gastos_no_debitables: number
   created_at: string
   updated_at: string
 }
@@ -2083,6 +2166,7 @@ export type FacturaCompraInsert = {
   percepcion_iva?: number
   percepcion_iibb?: number
   percepcion_otros?: number
+  gastos_no_debitables?: number
   created_at?: string
   updated_at?: string
 }
@@ -2455,6 +2539,24 @@ export interface Database {
         Row: EmpleadoRow
         Insert: EmpleadoInsert
         Update: EmpleadoUpdate
+        Relationships: []
+      }
+      empleado_sueldo: {
+        Row: EmpleadoSueldoRow
+        Insert: Partial<EmpleadoSueldoRow>
+        Update: Partial<EmpleadoSueldoRow>
+        Relationships: []
+      }
+      empleado_documentos: {
+        Row: EmpleadoDocumentoRow
+        Insert: EmpleadoDocumentoInsert
+        Update: Partial<EmpleadoDocumentoInsert>
+        Relationships: []
+      }
+      rrhh_config: {
+        Row: RrhhConfigRow
+        Insert: Partial<RrhhConfigRow>
+        Update: Partial<RrhhConfigRow>
         Relationships: []
       }
       novedades_empleado: {
@@ -2976,6 +3078,7 @@ export interface Database {
           p_usuario_id: string
           p_lineas: Json
           p_percepciones?: Json
+          p_gastos_no_debitables?: number
         }
         Returns: undefined
       }

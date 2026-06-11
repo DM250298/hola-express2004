@@ -70,6 +70,8 @@ export interface GuardarFacturaPayload {
   lineas: LineaFacturaPayload[]
   /** Percepciones sufridas (suman al total a pagar y quedan como saldo a favor). */
   percepciones?: PercepcionesPayload
+  /** Gastos NO debitables (flete, etc.): se prorratean al costo de los productos, sin IVA. */
+  gastos_no_debitables?: number
   /** Datos formales del comprobante; si se omiten, no se tocan. */
   comprobante?: DatosComprobante
 }
@@ -209,6 +211,11 @@ export async function guardarFacturaCompra(
       margen_porcentaje: l.margen_porcentaje,
       iva_venta_porcentaje: l.iva_venta_porcentaje,
     })) as unknown as Json,
+    // Solo se manda si hay gastos: así, antes de correr la migración 086, las
+    // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.
+    ...((payload.gastos_no_debitables ?? 0) > 0
+      ? { p_gastos_no_debitables: payload.gastos_no_debitables }
+      : {}),
   })
   if (error) throw error
 
