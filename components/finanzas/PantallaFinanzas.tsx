@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -30,7 +30,7 @@ import {
 } from '@/lib/utils/periodos'
 
 const TAB_CLS =
-  'data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm'
+  'flex-none data-active:bg-[#f9b44c]/20 data-active:text-[#391511] data-active:shadow-sm'
 
 function isoLocalAHoy(): string {
   const d = new Date()
@@ -130,15 +130,13 @@ export function PantallaFinanzas() {
         onValueChange={(v) => setTab(v ?? 'tablero')}
         className="space-y-4"
       >
-        <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap gap-0.5">
+        <TabsList className="flex w-full flex-wrap justify-start bg-white border border-[#e4c9b0]/60 p-1 h-auto gap-0.5">
+          <GrupoEtiqueta>Mi negocio</GrupoEtiqueta>
           <TabsTrigger value="tablero" className={TAB_CLS}>
             Tablero
           </TabsTrigger>
 
-          <span
-            aria-hidden
-            className="hidden md:block w-px self-stretch bg-[#e4c9b0]/70 mx-1.5"
-          />
+          <GrupoEtiqueta>Plata que entra y sale</GrupoEtiqueta>
           <TabsTrigger value="caja_fuerte" className={TAB_CLS}>
             Caja fuerte
           </TabsTrigger>
@@ -158,10 +156,7 @@ export function PantallaFinanzas() {
             Egresos
           </TabsTrigger>
 
-          <span
-            aria-hidden
-            className="hidden md:block w-px self-stretch bg-[#e4c9b0]/70 mx-1.5"
-          />
+          <GrupoEtiqueta>Lo que debo e impuestos</GrupoEtiqueta>
           <TabsTrigger value="cuentas_pagar" className={TAB_CLS}>
             Cuentas a pagar
           </TabsTrigger>
@@ -215,5 +210,18 @@ export function PantallaFinanzas() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/**
+ * Rótulo de grupo en la barra de tabs. Ocupa una fila completa (basis-full)
+ * para separar visualmente los grupos. Funciona porque el TabsList está en
+ * w-full (si fuera w-fit de base-ui, basis-full rompería el layout).
+ */
+function GrupoEtiqueta({ children }: { children: ReactNode }) {
+  return (
+    <span className="w-full basis-full px-1.5 pb-0.5 pt-1.5 text-[10px] font-bold uppercase tracking-wider text-[#c8a58a] first:pt-0.5">
+      {children}
+    </span>
   )
 }
