@@ -26,6 +26,10 @@ const PERMISO_RUTA: Record<string, string[]> = {
   finanzas: ['/finanzas'],
   contabilidad: ['/contabilidad'],
   rrhh: ['/rrhh'],
+  // El panel del empleado vive bajo /rrhh pero lo habilita 'mi_panel' (rol
+  // empleado), no 'rrhh'. Como el match es por prefijo exacto o sub-ruta, esta
+  // entrada le da acceso solo a /rrhh/mi-panel.
+  mi_panel: ['/rrhh/mi-panel'],
   terminales: ['/terminales'],
   reportes: ['/reportes'],
   configuracion: ['/configuracion'],

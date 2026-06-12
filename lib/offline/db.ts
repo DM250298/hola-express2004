@@ -11,11 +11,14 @@
  */
 
 const NOMBRE_DB = 'hola-express-offline'
-const VERSION_DB = 1
+// v2: stores del kiosco de fichaje (RRHH Sprint 2).
+const VERSION_DB = 2
 
 export const STORE_CATALOGO = 'catalogo'
 export const STORE_VENTAS_PENDIENTES = 'ventas_pendientes'
 export const STORE_META = 'meta'
+export const STORE_FICHAJES_PENDIENTES = 'fichajes_pendientes'
+export const STORE_EMPLEADOS_KIOSCO = 'empleados_kiosco'
 
 function hayIndexedDB(): boolean {
   return typeof window !== 'undefined' && 'indexedDB' in window
@@ -44,6 +47,12 @@ function abrirDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META, { keyPath: 'clave' })
+      }
+      if (!db.objectStoreNames.contains(STORE_FICHAJES_PENDIENTES)) {
+        db.createObjectStore(STORE_FICHAJES_PENDIENTES, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(STORE_EMPLEADOS_KIOSCO)) {
+        db.createObjectStore(STORE_EMPLEADOS_KIOSCO, { keyPath: 'id' })
       }
     }
 

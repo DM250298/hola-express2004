@@ -30,7 +30,9 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'finanzas', etiqueta: 'Finanzas', grupo: 'Análisis' },
   { clave: 'contabilidad', etiqueta: 'Contabilidad', grupo: 'Análisis' },
   { clave: 'reportes', etiqueta: 'Reportes', grupo: 'Análisis' },
-  { clave: 'rrhh', etiqueta: 'Recursos Humanos / Sueldos', grupo: 'Análisis' },
+  { clave: 'rrhh', etiqueta: 'Recursos Humanos (operativo, sin sueldos)', grupo: 'Análisis' },
+  { clave: 'rrhh_sueldos', etiqueta: 'RRHH · Sueldos y liquidaciones', grupo: 'Análisis' },
+  { clave: 'mi_panel', etiqueta: 'Mi panel (empleado)', grupo: 'General' },
   { clave: 'terminales', etiqueta: 'Terminales de cobro', grupo: 'Sistema' },
   { clave: 'configuracion', etiqueta: 'Configuración del sistema', grupo: 'Sistema' },
 ]
@@ -68,6 +70,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'recepcion',
     'produccion',
     'reportes',
+    'rrhh',
   ],
   cajero: [
     'proyectos',
@@ -77,6 +80,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'inventario',
     'recepcion',
   ],
+  empleado: ['mi_panel'],
 }
 
 /** Permiso → ruta del módulo. Para resolver la pantalla de inicio. */
@@ -95,6 +99,7 @@ const RUTA_POR_PERMISO: Record<string, string> = {
   finanzas: '/finanzas',
   contabilidad: '/contabilidad',
   rrhh: '/rrhh',
+  mi_panel: '/rrhh/mi-panel',
   terminales: '/terminales',
   proyectos: '/proyectos',
   reportes: '/reportes',
@@ -117,6 +122,7 @@ const PRIORIDAD_INICIO: string[] = [
   'finanzas',
   'contabilidad',
   'rrhh',
+  'mi_panel',
   'proyectos',
   'terminales',
   'reportes',

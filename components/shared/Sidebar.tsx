@@ -22,6 +22,8 @@ import {
   Settings,
   ChefHat,
   ChevronDown,
+  Clock,
+  UserRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +46,12 @@ interface Seccion {
 const SECCIONES: Seccion[] = [
   {
     items: [
+      {
+        href: '/rrhh/mi-panel',
+        etiqueta: 'Mi panel',
+        icono: UserRound,
+        permiso: 'mi_panel',
+      },
       {
         href: '/',
         etiqueta: 'Dashboard',
@@ -155,6 +163,12 @@ const SECCIONES: Seccion[] = [
         href: '/rrhh',
         etiqueta: 'Recursos Humanos',
         icono: Briefcase,
+        permiso: 'rrhh',
+      },
+      {
+        href: '/rrhh/asistencia',
+        etiqueta: 'Asistencia',
+        icono: Clock,
         permiso: 'rrhh',
       },
       {

@@ -178,20 +178,42 @@ export type VistaClienteRow = ClienteRow & {
   ultima_compra: string | null
 }
 
-// ─── empleados (FASE 4 — RR.HH.) ─────────────────────────────────────────────
+// ─── empleados (RR.HH.) ──────────────────────────────────────────────────────
+
+export type UnidadNegocio = 'hola_express' | 'nor_construcciones' | 'otra'
+export type TipoContrato =
+  | 'relacion_dependencia'
+  | 'monotributista'
+  | 'informal_a_regularizar'
+export type TipoDocumentoEmpleado =
+  | 'dni'
+  | 'cuil'
+  | 'contrato'
+  | 'apto_medico'
+  | 'certificado'
+  | 'otro'
 
 export type EmpleadoRow = {
   id: number
+  legajo: string
   nombre: string
+  apellido: string | null
+  dni: string | null
+  /** Documento legacy (se conserva por compatibilidad con cta. cte.). */
   documento: string | null
   cuil: string | null
-  puesto: string | null
-  fecha_ingreso: string | null
-  fecha_egreso: string | null
-  sueldo_basico: number
+  fecha_nacimiento: string | null
   telefono: string | null
   email: string | null
   direccion: string | null
+  unidad_negocio: UnidadNegocio
+  puesto: string | null
+  fecha_ingreso: string | null
+  fecha_egreso: string | null
+  tipo_contrato: TipoContrato
+  banco_cbu_alias: string | null
+  reloj_id: number | null
+  foto_url: string | null
   usuario_id: string | null
   notas: string | null
   activo: boolean
@@ -199,25 +221,188 @@ export type EmpleadoRow = {
   updated_at: string
 }
 
+/**
+ * Empleado con su sueldo embebido (tabla gateada `empleado_sueldo`). Para un
+ * rol sin permiso 'rrhh_sueldos' el embed viene null → sueldo/valor_hora 0:
+ * no ve los montos (RLS, no sólo ocultar en UI). Mismo patrón que el costo.
+ */
+export type EmpleadoConSueldo = EmpleadoRow & {
+  sueldo_basico: number
+  valor_hora: number
+}
+
 export type EmpleadoInsert = {
   id?: number
+  legajo?: string
   nombre: string
+  apellido?: string | null
+  dni?: string | null
   documento?: string | null
   cuil?: string | null
-  puesto?: string | null
-  fecha_ingreso?: string | null
-  fecha_egreso?: string | null
-  sueldo_basico?: number
+  fecha_nacimiento?: string | null
   telefono?: string | null
   email?: string | null
   direccion?: string | null
+  unidad_negocio?: UnidadNegocio
+  puesto?: string | null
+  fecha_ingreso?: string | null
+  fecha_egreso?: string | null
+  tipo_contrato?: TipoContrato
+  banco_cbu_alias?: string | null
+  reloj_id?: number | null
+  foto_url?: string | null
   usuario_id?: string | null
   notas?: string | null
   activo?: boolean
+  /** Virtual: el query lo escribe en `empleado_sueldo`, no en `empleados`. */
+  sueldo_basico?: number
 }
 
 export type EmpleadoUpdate = Partial<EmpleadoInsert> & {
   updated_at?: string
+}
+
+export type EmpleadoSueldoRow = {
+  empleado_id: number
+  sueldo_basico: number
+  valor_hora: number
+  updated_at: string
+}
+
+export type EmpleadoDocumentoRow = {
+  id: string
+  empleado_id: number
+  tipo: TipoDocumentoEmpleado
+  /** Path dentro del bucket privado `rrhh-docs`. */
+  archivo_url: string
+  nombre_archivo: string | null
+  fecha_vencimiento: string | null
+  notas: string | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type EmpleadoDocumentoInsert = {
+  id?: string
+  empleado_id: number
+  tipo: TipoDocumentoEmpleado
+  archivo_url: string
+  nombre_archivo?: string | null
+  fecha_vencimiento?: string | null
+  notas?: string | null
+  usuario_id?: string | null
+}
+
+export type RrhhConfigRow = {
+  clave: string
+  valor: Json
+  descripcion: string | null
+  updated_at: string
+}
+
+// ─── asistencia / fichajes (Sprint 2) ────────────────────────────────────────
+
+export type NombreTurno = 'manana' | 'tarde' | 'noche'
+export type TipoFichaje = 'entrada' | 'salida' | 'marcacion' | 'correccion'
+export type OrigenFichaje = 'import_reloj' | 'kiosco' | 'manual_admin' | 'app'
+export type EstadoHorario =
+  | 'planificado'
+  | 'cubierto'
+  | 'ausente'
+  | 'franco'
+  | 'licencia'
+export type EstadoAsistencia =
+  | 'presente'
+  | 'tardanza'
+  | 'ausente_justificado'
+  | 'ausente_injustificado'
+  | 'franco'
+  | 'licencia'
+  | 'incompleto'
+  | 'sin_turno'
+
+export type TurnoPlantillaRow = {
+  id: number
+  nombre: NombreTurno
+  hora_inicio: string
+  hora_fin: string
+  cruza_medianoche: boolean
+  tolerancia_min: number
+  activo: boolean
+}
+
+export type HorarioAsignadoRow = {
+  id: string
+  empleado_id: number
+  turno_id: number | null
+  fecha: string
+  estado: EstadoHorario
+  notas: string | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type HorarioAsignadoInsert = {
+  id?: string
+  empleado_id: number
+  turno_id?: number | null
+  fecha: string
+  estado?: EstadoHorario
+  notas?: string | null
+  usuario_id?: string | null
+}
+
+export type FichajeRow = {
+  id: string
+  empleado_id: number
+  tipo: TipoFichaje
+  momento: string
+  origen: OrigenFichaje
+  fichaje_corregido_id: string | null
+  import_id: string | null
+  usuario_id: string | null
+  notas: string | null
+  created_at: string
+}
+
+export type AsistenciaDiariaRow = {
+  empleado_id: number
+  fecha: string
+  turno_id: number | null
+  entrada_real: string | null
+  salida_real: string | null
+  minutos_trabajados: number
+  minutos_tardanza: number
+  horas_extra_50: number
+  horas_extra_100: number
+  estado: EstadoAsistencia
+  marcaciones: number
+  updated_at: string
+}
+
+export type ImportacionFichajesRow = {
+  id: string
+  usuario_id: string | null
+  archivo_nombre: string | null
+  periodo_desde: string | null
+  periodo_hasta: string | null
+  total_marcaciones: number
+  nuevas: number
+  duplicadas: number
+  sin_match: number
+  dias_recalculados: number
+  estado: string
+  created_at: string
+}
+
+export type ImportacionFichajesInsert = {
+  id?: string
+  usuario_id?: string | null
+  archivo_nombre?: string | null
+  periodo_desde?: string | null
+  periodo_hasta?: string | null
+  total_marcaciones?: number
+  estado?: string
 }
 
 // ─── novedades_empleado ──────────────────────────────────────────────────────
@@ -2459,6 +2644,54 @@ export interface Database {
         Update: EmpleadoUpdate
         Relationships: []
       }
+      empleado_sueldo: {
+        Row: EmpleadoSueldoRow
+        Insert: Partial<EmpleadoSueldoRow>
+        Update: Partial<EmpleadoSueldoRow>
+        Relationships: []
+      }
+      empleado_documentos: {
+        Row: EmpleadoDocumentoRow
+        Insert: EmpleadoDocumentoInsert
+        Update: Partial<EmpleadoDocumentoInsert>
+        Relationships: []
+      }
+      rrhh_config: {
+        Row: RrhhConfigRow
+        Insert: Partial<RrhhConfigRow>
+        Update: Partial<RrhhConfigRow>
+        Relationships: []
+      }
+      turnos_plantilla: {
+        Row: TurnoPlantillaRow
+        Insert: Partial<TurnoPlantillaRow>
+        Update: Partial<TurnoPlantillaRow>
+        Relationships: []
+      }
+      horarios_asignados: {
+        Row: HorarioAsignadoRow
+        Insert: HorarioAsignadoInsert
+        Update: Partial<HorarioAsignadoInsert>
+        Relationships: []
+      }
+      fichajes: {
+        Row: FichajeRow
+        Insert: Partial<FichajeRow>
+        Update: Partial<FichajeRow>
+        Relationships: []
+      }
+      asistencia_diaria: {
+        Row: AsistenciaDiariaRow
+        Insert: Partial<AsistenciaDiariaRow>
+        Update: Partial<AsistenciaDiariaRow>
+        Relationships: []
+      }
+      importaciones_fichajes: {
+        Row: ImportacionFichajesRow
+        Insert: ImportacionFichajesInsert
+        Update: Partial<ImportacionFichajesInsert>
+        Relationships: []
+      }
       novedades_empleado: {
         Row: NovedadEmpleadoRow
         Insert: NovedadEmpleadoInsert
@@ -2853,6 +3086,50 @@ export interface Database {
       }
     }
     Functions: {
+      fn_importar_fichajes: {
+        Args: { p_import_id: string; p_marcaciones: Json }
+        Returns: Json
+      }
+      fn_registrar_fichaje: {
+        Args: {
+          p_id: string
+          p_empleado_id: number
+          p_pin: string
+          p_tipo?: TipoFichaje
+          p_origen?: OrigenFichaje
+          p_momento?: string
+        }
+        Returns: Json
+      }
+      fn_set_pin: {
+        Args: { p_empleado_id: number; p_pin: string }
+        Returns: undefined
+      }
+      fn_validar_pin: {
+        Args: { p_empleado_id: number; p_pin: string }
+        Returns: boolean
+      }
+      fn_tiene_pin: {
+        Args: { p_empleado_id: number }
+        Returns: boolean
+      }
+      fn_cerrar_dia_asistencia: {
+        Args: { p_fecha: string }
+        Returns: number
+      }
+      fn_corregir_fichaje: {
+        Args: {
+          p_empleado_id: number
+          p_momento: string
+          p_tipo: TipoFichaje
+          p_motivo: string
+        }
+        Returns: string
+      }
+      fn_anular_fichaje: {
+        Args: { p_fichaje_id: string; p_motivo: string }
+        Returns: undefined
+      }
       fn_crear_venta: {
         Args: {
           p_turno_id: number
