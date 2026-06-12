@@ -405,6 +405,77 @@ export type ImportacionFichajesInsert = {
   estado?: string
 }
 
+// ─── tareas operativas (Sprint 3) ────────────────────────────────────────────
+
+export type PrioridadTarea = 'baja' | 'media' | 'alta'
+export type EstadoTareaTurno =
+  | 'pendiente'
+  | 'en_curso'
+  | 'completada'
+  | 'vencida'
+  | 'cancelada'
+
+export type TareaRecurrenteRow = {
+  id: string
+  titulo: string
+  descripcion: string | null
+  empleado_id: number
+  turno_id: number | null
+  dias_semana: number[]
+  prioridad: PrioridadTarea
+  requiere_evidencia: boolean
+  activa: boolean
+  usuario_id: string | null
+  created_at: string
+}
+
+export type TareaRecurrenteInsert = {
+  id?: string
+  titulo: string
+  descripcion?: string | null
+  empleado_id: number
+  turno_id?: number | null
+  dias_semana?: number[]
+  prioridad?: PrioridadTarea
+  requiere_evidencia?: boolean
+  activa?: boolean
+  usuario_id?: string | null
+}
+
+export type TareaTurnoRow = {
+  id: string
+  plantilla_id: string | null
+  titulo: string
+  descripcion: string | null
+  empleado_id: number
+  turno_id: number | null
+  fecha: string
+  prioridad: PrioridadTarea
+  requiere_evidencia: boolean
+  estado: EstadoTareaTurno
+  evidencia_url: string | null
+  completada_por: number | null
+  completada_at: string | null
+  notas: string | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type TareaTurnoInsert = {
+  id?: string
+  plantilla_id?: string | null
+  titulo: string
+  descripcion?: string | null
+  empleado_id: number
+  turno_id?: number | null
+  fecha: string
+  prioridad?: PrioridadTarea
+  requiere_evidencia?: boolean
+  estado?: EstadoTareaTurno
+  notas?: string | null
+  usuario_id?: string | null
+}
+
 // ─── novedades_empleado ──────────────────────────────────────────────────────
 
 export type NovedadEmpleadoRow = {
@@ -2692,6 +2763,18 @@ export interface Database {
         Update: Partial<ImportacionFichajesInsert>
         Relationships: []
       }
+      tareas_recurrentes: {
+        Row: TareaRecurrenteRow
+        Insert: TareaRecurrenteInsert
+        Update: Partial<TareaRecurrenteInsert>
+        Relationships: []
+      }
+      tareas_turno: {
+        Row: TareaTurnoRow
+        Insert: TareaTurnoInsert
+        Update: Partial<TareaTurnoInsert>
+        Relationships: []
+      }
       novedades_empleado: {
         Row: NovedadEmpleadoRow
         Insert: NovedadEmpleadoInsert
@@ -3112,6 +3195,18 @@ export interface Database {
       fn_tiene_pin: {
         Args: { p_empleado_id: number }
         Returns: boolean
+      }
+      fn_materializar_tareas_turno: {
+        Args: { p_fecha: string }
+        Returns: number
+      }
+      fn_marcar_tareas_vencidas: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      fn_completar_tarea: {
+        Args: { p_tarea_id: string; p_evidencia_url?: string | null }
+        Returns: undefined
       }
       fn_cerrar_dia_asistencia: {
         Args: { p_fecha: string }

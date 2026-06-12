@@ -11,6 +11,7 @@ import { ModalEmpleado } from './ModalEmpleado'
 import { ModalPin } from './ModalPin'
 import { TabDatosEmpleado } from './TabDatosEmpleado'
 import { TabDocumentosEmpleado } from './TabDocumentosEmpleado'
+import { TabTareasEmpleado } from './TabTareasEmpleado'
 import { CalendarioAsistencia } from './CalendarioAsistencia'
 import { UNIDADES_NEGOCIO, iniciales, nombreCompleto } from './constantes'
 import { useEmpleado, useSubirFoto } from '@/lib/hooks/useRrhh'
@@ -179,7 +180,7 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
           <TabsTrigger value="asistencia" className={claseTab}>
             Asistencia
           </TabsTrigger>
-          <TabsTrigger value="tareas" disabled className={claseTab}>
+          <TabsTrigger value="tareas" className={claseTab}>
             Tareas
           </TabsTrigger>
           {puedeVerSueldos && (
@@ -203,6 +204,9 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
         </TabsContent>
         <TabsContent value="asistencia">
           <CalendarioAsistencia empleadoId={empleado.id} />
+        </TabsContent>
+        <TabsContent value="tareas">
+          <TabTareasEmpleado empleadoId={empleado.id} />
         </TabsContent>
       </Tabs>
 

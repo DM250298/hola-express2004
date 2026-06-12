@@ -47,6 +47,13 @@ export const ESTADO_ASISTENCIA: Record<EstadoAsistencia, EstiloEstado> = {
   sin_turno: { label: 'Sin turno', clase: 'bg-[#e4c9b0]/30 text-[#6f3a2a]' },
 }
 
+/** Fecha de hoy (yyyy-MM-dd) anclada a hora argentina (no a la TZ del navegador). */
+export function hoyAr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(new Date())
+}
+
 /** HH:mm de un timestamptz en hora argentina. */
 export function horaAr(iso: string | null): string {
   if (!iso) return '—'

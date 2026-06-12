@@ -24,6 +24,8 @@ import {
   ChevronDown,
   Clock,
   UserRound,
+  ClipboardList,
+  ListChecks,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -50,6 +52,12 @@ const SECCIONES: Seccion[] = [
         href: '/rrhh/mi-panel',
         etiqueta: 'Mi panel',
         icono: UserRound,
+        permiso: 'mi_panel',
+      },
+      {
+        href: '/rrhh/mis-tareas',
+        etiqueta: 'Mis tareas',
+        icono: ListChecks,
         permiso: 'mi_panel',
       },
       {
@@ -169,6 +177,12 @@ const SECCIONES: Seccion[] = [
         href: '/rrhh/asistencia',
         etiqueta: 'Asistencia',
         icono: Clock,
+        permiso: 'rrhh',
+      },
+      {
+        href: '/rrhh/tareas',
+        etiqueta: 'Tareas',
+        icono: ClipboardList,
         permiso: 'rrhh',
       },
       {
