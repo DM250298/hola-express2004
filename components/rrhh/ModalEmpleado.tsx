@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useCreateEmpleado, useUpdateEmpleado } from '@/lib/hooks/useRrhh'
+import { useUsuariosAdmin } from '@/lib/hooks/useRoles'
 import { TIPOS_CONTRATO, UNIDADES_NEGOCIO } from './constantes'
 import type {
   EmpleadoConSueldo,
@@ -47,6 +48,7 @@ export function ModalEmpleado({
 }: Props) {
   const crear = useCreateEmpleado()
   const actualizar = useUpdateEmpleado()
+  const { data: usuarios } = useUsuariosAdmin()
   const editando = !!empleado
 
   const [nombre, setNombre] = useState('')
@@ -66,6 +68,8 @@ export function ModalEmpleado({
   const [direccion, setDireccion] = useState('')
   const [cbu, setCbu] = useState('')
   const [notas, setNotas] = useState('')
+  const [relojId, setRelojId] = useState('')
+  const [usuarioId, setUsuarioId] = useState('__ninguna__')
 
   useEffect(() => {
     if (abierto) {
@@ -84,8 +88,17 @@ export function ModalEmpleado({
       setDireccion(empleado?.direccion ?? '')
       setCbu(empleado?.banco_cbu_alias ?? '')
       setNotas(empleado?.notas ?? '')
+      setRelojId(empleado?.reloj_id != null ? String(empleado.reloj_id) : '')
+      setUsuarioId(empleado?.usuario_id ?? '__ninguna__')
     }
   }, [abierto, empleado])
+
+  const itemsUsuario: Record<string, string> = {
+    __ninguna__: 'Sin cuenta vinculada',
+    ...Object.fromEntries(
+      (usuarios ?? []).map((u) => [u.id, `${u.nombre} (${u.email})`])
+    ),
+  }
 
   const procesando = crear.isPending || actualizar.isPending
   const puedeGuardar = nombre.trim().length > 0 && !procesando
@@ -107,6 +120,8 @@ export function ModalEmpleado({
       direccion: direccion.trim() || null,
       banco_cbu_alias: cbu.trim() || null,
       notas: notas.trim() || null,
+      reloj_id: relojId.trim() ? Number(relojId) : null,
+      usuario_id: usuarioId === '__ninguna__' ? null : usuarioId,
     }
     // Sólo quien ve sueldos lo envía (la RLS igual lo bloquearía para otros).
     if (puedeVerSueldos) datos.sueldo_basico = Number(sueldo) || 0
@@ -337,6 +352,48 @@ export function ModalEmpleado({
               disabled={procesando}
               className={claseInput}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium text-sm">
+                N° reloj biométrico
+              </Label>
+              <Input
+                type="number"
+                min="0"
+                value={relojId}
+                onChange={(e) => setRelojId(e.target.value)}
+                placeholder="Ej: 10"
+                disabled={procesando}
+                className={`${claseInput} tabular-nums`}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium text-sm">
+                Cuenta de login
+              </Label>
+              <Select
+                items={itemsUsuario}
+                value={usuarioId}
+                onValueChange={(v) => setUsuarioId(v ?? '__ninguna__')}
+                disabled={procesando}
+              >
+                <SelectTrigger className={`w-full ${claseInput}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(itemsUsuario).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[#c8a58a] text-[11px]">
+                Para que el empleado vea “Mi panel”.
+              </p>
+            </div>
           </div>
 
           <div className="space-y-1.5">
