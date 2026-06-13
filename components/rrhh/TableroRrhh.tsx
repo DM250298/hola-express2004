@@ -4,6 +4,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   AlertTriangle,
+  CheckCircle2,
   CircleAlert,
   Clock,
   FileWarning,
@@ -67,7 +68,13 @@ export function TableroRrhh() {
     )
   }
 
-  const tareasPend = data.tareas_hoy.pendientes
+  const {
+    total: tareasTotal,
+    completadas: tareasHechas,
+    pendientes: tareasPend,
+  } = data.tareas_hoy
+  // Todo hecho: hubo tareas y no quedan pendientes → mostrar en verde, no "0".
+  const tareasOk = tareasTotal > 0 && tareasPend === 0
   const vencidasTotal = data.tareas_vencidas.reduce((s, t) => s + t.cantidad, 0)
 
   return (
@@ -102,13 +109,25 @@ export function TableroRrhh() {
           color="#c43e2c"
           alerta={data.ausentes_hoy.length > 0}
         />
-        <KpiCard
-          icono={ListChecks}
-          label="Tareas pendientes hoy"
-          valor={tareasPend}
-          sufijo={`/ ${data.tareas_hoy.total}`}
-          color="#e4a42a"
-        />
+        {tareasOk ? (
+          <KpiCard
+            icono={CheckCircle2}
+            label="Tareas de hoy"
+            valor={`${tareasHechas}/${tareasTotal}`}
+            sufijo="hechas"
+            color="#2f7d4f"
+            tono="#2f7d4f"
+            ok
+          />
+        ) : (
+          <KpiCard
+            icono={ListChecks}
+            label="Tareas pendientes hoy"
+            valor={tareasPend}
+            sufijo={tareasTotal > 0 ? `/ ${tareasTotal}` : undefined}
+            color="#e4a42a"
+          />
+        )}
         <KpiCard
           icono={AlertTriangle}
           label="Tareas vencidas (14d)"
@@ -257,27 +276,37 @@ function KpiCard({
   valor,
   sufijo,
   color,
+  tono = '#391511',
   alerta = false,
+  ok = false,
 }: {
   icono: React.ElementType
   label: string
-  valor: number
+  valor: number | string
   sufijo?: string
   color: string
+  /** Color del número grande (ej. verde cuando está todo hecho). */
+  tono?: string
   alerta?: boolean
+  /** Estado positivo: borde verde suave. */
+  ok?: boolean
 }) {
   return (
     <div
       className={cn(
         'bg-white border rounded-2xl shadow-sm p-4',
-        alerta ? 'border-[#c43e2c]/30' : 'border-[#e4c9b0]/60'
+        alerta
+          ? 'border-[#c43e2c]/30'
+          : ok
+            ? 'border-[#2f7d4f]/30'
+            : 'border-[#e4c9b0]/60'
       )}
     >
       <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[#c8a58a]">
         <Icono className="h-4 w-4" style={{ color }} />
         {label}
       </div>
-      <p className="mt-1 text-3xl font-bold tabular-nums text-[#391511]">
+      <p className="mt-1 text-3xl font-bold tabular-nums" style={{ color: tono }}>
         {valor}
         {sufijo && (
           <span className="text-base font-semibold text-[#c8a58a] ml-1">
