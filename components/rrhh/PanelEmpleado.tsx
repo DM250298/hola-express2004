@@ -73,7 +73,10 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
     const tardanzas = lista.filter((d) => d.estado === 'tardanza').length
     const ausencias = lista.filter((d) => d.estado === 'ausente_injustificado').length
     const ultima = lista.reduce((max, d) => (d.updated_at > max ? d.updated_at : max), '')
-    const presentismoOk = ausencias < MAX_AUSENCIAS && tardanzas < MAX_TARDANZAS
+    // Se pierde con MÁS de los máximos (la liquidación usa `> max`), así que en
+    // el límite exacto sigue en regla → comparar con <=, no con <.
+    const presentismoOk =
+      ausencias <= MAX_AUSENCIAS && tardanzas <= MAX_TARDANZAS
     return { trabajados, horas, tardanzas, ausencias, ultima, presentismoOk }
   }, [dias])
 

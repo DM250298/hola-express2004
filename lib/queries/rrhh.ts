@@ -6,10 +6,11 @@ import type {
   EmpleadoRow,
   EmpleadoUpdate,
   Json,
-  LiquidacionRow,
+  LiquidacionLoteRow,
+  LiquidacionReciboRow,
+  LiquidacionRenglonRow,
   NovedadEmpleadoInsert,
   NovedadEmpleadoRow,
-  ReciboSueldoRow,
   TipoDocumentoEmpleado,
 } from '@/types/database'
 
@@ -301,93 +302,161 @@ export async function deleteNovedad(id: number): Promise<void> {
   if (error) throw error
 }
 
-// ─── Liquidaciones ───────────────────────────────────────────────────────────
+// ─── Liquidaciones (modelo nuevo · Sprint 4) ─────────────────────────────────
+//
+// Modelo por-empleado con snapshot inmutable. Una liquidación es un LOTE de un
+// período (cabecera) con un RECIBO por empleado y RENGLONES de conceptos. Lee
+// la asistencia real y el sueldo gateado; el cálculo vive en la RPC
+// `fn_generar_liquidacion` (security definer, gateada a 'rrhh_sueldos').
 
-export async function getLiquidaciones(): Promise<LiquidacionRow[]> {
+/** Empleado embebido (objeto, array o null) → normalizado a objeto o null. */
+function empleadoDesdeEmbed<T>(embed: T | T[] | null): T | null {
+  return Array.isArray(embed) ? (embed[0] ?? null) : embed
+}
+
+export async function getLiquidacionLotes(): Promise<LiquidacionLoteRow[]> {
   const supabase = createClient()
   const { data, error } = await supabase
-    .from('liquidaciones')
+    .from('liquidacion_lote')
     .select('*')
     .order('periodo', { ascending: false })
+    .order('id', { ascending: false })
 
   if (error) throw error
-  return (data ?? []) as LiquidacionRow[]
+  return (data ?? []) as LiquidacionLoteRow[]
 }
 
-export interface ReciboConEmpleado extends ReciboSueldoRow {
-  empleados: { nombre: string; puesto: string | null } | null
+export interface ReciboConEmpleado extends LiquidacionReciboRow {
+  empleados: {
+    nombre: string
+    apellido: string | null
+    legajo: string
+    puesto: string | null
+  } | null
 }
 
-export interface LiquidacionDetalle {
-  liquidacion: LiquidacionRow
+export interface LiquidacionLoteDetalle {
+  lote: LiquidacionLoteRow
   recibos: ReciboConEmpleado[]
 }
 
-export async function getLiquidacionDetalle(
+export async function getLiquidacionLoteDetalle(
   id: number
-): Promise<LiquidacionDetalle | null> {
+): Promise<LiquidacionLoteDetalle | null> {
   const supabase = createClient()
-  const [resLiq, resRecibos] = await Promise.all([
-    supabase.from('liquidaciones').select('*').eq('id', id).maybeSingle(),
+  const [resLote, resRecibos] = await Promise.all([
+    supabase.from('liquidacion_lote').select('*').eq('id', id).maybeSingle(),
     supabase
-      .from('recibos_sueldo')
-      .select('*, empleados(nombre, puesto)')
-      .eq('liquidacion_id', id)
+      .from('liquidacion_recibo')
+      .select('*, empleados(nombre, apellido, legajo, puesto)')
+      .eq('lote_id', id)
       .order('id', { ascending: true }),
   ])
 
-  if (resLiq.error) throw resLiq.error
+  if (resLote.error) throw resLote.error
   if (resRecibos.error) throw resRecibos.error
-  if (!resLiq.data) return null
+  if (!resLote.data) return null
+
+  type ReciboRaw = LiquidacionReciboRow & {
+    empleados: ReciboConEmpleado['empleados'] | ReciboConEmpleado['empleados'][]
+  }
+  const recibos = ((resRecibos.data ?? []) as unknown as ReciboRaw[]).map((r) => {
+    const { empleados, ...resto } = r
+    return { ...(resto as LiquidacionReciboRow), empleados: empleadoDesdeEmbed(empleados) }
+  })
+
+  return { lote: resLote.data as LiquidacionLoteRow, recibos }
+}
+
+export interface ReciboCompleto {
+  recibo: LiquidacionReciboRow
+  renglones: LiquidacionRenglonRow[]
+  empleado: Pick<
+    EmpleadoRow,
+    'nombre' | 'apellido' | 'legajo' | 'cuil' | 'dni' | 'puesto'
+  > | null
+  lote: Pick<LiquidacionLoteRow, 'periodo' | 'estado' | 'fecha_pago'> | null
+}
+
+/** Recibo + renglones + datos del empleado y del lote, para el PDF. */
+export async function getReciboCompleto(
+  reciboId: number
+): Promise<ReciboCompleto | null> {
+  const supabase = createClient()
+  const [resRecibo, resRenglones] = await Promise.all([
+    supabase
+      .from('liquidacion_recibo')
+      .select(
+        '*, empleados(nombre, apellido, legajo, cuil, dni, puesto), liquidacion_lote(periodo, estado, fecha_pago)'
+      )
+      .eq('id', reciboId)
+      .maybeSingle(),
+    supabase
+      .from('liquidacion_renglon')
+      .select('*')
+      .eq('recibo_id', reciboId)
+      .order('orden', { ascending: true }),
+  ])
+
+  if (resRecibo.error) throw resRecibo.error
+  if (resRenglones.error) throw resRenglones.error
+  if (!resRecibo.data) return null
+
+  type ReciboRaw = LiquidacionReciboRow & {
+    empleados: ReciboCompleto['empleado'] | ReciboCompleto['empleado'][]
+    liquidacion_lote: ReciboCompleto['lote'] | ReciboCompleto['lote'][]
+  }
+  const { empleados, liquidacion_lote, ...recibo } =
+    resRecibo.data as unknown as ReciboRaw
 
   return {
-    liquidacion: resLiq.data as LiquidacionRow,
-    recibos: (resRecibos.data ?? []) as unknown as ReciboConEmpleado[],
+    recibo: recibo as LiquidacionReciboRow,
+    renglones: (resRenglones.data ?? []) as LiquidacionRenglonRow[],
+    empleado: empleadoDesdeEmbed(empleados),
+    lote: empleadoDesdeEmbed(liquidacion_lote),
   }
 }
 
-/** Arma (o re-arma) el borrador de liquidación de un período. */
-export async function liquidarPeriodo(
+/** Arma (o re-arma) el borrador del período leyendo asistencia + sueldo. */
+export async function generarLiquidacion(
   periodo: string,
-  aportesPorcentaje: number,
   usuarioId: string
-): Promise<LiquidacionRow> {
+): Promise<LiquidacionLoteRow> {
   const supabase = createClient()
-  const { data, error } = await supabase.rpc('fn_liquidar_periodo', {
+  const { data, error } = await supabase.rpc('fn_generar_liquidacion', {
     p_periodo: periodo,
-    p_aportes_porcentaje: aportesPorcentaje,
     p_usuario_id: usuarioId,
   })
   if (error) throw error
-  return data as LiquidacionRow
+  return data as LiquidacionLoteRow
 }
 
-/** Confirma el borrador y genera el asiento de devengamiento. */
+/** Confirma el borrador y genera el asiento de devengamiento (balanceado). */
 export async function confirmarLiquidacion(
-  liquidacionId: number,
+  loteId: number,
   usuarioId: string
-): Promise<LiquidacionRow> {
+): Promise<LiquidacionLoteRow> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('fn_confirmar_liquidacion', {
-    p_liquidacion_id: liquidacionId,
+    p_lote_id: loteId,
     p_usuario_id: usuarioId,
   })
   if (error) throw error
-  return data as LiquidacionRow
+  return data as LiquidacionLoteRow
 }
 
-/** Paga la liquidación desde una cuenta de tesorería. */
+/** Paga el neto total desde una cuenta de tesorería. */
 export async function pagarLiquidacion(
-  liquidacionId: number,
+  loteId: number,
   cuentaId: number,
   usuarioId: string
-): Promise<LiquidacionRow> {
+): Promise<LiquidacionLoteRow> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('fn_pagar_liquidacion', {
-    p_liquidacion_id: liquidacionId,
+    p_lote_id: loteId,
     p_cuenta_id: cuentaId,
     p_usuario_id: usuarioId,
   })
   if (error) throw error
-  return data as LiquidacionRow
+  return data as LiquidacionLoteRow
 }

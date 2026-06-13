@@ -24,10 +24,10 @@ function mesActual(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+// HE/presentismo ya no se cargan a mano (son automáticos en la liquidación);
+// los registros legacy con esos tipos caen al fallback `n.tipo`.
 const ETIQUETA_TIPO: Record<string, string> = {
-  hora_extra: 'Horas extra',
   bono: 'Bono / premio',
-  presentismo: 'Presentismo',
   otro: 'Otro haber',
   adelanto: 'Adelanto',
   descuento: 'Descuento',
@@ -88,7 +88,8 @@ export function TabNovedades() {
               Sin novedades en {periodo}
             </p>
             <p className="text-[#6f3a2a] text-sm mt-1">
-              Cargá horas extra, bonos o adelantos antes de liquidar.
+              Cargá bonos, adelantos o descuentos antes de liquidar (las horas
+              extra salen solas de la asistencia).
             </p>
           </div>
         ) : (

@@ -15,7 +15,7 @@ import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalGenerarLiquidacion } from './ModalGenerarLiquidacion'
 import { ModalDetalleLiquidacion } from './ModalDetalleLiquidacion'
-import { useLiquidaciones } from '@/lib/hooks/useRrhh'
+import { useLiquidacionLotes } from '@/lib/hooks/useRrhh'
 import { cn } from '@/lib/utils'
 
 const BADGE_ESTADO: Record<string, string> = {
@@ -25,7 +25,7 @@ const BADGE_ESTADO: Record<string, string> = {
 }
 
 export function TabLiquidaciones() {
-  const { data: liquidaciones, isLoading, isError } = useLiquidaciones()
+  const { data: lotes, isLoading, isError } = useLiquidacionLotes()
   const [modalGenerar, setModalGenerar] = useState(false)
   const [detalleId, setDetalleId] = useState<number | null>(null)
   const [detalleAbierto, setDetalleAbierto] = useState(false)
@@ -41,7 +41,8 @@ export function TabLiquidaciones() {
         <div>
           <h2 className="text-[#391511] font-bold">Liquidaciones de sueldo</h2>
           <p className="text-[#6f3a2a] text-sm">
-            Una liquidación mensual con un recibo por empleado.
+            Una liquidación mensual con un recibo por empleado, calculado desde
+            la asistencia real.
           </p>
         </div>
         <Button
@@ -62,7 +63,7 @@ export function TabLiquidaciones() {
           <div className="p-10 text-center text-[#c43e2c] text-sm">
             No se pudieron cargar las liquidaciones.
           </div>
-        ) : !liquidaciones || liquidaciones.length === 0 ? (
+        ) : !lotes || lotes.length === 0 ? (
           <div className="p-12 text-center">
             <div className="inline-flex p-3 rounded-full bg-[#f9d2a2]/40 mb-3">
               <FileText className="h-6 w-6 text-[#6f3a2a]" />
@@ -86,10 +87,10 @@ export function TabLiquidaciones() {
                     Estado
                   </TableHead>
                   <TableHead className="text-right text-[#391511] font-semibold">
-                    Bruto
+                    Remunerativo
                   </TableHead>
                   <TableHead className="text-right text-[#391511] font-semibold">
-                    Aportes
+                    Descuentos
                   </TableHead>
                   <TableHead className="text-right text-[#391511] font-semibold">
                     Neto
@@ -97,7 +98,7 @@ export function TabLiquidaciones() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {liquidaciones.map((l) => (
+                {lotes.map((l) => (
                   <TableRow
                     key={l.id}
                     onClick={() => abrirDetalle(l.id)}
@@ -117,10 +118,10 @@ export function TabLiquidaciones() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#391511]">
-                      <MontoARS monto={l.total_bruto} />
+                      <MontoARS monto={l.total_remunerativo} />
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#c43e2c]">
-                      <MontoARS monto={l.total_aportes} />
+                      <MontoARS monto={l.total_descuentos} />
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-bold text-[#391511]">
                       <MontoARS monto={l.total_neto} />
@@ -142,7 +143,7 @@ export function TabLiquidaciones() {
       <ModalDetalleLiquidacion
         abierto={detalleAbierto}
         onCambioAbierto={setDetalleAbierto}
-        liquidacionId={detalleId}
+        loteId={detalleId}
       />
     </div>
   )

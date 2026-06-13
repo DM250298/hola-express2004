@@ -47,8 +47,10 @@ export async function crearMovimientoCtaCte(
 
 /**
  * Elimina un movimiento manual. No deja borrar los `descuento_sueldo` que
- * fueron generados por una liquidación: esos se borran cuando se regenera
- * el borrador de liquidación (cascade vía recibo_id).
+ * fueron generados por una liquidación (legacy `recibo_id` o el modelo nuevo
+ * `liquidacion_recibo_id`): esos se borran solos cuando se regenera el
+ * borrador de la liquidación (cascade). Borrarlos a mano re-inflaría el saldo
+ * y duplicaría el descuento del consumo en el período siguiente.
  */
 export async function eliminarMovimientoCtaCte(id: number): Promise<void> {
   const supabase = createClient()
@@ -57,5 +59,6 @@ export async function eliminarMovimientoCtaCte(id: number): Promise<void> {
     .delete()
     .eq('id', id)
     .is('recibo_id', null)
+    .is('liquidacion_recibo_id', null)
   if (error) throw error
 }

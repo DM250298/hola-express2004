@@ -210,7 +210,8 @@ function DetalleMovimientos({ empleadoId }: { empleadoId: number }) {
               key={m.id}
               mov={m}
               onEliminar={() => {
-                if (m.recibo_id != null) return
+                if (m.recibo_id != null || m.liquidacion_recibo_id != null)
+                  return
                 if (
                   !confirm(
                     '¿Eliminar este movimiento? Se actualizará el saldo del empleado.'
@@ -234,7 +235,7 @@ function FilaMovimiento({
   mov: CuentaCorrienteEmpleadoRow
   onEliminar: () => void
 }) {
-  const liquidado = mov.recibo_id != null
+  const liquidado = mov.recibo_id != null || mov.liquidacion_recibo_id != null
   return (
     <li className="py-2 flex items-center gap-2 group">
       <span

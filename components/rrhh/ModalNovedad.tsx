@@ -29,11 +29,13 @@ interface Props {
   periodo: string
 }
 
-/** Tipos de novedad y si suman (haber) o restan (descuento) en el recibo. */
+/**
+ * Tipos de novedad MANUAL y si suman (haber) o restan (descuento) en el recibo.
+ * Horas extra y presentismo NO están: se calculan automáticamente desde la
+ * asistencia en la liquidación (Sprint 4); cargarlos a mano no tendría efecto.
+ */
 export const TIPOS_NOVEDAD: Record<string, string> = {
-  hora_extra: 'Horas extra (suma)',
   bono: 'Bono / premio (suma)',
-  presentismo: 'Presentismo (suma)',
   otro: 'Otro haber (suma)',
   adelanto: 'Adelanto de sueldo (resta)',
   descuento: 'Descuento (resta)',
@@ -45,7 +47,7 @@ export function ModalNovedad({ abierto, onCambioAbierto, periodo }: Props) {
   const crear = useCreateNovedad()
 
   const [empleadoId, setEmpleadoId] = useState('')
-  const [tipo, setTipo] = useState('hora_extra')
+  const [tipo, setTipo] = useState('bono')
   const [concepto, setConcepto] = useState('')
   const [monto, setMonto] = useState('')
 
@@ -65,7 +67,7 @@ export function ModalNovedad({ abierto, onCambioAbierto, periodo }: Props) {
       setEmpleadoId(
         empleadosActivos.length > 0 ? String(empleadosActivos[0].id) : ''
       )
-      setTipo('hora_extra')
+      setTipo('bono')
       setConcepto('')
       setMonto('')
     }
@@ -102,7 +104,8 @@ export function ModalNovedad({ abierto, onCambioAbierto, periodo }: Props) {
             Nueva novedad · {periodo}
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            Horas extra, bonos, adelantos o descuentos del período.
+            Bonos, adelantos o descuentos del período. Las horas extra y el
+            presentismo se calculan solos desde la asistencia.
           </DialogDescription>
         </DialogHeader>
 
@@ -137,7 +140,7 @@ export function ModalNovedad({ abierto, onCambioAbierto, periodo }: Props) {
             <Select
               items={TIPOS_NOVEDAD}
               value={tipo}
-              onValueChange={(v) => setTipo(v ?? 'hora_extra')}
+              onValueChange={(v) => setTipo(v ?? 'bono')}
               disabled={crear.isPending}
             >
               <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
@@ -160,7 +163,7 @@ export function ModalNovedad({ abierto, onCambioAbierto, periodo }: Props) {
             <Input
               value={concepto}
               onChange={(e) => setConcepto(e.target.value)}
-              placeholder="Ej: 10 hs extra fin de semana"
+              placeholder="Ej: bono por objetivos"
               disabled={crear.isPending}
               className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />

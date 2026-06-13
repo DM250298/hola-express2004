@@ -549,7 +549,10 @@ export type CuentaCorrienteEmpleadoRow = {
   concepto: string | null
   /** Monto con signo: positivo aumenta deuda, negativo la cancela. */
   monto: number
+  /** Recibo legacy que consumió el saldo (modelo viejo recibos_sueldo). */
   recibo_id: number | null
+  /** Recibo del modelo nuevo (Sprint 4) que consumió el saldo. */
+  liquidacion_recibo_id: number | null
   usuario_id: string | null
   created_at: string
 }
@@ -562,11 +565,90 @@ export type CuentaCorrienteEmpleadoInsert = {
   concepto?: string | null
   monto: number
   recibo_id?: number | null
+  liquidacion_recibo_id?: number | null
   usuario_id?: string | null
 }
 
 export type EmpleadoConSaldo = EmpleadoRow & {
   saldo_cta_cte: number
+}
+
+// ─── liquidaciones modelo nuevo (Sprint 4 · D5) ──────────────────────────────
+
+export type EstadoLiquidacion = 'borrador' | 'confirmada' | 'pagada'
+export type ClaseRenglon = 'haber' | 'descuento'
+/** Conceptos posibles de un renglón del recibo. */
+export type CodigoRenglon =
+  | 'basico'
+  | 'presentismo'
+  | 'he_50'
+  | 'he_100'
+  | 'sac'
+  | 'bono'
+  | 'otro'
+  | 'adelanto'
+  | 'descuento'
+  | 'ctacte'
+
+export type LiquidacionLoteRow = {
+  id: number
+  periodo: string
+  tipo: string
+  estado: EstadoLiquidacion
+  total_remunerativo: number
+  total_descuentos: number
+  total_neto: number
+  asiento_id: number | null
+  cuenta_id: number | null
+  fecha_pago: string | null
+  usuario_id: string | null
+  created_at: string
+  confirmada_at: string | null
+}
+
+export type LiquidacionReciboRow = {
+  id: number
+  lote_id: number
+  empleado_id: number
+  sueldo_basico: number
+  valor_hora: number
+  dias_trabajados: number
+  dias_ausente_injust: number
+  tardanzas: number
+  he50_horas: number
+  he100_horas: number
+  presentismo_perdido: boolean
+  total_remunerativo: number
+  total_descuentos: number
+  neto: number
+  pagado: boolean
+  fecha_pago: string | null
+  created_at: string
+}
+
+export type LiquidacionRenglonRow = {
+  id: number
+  recibo_id: number
+  codigo: CodigoRenglon
+  clase: ClaseRenglon
+  descripcion: string
+  base: number | null
+  cantidad: number | null
+  monto: number
+  orden: number
+}
+
+export type FeriadoRow = {
+  fecha: string
+  nombre: string
+  ambito: string
+  created_at: string
+}
+
+export type FeriadoInsert = {
+  fecha: string
+  nombre: string
+  ambito?: string
 }
 
 // ─── proyectos y tareas (FASE 5) ─────────────────────────────────────────────
@@ -2799,6 +2881,30 @@ export interface Database {
         Update: Partial<CuentaCorrienteEmpleadoRow>
         Relationships: []
       }
+      liquidacion_lote: {
+        Row: LiquidacionLoteRow
+        Insert: Partial<LiquidacionLoteRow>
+        Update: Partial<LiquidacionLoteRow>
+        Relationships: []
+      }
+      liquidacion_recibo: {
+        Row: LiquidacionReciboRow
+        Insert: Partial<LiquidacionReciboRow>
+        Update: Partial<LiquidacionReciboRow>
+        Relationships: []
+      }
+      liquidacion_renglon: {
+        Row: LiquidacionRenglonRow
+        Insert: Partial<LiquidacionRenglonRow>
+        Update: Partial<LiquidacionRenglonRow>
+        Relationships: []
+      }
+      feriados: {
+        Row: FeriadoRow
+        Insert: FeriadoInsert
+        Update: Partial<FeriadoInsert>
+        Relationships: []
+      }
       proyectos: {
         Row: ProyectoRow
         Insert: ProyectoInsert
@@ -3236,28 +3342,27 @@ export interface Database {
         }
         Returns: VentaRow
       }
-      fn_liquidar_periodo: {
+      fn_generar_liquidacion: {
         Args: {
           p_periodo: string
-          p_aportes_porcentaje: number
           p_usuario_id: string
         }
-        Returns: LiquidacionRow
+        Returns: LiquidacionLoteRow
       }
       fn_confirmar_liquidacion: {
         Args: {
-          p_liquidacion_id: number
+          p_lote_id: number
           p_usuario_id: string
         }
-        Returns: LiquidacionRow
+        Returns: LiquidacionLoteRow
       }
       fn_pagar_liquidacion: {
         Args: {
-          p_liquidacion_id: number
+          p_lote_id: number
           p_cuenta_id: number
           p_usuario_id: string
         }
-        Returns: LiquidacionRow
+        Returns: LiquidacionLoteRow
       }
       fn_anular_venta: {
         Args: {

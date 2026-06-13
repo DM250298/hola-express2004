@@ -8,13 +8,13 @@ import {
   createNovedad,
   deleteNovedad,
   eliminarDocumento,
+  generarLiquidacion,
   getDocumentos,
   getEmpleado,
   getEmpleados,
-  getLiquidacionDetalle,
-  getLiquidaciones,
+  getLiquidacionLoteDetalle,
+  getLiquidacionLotes,
   getNovedades,
-  liquidarPeriodo,
   pagarLiquidacion,
   subirDocumento,
   subirFotoEmpleado,
@@ -178,36 +178,34 @@ export function useDeleteNovedad() {
   })
 }
 
-// ─── Liquidaciones ───────────────────────────────────────────────────────────
+// ─── Liquidaciones (modelo nuevo · Sprint 4) ─────────────────────────────────
 
-export function useLiquidaciones() {
+export function useLiquidacionLotes() {
   return useQuery({
     queryKey: LIQUIDACIONES_KEY,
-    queryFn: getLiquidaciones,
+    queryFn: getLiquidacionLotes,
     staleTime: 30 * 1000,
   })
 }
 
-export function useLiquidacionDetalle(id: number | undefined) {
+export function useLiquidacionLoteDetalle(id: number | undefined) {
   return useQuery({
     queryKey: [...LIQUIDACIONES_KEY, 'detalle', id],
-    queryFn: () => getLiquidacionDetalle(id as number),
+    queryFn: () => getLiquidacionLoteDetalle(id as number),
     enabled: !!id,
   })
 }
 
-export function useLiquidarPeriodo() {
+export function useGenerarLiquidacion() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({
       periodo,
-      aportesPorcentaje,
       usuarioId,
     }: {
       periodo: string
-      aportesPorcentaje: number
       usuarioId: string
-    }) => liquidarPeriodo(periodo, aportesPorcentaje, usuarioId),
+    }) => generarLiquidacion(periodo, usuarioId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: LIQUIDACIONES_KEY })
       toast.success('Liquidación generada')
@@ -220,12 +218,12 @@ export function useConfirmarLiquidacion() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({
-      liquidacionId,
+      loteId,
       usuarioId,
     }: {
-      liquidacionId: number
+      loteId: number
       usuarioId: string
-    }) => confirmarLiquidacion(liquidacionId, usuarioId),
+    }) => confirmarLiquidacion(loteId, usuarioId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: LIQUIDACIONES_KEY })
       qc.invalidateQueries({ queryKey: ['asientos'] })
@@ -239,14 +237,14 @@ export function usePagarLiquidacion() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({
-      liquidacionId,
+      loteId,
       cuentaId,
       usuarioId,
     }: {
-      liquidacionId: number
+      loteId: number
       cuentaId: number
       usuarioId: string
-    }) => pagarLiquidacion(liquidacionId, cuentaId, usuarioId),
+    }) => pagarLiquidacion(loteId, cuentaId, usuarioId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: LIQUIDACIONES_KEY })
       qc.invalidateQueries({ queryKey: ['asientos'] })
