@@ -26,6 +26,7 @@ import {
   UserRound,
   ClipboardList,
   ListChecks,
+  Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -167,6 +168,12 @@ const SECCIONES: Seccion[] = [
   {
     titulo: 'Administración',
     items: [
+      {
+        href: '/rrhh/dashboard',
+        etiqueta: 'Tablero RRHH',
+        icono: Gauge,
+        permiso: 'rrhh',
+      },
       {
         href: '/rrhh',
         etiqueta: 'Recursos Humanos',

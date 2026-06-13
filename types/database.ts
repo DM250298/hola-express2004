@@ -651,6 +651,57 @@ export type FeriadoInsert = {
   ambito?: string
 }
 
+// ─── desempeño (Sprint 5) ─────────────────────────────────────────────────────
+
+export type EvaluacionDesempenoRow = {
+  id: number
+  empleado_id: number
+  periodo: string
+  puntaje_asistencia: number | null
+  puntaje_tareas: number | null
+  puntaje_manual: number | null
+  puntaje_total: number | null
+  dias_trabajados: number
+  tardanzas: number
+  ausencias: number
+  tareas_asignadas: number
+  tareas_completadas: number
+  comentario: string | null
+  usuario_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type EvaluacionDesempenoInsert = {
+  empleado_id: number
+  periodo: string
+  puntaje_manual?: number | null
+  comentario?: string | null
+  usuario_id?: string | null
+}
+
+/** Fila calculada en vivo por `fn_calcular_evaluacion` (auto + manual guardado). */
+export type EvaluacionCalculadaRow = {
+  empleado_id: number
+  nombre: string
+  apellido: string | null
+  legajo: string
+  puesto: string | null
+  dias_esperados: number
+  dias_presente: number
+  tardanzas: number
+  ausencias: number
+  incompletos: number
+  tareas_asignadas: number
+  tareas_completadas: number
+  puntaje_asistencia: number | null
+  puntaje_tareas: number | null
+  puntaje_manual: number | null
+  puntaje_total: number | null
+  comentario: string | null
+  evaluado_at: string | null
+}
+
 // ─── proyectos y tareas (FASE 5) ─────────────────────────────────────────────
 
 export type ProyectoRow = {
@@ -2905,6 +2956,12 @@ export interface Database {
         Update: Partial<FeriadoInsert>
         Relationships: []
       }
+      evaluacion_desempeno: {
+        Row: EvaluacionDesempenoRow
+        Insert: EvaluacionDesempenoInsert
+        Update: Partial<EvaluacionDesempenoRow>
+        Relationships: []
+      }
       proyectos: {
         Row: ProyectoRow
         Insert: ProyectoInsert
@@ -3363,6 +3420,27 @@ export interface Database {
           p_usuario_id: string
         }
         Returns: LiquidacionLoteRow
+      }
+      fn_calcular_evaluacion: {
+        Args: {
+          p_periodo: string
+          p_empleado_id?: number | null
+        }
+        Returns: EvaluacionCalculadaRow[]
+      }
+      fn_guardar_evaluacion: {
+        Args: {
+          p_empleado_id: number
+          p_periodo: string
+          p_puntaje_manual?: number | null
+          p_comentario?: string | null
+          p_usuario_id?: string | null
+        }
+        Returns: EvaluacionDesempenoRow
+      }
+      fn_dashboard_rrhh: {
+        Args: Record<string, never>
+        Returns: Json
       }
       fn_anular_venta: {
         Args: {

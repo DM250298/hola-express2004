@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   addMonths,
   endOfMonth,
@@ -14,13 +15,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  ListChecks,
   ShieldCheck,
+  TrendingUp,
   XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CalendarioAsistencia } from './CalendarioAsistencia'
+import { ScoreBadge, formatearScore as fmt } from './ScoreDesempeno'
 import { formatearMinutos } from './asistenciaConstantes'
 import { useAsistenciaEmpleado } from '@/lib/hooks/useAsistencia'
+import { useEvaluacionEmpleado } from '@/lib/hooks/useDesempeno'
+import { useTareasFecha } from '@/lib/hooks/useTareas'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
@@ -63,6 +69,20 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
   const desde = format(startOfMonth(mes), 'yyyy-MM-dd')
   const hasta = format(endOfMonth(mes), 'yyyy-MM-dd')
   const { data: dias } = useAsistenciaEmpleado(empleadoId, desde, hasta)
+
+  // Tareas de HOY (siempre el día actual, no el mes navegado). Se filtra por
+  // empleado por si el panel lo abre alguien con permiso 'rrhh' (ve todas).
+  const hoy = format(new Date(), 'yyyy-MM-dd')
+  const periodo = format(mes, 'yyyy-MM')
+  const { data: tareasHoy } = useTareasFecha(hoy)
+  const { data: evaluacion } = useEvaluacionEmpleado(periodo, empleadoId)
+
+  const misTareas = useMemo(() => {
+    const lista = (tareasHoy ?? []).filter((t) => t.empleado_id === empleadoId)
+    const total = lista.filter((t) => t.estado !== 'cancelada').length
+    const completadas = lista.filter((t) => t.estado === 'completada').length
+    return { total, completadas }
+  }, [tareasHoy, empleadoId])
 
   const resumen = useMemo(() => {
     const lista = dias ?? []
@@ -150,6 +170,52 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
               ? 'Seguí así: sin ausencias injustificadas ni exceso de tardanzas.'
               : 'Cuidá las tardanzas y ausencias para no perder el presentismo.'}
           </p>
+        </div>
+      </div>
+
+      {/* Mis tareas de hoy + mi desempeño del mes */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <Link
+          href="/rrhh/mis-tareas"
+          className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all"
+        >
+          <div className="shrink-0 p-2.5 rounded-xl bg-[#f9b44c]/15">
+            <ListChecks className="h-5 w-5 text-[#a06b00]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-[#c8a58a] font-semibold">
+              Mis tareas de hoy
+            </p>
+            {misTareas.total === 0 ? (
+              <p className="text-[#391511] font-bold mt-0.5">Sin tareas hoy 🎉</p>
+            ) : (
+              <p className="text-[#391511] mt-0.5">
+                <span className="text-2xl font-bold tabular-nums">
+                  {misTareas.completadas}
+                </span>
+                <span className="text-[#c8a58a] font-semibold">
+                  {' '}
+                  / {misTareas.total} hechas
+                </span>
+              </p>
+            )}
+          </div>
+          <ChevronRight className="h-4 w-4 text-[#c8a58a] group-hover:translate-x-0.5 group-hover:text-[#391511] transition-all" />
+        </Link>
+
+        <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3">
+          <ScoreBadge valor={evaluacion?.puntaje_total ?? null} size="lg" />
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-[#c8a58a] font-semibold flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Mi desempeño del mes
+            </p>
+            <p className="text-[#6f3a2a] text-xs mt-1 leading-snug">
+              Asistencia {fmt(evaluacion?.puntaje_asistencia)} · Tareas{' '}
+              {fmt(evaluacion?.puntaje_tareas)} · Personal{' '}
+              {fmt(evaluacion?.puntaje_manual)}
+            </p>
+          </div>
         </div>
       </div>
 

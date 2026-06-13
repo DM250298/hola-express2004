@@ -5,6 +5,7 @@ import { TabEmpleados } from './TabEmpleados'
 import { TabNovedades } from './TabNovedades'
 import { TabLiquidaciones } from './TabLiquidaciones'
 import { TabCtaCteEmpleados } from './TabCtaCteEmpleados'
+import { TabDesempeno } from './TabDesempeno'
 
 interface Props {
   permisos: string[]
@@ -23,7 +24,8 @@ export function PantallaRrhh({ permisos }: Props) {
       <header>
         <h1 className="text-[#391511] text-2xl font-bold">Recursos Humanos</h1>
         <p className="text-[#6f3a2a] text-sm mt-1">
-          Legajo del personal, documentación, novedades y liquidación de sueldos.
+          Legajo del personal, documentación, desempeño, novedades y liquidación
+          de sueldos.
         </p>
       </header>
 
@@ -34,6 +36,9 @@ export function PantallaRrhh({ permisos }: Props) {
           </TabsTrigger>
           <TabsTrigger value="cta_cte" className={claseTab}>
             Cta. corriente
+          </TabsTrigger>
+          <TabsTrigger value="desempeno" className={claseTab}>
+            Desempeño
           </TabsTrigger>
           {puedeVerSueldos && (
             <>
@@ -52,6 +57,9 @@ export function PantallaRrhh({ permisos }: Props) {
         </TabsContent>
         <TabsContent value="cta_cte">
           <TabCtaCteEmpleados />
+        </TabsContent>
+        <TabsContent value="desempeno">
+          <TabDesempeno />
         </TabsContent>
         {puedeVerSueldos && (
           <>
