@@ -6,6 +6,7 @@ import { PanelAlertas } from './PanelAlertas'
 import { GraficoVentasPorHora } from './GraficoVentasPorHora'
 import { TopProductosDia } from './TopProductosDia'
 import { TablaTurnosDia } from './TablaTurnosDia'
+import { AvisoProduccionPendiente } from '@/components/produccion/AvisoProduccionPendiente'
 import { useRealtimeDashboard } from '@/lib/hooks/useDashboard'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -31,6 +32,8 @@ export function PantallaDashboard({ nombreUsuario }: Props) {
           {hoy} · Resumen operativo en tiempo real
         </p>
       </header>
+
+      <AvisoProduccionPendiente />
 
       <CardsKPIs />
 

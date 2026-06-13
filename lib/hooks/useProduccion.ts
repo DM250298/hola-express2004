@@ -11,6 +11,7 @@ import {
   getDisponibilidadInsumos,
   getOrdenDetalle,
   getOrdenes,
+  getPendientesProduccion,
   getProductosProduccion,
   getRecetaDeProducto,
   getRecetas,
@@ -127,6 +128,7 @@ export function useCrearOrden() {
     mutationFn: (payload: NuevaOrdenPayload) => crearOrden(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ORDENES_KEY })
+      qc.invalidateQueries({ queryKey: ['pendientes-produccion'] })
       toast.success('Orden de producción creada')
     },
     onError: (error: Error) => {
@@ -138,6 +140,7 @@ export function useCrearOrden() {
 /** Invalida todo lo que toca un movimiento de stock de producción. */
 function invalidarStock(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ORDENES_KEY })
+  qc.invalidateQueries({ queryKey: ['pendientes-produccion'] })
   qc.invalidateQueries({ queryKey: ['productos'] })
   qc.invalidateQueries({ queryKey: ['inventario'] })
   qc.invalidateQueries({ queryKey: ['alertas-stock'] })
@@ -212,6 +215,7 @@ export function useGenerarReposicion() {
     mutationFn: () => generarReposicion(),
     onSuccess: (count) => {
       qc.invalidateQueries({ queryKey: ORDENES_KEY })
+      qc.invalidateQueries({ queryKey: ['pendientes-produccion'] })
       if (count > 0) {
         toast.success(`${count} orden(es) de reposición creada(s) en borrador`)
       } else {
@@ -229,5 +233,16 @@ export function useDesfasajes() {
     queryKey: ['desfasajes'],
     queryFn: () => getDesfasajes(),
     staleTime: 30 * 1000,
+  })
+}
+
+/** Cantidad de órdenes pendientes de elaborar (borradores). Refresca solo. */
+export function usePendientesProduccion() {
+  return useQuery({
+    queryKey: ['pendientes-produccion'],
+    queryFn: () => getPendientesProduccion(),
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnWindowFocus: true,
   })
 }

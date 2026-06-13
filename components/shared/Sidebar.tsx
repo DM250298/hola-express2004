@@ -29,6 +29,7 @@ import {
   Gauge,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BadgeProduccionPendiente } from '@/components/produccion/BadgeProduccionPendiente'
 
 interface ItemNav {
   href: string
@@ -359,6 +360,9 @@ export function Sidebar({ permisos }: SidebarProps) {
                           </span>
                         )}
                       </span>
+                      {item.href === '/produccion' && (
+                        <BadgeProduccionPendiente activo={activo} />
+                      )}
                     </Link>
                   )
                 })}

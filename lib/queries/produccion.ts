@@ -588,3 +588,14 @@ export async function generarReposicion(): Promise<number> {
   if (error) throw error
   return Number(data ?? 0)
 }
+
+/** Cantidad de órdenes pendientes de elaborar (en borrador). */
+export async function getPendientesProduccion(): Promise<number> {
+  const supabase = createClient()
+  const { count, error } = await supabase
+    .from('ordenes_produccion')
+    .select('id', { count: 'exact', head: true })
+    .eq('estado', 'borrador')
+  if (error) throw error
+  return count ?? 0
+}
