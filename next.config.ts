@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Forzar el root del proyecto a esta carpeta. En el directorio padre
+  // (HEX-V1/) hay un package-lock.json propio del script generar-fichas.cjs,
+  // y Turbopack infería ESE como workspace root (warning "multiple lockfiles").
+  turbopack: {
+    root: __dirname,
+  },
   async headers() {
     return [
       {
