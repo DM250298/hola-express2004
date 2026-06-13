@@ -2,7 +2,10 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 
-const RUTAS_PUBLICAS = ['/login', '/tienda', '/api/tienda']
+// `/api/cron` se autoprotege con el header Authorization Bearer CRON_SECRET
+// dentro del handler; debe ser público en el middleware porque Vercel Cron lo
+// invoca SIN cookie de sesión (si no, el guard de auth lo redirige a /login).
+const RUTAS_PUBLICAS = ['/login', '/tienda', '/api/tienda', '/api/cron']
 /** Rutas que solo deben ver usuarios NO logueados (ej: login). */
 const RUTAS_SOLO_ANON = ['/login']
 
