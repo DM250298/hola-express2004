@@ -35,6 +35,7 @@ import { useCategorias } from '@/lib/hooks/useCategorias'
 import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
 import { createProducto, getProductoByBarcode } from '@/lib/queries/productos'
 import { formatearFechaCorta } from '@/lib/utils/formato'
+import { cn } from '@/lib/utils'
 
 interface ItemEstado {
   item_id: number
@@ -78,6 +79,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
   const cerrarTrasRecepcion = useRef(false)
 
+  // Producto activo (último escaneado): se resalta y se enfoca su campo para
+  // cargar la cantidad total. El escaneo deja de ser un "+1" como protagonista.
+  const [activoId, setActivoId] = useState<number | null>(null)
+  const inputRefs = useRef<Record<number, HTMLInputElement | null>>({})
+
   // Alta de producto que no está en el pedido
   const [ultimoNoEncontrado, setUltimoNoEncontrado] = useState('')
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false)
@@ -119,7 +125,39 @@ export function RecepcionMovil({ pedidoId }: Props) {
     )
   }
 
-  /** Escaneo: suma 1 a la cantidad recibida del producto con ese código. */
+  /** Botón secundario: suma 1 unidad al producto (para los que prefieren tallar). */
+  function sumarUno(item_id: number) {
+    setItemsEstado((prev) =>
+      prev.map((it) =>
+        it.item_id === item_id
+          ? {
+              ...it,
+              cantidad_recibida: String((Number(it.cantidad_recibida) || 0) + 1),
+            }
+          : it
+      )
+    )
+  }
+
+  // Al marcar un producto como activo (recién escaneado), enfocamos su campo
+  // para que cargue la cantidad total directamente.
+  useEffect(() => {
+    if (activoId == null) return
+    const el = inputRefs.current[activoId]
+    if (el) {
+      el.focus()
+      try {
+        el.select()
+      } catch {
+        // algunos navegadores no permiten select() en input number — se ignora
+      }
+    }
+  }, [activoId])
+
+  /**
+   * Escaneo: trae el producto al tope de la lista, lo resalta y enfoca su campo
+   * para cargar la cantidad TOTAL (no suma de a 1). El "+1" queda como botón.
+   */
   function alEscanear(codigo: string) {
     const item = itemsEstado.find((it) => it.codigo_barras === codigo)
     if (!item) {
@@ -127,9 +165,15 @@ export function RecepcionMovil({ pedidoId }: Props) {
       toast.error('No está en el pedido. Tocá "Agregar producto" para sumarlo.')
       return
     }
-    const actual = Number(item.cantidad_recibida) || 0
-    actualizarItem(item.item_id, { cantidad_recibida: String(actual + 1) })
-    toast.success(`${item.nombre} · ${actual + 1}`)
+    // Si ya es el activo, ignorar (evita que la cámara lo re-dispare al tipear).
+    if (activoId === item.item_id) return
+    setActivoId(item.item_id)
+    setItemsEstado((prev) => {
+      const sel = prev.find((it) => it.item_id === item.item_id)
+      if (!sel) return prev
+      return [sel, ...prev.filter((it) => it.item_id !== item.item_id)]
+    })
+    toast.success(`${item.nombre} — cargá la cantidad`)
   }
 
   /** Total de unidades de esta entrega (habilita el botón; no usa plata). */
@@ -366,7 +410,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
       <div className="mb-4">
         <EscanerCamara
           onDetectado={alEscanear}
-          ayuda="Cada escaneo suma 1 unidad al producto"
+          ayuda="Escaneá un producto y cargá cuántas llegaron"
         />
       </div>
 
@@ -381,10 +425,16 @@ export function RecepcionMovil({ pedidoId }: Props) {
         {itemsEstado.map((it) => {
           const cantNum = Number(it.cantidad_recibida) || 0
           const diferencia = it.ya_recibido + cantNum - it.cantidad_pedida
+          const activo = it.item_id === activoId
           return (
             <li
               key={it.item_id}
-              className="rounded-2xl border border-[#e4c9b0]/70 bg-white p-3 shadow-sm"
+              className={cn(
+                'rounded-2xl border bg-white p-3 shadow-sm transition',
+                activo
+                  ? 'border-[#f9b44c] ring-2 ring-[#f9b44c]/40'
+                  : 'border-[#e4c9b0]/70'
+              )}
             >
               <div className="min-w-0">
                 <p className="font-medium text-[#391511]">{it.nombre}</p>
@@ -410,20 +460,33 @@ export function RecepcionMovil({ pedidoId }: Props) {
                   <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
                     Recibido
                   </Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    inputMode="numeric"
-                    value={it.cantidad_recibida}
-                    onChange={(e) =>
-                      actualizarItem(it.item_id, {
-                        cantidad_recibida: e.target.value,
-                      })
-                    }
-                    placeholder="0"
-                    className="h-12 border-[#e4c9b0] text-lg tabular-nums focus-visible:ring-[#f9b44c]"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      ref={(el) => {
+                        inputRefs.current[it.item_id] = el
+                      }}
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={it.cantidad_recibida}
+                      onChange={(e) =>
+                        actualizarItem(it.item_id, {
+                          cantidad_recibida: e.target.value,
+                        })
+                      }
+                      placeholder="0"
+                      className="h-12 flex-1 border-[#e4c9b0] text-lg tabular-nums focus-visible:ring-[#f9b44c]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => sumarUno(it.item_id)}
+                      className="h-12 w-11 shrink-0 rounded-md border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15] active:scale-95"
+                      aria-label="Sumar 1"
+                    >
+                      +1
+                    </button>
+                  </div>
                   {diferencia !== 0 && !Number.isNaN(diferencia) && cantNum > 0 && (
                     <p
                       className={
