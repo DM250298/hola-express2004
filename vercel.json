@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/cierre-diario",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/aviso-produccion",
+      "schedule": "0 11 * * *"
     }
   ]
 }

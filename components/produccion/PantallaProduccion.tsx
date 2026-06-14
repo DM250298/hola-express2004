@@ -13,6 +13,7 @@ import { TabProducir } from './TabProducir'
 import { TabRecetas } from './TabRecetas'
 import { TabComprarInsumos } from './TabComprarInsumos'
 import { TabAnalisis } from './TabAnalisis'
+import { BotonAvisosPush } from './BotonAvisosPush'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 
 interface TabDef {
@@ -46,15 +47,18 @@ export function PantallaProduccion({ tabInicial }: Props) {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
-      <header>
-        <h1 className="text-[#391511] text-2xl font-bold flex items-center gap-2">
-          <ChefHat className="h-6 w-6 text-[#f9b44c]" />
-          Producción
-        </h1>
-        <p className="text-[#6f3a2a] text-sm mt-1">
-          Elaboración de comida: recetas, órdenes de producción con descuento de
-          insumos y costeo automático.
-        </p>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-[#391511] text-2xl font-bold flex items-center gap-2">
+            <ChefHat className="h-6 w-6 text-[#f9b44c]" />
+            Producción
+          </h1>
+          <p className="text-[#6f3a2a] text-sm mt-1">
+            Elaboración de comida: recetas, órdenes de producción con descuento de
+            insumos y costeo automático.
+          </p>
+        </div>
+        <BotonAvisosPush />
       </header>
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-5">

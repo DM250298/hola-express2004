@@ -111,3 +111,58 @@ async function staleWhileRevalidate(req) {
     .catch(() => null)
   return cacheado || (await red) || new Response('', { status: 504 })
 }
+
+/*
+ * Web Push — avisos de producción pendiente (resumen diario).
+ * El payload llega como JSON { title, body, url } desde el cron del servidor.
+ */
+self.addEventListener('push', (event) => {
+  let datos = {}
+  try {
+    datos = event.data ? event.data.json() : {}
+  } catch {
+    datos = {}
+  }
+  const title = datos.title || 'Hola Express'
+  const body = datos.body || 'Tenés novedades en producción.'
+  const url = datos.url || '/produccion'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icono.svg',
+      badge: '/icono.svg',
+      tag: 'produccion-pendiente',
+      renotify: true,
+      data: { url },
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url =
+    (event.notification.data && event.notification.data.url) || '/produccion'
+  event.waitUntil(
+    (async () => {
+      const ventanas = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      })
+      // Si ya hay una pestaña de la app abierta, la enfoco y navego.
+      for (const cliente of ventanas) {
+        if ('focus' in cliente) {
+          await cliente.focus()
+          if ('navigate' in cliente) {
+            try {
+              await cliente.navigate(url)
+            } catch {
+              // navigate puede fallar en algunos contextos: se ignora.
+            }
+          }
+          return
+        }
+      }
+      if (self.clients.openWindow) await self.clients.openWindow(url)
+    })()
+  )
+})

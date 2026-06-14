@@ -1521,6 +1521,34 @@ export type DesfasajeProduccionRow = {
   fecha_cierre: string | null
 }
 
+export type PushSubscriptionRow = {
+  id: number
+  usuario_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  user_agent: string | null
+  created_at: string
+}
+
+export type PushSubscriptionInsert = {
+  id?: number
+  usuario_id: string
+  endpoint: string
+  p256dh: string
+  auth: string
+  user_agent?: string | null
+  created_at?: string
+}
+
+export type PushSubscriptionUpdate = {
+  usuario_id?: string
+  endpoint?: string
+  p256dh?: string
+  auth?: string
+  user_agent?: string | null
+}
+
 // ─── egresos ─────────────────────────────────────────────────────────────────
 
 export type EgresoRow = {
@@ -2809,6 +2837,12 @@ export interface Database {
         Row: ItemOrdenProdRow
         Insert: ItemOrdenProdInsert
         Update: ItemOrdenProdUpdate
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: PushSubscriptionRow
+        Insert: PushSubscriptionInsert
+        Update: PushSubscriptionUpdate
         Relationships: []
       }
       config_compras: {
