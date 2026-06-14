@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
 import { HubMovil } from '@/components/movil/HubMovil'
-import { PanelEmpleado } from '@/components/rrhh/PanelEmpleado'
 
 export const metadata = {
   title: 'Modo móvil — Hola Express',
@@ -32,29 +31,18 @@ export default async function PaginaMovil() {
   ])
 
   const emp = resEmp.data
-  const pedidosPendientes = resPedidos.count ?? 0
   const nombre = emp
     ? [emp.nombre, emp.apellido].filter(Boolean).join(' ')
     : resPerfil.data?.nombre ?? 'Encargado'
 
   return (
-    <div className="pb-24">
-      <div className="mx-auto max-w-md px-4 pt-5">
-        <HubMovil
-          nombre={nombre}
-          permisos={permisos}
-          pedidosPendientes={pedidosPendientes}
-        />
-      </div>
-
-      {emp && (
-        <div className="mt-2">
-          <PanelEmpleado
-            empleadoId={emp.id}
-            nombre={[emp.nombre, emp.apellido].filter(Boolean).join(' ')}
-          />
-        </div>
-      )}
+    <div className="mx-auto max-w-md px-4 pb-24 pt-5">
+      <HubMovil
+        nombre={nombre}
+        permisos={permisos}
+        pedidosPendientes={resPedidos.count ?? 0}
+        tienePanel={!!emp}
+      />
     </div>
   )
 }
