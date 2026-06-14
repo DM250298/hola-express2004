@@ -2,14 +2,14 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ChevronLeft, Loader2, Lock } from 'lucide-react'
+import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { cn } from '@/lib/utils'
 import { ConteoRapidoMovil } from './ConteoRapidoMovil'
 import { ConteoFormalMovil } from './ConteoFormalMovil'
 
-type Modo = 'rapido' | 'formal'
+type Modo = 'rapido' | 'asignados'
 
 function Marco({ children }: { children: React.ReactNode }) {
   return (
@@ -32,10 +32,11 @@ function Marco({ children }: { children: React.ReactNode }) {
 
 export function ConteoMovil() {
   const { data: usuario, isLoading } = useUsuario()
-  // El conteo rápido crea ajustes de stock → requiere `inventario_ajustes`.
-  // El conteo formal (asignar/aprobar) requiere `conteo_gestion`.
+  // Conteo rápido (ajuste directo) → requiere `inventario_ajustes`.
+  // Aprobar conteos formales → requiere `conteo_gestion`.
+  // La lista de conteos asignados se muestra siempre (para poder contarlos).
   const puedeRapido = tienePermiso(usuario?.permisos, 'inventario_ajustes')
-  const puedeFormal = tienePermiso(usuario?.permisos, 'conteo_gestion')
+  const puedeGestionar = tienePermiso(usuario?.permisos, 'conteo_gestion')
   const [modo, setModo] = useState<Modo>('rapido')
 
   if (isLoading) {
@@ -48,32 +49,11 @@ export function ConteoMovil() {
     )
   }
 
-  if (!puedeRapido && !puedeFormal) {
-    return (
-      <Marco>
-        <div className="flex flex-col items-center gap-2 rounded-2xl border border-[#e4c9b0] bg-white p-8 text-center">
-          <Lock className="h-6 w-6 text-[#c43e2c]" />
-          <p className="font-semibold text-[#391511]">
-            No tenés permiso para contar o ajustar stock.
-          </p>
-          <p className="text-sm text-[#6f3a2a]">
-            Pedile al encargado que te habilite los ajustes de inventario.
-          </p>
-        </div>
-      </Marco>
-    )
-  }
-
-  // Modo efectivo: respeta los permisos disponibles.
-  const modoEfectivo: Modo = !puedeRapido
-    ? 'formal'
-    : !puedeFormal
-      ? 'rapido'
-      : modo
+  const modoEfectivo: Modo = puedeRapido ? modo : 'asignados'
 
   return (
     <Marco>
-      {puedeRapido && puedeFormal && (
+      {puedeRapido && (
         <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-[#391511]/5 p-1">
           <button
             type="button"
@@ -89,10 +69,10 @@ export function ConteoMovil() {
           </button>
           <button
             type="button"
-            onClick={() => setModo('formal')}
+            onClick={() => setModo('asignados')}
             className={cn(
               'rounded-lg py-2 text-sm font-semibold transition',
-              modoEfectivo === 'formal'
+              modoEfectivo === 'asignados'
                 ? 'bg-white text-[#391511] shadow-sm'
                 : 'text-[#6f3a2a]'
             )}
@@ -105,7 +85,10 @@ export function ConteoMovil() {
       {modoEfectivo === 'rapido' ? (
         <ConteoRapidoMovil usuarioId={usuario?.id ?? null} />
       ) : (
-        <ConteoFormalMovil usuarioId={usuario?.id ?? null} />
+        <ConteoFormalMovil
+          usuarioId={usuario?.id ?? null}
+          puedeAprobar={puedeGestionar}
+        />
       )}
     </Marco>
   )
