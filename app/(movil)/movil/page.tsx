@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
 import { HubMovil } from '@/components/movil/HubMovil'
+import { NovedadesStock } from '@/components/shared/NovedadesStock'
 
 export const metadata = {
   title: 'Modo móvil — Hola Express',
@@ -43,6 +44,8 @@ export default async function PaginaMovil() {
         pedidosPendientes={resPedidos.count ?? 0}
         tienePanel={!!emp}
       />
+
+      <NovedadesStock className="mt-4" />
     </div>
   )
 }

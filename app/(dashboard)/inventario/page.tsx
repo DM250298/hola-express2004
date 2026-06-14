@@ -1,4 +1,5 @@
 import { PantallaInventario } from '@/components/inventario/PantallaInventario'
+import { NovedadesStock } from '@/components/shared/NovedadesStock'
 
 export const metadata = {
   title: 'Stock — ¡Hola! Express',
@@ -11,6 +12,11 @@ export default async function PaginaInventario({
 }) {
   const { tab } = await searchParams
   return (
-    <PantallaInventario tabInicial={tab === 'ranking' ? 'ranking' : 'stock'} />
+    <>
+      <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6">
+        <NovedadesStock />
+      </div>
+      <PantallaInventario tabInicial={tab === 'ranking' ? 'ranking' : 'stock'} />
+    </>
   )
 }
