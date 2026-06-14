@@ -30,5 +30,31 @@ export default function manifest(): MetadataRoute.Manifest {
         type: 'image/x-icon',
       },
     ],
+    // Accesos directos del modo móvil de la encargada: aparecen al mantener
+    // apretado el ícono de la app instalada (Android). No cambian el start_url
+    // (los cajeros siguen entrando al POS), pero le dan un atajo directo.
+    shortcuts: [
+      {
+        name: 'Modo móvil',
+        short_name: 'Móvil',
+        description: 'Panel, conteo de stock y recepción desde el teléfono',
+        url: '/movil',
+        icons: [{ src: '/icono.svg', sizes: 'any', type: 'image/svg+xml' }],
+      },
+      {
+        name: 'Contar stock',
+        short_name: 'Contar',
+        description: 'Conteo de stock escaneando con la cámara',
+        url: '/movil/conteo',
+        icons: [{ src: '/icono.svg', sizes: 'any', type: 'image/svg+xml' }],
+      },
+      {
+        name: 'Recibir pedido',
+        short_name: 'Recibir',
+        description: 'Recepción de mercadería con código de barras',
+        url: '/movil/recepcion',
+        icons: [{ src: '/icono.svg', sizes: 'any', type: 'image/svg+xml' }],
+      },
+    ],
   }
 }

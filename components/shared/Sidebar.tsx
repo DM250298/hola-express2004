@@ -27,6 +27,7 @@ import {
   ClipboardList,
   ListChecks,
   Gauge,
+  Smartphone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BadgeProduccionPendiente } from '@/components/produccion/BadgeProduccionPendiente'
@@ -61,6 +62,16 @@ const SECCIONES: Seccion[] = [
         etiqueta: 'Mis tareas',
         icono: ListChecks,
         permiso: 'mi_panel',
+      },
+      {
+        href: '/movil',
+        etiqueta: 'Modo móvil',
+        icono: Smartphone,
+        permiso: 'inventario',
+        // Conteo de stock + recepción desde el teléfono. Lo ve quien pueda
+        // operar stock o recibir mercadería (encargado y cajero).
+        permisosAlt: ['recepcion', 'conteo_gestion'],
+        nota: 'Contar stock y recibir',
       },
       {
         href: '/',
