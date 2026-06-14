@@ -1,11 +1,5 @@
 import Link from 'next/link'
-import {
-  Boxes,
-  CalendarX,
-  ChevronRight,
-  ListChecks,
-  Truck,
-} from 'lucide-react'
+import { Boxes, ChevronRight, Truck } from 'lucide-react'
 import { tienePermiso } from '@/lib/permisos'
 
 interface Props {
@@ -83,27 +77,6 @@ export function HubMovil({ nombre, permisos, pedidosPendientes }: Props) {
               </span>
             </span>
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
-          </Link>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        {tienePermiso(permisos, 'mi_panel') && (
-          <Link
-            href="/rrhh/mis-tareas"
-            className="flex items-center gap-2 rounded-xl border border-[#e4c9b0]/70 bg-white px-3 py-3 text-sm font-medium text-[#391511] shadow-sm transition active:scale-[0.99]"
-          >
-            <ListChecks className="h-4.5 w-4.5 text-[#9e6b15]" />
-            Mis tareas
-          </Link>
-        )}
-        {tienePermiso(permisos, 'vencimientos') && (
-          <Link
-            href="/vencimientos"
-            className="flex items-center gap-2 rounded-xl border border-[#e4c9b0]/70 bg-white px-3 py-3 text-sm font-medium text-[#391511] shadow-sm transition active:scale-[0.99]"
-          >
-            <CalendarX className="h-4.5 w-4.5 text-[#c43e2c]" />
-            Vencimientos
           </Link>
         )}
       </div>
