@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Boxes, ChevronRight, Truck } from 'lucide-react'
+import { Boxes, CalendarCheck, ChevronRight, Truck } from 'lucide-react'
 import { tienePermiso } from '@/lib/permisos'
 
 interface Props {
@@ -7,13 +7,21 @@ interface Props {
   permisos: string[]
   /** Pedidos en estado enviado / recepción parcial, para el badge. */
   pedidosPendientes: number
+  /** Si el usuario tiene legajo de empleado (para mostrar "Mi panel"). */
+  tienePanel: boolean
 }
 
 /**
  * Pantalla de inicio del modo móvil de la encargada: saludo + accesos grandes
- * a las dos acciones críticas (contar stock y recibir pedido) según permisos.
+ * a las dos acciones críticas (contar stock y recibir pedido) según permisos,
+ * más un acceso a su panel de asistencia.
  */
-export function HubMovil({ nombre, permisos, pedidosPendientes }: Props) {
+export function HubMovil({
+  nombre,
+  permisos,
+  pedidosPendientes,
+  tienePanel,
+}: Props) {
   const puedeContar =
     tienePermiso(permisos, 'inventario_ajustes') ||
     tienePermiso(permisos, 'conteo_gestion')
@@ -74,6 +82,26 @@ export function HubMovil({ nombre, permisos, pedidosPendientes }: Props) {
                       pedidosPendientes === 1 ? '' : 's'
                     } esperando recepción`
                   : 'Escaneá la mercadería que llega'}
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        )}
+
+        {tienePanel && (
+          <Link
+            href="/movil/panel"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#391511]/10 text-[#391511]">
+              <CalendarCheck className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                Mi panel
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Asistencia, tareas y desempeño del mes
               </span>
             </span>
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
