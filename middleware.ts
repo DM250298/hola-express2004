@@ -16,15 +16,17 @@ const PERMISO_RUTA: Record<string, string[]> = {
   pos: ['/pos'],
   ventas: ['/ventas'],
   clientes: ['/clientes'],
-  inventario: ['/inventario'],
+  // El modo móvil de la encargada (/movil) agrupa conteo de stock y recepción;
+  // lo habilitan los permisos operativos de stock/abastecimiento.
+  inventario: ['/inventario', '/movil'],
   vencimientos: ['/vencimientos'],
   // El módulo unificado /compras es accesible con cualquiera de los permisos
   // de abastecimiento (compras, pedidos o recepción). El cajero recibe
   // mercadería, por eso 'recepcion' también habilita /compras.
   compras: ['/compras'],
   etiquetas: ['/etiquetas'],
-  pedidos: ['/pedidos', '/compras'],
-  recepcion: ['/recepcion', '/compras'],
+  pedidos: ['/pedidos', '/compras', '/movil'],
+  recepcion: ['/recepcion', '/compras', '/movil'],
   produccion: ['/produccion'],
   finanzas: ['/finanzas'],
   contabilidad: ['/contabilidad'],
