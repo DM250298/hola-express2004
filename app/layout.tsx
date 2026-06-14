@@ -19,6 +19,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: '¡Hola! Express — Sistema de Gestión',
   description: 'Sistema de gestión operativa para Hola! Express, La Rioja, Argentina',
+  // Manifest por defecto (arranca en el POS). El modo móvil lo sobreescribe en
+  // su propio layout con un manifest que arranca en /movil.
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     title: 'Hola Express',

@@ -1,0 +1,33 @@
+{
+  "name": "Hola Express — Encargada",
+  "short_name": "Hola Móvil",
+  "description": "Conteo de stock y recepción de pedidos desde el teléfono.",
+  "id": "/movil",
+  "start_url": "/movil",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "es-AR",
+  "background_color": "#fdfaf6",
+  "theme_color": "#391511",
+  "icons": [
+    { "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Contar stock",
+      "short_name": "Contar",
+      "description": "Conteo de stock escaneando con la cámara",
+      "url": "/movil/conteo",
+      "icons": [{ "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Recibir pedido",
+      "short_name": "Recibir",
+      "description": "Recepción de mercadería con código de barras",
+      "url": "/movil/recepcion",
+      "icons": [{ "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}
