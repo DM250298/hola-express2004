@@ -1,7 +1,14 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerClient } from '@/lib/supabase/server'
 import { BotonSalirMovil } from '@/components/movil/BotonSalirMovil'
+
+// Manifest propio del modo móvil: la app instalada desde /movil arranca en
+// /movil (no en el POS). Sobreescribe el manifest por defecto del layout raíz.
+export const metadata: Metadata = {
+  manifest: '/movil.webmanifest',
+}
 
 /**
  * Layout del modo móvil de la encargada. A diferencia del dashboard, NO incluye

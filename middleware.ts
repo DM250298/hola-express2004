@@ -148,6 +148,6 @@ export const config = {
   matcher: [
     // Se excluyen también el service worker y el manifest PWA (FASE 2 —
     // POS offline): deben servirse tal cual, sin pasar por los guardas de auth.
-    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|icono\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|[\\w-]+\\.webmanifest|icono\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
