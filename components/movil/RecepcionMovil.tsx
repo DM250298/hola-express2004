@@ -9,13 +9,20 @@ import {
   ChevronLeft,
   Loader2,
   PackageCheck,
+  Plus,
   ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { MontoARS } from '@/components/shared/MontoARS'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { EscanerCamara } from './EscanerCamara'
 import {
@@ -24,7 +31,9 @@ import {
   useRecibirPedido,
 } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { parsearDiasCondicionPago } from '@/lib/queries/pedidos'
+import { useCategorias } from '@/lib/hooks/useCategorias'
+import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
+import { createProducto, getProductoByBarcode } from '@/lib/queries/productos'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 
 interface ItemEstado {
@@ -35,6 +44,7 @@ interface ItemEstado {
   cantidad_pedida: number
   /** Lo ya recibido en entregas anteriores (acumulado en la DB). */
   ya_recibido: number
+  /** Costo de la línea (no se muestra en pantalla, pero viaja en la recepción). */
   precio_costo: number
   /** Lo que se recibe en ESTA entrega (input controlado). */
   cantidad_recibida: string
@@ -49,13 +59,15 @@ interface Props {
 /**
  * Recepción de un pedido desde el teléfono: escaneo con cámara (cada lectura
  * suma 1 al producto, editable), fecha de vencimiento opcional por ítem, clave
- * de supervisor si se recibe de más, y registro atómico vía `fn_recibir_pedido`
- * (suma stock, crea lotes y genera la cuenta a pagar provisoria).
+ * de supervisor si se recibe de más, y registro atómico vía `fn_recibir_pedido`.
+ * No muestra precios/costos. Permite agregar un producto que no estaba en la
+ * orden (creándolo si hace falta).
  */
 export function RecepcionMovil({ pedidoId }: Props) {
   const router = useRouter()
   const { data: usuario } = useUsuario()
   const { data: pedido, isLoading } = usePedidoDetalle(pedidoId)
+  const { data: categorias } = useCategorias()
   const recibir = useRecibirPedido()
   const cambiarEstado = useActualizarEstadoPedido()
 
@@ -65,6 +77,17 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
   const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
   const cerrarTrasRecepcion = useRef(false)
+
+  // Alta de producto que no está en el pedido
+  const [ultimoNoEncontrado, setUltimoNoEncontrado] = useState('')
+  const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false)
+  const [nuevoCodigo, setNuevoCodigo] = useState('')
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoPrecio, setNuevoPrecio] = useState('')
+  const [nuevoCategoria, setNuevoCategoria] = useState('')
+  const [nuevoCantidad, setNuevoCantidad] = useState('')
+  const [nuevoVenc, setNuevoVenc] = useState('')
+  const [guardandoNuevo, setGuardandoNuevo] = useState(false)
 
   useEffect(() => {
     if (!pedido) return
@@ -100,7 +123,8 @@ export function RecepcionMovil({ pedidoId }: Props) {
   function alEscanear(codigo: string) {
     const item = itemsEstado.find((it) => it.codigo_barras === codigo)
     if (!item) {
-      toast.error('Ese código no pertenece a este pedido.')
+      setUltimoNoEncontrado(codigo)
+      toast.error('No está en el pedido. Tocá "Agregar producto" para sumarlo.')
       return
     }
     const actual = Number(item.cantidad_recibida) || 0
@@ -108,12 +132,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
     toast.success(`${item.nombre} · ${actual + 1}`)
   }
 
-  const totalRecibido = useMemo(
+  /** Total de unidades de esta entrega (habilita el botón; no usa plata). */
+  const totalUnidades = useMemo(
     () =>
-      itemsEstado.reduce((acc, it) => {
-        const cant = Number(it.cantidad_recibida) || 0
-        return acc + cant * it.precio_costo
-      }, 0),
+      itemsEstado.reduce(
+        (acc, it) => acc + (Number(it.cantidad_recibida) || 0),
+        0
+      ),
     [itemsEstado]
   )
 
@@ -173,10 +198,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
     })
   }, [itemsEstado])
 
-  const requiereAceptacion = itemsPorDebajoMinimo.length > 0 && !aceptaPorDebajoMin
+  const requiereAceptacion =
+    itemsPorDebajoMinimo.length > 0 && !aceptaPorDebajoMin
   const procesando = recibir.isPending || cambiarEstado.isPending
   const accionDeshabilitada =
-    procesando || hayErrores || totalRecibido <= 0 || requiereAceptacion
+    procesando || hayErrores || totalUnidades <= 0 || requiereAceptacion
 
   function confirmar(cerrarPedido: boolean) {
     if (!usuario || hayErrores || !pedido?.proveedor) return
@@ -209,19 +235,90 @@ export function RecepcionMovil({ pedidoId }: Props) {
           if (cerrarPedido && resultado.es_parcial) {
             cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
           }
-          if (resultado.variaciones && resultado.variaciones.length > 0) {
-            const nombres = resultado.variaciones
-              .map((v) => {
-                const it = itemsEstado.find((i) => i.producto_id === v.producto_id)
-                return `${it?.nombre ?? 'Producto'} (+${v.variacion_pct}%)`
-              })
-              .join(', ')
-            toast.warning(`Subas de costo: ${nombres}`, { duration: 8000 })
-          }
           router.push('/movil/recepcion')
         },
       }
     )
+  }
+
+  async function guardarNuevoProducto() {
+    const cant = Number(nuevoCantidad)
+    if (!Number.isFinite(cant) || cant <= 0) {
+      toast.error('Poné cuántas unidades llegaron.')
+      return
+    }
+    setGuardandoNuevo(true)
+    try {
+      const cod = nuevoCodigo.trim()
+      let prod: { id: number; nombre: string; codigo_barras: string | null } | null =
+        null
+      // Si el código ya existe en el catálogo, se usa ese producto.
+      if (cod) prod = await getProductoByBarcode(cod)
+      if (!prod) {
+        if (!nuevoNombre.trim()) {
+          toast.error('Poné el nombre del producto.')
+          setGuardandoNuevo(false)
+          return
+        }
+        const precio = Number(nuevoPrecio)
+        if (!Number.isFinite(precio) || precio <= 0) {
+          toast.error('Poné el precio de venta.')
+          setGuardandoNuevo(false)
+          return
+        }
+        prod = await createProducto({
+          nombre: nuevoNombre.trim(),
+          precio_venta: precio,
+          codigo_barras: cod || null,
+          categoria_id: nuevoCategoria ? Number(nuevoCategoria) : null,
+        })
+      }
+
+      if (itemsEstado.some((it) => it.producto_id === prod!.id)) {
+        toast.info(`${prod.nombre} ya está en la lista.`)
+      } else {
+        const nuevoItem = await agregarItemPedido({
+          pedido_id: pedidoId,
+          producto_id: prod.id,
+          cantidad: cant,
+          precio_costo: 0,
+        })
+        setItemsEstado((prev) => [
+          ...prev,
+          {
+            item_id: nuevoItem.id,
+            producto_id: prod!.id,
+            nombre: prod!.nombre,
+            codigo_barras: prod!.codigo_barras,
+            cantidad_pedida: cant,
+            ya_recibido: 0,
+            precio_costo: 0,
+            cantidad_recibida: String(cant),
+            fecha_vencimiento: nuevoVenc,
+            dias_vencimiento_minimo: null,
+          },
+        ])
+        toast.success(`${prod.nombre} agregado al pedido`)
+      }
+
+      setModalNuevoAbierto(false)
+      setNuevoCodigo('')
+      setNuevoNombre('')
+      setNuevoPrecio('')
+      setNuevoCategoria('')
+      setNuevoCantidad('')
+      setNuevoVenc('')
+      setUltimoNoEncontrado('')
+    } catch (e) {
+      toast.error(`No se pudo agregar: ${(e as Error).message}`)
+    } finally {
+      setGuardandoNuevo(false)
+    }
+  }
+
+  function abrirNuevoProducto() {
+    setNuevoCodigo(ultimoNoEncontrado)
+    setModalNuevoAbierto(true)
   }
 
   if (isLoading) {
@@ -289,35 +386,23 @@ export function RecepcionMovil({ pedidoId }: Props) {
               key={it.item_id}
               className="rounded-2xl border border-[#e4c9b0]/70 bg-white p-3 shadow-sm"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-[#391511]">{it.nombre}</p>
-                  <p className="text-xs text-[#6f3a2a]">
-                    Pedido:{' '}
-                    <span className="font-semibold tabular-nums">
-                      {it.cantidad_pedida}
-                    </span>
-                    {it.ya_recibido > 0 && (
-                      <>
-                        {' '}
-                        · ya recibido{' '}
-                        <span className="font-semibold tabular-nums">
-                          {it.ya_recibido}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
-                {cantNum > 0 && (
-                  <span className="shrink-0 text-right">
-                    <span className="block text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-                      Subtotal
-                    </span>
-                    <span className="font-bold tabular-nums text-[#391511]">
-                      <MontoARS monto={cantNum * it.precio_costo} />
-                    </span>
+              <div className="min-w-0">
+                <p className="font-medium text-[#391511]">{it.nombre}</p>
+                <p className="text-xs text-[#6f3a2a]">
+                  Pedido:{' '}
+                  <span className="font-semibold tabular-nums">
+                    {it.cantidad_pedida}
                   </span>
-                )}
+                  {it.ya_recibido > 0 && (
+                    <>
+                      {' '}
+                      · ya recibido{' '}
+                      <span className="font-semibold tabular-nums">
+                        {it.ya_recibido}
+                      </span>
+                    </>
+                  )}
+                </p>
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -374,6 +459,16 @@ export function RecepcionMovil({ pedidoId }: Props) {
         })}
       </ul>
 
+      {/* Agregar producto que no estaba en el pedido */}
+      <button
+        type="button"
+        onClick={abrirNuevoProducto}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#e4c9b0] bg-white/60 px-3 py-3 text-sm font-semibold text-[#9e6b15] transition active:scale-[0.99]"
+      >
+        <Plus className="h-4 w-4" />
+        Agregar producto que no está en el pedido
+      </button>
+
       {itemsPorDebajoMinimo.length > 0 && (
         <div className="mt-3 space-y-2 rounded-2xl border-2 border-[#c43e2c]/40 bg-[#c43e2c]/10 p-3">
           <div className="flex items-start gap-2">
@@ -403,13 +498,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
               {itemsEstado.some((it) => it.ya_recibido > 0)
                 ? 'Esta entrega'
-                : 'Total a pagar'}
+                : 'A recibir'}
             </div>
             <div className="text-xl font-extrabold tabular-nums text-[#391511]">
-              <MontoARS monto={totalRecibido} />
+              {totalUnidades} u.
             </div>
           </div>
-          {esParcial && totalRecibido > 0 ? (
+          {esParcial && totalUnidades > 0 ? (
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -459,6 +554,127 @@ export function RecepcionMovil({ pedidoId }: Props) {
           ejecutarRecepcion(cerrarTrasRecepcion.current)
         }}
       />
+
+      {/* Modal: agregar / crear producto que no está en el pedido */}
+      <Dialog open={modalNuevoAbierto} onOpenChange={setModalNuevoAbierto}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#391511]">
+              <Plus className="h-5 w-5 text-[#f9b44c]" />
+              Agregar producto
+            </DialogTitle>
+            <DialogDescription className="text-[#6f3a2a]">
+              Si el código ya existe, se usa ese producto. Si no, se crea uno
+              nuevo y se suma a este pedido.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs text-[#6f3a2a]">
+                Código de barras (opcional)
+              </Label>
+              <Input
+                inputMode="numeric"
+                value={nuevoCodigo}
+                onChange={(e) => setNuevoCodigo(e.target.value)}
+                placeholder="Escaneá o escribí el código…"
+                className="h-11 border-[#e4c9b0] font-mono focus-visible:ring-[#f9b44c]"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-[#6f3a2a]">Nombre del producto</Label>
+              <Input
+                value={nuevoNombre}
+                onChange={(e) => setNuevoNombre(e.target.value)}
+                placeholder="Ej: Gaseosa Cola 1.5L"
+                className="h-11 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-[#6f3a2a]">Precio de venta</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={nuevoPrecio}
+                  onChange={(e) => setNuevoPrecio(e.target.value)}
+                  placeholder="0"
+                  className="h-11 border-[#e4c9b0] tabular-nums focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-[#6f3a2a]">Categoría (opc.)</Label>
+                <select
+                  value={nuevoCategoria}
+                  onChange={(e) => setNuevoCategoria(e.target.value)}
+                  className="h-11 w-full rounded-md border border-[#e4c9b0] bg-white px-2 text-sm text-[#391511] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c]"
+                >
+                  <option value="">Sin categoría</option>
+                  {(categorias ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-[#6f3a2a]">Unidades que llegaron</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={nuevoCantidad}
+                  onChange={(e) => setNuevoCantidad(e.target.value)}
+                  placeholder="0"
+                  className="h-11 border-[#e4c9b0] tabular-nums focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-[#6f3a2a]">Vence (opc.)</Label>
+                <Input
+                  type="date"
+                  value={nuevoVenc}
+                  onChange={(e) => setNuevoVenc(e.target.value)}
+                  className="h-11 border-[#e4c9b0] tabular-nums focus-visible:ring-[#f9b44c]"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setModalNuevoAbierto(false)}
+                disabled={guardandoNuevo}
+                className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={guardarNuevoProducto}
+                disabled={guardandoNuevo}
+                className="flex-1 bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
+              >
+                {guardandoNuevo ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Agregando…
+                  </>
+                ) : (
+                  'Agregar al pedido'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
