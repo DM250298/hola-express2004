@@ -1430,6 +1430,7 @@ export type OrdenProduccionRow = {
   lote_id: number | null
   costo_total: number
   usuario_id: string | null
+  usuario_cierre: string | null
   fecha_inicio: string | null
   fecha_cierre: string | null
   nota: string | null
@@ -1447,6 +1448,7 @@ export type OrdenProduccionInsert = {
   lote_id?: number | null
   costo_total?: number
   usuario_id?: string | null
+  usuario_cierre?: string | null
   fecha_inicio?: string | null
   fecha_cierre?: string | null
   nota?: string | null
@@ -1460,6 +1462,7 @@ export type OrdenProduccionUpdate = {
   estado?: EstadoOrdenProduccion
   lote_id?: number | null
   costo_total?: number
+  usuario_cierre?: string | null
   fecha_inicio?: string | null
   fecha_cierre?: string | null
   nota?: string | null
@@ -1513,6 +1516,8 @@ export type DesfasajeProduccionRow = {
   diferencia_costo: number
   motivo_desfasaje: string | null
   usuario_id: string | null
+  usuario_cierre: string | null
+  responsable_id: string | null
   fecha_cierre: string | null
 }
 
@@ -3522,6 +3527,22 @@ export interface Database {
       fn_generar_ordenes_reposicion: {
         Args: Record<string, never>
         Returns: number
+      }
+      fn_insumos_a_comprar: {
+        Args: Record<string, never>
+        Returns: {
+          insumo_id: number
+          insumo_nombre: string
+          codigo_barras: string | null
+          unidad: string
+          proveedor_id: number | null
+          proveedor_nombre: string | null
+          requerido: number
+          stock_actual: number
+          a_comprar: number
+          precio_costo: number
+          costo_estimado: number
+        }[]
       }
       fn_guardar_factura_compra: {
         Args: {

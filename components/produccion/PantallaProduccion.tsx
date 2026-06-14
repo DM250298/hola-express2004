@@ -1,10 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { BookOpen, ChefHat, ClipboardList, TrendingUp } from 'lucide-react'
+import {
+  BookOpen,
+  ChefHat,
+  ClipboardList,
+  ShoppingCart,
+  TrendingUp,
+} from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabProducir } from './TabProducir'
 import { TabRecetas } from './TabRecetas'
+import { TabComprarInsumos } from './TabComprarInsumos'
 import { TabAnalisis } from './TabAnalisis'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 
@@ -17,6 +24,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { value: 'producir', etiqueta: 'Producir', icono: ClipboardList },
   { value: 'recetas', etiqueta: 'Recetas', icono: BookOpen },
+  { value: 'comprar', etiqueta: 'Comprar insumos', icono: ShoppingCart },
   { value: 'analisis', etiqueta: 'Análisis', icono: TrendingUp },
 ]
 
@@ -68,6 +76,9 @@ export function PantallaProduccion({ tabInicial }: Props) {
         </TabsContent>
         <TabsContent value="recetas">
           <TabRecetas />
+        </TabsContent>
+        <TabsContent value="comprar">
+          <TabComprarInsumos />
         </TabsContent>
         <TabsContent value="analisis">
           <TabAnalisis />

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import type { RangoFechas } from '@/lib/utils/periodos'
 import {
   cancelarOrden,
   cerrarOrden,
@@ -9,6 +10,7 @@ import {
   generarReposicion,
   getDesfasajes,
   getDisponibilidadInsumos,
+  getInsumosAComprar,
   getOrdenDetalle,
   getOrdenes,
   getPendientesProduccion,
@@ -228,10 +230,19 @@ export function useGenerarReposicion() {
   })
 }
 
-export function useDesfasajes() {
+export function useDesfasajes(rango?: RangoFechas) {
   return useQuery({
-    queryKey: ['desfasajes'],
-    queryFn: () => getDesfasajes(),
+    queryKey: ['desfasajes', rango?.desde ?? null, rango?.hasta ?? null],
+    queryFn: () => getDesfasajes(rango),
+    staleTime: 30 * 1000,
+  })
+}
+
+/** Insumos a comprar para las órdenes en borrador (explosión → compra). */
+export function useInsumosAComprar() {
+  return useQuery({
+    queryKey: ['insumos-a-comprar'],
+    queryFn: () => getInsumosAComprar(),
     staleTime: 30 * 1000,
   })
 }

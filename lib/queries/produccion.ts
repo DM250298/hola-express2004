@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { convertir, esUnidadCanonica, type UnidadCanonica } from '@/lib/utils/unidades'
+import type { RangoFechas } from '@/lib/utils/periodos'
 import type {
   DesfasajeProduccionRow,
   EstadoOrdenProduccion,
@@ -513,6 +514,15 @@ export async function cerrarOrden(
   })
   if (error) throw error
   if (!data) throw new Error('No se pudo cerrar la orden.')
+
+  // Atribución del desfasaje: marcamos quién cerró la orden. Best-effort y no
+  // crítico — el cierre, el stock y el costeo ya se hicieron atómicos en el RPC.
+  // Si esta escritura fallara, la vista de desfasajes cae al usuario que la inició.
+  await supabase
+    .from('ordenes_produccion')
+    .update({ usuario_cierre: usuario_id })
+    .eq('id', orden_id)
+
   return data as unknown as ResultadoCerrar
 }
 
@@ -531,17 +541,31 @@ export interface DesfasajeLinea {
   costo_unitario: number
   diferencia_costo: number
   motivo: string | null
+  /** Quién es responsable: quien cerró la orden, o quien la inició (órdenes viejas). */
+  responsable_id: string | null
 }
 
-/** Líneas de desfasaje (consumo real ≠ receta) en órdenes cerradas, por impacto en $. */
-export async function getDesfasajes(): Promise<DesfasajeLinea[]> {
+/**
+ * Líneas de desfasaje (consumo real ≠ receta) en órdenes cerradas, ordenadas por
+ * impacto en $. Si se pasa un rango, filtra por fecha de cierre.
+ */
+export async function getDesfasajes(
+  rango?: RangoFechas
+): Promise<DesfasajeLinea[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('vista_desfasajes_produccion')
     .select('*')
-    .order('id', { ascending: false })
-    .limit(200)
+    .order('fecha_cierre', { ascending: false })
+    .limit(2000)
 
+  if (rango) {
+    query = query
+      .gte('fecha_cierre', rango.desde)
+      .lte('fecha_cierre', rango.hasta)
+  }
+
+  const { data, error } = await query
   if (error) throw error
 
   return ((data ?? []) as DesfasajeProduccionRow[])
@@ -558,6 +582,7 @@ export async function getDesfasajes(): Promise<DesfasajeLinea[]> {
       costo_unitario: d.costo_unitario,
       diferencia_costo: d.diferencia_costo,
       motivo: d.motivo_desfasaje,
+      responsable_id: d.responsable_id,
     }))
     .sort((a, b) => Math.abs(b.diferencia_costo) - Math.abs(a.diferencia_costo))
 }
@@ -598,4 +623,61 @@ export async function getPendientesProduccion(): Promise<number> {
     .eq('estado', 'borrador')
   if (error) throw error
   return count ?? 0
+}
+
+// ─── Insumos a comprar (explosión de órdenes en borrador → compra) ───────────────
+
+export interface InsumoAComprar {
+  insumo_id: number
+  insumo_nombre: string
+  codigo_barras: string | null
+  unidad: string
+  proveedor_id: number | null
+  proveedor_nombre: string | null
+  /** Total requerido por las órdenes en borrador, en la unidad de stock del insumo. */
+  requerido: number
+  stock_actual: number
+  /** max(requerido - stock_actual, 0): lo que falta y conviene comprar. */
+  a_comprar: number
+  precio_costo: number
+  costo_estimado: number
+}
+
+/**
+ * Explota las recetas de las órdenes en BORRADOR hasta sus insumos hoja, suma por
+ * insumo, netea contra el stock y agrupa por proveedor. Pensado para armar la
+ * orden de compra (handoff a /pedidos/nuevo). Ver fn_insumos_a_comprar (mig 092).
+ */
+export async function getInsumosAComprar(): Promise<InsumoAComprar[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_insumos_a_comprar')
+  if (error) throw error
+
+  type Fila = {
+    insumo_id: number
+    insumo_nombre: string
+    codigo_barras: string | null
+    unidad: string
+    proveedor_id: number | null
+    proveedor_nombre: string | null
+    requerido: number
+    stock_actual: number
+    a_comprar: number
+    precio_costo: number
+    costo_estimado: number
+  }
+
+  return ((data ?? []) as Fila[]).map((f) => ({
+    insumo_id: f.insumo_id,
+    insumo_nombre: f.insumo_nombre,
+    codigo_barras: f.codigo_barras,
+    unidad: f.unidad,
+    proveedor_id: f.proveedor_id,
+    proveedor_nombre: f.proveedor_nombre,
+    requerido: Number(f.requerido),
+    stock_actual: Number(f.stock_actual),
+    a_comprar: Number(f.a_comprar),
+    precio_costo: Number(f.precio_costo),
+    costo_estimado: Number(f.costo_estimado),
+  }))
 }
