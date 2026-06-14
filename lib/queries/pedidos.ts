@@ -245,6 +245,34 @@ export async function actualizarEstadoPedido(
   return data
 }
 
+/**
+ * Agrega un producto suelto a un pedido existente (para recibir algo que llegó
+ * y no estaba en la orden). Crea una línea en `items_pedido` y devuelve la fila,
+ * cuyo id se usa luego en la recepción.
+ */
+export async function agregarItemPedido(payload: {
+  pedido_id: number
+  producto_id: number
+  cantidad: number
+  precio_costo: number
+}): Promise<ItemPedidoRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('items_pedido')
+    .insert({
+      pedido_id: payload.pedido_id,
+      producto_id: payload.producto_id,
+      cantidad_pedida: payload.cantidad,
+      cantidad_recibida: null,
+      precio_costo: payload.precio_costo,
+      subtotal: payload.cantidad * payload.precio_costo,
+    })
+    .select()
+    .single<ItemPedidoRow>()
+  if (error) throw error
+  return data
+}
+
 export interface ItemRecepcion {
   item_id: number
   producto_id: number
