@@ -8,6 +8,7 @@ import {
   crearRol,
   crearUsuario,
   eliminarRol,
+  eliminarUsuario,
   getRoles,
   getUsuarios,
   type NuevoUsuarioPayload,
@@ -113,6 +114,20 @@ export function useActualizarUsuario() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo actualizar el usuario: ${error.message}`)
+    },
+  })
+}
+
+export function useEliminarUsuario() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => eliminarUsuario(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: USUARIOS_ADMIN_KEY })
+      toast.success('Usuario borrado')
+    },
+    onError: (error: Error) => {
+      toast.error(error.message)
     },
   })
 }

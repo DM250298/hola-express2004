@@ -34,6 +34,7 @@ import { ModalNuevoUsuario } from './ModalNuevoUsuario'
 import {
   useActualizarUsuario,
   useEliminarRol,
+  useEliminarUsuario,
   useRoles,
   useUsuariosAdmin,
 } from '@/lib/hooks/useRoles'
@@ -46,6 +47,7 @@ export function PantallaUsuariosRoles() {
   const { data: usuarios, isLoading: cargandoUsuarios } = useUsuariosAdmin()
   const actualizarUsuario = useActualizarUsuario()
   const eliminarRol = useEliminarRol()
+  const eliminarUsuario = useEliminarUsuario()
 
   const { data: usuarioActual } = useUsuario()
   const esAdmin = usuarioActual?.rol === 'admin'
@@ -71,6 +73,16 @@ export function PantallaUsuariosRoles() {
   function borrarRol(rol: RolRow) {
     if (!confirm(`¿Borrar el rol "${rol.nombre}"?`)) return
     eliminarRol.mutate(rol.id)
+  }
+  function borrarUsuario(u: { id: string; nombre: string }) {
+    if (u.id === usuarioActual?.id) return
+    if (
+      !confirm(
+        `¿Borrar al usuario "${u.nombre}"? Esta acción no se puede deshacer.\n\nSi ya tiene ventas o turnos registrados no se podrá borrar; en ese caso desactivá su acceso.`
+      )
+    )
+      return
+    eliminarUsuario.mutate(u.id)
   }
 
   return (
@@ -136,6 +148,11 @@ export function PantallaUsuariosRoles() {
                   <TableHead className="text-center text-[#391511] font-semibold w-24">
                     Activo
                   </TableHead>
+                  {esAdmin && (
+                    <TableHead className="text-center text-[#391511] font-semibold w-16">
+                      <span className="sr-only">Acciones</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -185,6 +202,30 @@ export function PantallaUsuariosRoles() {
                         aria-label={`Activar ${u.nombre}`}
                       />
                     </TableCell>
+                    {esAdmin && (
+                      <TableCell className="text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => borrarUsuario(u)}
+                          disabled={
+                            u.id === usuarioActual?.id ||
+                            eliminarUsuario.isPending
+                          }
+                          className={cn(
+                            'h-8 w-8 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]',
+                            u.id === usuarioActual?.id && 'opacity-30'
+                          )}
+                          title={
+                            u.id === usuarioActual?.id
+                              ? 'No podés borrar tu propia cuenta'
+                              : `Borrar a ${u.nombre}`
+                          }
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
               </TableBody>

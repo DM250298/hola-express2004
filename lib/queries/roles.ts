@@ -147,3 +147,14 @@ export async function crearUsuario(
     throw new Error(data.error ?? 'No se pudo crear el usuario.')
   }
 }
+
+/** Borra un usuario vía el endpoint protegido /api/usuarios (solo admin). */
+export async function eliminarUsuario(id: string): Promise<void> {
+  const res = await fetch(`/api/usuarios?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  const data = (await res.json().catch(() => ({}))) as { error?: string }
+  if (!res.ok) {
+    throw new Error(data.error ?? 'No se pudo borrar el usuario.')
+  }
+}
