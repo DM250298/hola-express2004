@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     const productoIds = body.items.map((i) => i.producto_id)
     const { data: productos, error: errProd } = await supabase
       .from('productos')
-      .select('id, nombre, precio_venta, stock_actual')
+      .select('id, nombre, precio_venta, stock_actual, pendiente_precio')
       .in('id', productoIds)
       .eq('activo', true)
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     // Verificar cada item
     for (const item of body.items) {
       const prod = mapaProd.get(item.producto_id)
-      if (!prod) {
+      if (!prod || prod.pendiente_precio) {
         return NextResponse.json(
           { error: `El producto "${item.nombre}" ya no está disponible.` },
           { status: 400 }

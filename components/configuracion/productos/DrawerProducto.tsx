@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, Plus, ScanLine, Trash2 } from 'lucide-react'
+import { AlertTriangle, Loader2, Plus, ScanLine, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -307,6 +307,10 @@ export function DrawerProducto({
       visible_tienda: validado.visible_tienda,
       controlar_stock: validado.controlar_stock,
       no_ofrecer_ventas: validado.no_ofrecer_ventas,
+      // Sin precio de venta cargado → queda "pendiente de precio": visible en
+      // el POS pero bloqueado para vender hasta que se complete (factura o
+      // carga manual). Con precio > 0 se habilita.
+      pendiente_precio: r2(calc.precioConIva) <= 0,
       notas: validado.notas?.trim() ? validado.notas.trim() : null,
       imagen_url: imagenUrl,
     }
@@ -347,6 +351,22 @@ export function DrawerProducto({
           onSubmit={handleSubmit(onSubmit)}
           className="flex-1 overflow-y-auto px-6 py-5 space-y-5"
         >
+          {/* Aviso: producto pendiente de precio (alta al vuelo sin completar) */}
+          {producto?.pendiente_precio && (
+            <div className="flex items-start gap-2 rounded-xl border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-3">
+              <AlertTriangle className="h-5 w-5 text-[#c43e2c] shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-bold text-[#c43e2c]">Pendiente de precio</p>
+                <p className="text-[#391511] mt-0.5">
+                  Este producto se creó sin precio y{' '}
+                  <strong>no se puede vender</strong> todavía. Cargá el costo y
+                  el precio de venta acá (o al cargar la factura) para
+                  habilitarlo en el punto de venta.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Código de barras + escáner */}
           <div className="space-y-1.5">
             <Label htmlFor="codigo_barras" className="text-[#391511] font-medium">

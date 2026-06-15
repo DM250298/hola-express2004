@@ -23,6 +23,8 @@ export interface ProductoConStock {
   stock_actual: number
   stock_minimo: number
   activo: boolean
+  /** Alta al vuelo sin precio: visible pero no vendible hasta completarlo. */
+  pendiente_precio: boolean
   categoria_nombre: string | null
   proveedor_nombre: string | null
   estado_stock: EstadoStock
@@ -113,6 +115,7 @@ export async function getProductosConStock(
     stock_actual: number
     stock_minimo: number
     activo: boolean
+    pendiente_precio: boolean
     categorias: { nombre: string } | null
     proveedores: { nombre: string } | null
   }
@@ -123,7 +126,7 @@ export async function getProductosConStock(
       let q = supabase
         .from('productos')
         .select(
-          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, categorias(nombre), proveedores(nombre)'
+          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, pendiente_precio, categorias(nombre), proveedores(nombre)'
         )
       if (filtros.solo_activos !== false) q = q.eq('activo', true)
       if (patron) q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
@@ -148,6 +151,7 @@ export async function getProductosConStock(
       stock_actual: p.stock_actual,
       stock_minimo: p.stock_minimo,
       activo: p.activo,
+      pendiente_precio: p.pendiente_precio,
       categoria_nombre: p.categorias?.nombre ?? null,
       proveedor_nombre: p.proveedores?.nombre ?? null,
       estado_stock: calcularEstadoStock(p.stock_actual, p.stock_minimo),

@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { formatearMonto } from '@/lib/utils/formato'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useProductos } from '@/lib/hooks/useProductos'
@@ -69,6 +70,7 @@ export function FormularioNuevoPedido() {
   const [fechaEntrega, setFechaEntrega] = useState<string>('')
   const [items, setItems] = useState<ItemFormulario[]>([])
   const [busqueda, setBusqueda] = useState('')
+  const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false)
 
   const proveedorId =
     proveedorIdStr === SIN_PROVEEDOR ? undefined : Number(proveedorIdStr)
@@ -366,7 +368,7 @@ export function FormularioNuevoPedido() {
               placeholder="Buscar producto por nombre o código…"
               className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
-            {busqueda && productosFiltrados.length > 0 && (
+            {busqueda.trim() && (
               <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-[#e4c9b0] rounded-xl shadow-lg max-h-64 overflow-y-auto">
                 {productosFiltrados.map((p) => (
                   <button
@@ -390,6 +392,18 @@ export function FormularioNuevoPedido() {
                     </div>
                   </button>
                 ))}
+                {/* Alta al vuelo: crea el producto (queda sin precio hasta la
+                    factura) y lo agrega al pedido. */}
+                <button
+                  type="button"
+                  onClick={() => setNuevoProductoAbierto(true)}
+                  className="w-full px-3 py-2.5 flex items-center gap-2 hover:bg-[#f9b44c]/10 text-left border-t border-[#e4c9b0]/60 text-[#9e6b15] font-medium"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="truncate text-sm">
+                    Crear producto nuevo «{busqueda.trim()}»
+                  </span>
+                </button>
               </div>
             )}
           </div>
@@ -533,6 +547,26 @@ export function FormularioNuevoPedido() {
           )}
         </Button>
       </div>
+
+      {/* Alta de producto al vuelo: prellena el nombre escrito y el proveedor
+          del pedido. Si no se carga precio queda "pendiente de precio" (no se
+          puede vender hasta cargar la factura). Al crearse se suma al pedido. */}
+      <DrawerProducto
+        abierto={nuevoProductoAbierto}
+        onCambioAbierto={setNuevoProductoAbierto}
+        producto={null}
+        nombreInicial={busqueda.trim()}
+        proveedorIdInicial={proveedorId ?? null}
+        onCreado={(prod) => {
+          agregarItem({
+            id: prod.id,
+            nombre: prod.nombre,
+            codigo_barras: prod.codigo_barras,
+            precio_costo: prod.precio_costo ?? 0,
+          })
+          setNuevoProductoAbierto(false)
+        }}
+      />
     </div>
   )
 }

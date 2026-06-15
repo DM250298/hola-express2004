@@ -182,6 +182,14 @@ export function TablaStock({
                               por vencer
                             </span>
                           )}
+                          {p.pendiente_precio && (
+                            <span
+                              className="inline-flex items-center gap-0.5 rounded-full bg-[#c43e2c]/12 text-[#c43e2c] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
+                              title="Producto sin precio: no se puede vender hasta cargar la factura o completar el precio"
+                            >
+                              Sin precio
+                            </span>
+                          )}
                         </span>
                       </div>
                     </TableCell>

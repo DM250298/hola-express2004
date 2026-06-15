@@ -23,6 +23,7 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { toast } from 'sonner'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import {
   useAjustesStock,
   useCrearAjusteStock,
@@ -64,6 +65,9 @@ function uid() {
 
 export function TabAjustes() {
   const { data: usuario } = useUsuario()
+  // El mostrador (cajero/fiambrero) no ve costos: se oculta la valorización a
+  // costo de los ajustes (puede ajustar cantidades sin ver cuánto valen).
+  const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const { data: historial, isLoading: cargandoHist } = useAjustesStock()
   const crear = useCrearAjusteStock()
 
@@ -382,7 +386,11 @@ export function TabAjustes() {
                           {stockFinal}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                          <MontoARS monto={subtotal} />
+                          {puedeVerCosto ? (
+                            <MontoARS monto={subtotal} />
+                          ) : (
+                            <span className="text-[#c8a58a]">—</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -405,12 +413,16 @@ export function TabAjustes() {
         </div>
 
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-sm text-[#6f3a2a]">
-            Valorización del ajuste:{' '}
-            <span className="font-extrabold text-[#391511] tabular-nums">
-              <MontoARS monto={totalCosto} />
-            </span>
-          </div>
+          {puedeVerCosto ? (
+            <div className="text-sm text-[#6f3a2a]">
+              Valorización del ajuste:{' '}
+              <span className="font-extrabold text-[#391511] tabular-nums">
+                <MontoARS monto={totalCosto} />
+              </span>
+            </div>
+          ) : (
+            <div />
+          )}
           <Button
             onClick={guardar}
             disabled={!puedeGuardar}
@@ -494,7 +506,11 @@ export function TabAjustes() {
                       {a.cantidad_items}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-[#391511]">
-                      <MontoARS monto={a.total_costo} />
+                      {puedeVerCosto ? (
+                        <MontoARS monto={a.total_costo} />
+                      ) : (
+                        <span className="text-[#c8a58a]">—</span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

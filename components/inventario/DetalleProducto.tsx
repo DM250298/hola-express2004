@@ -137,7 +137,10 @@ export function DetalleProducto({ productoId }: Props) {
     producto.stock_actual,
     producto.stock_minimo
   )
-  const puedeVerCosto = usuario?.rol !== 'cajero'
+  // El costo se gatea por el PERMISO 'costos' (consistente con la RLS de
+  // costos_producto), no por el nombre del rol: así cualquier rol sin ese
+  // permiso (cajero, fiambrero, roles nuevos) no ve el costo.
+  const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const puedeEditar = tienePermiso(usuario?.permisos, 'configuracion')
 
   // Margen / ganancia: el precio de venta es con IVA; lo bajamos a neto para
