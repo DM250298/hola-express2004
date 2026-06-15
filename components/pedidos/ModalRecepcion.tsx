@@ -6,6 +6,7 @@ import {
   Calendar,
   Loader2,
   PackageCheck,
+  Plus,
   ScanLine,
   ShieldCheck,
   TrendingUp,
@@ -25,10 +26,13 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
+import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { useActualizarEstadoPedido, useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { parsearDiasCondicionPago } from '@/lib/queries/pedidos'
+import { tienePermiso } from '@/lib/permisos'
+import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
 import type { PedidoCompleto } from '@/lib/queries/pedidos'
+import type { ProductoRow } from '@/types/database'
 import { formatearFechaCorta, formatearMonto } from '@/lib/utils/formato'
 import {
   ModalImprimirEtiquetas,
@@ -48,6 +52,9 @@ interface ItemEstado {
   cantidad_recibida: string
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
+  /** Producto agregado al vuelo (no estaba en la orden): se exime del control
+   *  de exceso vs. lo pedido. */
+  no_pedido?: boolean
 }
 
 interface Props {
@@ -58,6 +65,9 @@ interface Props {
 
 export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   const { data: usuario } = useUsuario()
+  // El mostrador (cajero/fiambrero) no ve costos: se ocultan los importes de
+  // costo de la recepción aunque el dato exista para calcular el stock.
+  const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const recibir = useRecibirPedido()
   const cambiarEstado = useActualizarEstadoPedido()
   // Recuerda si el operador eligió "cerrar pedido" mientras se valida el
@@ -66,6 +76,9 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   const [itemsEstado, setItemsEstado] = useState<ItemEstado[]>([])
   const [itemsParaEtiquetar, setItemsParaEtiquetar] = useState<ItemParaEtiqueta[]>([])
   const [modalEtiquetasAbierto, setModalEtiquetasAbierto] = useState(false)
+  // Alta al vuelo de un producto que llegó y no estaba en la orden.
+  const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false)
+  const [agregandoNoPedido, setAgregandoNoPedido] = useState(false)
 
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
 
@@ -132,6 +145,51 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     )
   }
 
+  /**
+   * Suma a la recepción un producto que llegó y no estaba en la orden. Se crea
+   * una línea en el pedido (cantidad pedida = 1 como placeholder, la real es la
+   * recibida) y se marca `no_pedido` para eximirla del control de exceso.
+   */
+  async function agregarProductoNoPedido(prod: ProductoRow) {
+    setNuevoProductoAbierto(false)
+    if (itemsEstado.some((it) => it.producto_id === prod.id)) {
+      toast.info(`${prod.nombre} ya está en la lista.`)
+      return
+    }
+    setAgregandoNoPedido(true)
+    try {
+      const nuevoItem = await agregarItemPedido({
+        pedido_id: pedido.id,
+        producto_id: prod.id,
+        cantidad: 1,
+        precio_costo: prod.precio_costo ?? 0,
+      })
+      setItemsEstado((prev) => [
+        ...prev,
+        {
+          item_id: nuevoItem.id,
+          producto_id: prod.id,
+          nombre: prod.nombre,
+          codigo_barras: prod.codigo_barras,
+          cantidad_pedida: Number(nuevoItem.cantidad_pedida) || 1,
+          ya_recibido: 0,
+          precio_costo: prod.precio_costo ?? 0,
+          cantidad_recibida: '',
+          fecha_vencimiento: '',
+          dias_vencimiento_minimo: prod.dias_vencimiento_minimo ?? null,
+          no_pedido: true,
+        },
+      ])
+      toast.success(`${prod.nombre} agregado a la recepción`)
+    } catch (e) {
+      toast.error(
+        `No se pudo agregar: ${e instanceof Error ? e.message : 'error'}`
+      )
+    } finally {
+      setAgregandoNoPedido(false)
+    }
+  }
+
   const totalRecibido = useMemo(
     () =>
       itemsEstado.reduce((acc, it) => {
@@ -162,8 +220,9 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     () =>
       itemsEstado.filter(
         (it) =>
+          !it.no_pedido &&
           it.ya_recibido + (Number(it.cantidad_recibida) || 0) >
-          it.cantidad_pedida
+            it.cantidad_pedida
       ),
     [itemsEstado]
   )
@@ -395,6 +454,21 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             </div>
           )}
 
+          {/* Agregar un producto que llegó y no estaba en la orden */}
+          <button
+            type="button"
+            onClick={() => setNuevoProductoAbierto(true)}
+            disabled={recibir.isPending || agregandoNoPedido}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[#e4c9b0] bg-white px-3 py-2.5 text-sm font-medium text-[#9e6b15] transition-colors hover:border-[#f9b44c] hover:bg-[#f9b44c]/8 disabled:opacity-50"
+          >
+            {agregandoNoPedido ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Agregar producto que no estaba en la orden
+          </button>
+
           {/* Items */}
           <ul className="space-y-3">
             {itemsEstado.map((it) => {
@@ -424,19 +498,35 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                 >
                   <div className="flex items-start justify-between gap-2 flex-wrap">
                     <div className="min-w-0 flex-1">
-                      <div className="font-medium text-[#391511]">
+                      <div className="font-medium text-[#391511] flex items-center gap-2 flex-wrap">
                         {it.nombre}
+                        {it.no_pedido && (
+                          <span className="text-[9px] uppercase tracking-wider font-semibold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
+                            Extra (no pedido)
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-[#6f3a2a] mt-0.5">
-                        Pedido:{' '}
-                        <span className="font-semibold text-[#391511] tabular-nums">
-                          {it.cantidad_pedida}
-                        </span>{' '}
-                        · ${' '}
-                        <span className="tabular-nums">
-                          {it.precio_costo.toFixed(2)}
-                        </span>{' '}
-                        c/u
+                        {it.no_pedido ? (
+                          <>Llegó sin estar en la orden</>
+                        ) : (
+                          <>
+                            Pedido:{' '}
+                            <span className="font-semibold text-[#391511] tabular-nums">
+                              {it.cantidad_pedida}
+                            </span>
+                            {puedeVerCosto && (
+                              <>
+                                {' '}
+                                · ${' '}
+                                <span className="tabular-nums">
+                                  {it.precio_costo.toFixed(2)}
+                                </span>{' '}
+                                c/u
+                              </>
+                            )}
+                          </>
+                        )}
                       </div>
                       {it.ya_recibido > 0 && (
                         <div className="text-[11px] text-[#9e6b15] mt-0.5">
@@ -451,14 +541,16 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         </div>
                       )}
                     </div>
-                    <div className="text-right">
-                      <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-                        Subtotal
+                    {puedeVerCosto && (
+                      <div className="text-right">
+                        <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
+                          Subtotal
+                        </div>
+                        <div className="font-bold text-[#391511] tabular-nums">
+                          {formatearMonto(cantNum * it.precio_costo)}
+                        </div>
                       </div>
-                      <div className="font-bold text-[#391511] tabular-nums">
-                        {formatearMonto(cantNum * it.precio_costo)}
-                      </div>
-                    </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -479,18 +571,20 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         disabled={recibir.isPending}
                         className="h-10 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
-                      {diferencia !== 0 && !Number.isNaN(diferencia) && (
-                        <p
-                          className={
-                            diferencia > 0
-                              ? 'text-[10px] text-[#6f3a2a]'
-                              : 'text-[10px] text-[#c43e2c]'
-                          }
-                        >
-                          {diferencia > 0 ? '+' : ''}
-                          {diferencia} vs. lo pedido
-                        </p>
-                      )}
+                      {!it.no_pedido &&
+                        diferencia !== 0 &&
+                        !Number.isNaN(diferencia) && (
+                          <p
+                            className={
+                              diferencia > 0
+                                ? 'text-[10px] text-[#6f3a2a]'
+                                : 'text-[10px] text-[#c43e2c]'
+                            }
+                          >
+                            {diferencia > 0 ? '+' : ''}
+                            {diferencia} vs. lo pedido
+                          </p>
+                        )}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] flex items-center gap-1">
@@ -573,12 +667,16 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-3 flex items-center justify-between shrink-0">
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-              {hayRecepcionPrevia ? 'Total de esta entrega' : 'Total a pagar'}
-            </div>
-            <div className="text-2xl font-extrabold text-[#391511] tabular-nums">
-              <MontoARS monto={totalRecibido} />
-            </div>
+            {puedeVerCosto && (
+              <>
+                <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                  {hayRecepcionPrevia ? 'Total de esta entrega' : 'Total a pagar'}
+                </div>
+                <div className="text-2xl font-extrabold text-[#391511] tabular-nums">
+                  <MontoARS monto={totalRecibido} />
+                </div>
+              </>
+            )}
             {esParcial && totalRecibido > 0 && (
               <p className="text-[11px] text-[#9e6b15] font-medium mt-0.5">
                 Estás recibiendo menos de lo pedido: elegí cerrar el pedido o
@@ -647,6 +745,14 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           <span>Acciones</span>
         </DialogFooter>
       </DialogContent>
+
+      <DrawerProducto
+        abierto={nuevoProductoAbierto}
+        onCambioAbierto={setNuevoProductoAbierto}
+        producto={null}
+        proveedorIdInicial={pedido.proveedor?.id ?? null}
+        onCreado={agregarProductoNoPedido}
+      />
 
       <ModalImprimirEtiquetas
         abierto={modalEtiquetasAbierto}

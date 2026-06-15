@@ -937,6 +937,8 @@ export type ProductoRow = {
   visible_tienda: boolean
   controlar_stock: boolean
   no_ofrecer_ventas: boolean
+  /** Alta al vuelo sin precio: visible en el POS pero bloqueado para vender. */
+  pendiente_precio: boolean
   notas: string | null
   imagen_url: string | null
   created_at: string
@@ -972,6 +974,7 @@ export type ProductoInsert = {
   visible_tienda?: boolean
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean
+  pendiente_precio?: boolean
   notas?: string | null
   imagen_url?: string | null
   created_at?: string
@@ -1005,6 +1008,7 @@ export type ProductoUpdate = {
   visible_tienda?: boolean
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean
+  pendiente_precio?: boolean
   notas?: string | null
   imagen_url?: string | null
   updated_at?: string

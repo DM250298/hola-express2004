@@ -1,5 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, userAgent, type NextRequest } from 'next/server'
 import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 
 // `/api/cron` se autoprotege con el header Authorization Bearer CRON_SECRET
@@ -112,6 +112,30 @@ export async function middleware(request: NextRequest) {
         .eq('codigo', rol)
         .maybeSingle()
       if (rolData?.permisos) permisos = rolData.permisos as string[]
+
+      // ── Celular / tablet → hub móvil ─────────────────────────────────
+      // El dashboard y el POS son de ESCRITORIO. En cualquier dispositivo
+      // móvil (celular o tablet), el usuario con acceso al modo móvil
+      // (encargada, cajero, fiambrero) entra al hub /movil (contar stock /
+      // recibir), nunca al POS ni al dashboard (que en pantalla chica se ven
+      // en blanco). El POS queda solo para la PC/notebook del mostrador
+      // (`device.type` undefined = escritorio → no redirige).
+      const tipoDispositivo = userAgent(request).device.type
+      const esMovil =
+        tipoDispositivo === 'mobile' || tipoDispositivo === 'tablet'
+      const tieneAccesoMovil =
+        permisos.includes('inventario') ||
+        permisos.includes('recepcion') ||
+        permisos.includes('pedidos')
+      if (
+        esMovil &&
+        tieneAccesoMovil &&
+        (pathname === '/' || pathname === '/pos' || pathname.startsWith('/pos/'))
+      ) {
+        const url = request.nextUrl.clone()
+        url.pathname = '/movil'
+        return NextResponse.redirect(url)
+      }
 
       // Quien no tiene permiso de dashboard (ej. el cajero) entra directo a
       // su área de trabajo — nunca al dashboard.

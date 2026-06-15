@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { FileText, Loader2, Plus, Search, Trash2 } from 'lucide-react'
+import { FileText, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +24,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
+import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
@@ -33,6 +34,7 @@ import {
   useGuardarFacturaCompra,
 } from '@/lib/hooks/useFacturasCompra'
 import { calcularLinea } from '@/lib/queries/facturasCompra'
+import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
 
 interface Props {
@@ -182,6 +184,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     activo: true,
     busqueda: busqueda || undefined,
   })
+
+  // Catálogo completo (activos) → mapa por id para marcar qué línea es un
+  // producto "pendiente de precio" (alta al vuelo) y poder corregirlo.
+  const { data: catalogoProductos } = useProductos({ activo: true })
+  const productosMap = useMemo(() => {
+    const m = new Map<number, ProductoConRelaciones>()
+    for (const p of catalogoProductos ?? []) m.set(p.id, p)
+    return m
+  }, [catalogoProductos])
+  const [productoEditar, setProductoEditar] =
+    useState<ProductoConRelaciones | null>(null)
 
   // Proveedor de la cuenta → para autocompletar su CUIT en el comprobante.
   const { data: proveedores } = useProveedores()
@@ -399,6 +412,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     'h-8 w-full text-right tabular-nums border-[#e4c9b0] text-xs px-1.5'
 
   return (
+    <>
     <Dialog
       open={abierto}
       onOpenChange={(v) => !guardar.isPending && onCambioAbierto(v)}
@@ -611,15 +625,33 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           Extra (no pedido)
                         </span>
                       )}
+                      {productosMap.get(l.producto_id)?.pendiente_precio && (
+                        <span className="mt-0.5 ml-1 inline-block text-[10px] font-semibold uppercase tracking-wider text-[#c43e2c] bg-[#c43e2c]/12 rounded-full px-1.5 py-0.5">
+                          Nuevo · completá precio
+                        </span>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => quitarLinea(l.key)}
-                      title="Quitar de la factura"
-                      className="-mr-1 shrink-0 rounded-lg p-2 text-[#c8a58a] transition-colors hover:bg-white hover:text-[#c43e2c]"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex shrink-0 items-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const p = productosMap.get(l.producto_id)
+                          if (p) setProductoEditar(p)
+                        }}
+                        title="Editar producto (nombre, código, etc.)"
+                        className="rounded-lg p-2 text-[#c8a58a] transition-colors hover:bg-white hover:text-[#6f3a2a]"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => quitarLinea(l.key)}
+                        title="Quitar de la factura"
+                        className="-mr-1 rounded-lg p-2 text-[#c8a58a] transition-colors hover:bg-white hover:text-[#c43e2c]"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* COMPRA */}
@@ -753,6 +785,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const p = productosMap.get(l.producto_id)
+                              if (p) setProductoEditar(p)
+                            }}
+                            title="Editar producto (nombre, código, etc.)"
+                            className="mt-0.5 shrink-0 text-[#c8a58a] transition-colors hover:text-[#6f3a2a]"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
                           <div className="min-w-0">
                             {l.nombre}
                             {l.codigo_barras && (
@@ -763,6 +806,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             {l.item_pedido_id === null && (
                               <span className="block text-[10px] font-semibold text-[#9e6b15]">
                                 Extra (no pedido)
+                              </span>
+                            )}
+                            {productosMap.get(l.producto_id)?.pendiente_precio && (
+                              <span className="mt-0.5 inline-block text-[10px] font-semibold uppercase tracking-wider text-[#c43e2c] bg-[#c43e2c]/12 rounded-full px-1.5 py-0.5">
+                                Nuevo · completá precio
                               </span>
                             )}
                           </div>
@@ -973,5 +1021,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         </div>
       </DialogContent>
     </Dialog>
+
+    {/* Editor completo del producto (corregir nombre, código, precio, etc.).
+        Se abre desde el lápiz de cada línea; útil sobre todo para productos
+        dados de alta al vuelo que llegan "pendientes de precio". */}
+    <DrawerProducto
+      abierto={productoEditar !== null}
+      onCambioAbierto={(v) => !v && setProductoEditar(null)}
+      producto={productoEditar}
+    />
+    </>
   )
 }

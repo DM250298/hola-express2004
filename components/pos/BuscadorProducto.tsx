@@ -79,6 +79,12 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
         toast.error(`"${p.nombre}" no está disponible para la venta.`)
         return
       }
+      if (p.pendiente_precio) {
+        toast.error(
+          `"${p.nombre}" todavía no tiene precio cargado. Cargá la factura o completá el precio para poder venderlo.`
+        )
+        return
+      }
       if (p.stock_actual <= 0) {
         toast.error(`"${p.nombre}" sin stock.`)
         return
@@ -179,7 +185,9 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
             ) : (
               <ul className="divide-y divide-[#e4c9b0]/40">
                 {resultados.map((p, idx) => {
+                  const sinPrecio = p.pendiente_precio
                   const sinStock = p.stock_actual <= 0
+                  const deshabilitado = sinStock || sinPrecio
                   const seleccionado = idx === indiceSeleccionado
                   return (
                     <li key={p.id}>
@@ -187,10 +195,10 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
                         type="button"
                         onClick={() => agregarProducto(p)}
                         onMouseEnter={() => setIndiceSeleccionado(idx)}
-                        disabled={sinStock}
+                        disabled={deshabilitado}
                         className={cn(
                           'w-full px-4 py-3 flex items-center justify-between gap-3 text-left transition-colors border-l-4',
-                          sinStock
+                          deshabilitado
                             ? 'opacity-50 cursor-not-allowed border-transparent'
                             : seleccionado
                             ? 'bg-[#f9d2a2]/40 border-[#f9b44c]'
@@ -223,13 +231,19 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
                           </div>
                         </div>
                         <div className="text-right shrink-0 flex items-center gap-2">
-                          <div className="font-bold text-[#391511] tabular-nums">
-                            <MontoARS monto={p.precio_venta} />
-                            {p.venta_por_peso && (
-                              <span className="text-[10px] text-[#6f3a2a] font-normal ml-0.5">/kg</span>
-                            )}
-                          </div>
-                          {seleccionado && !sinStock && (
+                          {sinPrecio ? (
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-[#c43e2c] bg-[#c43e2c]/12 px-2 py-1 rounded">
+                              Sin precio
+                            </span>
+                          ) : (
+                            <div className="font-bold text-[#391511] tabular-nums">
+                              <MontoARS monto={p.precio_venta} />
+                              {p.venta_por_peso && (
+                                <span className="text-[10px] text-[#6f3a2a] font-normal ml-0.5">/kg</span>
+                              )}
+                            </div>
+                          )}
+                          {seleccionado && !deshabilitado && (
                             <span className="text-[10px] font-bold uppercase tracking-wide text-[#6f3a2a] bg-[#f9b44c] px-1.5 py-0.5 rounded">
                               ↵
                             </span>

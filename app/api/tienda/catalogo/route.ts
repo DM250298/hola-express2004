@@ -11,12 +11,14 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Productos activos con stock
+    // Productos activos con stock. Se excluyen los "pendientes de precio"
+    // (alta al vuelo sin precio): no deben ofrecerse hasta tener precio cargado.
     const { data: productos, error: errProd } = await supabase
       .from('productos')
       .select('id, nombre, codigo_barras, precio_venta, stock_actual, categoria_id, imagen_url, categorias(id, nombre)')
       .eq('activo', true)
       .eq('visible_tienda', true)
+      .eq('pendiente_precio', false)
       .gt('stock_actual', 0)
       .order('nombre')
 
