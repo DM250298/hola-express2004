@@ -88,6 +88,12 @@ function hoyIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Redondeo a 2 decimales — mismo criterio que el RPC, para que el "Costo
+ *  final" mostrado coincida al centavo con lo que se guarda. */
+function r2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
 function soloDigitos(s: string): string {
   return s.replace(/\D/g, '')
 }
@@ -324,16 +330,42 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     return productosBusqueda.filter((p) => !enFactura.has(p.id)).slice(0, 6)
   }, [busqueda, productosBusqueda, lineas])
 
-  // Cálculo por línea
+  // Gastos no debitables (flete, etc.): se prorratean al costo de cada
+  // producto por su neto, idéntico al RPC fn_guardar_factura_compra (mig. 086).
+  // Hay que calcular el factor ANTES de las líneas para que el "Costo final" y
+  // el precio reflejen el prorrateo en pantalla (WYSIWYG con lo que se guarda).
+  // Se redondea a 2 decimales igual que el RPC (v_gastos := round(...)), para
+  // que el factor —y todo lo derivado: costo final, precio, total— coincida al
+  // centavo con lo que se guarda, incluso si pegan un valor con más decimales.
+  const gastos = r2(Number(gastosNoDebitables) || 0)
+  // Neto gravado (sin gastos) = base del prorrateo. Se redondea cada línea como
+  // en el RPC para que el factor —y por ende el costo final— coincidan al centavo.
+  const netoGravado = r2(
+    lineas.reduce((acc, l) => {
+      const costoNeto = r2(
+        (Number(l.costo) || 0) * (1 - (Number(l.descuento) || 0) / 100)
+      )
+      return acc + costoNeto * (Number(l.cantidad) || 0)
+    }, 0)
+  )
+  const factorGastos = netoGravado > 0 ? 1 + gastos / netoGravado : 1
+  const factorGastosPct = (factorGastos - 1) * 100
+  // Hay prorrateo efectivo → se muestra la columna/línea "Costo final".
+  const hayGastos = gastos > 0 && factorGastos > 1
+
+  // Cálculo por línea (ya con el prorrateo de gastos en costo final y precio).
   const calculadas = lineas.map((l) => {
     const cantidad = Number(l.cantidad) || 0
-    const calc = calcularLinea({
-      costo_sin_iva: Number(l.costo) || 0,
-      descuento_porcentaje: Number(l.descuento) || 0,
-      iva_compra_porcentaje: Number(l.iva_compra) || 0,
-      margen_porcentaje: Number(l.margen) || 0,
-      iva_venta_porcentaje: Number(l.iva_venta) || 0,
-    })
+    const calc = calcularLinea(
+      {
+        costo_sin_iva: Number(l.costo) || 0,
+        descuento_porcentaje: Number(l.descuento) || 0,
+        iva_compra_porcentaje: Number(l.iva_compra) || 0,
+        margen_porcentaje: Number(l.margen) || 0,
+        iva_venta_porcentaje: Number(l.iva_venta) || 0,
+      },
+      factorGastos
+    )
     return { l, calc, cantidad }
   })
 
@@ -349,9 +381,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const percIva = Number(percepciones.iva) || 0
   const percOtros = Number(percepciones.otros) || 0
   const totalPercepciones = percIibb + percIva + percOtros
-  const gastos = Number(gastosNoDebitables) || 0
-  // % que sube el costo (y por ende el precio) de cada producto al prorratear.
-  const factorGastosPct = totales.neto > 0 ? (gastos / totales.neto) * 100 : 0
   const totalConIva =
     totales.neto + totales.iva + totalPercepciones + gastos
 
@@ -700,6 +729,16 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <MontoARS monto={calc.costoConIva} />
                       </span>
                     </div>
+                    {hayGastos && (
+                      <div className="mt-1.5 flex items-center justify-between rounded-md bg-[#f9b44c]/15 px-2 py-1 text-xs">
+                        <span className="font-medium text-[#6f3a2a]">
+                          Costo final s/IVA (c/gastos)
+                        </span>
+                        <span className="font-bold text-[#391511]">
+                          <MontoARS monto={calc.costoFinal} />
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* VENTA */}
@@ -739,7 +778,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               ))}
             </div>
 
-            {/* md+: tabla completa (sin cambios). */}
+            {/* md+: tabla completa. Con gastos no debitables aparece la columna
+                read-only "Costo final" (costo neto + prorrateo). */}
             <div className="hidden overflow-x-auto rounded-xl border border-[#e4c9b0]/60 md:block">
               <table className="w-full text-xs">
                 <thead>
@@ -750,7 +790,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <th className="p-2" rowSpan={2}>
                       Cant.
                     </th>
-                    <th className="p-2 text-center bg-[#6f3a2a]" colSpan={5}>
+                    <th
+                      className="p-2 text-center bg-[#6f3a2a]"
+                      colSpan={hayGastos ? 6 : 5}
+                    >
                       COMPRA
                     </th>
                     <th className="p-2 text-center bg-[#c43e2c]" colSpan={4}>
@@ -763,6 +806,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <th className="p-1.5 font-medium">Subtotal</th>
                     <th className="p-1.5 font-medium">IVA %</th>
                     <th className="p-1.5 font-medium">Costo c/IVA</th>
+                    {hayGastos && (
+                      <th
+                        className="p-1.5 font-medium bg-[#5a2f22]"
+                        title="Costo neto + gastos no debitables prorrateados (es el costo que se guarda)"
+                      >
+                        Costo final
+                      </th>
+                    )}
                     <th className="p-1.5 font-medium">Margen %</th>
                     <th className="p-1.5 font-medium">Precio s/IVA</th>
                     <th className="p-1.5 font-medium">IVA %</th>
@@ -868,6 +919,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       <td className="p-2 text-right tabular-nums font-semibold text-[#391511]">
                         <MontoARS monto={calc.costoConIva} />
                       </td>
+                      {hayGastos && (
+                        <td className="p-2 text-right tabular-nums font-bold text-[#391511] bg-[#f9b44c]/12">
+                          <MontoARS monto={calc.costoFinal} />
+                        </td>
+                      )}
                       <td className="p-1 w-16">
                         <Input
                           type="number"
@@ -950,11 +1006,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               className="h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs"
             />
           </div>
-          {gastos > 0 && factorGastosPct > 0 && (
+          {hayGastos && (
             <p className="text-[11px] text-[#9e6b15] text-right mb-3">
-              Se reparte en el costo de cada producto (+
-              {factorGastosPct.toFixed(1)}% sobre el neto). El precio de venta
-              sube en esa proporción al guardar.
+              Se prorratea al costo de cada producto (+
+              {factorGastosPct.toFixed(1)}% sobre el neto). Ya está reflejado en
+              la columna <span className="font-semibold">Costo final</span> y en
+              el precio de venta.
             </p>
           )}
 
