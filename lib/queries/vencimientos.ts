@@ -75,7 +75,7 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
 }
 
 export interface ResumenVencimientos {
-  unidades_por_vencer: number // total cantidad_actual de lotes con dias < 7
+  unidades_por_vencer: number // total cantidad_actual de lotes con dias < 7 (redondeado a entero)
   mermas_mes_unidades: number
   mermas_mes_monto: number
 }
@@ -85,9 +85,14 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
 
   // Lotes próximos a vencer (<7 días, todavía con stock)
   const lotes = await getLotesActivos()
-  const unidades_por_vencer = lotes
-    .filter((l) => l.dias_restantes < 7)
-    .reduce((acc, l) => acc + l.cantidad_actual, 0)
+  // Math.round: la suma de cantidades (numeric en BD) puede arrastrar ruido de
+  // punto flotante (ej: 10.995000000000001) y el KPI se muestra en unidades
+  // enteras.
+  const unidades_por_vencer = Math.round(
+    lotes
+      .filter((l) => l.dias_restantes < 7)
+      .reduce((acc, l) => acc + l.cantidad_actual, 0)
+  )
 
   // Mermas del mes corriente
   const inicioMes = new Date()
@@ -108,11 +113,19 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
   }
 
   const lista = (mermas ?? []) as unknown as FilaMerma[]
-  const mermas_mes_unidades = lista.reduce((acc, m) => acc + m.cantidad, 0)
-  const mermas_mes_monto = lista.reduce(
-    (acc, m) => acc + m.cantidad * costoDesdeEmbed(m.productos?.costos_producto ?? null),
-    0
+  // Mismas precauciones que arriba: redondeo para evitar el ruido de punto
+  // flotante de las sumas (unidades a entero, monto a 2 decimales).
+  const mermas_mes_unidades = Math.round(
+    lista.reduce((acc, m) => acc + m.cantidad, 0)
   )
+  const mermas_mes_monto =
+    Math.round(
+      lista.reduce(
+        (acc, m) =>
+          acc + m.cantidad * costoDesdeEmbed(m.productos?.costos_producto ?? null),
+        0
+      ) * 100
+    ) / 100
 
   return {
     unidades_por_vencer,

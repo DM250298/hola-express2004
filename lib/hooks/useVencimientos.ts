@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { formatearNumero } from '@/lib/utils/formato'
 import {
   crearLote,
   darDeBajaLote,
@@ -102,7 +103,7 @@ export function useSincronizarStockConLotes() {
         toast.info('Todo el stock ya estaba cubierto por lotes.')
       } else {
         toast.success(
-          `${resultado.lotes_creados} lotes creados con ${resultado.unidades_cubiertas} unidades`
+          `${resultado.lotes_creados} lotes creados con ${formatearNumero(resultado.unidades_cubiertas)} unidades`
         )
       }
     },

@@ -3,6 +3,7 @@
 import { AlertTriangle, Package, TrendingDown } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { formatearNumero } from '@/lib/utils/formato'
 import { useResumenVencimientos } from '@/lib/hooks/useVencimientos'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -26,7 +27,7 @@ export function ResumenVencimientos() {
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <CardKPI
         etiqueta="Próximas a vencer (<7 días)"
-        valor={String(resumen?.unidades_por_vencer ?? 0)}
+        valor={formatearNumero(resumen?.unidades_por_vencer ?? 0)}
         sufijo={resumen?.unidades_por_vencer === 1 ? 'unidad' : 'unidades'}
         icono={AlertTriangle}
         color="#e4a42a"
@@ -35,7 +36,7 @@ export function ResumenVencimientos() {
       />
       <CardKPI
         etiqueta={`Mermas de ${mesEnCurso}`}
-        valor={String(resumen?.mermas_mes_unidades ?? 0)}
+        valor={formatearNumero(resumen?.mermas_mes_unidades ?? 0)}
         sufijo={resumen?.mermas_mes_unidades === 1 ? 'unidad' : 'unidades'}
         icono={Package}
         color="#6f3a2a"

@@ -19,7 +19,7 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useDarDeBajaLote } from '@/lib/hooks/useVencimientos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { formatearFechaCorta } from '@/lib/utils/formato'
+import { formatearFechaCorta, formatearNumero } from '@/lib/utils/formato'
 import type { LoteConProducto } from '@/lib/queries/vencimientos'
 import { cn } from '@/lib/utils'
 
@@ -117,7 +117,7 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
               <span>
                 Disponible{' '}
                 <span className="font-bold text-[#391511] tabular-nums">
-                  {lote.cantidad_actual}
+                  {formatearNumero(lote.cantidad_actual)}
                 </span>
               </span>
             </div>
@@ -171,7 +171,7 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
                 </span>
               </div>
               <p className="text-[10px] text-[#6f3a2a] mt-1">
-                {cantidadActual} × precio costo · queda registrado para reportes
+                {formatearNumero(cantidadActual)} × precio costo · queda registrado para reportes
                 de finanzas.
               </p>
             </div>
