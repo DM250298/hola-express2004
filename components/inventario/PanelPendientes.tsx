@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { formatearNumero } from '@/lib/utils/formato'
 import { useResumenAlertasStock } from '@/lib/hooks/useInventario'
 import { useResumenVencimientos } from '@/lib/hooks/useVencimientos'
 import { useConteos } from '@/lib/hooks/useConteos'
@@ -43,7 +44,9 @@ export function PanelPendientes({ estadoFiltro, onCambiarFiltro }: Props) {
 
   const bajo = alertas?.bajo_stock ?? 0
   const sinStock = alertas?.agotados ?? 0
-  const porVencer = venc?.unidades_por_vencer ?? 0
+  // Unidades por vencer redondeadas a entero: la suma puede traer decimales de
+  // productos por peso, pero en el KPI se muestra como unidades enteras.
+  const porVencer = Math.round(venc?.unidades_por_vencer ?? 0)
   const conteosPorAprobar = (conteos ?? []).filter((c) => c.estado === 'contado').length
   const etiquetasPend = etiquetas?.length ?? 0
 
@@ -162,7 +165,7 @@ function Tarjeta({
           {href && <ArrowRight className="h-3 w-3 opacity-50" />}
         </div>
         <div className="text-3xl font-extrabold text-[#391511] tabular-nums leading-tight">
-          {valor}
+          {formatearNumero(valor)}
         </div>
         {sufijo && (
           <div className="text-[10px] text-[#c8a58a] -mt-0.5">{sufijo}</div>
