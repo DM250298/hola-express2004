@@ -19,7 +19,11 @@ const INVALIDAR: Record<string, string[][]> = {
 }
 
 export function useResumenImport() {
-  return useMutation<ResumenImport, Error, { filas: FilaProcesadaGen[]; def: DefinicionEntidad }>({
+  return useMutation<
+    { resumen: ResumenImport; filas: FilaProcesadaGen[] },
+    Error,
+    { filas: FilaProcesadaGen[]; def: DefinicionEntidad }
+  >({
     mutationFn: ({ filas, def }) => calcularResumen(filas, def),
   })
 }

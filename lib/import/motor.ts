@@ -45,6 +45,11 @@ export function detectarColumnas(
   return mapeo
 }
 
+/** Celda "vacía": null/undefined o texto en blanco. Un 0 numérico NO es vacío. */
+function esVacio(v: unknown): boolean {
+  return v == null || String(v).trim() === ''
+}
+
 /** Procesa las filas de datos aplicando el parser y las validaciones de cada columna. */
 export function procesarFilas(
   filas: unknown[][],
@@ -76,10 +81,16 @@ export function procesarFilas(
     def.posProcesar?.(datos)
 
     for (const col of def.columnas) {
-      if (col.validar) {
-        const msg = col.validar(datos[col.campo], datos)
-        if (msg) errores.push(msg)
-      }
+      if (!col.validar) continue
+      // Columnas "solo requeridas en alta": si la celda viene VACÍA no se valida
+      // acá, porque podría ser una actualización que conserva el valor actual.
+      // El faltante se controla luego solo para altas (aplicarValidacionesDeAlta).
+      // Pero si la celda TRAE un valor, se valida siempre: un valor inválido
+      // (ej. precio ≤ 0) debe rechazarse también al actualizar, para no pisar el
+      // dato vigente con un valor corrupto.
+      if (col.soloRequeridaEnAlta && esVacio(datos[col.campo])) continue
+      const msg = col.validar(datos[col.campo], datos)
+      if (msg) errores.push(msg)
     }
 
     resultado.push({ fila_origen: filaOrigen, datos, errores })
@@ -156,16 +167,55 @@ async function buscarExistentes(
   return set
 }
 
-/** Calcula el preview SIN escribir nada. */
+/**
+ * Controla el FALTANTE de las columnas "solo requeridas en alta" en las filas
+ * NUEVAS (cuya clave no existe en la base). Solo mira las celdas VACÍAS: un
+ * valor presente pero inválido ya se rechazó en procesarFilas (para altas y
+ * actualizaciones por igual). Las filas que actualizan un registro existente se
+ * saltean (el RPC conserva el valor actual). Devuelve filas nuevas (no muta).
+ */
+function aplicarValidacionesDeAlta(
+  filas: FilaProcesadaGen[],
+  existentes: Set<string>,
+  def: DefinicionEntidad
+): FilaProcesadaGen[] {
+  const campoClave = def.claveUnica.campo
+  const colsAlta = def.columnas.filter((c) => c.soloRequeridaEnAlta && c.validar)
+  if (colsAlta.length === 0) return filas
+
+  return filas.map((f) => {
+    const clave = f.datos[campoClave]
+    const claveStr = clave != null ? String(clave).trim() : ''
+    // Actualización: la clave existe en la base → no se exige el campo.
+    if (claveStr !== '' && existentes.has(claveStr)) return f
+
+    const extra: string[] = []
+    for (const col of colsAlta) {
+      if (!esVacio(f.datos[col.campo])) continue // valor presente: ya validado
+      const msg = col.validar!(f.datos[col.campo], f.datos)
+      if (msg) extra.push(msg)
+    }
+    return extra.length > 0 ? { ...f, errores: [...f.errores, ...extra] } : f
+  })
+}
+
+/**
+ * Calcula el preview SIN escribir nada. Además, finaliza los errores de cada
+ * fila: las validaciones "solo en alta" (ej. precio de venta obligatorio) se
+ * aplican acá, una vez consultada la existencia en la base, para que una fila
+ * que actualiza un producto existente no las exija. Por eso devuelve también
+ * las filas finalizadas (el llamador debe usar estas, no las de entrada).
+ */
 export async function calcularResumen(
   filas: FilaProcesadaGen[],
   def: DefinicionEntidad
-): Promise<ResumenImport> {
-  const validas = filas.filter((f) => f.errores.length === 0)
+): Promise<{ resumen: ResumenImport; filas: FilaProcesadaGen[] }> {
   const campoClave = def.claveUnica.campo
 
-  // Claves presentes en el archivo (las vacías siempre cuentan como "a crear")
-  const clavesArchivo = validas
+  // Claves de TODAS las filas con clave → para saber cuáles ya existen. Se
+  // consultan todas (no solo las válidas) porque la existencia decide si una
+  // fila es alta o actualización antes de aplicar las validaciones de alta.
+  const clavesArchivo = filas
     .map((f) => f.datos[campoClave])
     .filter((v): v is string => v != null && String(v).trim() !== '')
     .map((v) => String(v).trim())
@@ -173,12 +223,19 @@ export async function calcularResumen(
   const existentes =
     clavesArchivo.length > 0 ? await buscarExistentes(def, clavesArchivo) : new Set<string>()
 
-  // Duplicados dentro del archivo
+  const finalizadas = aplicarValidacionesDeAlta(filas, existentes, def)
+  const validas = finalizadas.filter((f) => f.errores.length === 0)
+
+  // Duplicados entre las filas válidas (las que efectivamente se escribirían;
+  // gana la última fila).
   const vistos = new Set<string>()
   const duplicados = new Set<string>()
-  for (const c of clavesArchivo) {
-    if (vistos.has(c)) duplicados.add(c)
-    else vistos.add(c)
+  for (const f of validas) {
+    const clave = f.datos[campoClave]
+    const claveStr = clave != null ? String(clave).trim() : ''
+    if (claveStr === '') continue
+    if (vistos.has(claveStr)) duplicados.add(claveStr)
+    else vistos.add(claveStr)
   }
 
   let aCrear = 0
@@ -190,15 +247,16 @@ export async function calcularResumen(
     else aCrear++
   }
 
-  return {
-    total_filas: filas.length,
+  const resumen: ResumenImport = {
+    total_filas: finalizadas.length,
     validas: validas.length,
-    con_errores: filas.filter((f) => f.errores.length > 0).length,
+    con_errores: finalizadas.filter((f) => f.errores.length > 0).length,
     a_crear: aCrear,
     a_actualizar: aActualizar,
     duplicados_archivo: [...duplicados],
     columnas_no_detectadas: [],
   }
+  return { resumen, filas: finalizadas }
 }
 
 /** Ejecuta la importación llamando al RPC de la entidad en chunks. */

@@ -89,9 +89,14 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
         setErrorParseo('No se encontraron filas con datos.')
         return
       }
-      setFilas(procesadas)
-      const r = await calcular.mutateAsync({ filas: procesadas, def })
-      setResumen(r)
+      // calcularResumen finaliza los errores según existencia (ej. no exige
+      // precio a productos que ya existen), así que usamos las filas que devuelve.
+      const { resumen, filas: finalizadas } = await calcular.mutateAsync({
+        filas: procesadas,
+        def,
+      })
+      setFilas(finalizadas)
+      setResumen(resumen)
       setEtapa('preview')
     } catch (e) {
       setErrorParseo(e instanceof Error ? e.message : 'Error al leer el archivo.')

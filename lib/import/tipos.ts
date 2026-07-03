@@ -20,6 +20,14 @@ export interface ColumnaDef {
   parser: (valor: unknown) => unknown
   /** Si true, el header DEBE detectarse para considerar válido el archivo. */
   requerida?: boolean
+  /**
+   * Si true, la validación `validar` de esta columna SOLO aplica a filas
+   * NUEVAS (altas). Cuando la clave ya existe en la base (actualización), se
+   * omite: el RPC conserva el valor actual si la columna no viene (update
+   * conservador con coalesce). Ej: el precio de venta es obligatorio al crear
+   * un producto, pero no al actualizar uno existente.
+   */
+  soloRequeridaEnAlta?: boolean
   /** Validación por celda; devuelve mensaje de error o null si está OK. */
   validar?: (valor: unknown, datos: Record<string, unknown>) => string | null
   /** Cómo serializar el valor al exportar (default: String(valor)). */

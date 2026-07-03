@@ -132,10 +132,12 @@ const columnas: ColumnaDef[] = [
     campo: 'venta_por_peso',
     etiqueta: 'es_fraccionado',
     aliases: [/es.*fraccionad/i, /fraccionad/i, /venta.*peso/i, /por.*peso/i, /pesable/i],
-    parser: parsearBooleano,
+    // Tri-estado: vacío → null (el RPC conserva el valor actual al actualizar;
+    // usa false por defecto al crear). No pisar la config de peso en updates.
+    parser: boolTriestado,
     exportar: (v) => (v ? 'true' : 'false'),
     orden: 12,
-    ayuda: 'true si se vende por peso (fiambres, verdura). Vacío = false.',
+    ayuda: 'true si se vende por peso (fiambres, verdura). Vacío = conserva el valor actual (false en productos nuevos).',
   },
   // ── Números ──
   {
@@ -150,30 +152,47 @@ const columnas: ColumnaDef[] = [
     campo: 'iva',
     etiqueta: 'alicuota_iva',
     aliases: [/al[ií]cuota.*iva/i, /al[ií]cuota/i, /^iva$/i],
-    parser: parsearIva,
+    // Vacío → null: en una actualización el RPC conserva la alícuota actual
+    // (coalesce); en un alta usa 21% por defecto. Si viene un valor, parsearIva
+    // lo normaliza (0.21 → 21, "21%" → 21).
+    parser: (v) => (v == null || String(v).trim() === '' ? null : parsearIva(v)),
     // Round-trip: el sistema guarda 21, el Excel del usuario usa 0.21
     exportar: (v) => Number(v ?? 21) / 100,
     orden: 5,
-    ayuda: 'Alícuota de IVA: podés poner 0.21 (= 21%) o 21. Vacío = 21%.',
+    ayuda: 'Alícuota de IVA: podés poner 0.21 (= 21%) o 21. Vacío = conserva la actual (21% en productos nuevos).',
   },
   {
     campo: 'precio_venta',
     etiqueta: 'precio_venta',
     aliases: [/precio.*venta/i, /^venta$/i, /^precio$/i],
-    parser: parsearPrecio,
+    // Vacío → null (NO 0): en una actualización el RPC hace coalesce(precio, actual),
+    // así un precio en blanco conserva el vigente en vez de pisarlo con 0.
+    parser: (v) => (v == null || String(v).trim() === '' ? null : parsearPrecio(v)),
     requerida: true,
+    // El FALTANTE solo se exige al CREAR: si el producto ya existe (misma SKU),
+    // el precio puede venir vacío y el RPC conserva el actual (coalesce). Pero un
+    // precio PRESENTE inválido (≤ 0) se rechaza siempre, para no pisar el precio
+    // vigente con 0 y dejar el producto vendible a $0.
+    soloRequeridaEnAlta: true,
     validar: (v) =>
-      typeof v === 'number' && v > 0 ? null : 'Falta el precio de venta (obligatorio)',
+      v == null
+        ? 'Falta el precio de venta (obligatorio)'
+        : typeof v === 'number' && v > 0
+          ? null
+          : 'El precio de venta debe ser mayor a 0',
     orden: 3,
-    ayuda: 'OBLIGATORIO. Precio final de venta, mayor a 0.',
+    ayuda: 'Precio final de venta, mayor a 0. Obligatorio solo para productos NUEVOS; si el producto ya existe, podés dejarlo vacío y se conserva el precio actual.',
   },
   {
     campo: 'stock_actual',
     etiqueta: 'stock_inicial',
     aliases: [/stock.*inicial/i, /stock.*actual/i, /^stock$/i, /existencia/i],
-    parser: parsearPrecio, // numeric(12,3): preserva decimales de fraccionados
+    // Vacío → null: en una actualización el RPC conserva el stock actual (coalesce)
+    // en vez de ponerlo en 0. En un alta, el RPC usa 0 por defecto. numeric(12,3):
+    // preserva decimales de fraccionados cuando sí viene un valor.
+    parser: (v) => (v == null || String(v).trim() === '' ? null : parsearPrecio(v)),
     orden: 13,
-    ayuda: 'Unidades que tenés hoy. Acepta decimales si es por peso. Vacío = 0.',
+    ayuda: 'Unidades que tenés hoy. Acepta decimales si es por peso. Vacío = conserva el stock actual (0 en productos nuevos).',
   },
   {
     campo: 'stock_minimo',
@@ -218,10 +237,12 @@ const columnas: ColumnaDef[] = [
     campo: 'activo',
     etiqueta: 'activo',
     aliases: [/^activo$/i, /habilitado/i],
-    parser: (v) => (v == null || String(v).trim() === '' ? true : parsearBooleano(v)),
+    // Vacío → null: en una actualización el RPC conserva el estado actual (no
+    // reactiva un producto dado de baja); en un alta usa true por defecto.
+    parser: (v) => (v == null || String(v).trim() === '' ? null : parsearBooleano(v)),
     exportar: (v) => (v ? 'true' : 'false'),
     orden: 20,
-    ayuda: 'true o false. Vacío = true (producto activo, visible en el POS).',
+    ayuda: 'true o false. Vacío = conserva el estado actual (activo en productos nuevos).',
   },
 ]
 
@@ -231,7 +252,10 @@ export const ENTIDAD_PRODUCTOS: DefinicionEntidad = {
   descripcion:
     'Maestro de productos. La columna SKU es el código único; si falta, se genera uno (HEX-…).',
   columnas,
-  requeridasHeader: ['nombre', 'precio_venta'],
+  // Solo 'nombre' es header obligatorio: un archivo que únicamente ACTUALIZA
+  // productos existentes puede no traer la columna de precio. El precio se sigue
+  // exigiendo por celda al CREAR (ver soloRequeridaEnAlta en precio_venta).
+  requeridasHeader: ['nombre'],
   claveUnica: { campo: 'codigo_barras', columna: 'codigo_barras', tabla: 'productos' },
   escritura: { tipo: 'rpc', nombre: 'fn_importar_productos' },
   permisoImport: 'configuracion',
