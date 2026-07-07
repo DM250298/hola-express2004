@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Loader2, Minus, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,11 +35,23 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
   const [buscando, setBuscando] = useState(false)
   const crear = useCrearAjusteStock()
 
+  /**
+   * Re-escanear un producto que ya está en la lista suma +1 al contado y lo
+   * sube arriba (ej: contó una góndola y encontró más unidades en otra).
+   */
+  function sumarEscaneado(item: ItemConteo) {
+    const nuevoValor = (Number(item.contado) || 0) + 1
+    setItems((prev) => [
+      { ...item, contado: String(nuevoValor) },
+      ...prev.filter((it) => it.producto_id !== item.producto_id),
+    ])
+    toast.success(`${item.nombre} · vas ${nuevoValor}`)
+  }
+
   async function alEscanear(codigo: string) {
-    // Si ya está en la lista, no lo dupliquemos.
     const existente = items.find((it) => it.codigo === codigo)
     if (existente) {
-      toast.info(`${existente.nombre} ya está en la lista — cargá la cantidad`)
+      sumarEscaneado(existente)
       return
     }
     setBuscando(true)
@@ -50,8 +62,9 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
         return
       }
       // Doble chequeo por id (puede entrar por código secundario).
-      if (items.some((it) => it.producto_id === prod.id)) {
-        toast.info(`${prod.nombre} ya está en la lista`)
+      const porId = items.find((it) => it.producto_id === prod.id)
+      if (porId) {
+        sumarEscaneado(porId)
         return
       }
       setItems((prev) => [
@@ -78,6 +91,17 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
       prev.map((it) =>
         it.producto_id === producto_id ? { ...it, contado: valor } : it
       )
+    )
+  }
+
+  /** Suma o resta 1 al contado con los botones − / + (mínimo 0). */
+  function ajustarContado(producto_id: number, delta: number) {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.producto_id !== producto_id) return it
+        const nuevo = Math.max(0, (Number(it.contado) || 0) + delta)
+        return { ...it, contado: String(nuevo) }
+      })
     )
   }
 
@@ -140,7 +164,8 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-[#e4c9b0] bg-white/60 p-6 text-center text-sm text-[#6f3a2a]">
           Todavía no escaneaste nada. El primer escaneo agrega el producto y ahí
-          cargás cuántas unidades contaste.
+          cargás cuántas unidades contaste. Si lo volvés a escanear (por ejemplo
+          porque encontraste más en otra góndola), suma +1.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -179,18 +204,37 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
                     <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
                       Conté en góndola
                     </label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="1"
-                      inputMode="numeric"
-                      value={it.contado}
-                      onChange={(e) =>
-                        actualizarContado(it.producto_id, e.target.value)
-                      }
-                      placeholder="0"
-                      className="h-12 border-[#e4c9b0] text-lg tabular-nums focus-visible:ring-[#f9b44c]"
-                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => ajustarContado(it.producto_id, -1)}
+                        disabled={cont == null || cont <= 0}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511] transition active:scale-95 disabled:opacity-40"
+                        aria-label="Restar 1"
+                      >
+                        <Minus className="h-5 w-5" />
+                      </button>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="1"
+                        inputMode="numeric"
+                        value={it.contado}
+                        onChange={(e) =>
+                          actualizarContado(it.producto_id, e.target.value)
+                        }
+                        placeholder="0"
+                        className="h-12 border-[#e4c9b0] text-center text-lg tabular-nums focus-visible:ring-[#f9b44c]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => ajustarContado(it.producto_id, 1)}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511] transition active:scale-95"
+                        aria-label="Sumar 1"
+                      >
+                        <Plus className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                   {dif != null && dif !== 0 && (
                     <span
