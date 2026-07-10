@@ -95,13 +95,24 @@ export async function getConteosZona(
   zonaId: number
 ): Promise<ConteoDetalleConProducto[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('conteo_detalle')
-    .select('*, productos(nombre)')
-    .eq('zona_id', zonaId)
-    .order('ts', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as ConteoDetalleConProducto[]
+  // Paginado: una zona grande puede superar el corte de 1000 filas de
+  // PostgREST. Orden secundario por id para que las páginas sean estables.
+  const PAGINA = 1000
+  const filas: ConteoDetalleConProducto[] = []
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await supabase
+      .from('conteo_detalle')
+      .select('*, productos(nombre)')
+      .eq('zona_id', zonaId)
+      .order('ts', { ascending: false })
+      .order('id', { ascending: false })
+      .range(desde, desde + PAGINA - 1)
+    if (error) throw error
+    const pagina = (data ?? []) as ConteoDetalleConProducto[]
+    filas.push(...pagina)
+    if (pagina.length < PAGINA) break
+  }
+  return filas
 }
 
 /** Cantidad de renglones contados por zona (para el avance del dashboard). */
@@ -116,17 +127,20 @@ export async function getItemsPorZona(
   if (errorZonas) throw errorZonas
   const ids = (zonas ?? []).map((z) => z.id)
   if (ids.length === 0) return {}
-  const { data, error } = await supabase
-    .from('conteo_detalle')
-    .select('zona_id, es_reconteo')
-    .in('zona_id', ids)
-  if (error) throw error
-  const conteo: Record<number, number> = {}
-  for (const fila of data ?? []) {
-    if (fila.es_reconteo) continue
-    conteo[fila.zona_id] = (conteo[fila.zona_id] ?? 0) + 1
-  }
-  return conteo
+  // count head por zona: no trae filas (inmune al corte de 1000 de PostgREST)
+  // y las zonas de una sesión son pocas.
+  const conteos = await Promise.all(
+    ids.map(async (zonaId) => {
+      const { count, error } = await supabase
+        .from('conteo_detalle')
+        .select('id', { count: 'exact', head: true })
+        .eq('zona_id', zonaId)
+        .eq('es_reconteo', false)
+      if (error) throw error
+      return [zonaId, count ?? 0] as const
+    })
+  )
+  return Object.fromEntries(conteos)
 }
 
 // ─── Búsqueda de productos para la pantalla de conteo ────────────────────────
@@ -281,11 +295,23 @@ export async function getDiferenciasConteo(
   sesionId: number
 ): Promise<ConteoDiferenciaRow[]> {
   const supabase = createClient()
-  const { data, error } = await supabase.rpc('fn_conteo_diferencias', {
-    p_sesion_id: sesionId,
-  })
-  if (error) throw error
-  return (data ?? []) as ConteoDiferenciaRow[]
+  // PostgREST corta cada respuesta en max-rows (1000 por default en Supabase).
+  // Con un catálogo grande el reporte tiene una fila por producto, así que se
+  // pagina con .range() hasta la página corta. La función devuelve las filas
+  // ordenadas por producto_id (migración 104) para que la paginación sea
+  // estable — sin eso podrían repetirse o saltearse filas entre páginas.
+  const PAGINA = 1000
+  const filas: ConteoDiferenciaRow[] = []
+  for (let desde = 0; ; desde += PAGINA) {
+    const { data, error } = await supabase
+      .rpc('fn_conteo_diferencias', { p_sesion_id: sesionId })
+      .range(desde, desde + PAGINA - 1)
+    if (error) throw error
+    const pagina = (data ?? []) as ConteoDiferenciaRow[]
+    filas.push(...pagina)
+    if (pagina.length < PAGINA) break
+  }
+  return filas
 }
 
 export async function cerrarSesionConteo(payload: {
