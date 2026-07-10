@@ -19,6 +19,13 @@ const PERMISO_RUTA: Record<string, string[]> = {
   // El modo móvil de la encargada (/movil) agrupa conteo de stock y recepción;
   // lo habilitan los permisos operativos de stock/abastecimiento.
   inventario: ['/inventario', '/movil'],
+  // El módulo de Conteo Físico (hub, zona y revisión) se PRESENTA a quien
+  // tiene 'conteo_cierre' (item de menú y tarjeta del hub móvil), así que la
+  // ruta también tiene que estar habilitada por ese permiso — si no, el
+  // gestor sin 'inventario' ve el acceso pero lo rebota. Los empleados que
+  // cuentan llegan por 'inventario' (cubre todo /inventario). Las acciones de
+  // gestión siguen gateadas por conteo_cierre a nivel RPC/RLS.
+  conteo_cierre: ['/inventario/conteo'],
   vencimientos: ['/vencimientos'],
   // El módulo unificado /compras es accesible con cualquiera de los permisos
   // de abastecimiento (compras, pedidos o recepción). El cajero recibe
