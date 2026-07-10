@@ -2763,6 +2763,166 @@ export type ItemPedidoTiendaUpdate = {
   subtotal?: number
 }
 
+// ─── Conteo físico por zonas (migración 098) ─────────────────────────────────
+
+export type EstadoConteoSesion = 'abierta' | 'en_revision' | 'cerrada'
+export type EstadoConteoZona = 'pendiente' | 'en_curso' | 'cerrada'
+
+export type ConteoSesionRow = {
+  id: number
+  nombre: string
+  estado: EstadoConteoSesion
+  abierta_por: string
+  cerrada_por: string | null
+  ts_apertura: string
+  ts_cierre: string | null
+  umbral_pesos: number
+  sync_confirmado: boolean
+  notas: string | null
+  created_at: string
+}
+
+export type ConteoSesionInsert = {
+  id?: number
+  nombre: string
+  estado?: EstadoConteoSesion
+  abierta_por: string
+  cerrada_por?: string | null
+  ts_apertura?: string
+  ts_cierre?: string | null
+  umbral_pesos?: number
+  sync_confirmado?: boolean
+  notas?: string | null
+  created_at?: string
+}
+
+export type ConteoSesionUpdate = {
+  nombre?: string
+  estado?: EstadoConteoSesion
+  cerrada_por?: string | null
+  ts_cierre?: string | null
+  umbral_pesos?: number
+  sync_confirmado?: boolean
+  notas?: string | null
+}
+
+export type ConteoSnapshotRow = {
+  sesion_id: number
+  producto_id: number
+  stock_teorico: number
+  ts_snapshot: string
+}
+
+export type ConteoSnapshotInsert = {
+  sesion_id: number
+  producto_id: number
+  stock_teorico: number
+  ts_snapshot?: string
+}
+
+export type ConteoSnapshotUpdate = {
+  stock_teorico?: number
+  ts_snapshot?: string
+}
+
+export type ConteoZonaRow = {
+  id: number
+  sesion_id: number
+  nombre: string
+  responsable_user_id: string | null
+  reconteo_user_id: string | null
+  estado: EstadoConteoZona
+  ts_inicio: string | null
+  ts_fin: string | null
+  orden: number
+  created_at: string
+}
+
+export type ConteoZonaInsert = {
+  id?: number
+  sesion_id: number
+  nombre: string
+  responsable_user_id?: string | null
+  reconteo_user_id?: string | null
+  estado?: EstadoConteoZona
+  ts_inicio?: string | null
+  ts_fin?: string | null
+  orden?: number
+  created_at?: string
+}
+
+export type ConteoZonaUpdate = {
+  nombre?: string
+  responsable_user_id?: string | null
+  reconteo_user_id?: string | null
+  estado?: EstadoConteoZona
+  ts_inicio?: string | null
+  ts_fin?: string | null
+  orden?: number
+}
+
+export type ConteoDetalleRow = {
+  id: number
+  zona_id: number
+  producto_id: number
+  cantidad_contada: number
+  contado_por: string
+  ts: string
+  es_reconteo: boolean
+  reconteo_pedido: boolean
+  observacion: string | null
+  created_at: string
+}
+
+export type ConteoDetalleInsert = {
+  id?: number
+  zona_id: number
+  producto_id: number
+  cantidad_contada: number
+  contado_por: string
+  ts?: string
+  es_reconteo?: boolean
+  reconteo_pedido?: boolean
+  observacion?: string | null
+  created_at?: string
+}
+
+export type ConteoDetalleUpdate = {
+  cantidad_contada?: number
+  contado_por?: string
+  ts?: string
+  reconteo_pedido?: boolean
+  observacion?: string | null
+}
+
+/** Fila del reporte de diferencias (fn_conteo_diferencias). */
+export type ConteoDiferenciaRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  stock_teorico: number
+  ventas_rango: number
+  ingresos_rango: number
+  otros_rango: number
+  teorico_esperado: number
+  total_contado: number | null
+  diferencia: number | null
+  costo_unitario: number
+  diferencia_pesos: number | null
+  relevante: boolean
+  reconteo_pendiente: boolean
+  observaciones: string[]
+}
+
+/** Resumen que devuelve fn_cerrar_sesion_conteo. */
+export type ResumenCierreConteo = {
+  productos_ajustados: number
+  faltante_unidades: number
+  faltante_pesos: number
+  sobrante_unidades: number
+  sobrante_pesos: number
+}
+
 // ─── Tipo Database (compatible con el cliente de Supabase) ───────────────────
 
 export interface Database {
@@ -3251,6 +3411,57 @@ export interface Database {
           },
         ]
       }
+      conteo_sesiones: {
+        Row: ConteoSesionRow
+        Insert: ConteoSesionInsert
+        Update: ConteoSesionUpdate
+        Relationships: []
+      }
+      conteo_snapshot: {
+        Row: ConteoSnapshotRow
+        Insert: ConteoSnapshotInsert
+        Update: ConteoSnapshotUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'conteo_snapshot_sesion_id_fkey'
+            columns: ['sesion_id']
+            referencedRelation: 'conteo_sesiones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      conteo_zonas: {
+        Row: ConteoZonaRow
+        Insert: ConteoZonaInsert
+        Update: ConteoZonaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'conteo_zonas_sesion_id_fkey'
+            columns: ['sesion_id']
+            referencedRelation: 'conteo_sesiones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      conteo_detalle: {
+        Row: ConteoDetalleRow
+        Insert: ConteoDetalleInsert
+        Update: ConteoDetalleUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'conteo_detalle_zona_id_fkey'
+            columns: ['zona_id']
+            referencedRelation: 'conteo_zonas'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'conteo_detalle_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       roles: {
         Row: RolRow
         Insert: RolInsert
@@ -3595,6 +3806,53 @@ export interface Database {
           p_gastos_no_debitables?: number
         }
         Returns: undefined
+      }
+      fn_abrir_sesion_conteo: {
+        Args: {
+          p_nombre: string
+          p_umbral?: number
+          p_zonas?: Json
+          p_notas?: string | null
+        }
+        Returns: ConteoSesionRow
+      }
+      fn_iniciar_zona: {
+        Args: { p_zona_id: number }
+        Returns: ConteoZonaRow
+      }
+      fn_cerrar_zona: {
+        Args: { p_zona_id: number }
+        Returns: ConteoZonaRow
+      }
+      fn_registrar_conteo: {
+        Args: {
+          p_zona_id: number
+          p_producto_id: number
+          p_cantidad: number
+          p_observacion?: string | null
+          p_es_reconteo?: boolean
+        }
+        Returns: ConteoDetalleRow
+      }
+      fn_pasar_a_revision: {
+        Args: { p_sesion_id: number }
+        Returns: ConteoSesionRow
+      }
+      fn_solicitar_reconteo: {
+        Args: {
+          p_sesion_id: number
+          p_producto_ids: number[]
+          p_reconteo_user_id?: string | null
+        }
+        Returns: number
+      }
+      fn_conteo_diferencias: {
+        Args: { p_sesion_id: number }
+        Returns: ConteoDiferenciaRow[]
+      }
+      fn_cerrar_sesion_conteo: {
+        Args: { p_sesion_id: number; p_confirmo_sync?: boolean }
+        Returns: Json
       }
       fn_aprobar_conteo: {
         Args: {

@@ -132,6 +132,13 @@ const SECCIONES: Seccion[] = [
         permiso: 'vencimientos',
       },
       {
+        href: '/inventario/conteo',
+        etiqueta: 'Conteo físico',
+        icono: ClipboardList,
+        permiso: 'conteo_cierre',
+        nota: 'Inventario por zonas',
+      },
+      {
         href: '/produccion',
         etiqueta: 'Producción',
         icono: ChefHat,
