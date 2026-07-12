@@ -3,13 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   Calendar,
+  Check,
   ChevronLeft,
   Loader2,
   PackageCheck,
   Plus,
+  Search,
   ShieldCheck,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -33,7 +36,11 @@ import {
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
-import { createProducto, getProductoByBarcode } from '@/lib/queries/productos'
+import {
+  createProducto,
+  getProductoByBarcode,
+  getProductos,
+} from '@/lib/queries/productos'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
@@ -84,7 +91,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const [activoId, setActivoId] = useState<number | null>(null)
   const inputRefs = useRef<Record<number, HTMLInputElement | null>>({})
 
-  // Alta de producto que no está en el pedido
+  // Alta / búsqueda de producto que no está en el pedido
   const [ultimoNoEncontrado, setUltimoNoEncontrado] = useState('')
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false)
   const [nuevoCodigo, setNuevoCodigo] = useState('')
@@ -94,6 +101,15 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const [nuevoCantidad, setNuevoCantidad] = useState('')
   const [nuevoVenc, setNuevoVenc] = useState('')
   const [guardandoNuevo, setGuardandoNuevo] = useState(false)
+  // Búsqueda en el catálogo para sumar un producto existente (aunque no sea de
+  // este proveedor ni esté en el pedido).
+  const [busquedaProd, setBusquedaProd] = useState('')
+  const [busquedaDebounced, setBusquedaDebounced] = useState('')
+  const [productoSeleccionado, setProductoSeleccionado] = useState<{
+    id: number
+    nombre: string
+    codigo_barras: string | null
+  } | null>(null)
 
   useEffect(() => {
     if (!pedido) return
@@ -154,15 +170,35 @@ export function RecepcionMovil({ pedidoId }: Props) {
     }
   }, [activoId])
 
+  // Debounce del texto de búsqueda del modal "Agregar producto".
+  useEffect(() => {
+    const t = setTimeout(() => setBusquedaDebounced(busquedaProd.trim()), 250)
+    return () => clearTimeout(t)
+  }, [busquedaProd])
+
+  // Búsqueda en el catálogo (por nombre o código). Solo corre con el modal
+  // abierto y al menos 2 caracteres, para no bajar todo el catálogo de gusto.
+  const { data: resultadosBusqueda, isFetching: buscandoProd } = useQuery({
+    queryKey: ['recepcion-buscar-producto', busquedaDebounced],
+    queryFn: () => getProductos({ busqueda: busquedaDebounced, activo: true }),
+    enabled: modalNuevoAbierto && busquedaDebounced.length >= 2,
+    staleTime: 30 * 1000,
+  })
+
   /**
    * Escaneo: trae el producto al tope de la lista, lo resalta y enfoca su campo
    * para cargar la cantidad TOTAL (no suma de a 1). El "+1" queda como botón.
    */
   function alEscanear(codigo: string) {
+    // Con el buscador abierto ignoramos lecturas (evita re-disparos de la cámara).
+    if (modalNuevoAbierto) return
     const item = itemsEstado.find((it) => it.codigo_barras === codigo)
     if (!item) {
-      setUltimoNoEncontrado(codigo)
-      toast.error('No está en el pedido. Tocá "Agregar producto" para sumarlo.')
+      // No está en el pedido: abrimos el buscador con el código cargado. Si el
+      // producto existe en el catálogo (aunque no sea de este proveedor) aparece
+      // como resultado para sumarlo; si no existe, se puede crear.
+      abrirBuscadorConCodigo(codigo)
+      toast.error('No está en el pedido. Buscalo o cargalo para sumarlo.')
       return
     }
     // Si ya es el activo, ignorar (evita que la cámara lo re-dispare al tipear).
@@ -285,7 +321,49 @@ export function RecepcionMovil({ pedidoId }: Props) {
     )
   }
 
-  async function guardarNuevoProducto() {
+  /** Suma un producto (ya existente en el catálogo) a esta recepción. */
+  async function agregarProductoALista(
+    prod: { id: number; nombre: string; codigo_barras: string | null },
+    cant: number,
+    venc: string
+  ) {
+    const yaEnLista = itemsEstado.find((it) => it.producto_id === prod.id)
+    if (yaEnLista) {
+      toast.info(`${prod.nombre} ya está en la lista.`)
+      setActivoId(yaEnLista.item_id)
+      return
+    }
+    const nuevoItem = await agregarItemPedido({
+      pedido_id: pedidoId,
+      producto_id: prod.id,
+      cantidad: cant,
+      precio_costo: 0,
+    })
+    setItemsEstado((prev) => [
+      ...prev,
+      {
+        item_id: nuevoItem.id,
+        producto_id: prod.id,
+        nombre: prod.nombre,
+        codigo_barras: prod.codigo_barras,
+        cantidad_pedida: cant,
+        ya_recibido: 0,
+        precio_costo: 0,
+        cantidad_recibida: String(cant),
+        fecha_vencimiento: venc,
+        dias_vencimiento_minimo: null,
+      },
+    ])
+    setActivoId(nuevoItem.id)
+    toast.success(`${prod.nombre} agregado al pedido`)
+  }
+
+  /**
+   * Confirma el modal: si hay un producto seleccionado del buscador lo suma;
+   * si no, intenta encontrarlo por código exacto y, si tampoco existe, crea uno
+   * nuevo con los datos cargados. En todos los casos queda como recibido.
+   */
+  async function agregarAlPedido() {
     const cant = Number(nuevoCantidad)
     if (!Number.isFinite(cant) || cant <= 0) {
       toast.error('Poné cuántas unidades llegaron.')
@@ -293,66 +371,35 @@ export function RecepcionMovil({ pedidoId }: Props) {
     }
     setGuardandoNuevo(true)
     try {
-      const cod = nuevoCodigo.trim()
       let prod: { id: number; nombre: string; codigo_barras: string | null } | null =
-        null
-      // Si el código ya existe en el catálogo, se usa ese producto.
-      if (cod) prod = await getProductoByBarcode(cod)
+        productoSeleccionado
+      if (!prod) {
+        const cod = nuevoCodigo.trim()
+        // Red de seguridad: si el código ya existe, se reutiliza ese producto.
+        if (cod) prod = await getProductoByBarcode(cod)
+      }
       if (!prod) {
         if (!nuevoNombre.trim()) {
-          toast.error('Poné el nombre del producto.')
+          toast.error('Buscá el producto, o poné el nombre para crearlo.')
           setGuardandoNuevo(false)
           return
         }
         const precio = Number(nuevoPrecio)
         if (!Number.isFinite(precio) || precio <= 0) {
-          toast.error('Poné el precio de venta.')
+          toast.error('Poné el precio de venta para crear el producto.')
           setGuardandoNuevo(false)
           return
         }
         prod = await createProducto({
           nombre: nuevoNombre.trim(),
           precio_venta: precio,
-          codigo_barras: cod || null,
+          codigo_barras: nuevoCodigo.trim() || null,
           categoria_id: nuevoCategoria ? Number(nuevoCategoria) : null,
         })
       }
 
-      if (itemsEstado.some((it) => it.producto_id === prod!.id)) {
-        toast.info(`${prod.nombre} ya está en la lista.`)
-      } else {
-        const nuevoItem = await agregarItemPedido({
-          pedido_id: pedidoId,
-          producto_id: prod.id,
-          cantidad: cant,
-          precio_costo: 0,
-        })
-        setItemsEstado((prev) => [
-          ...prev,
-          {
-            item_id: nuevoItem.id,
-            producto_id: prod!.id,
-            nombre: prod!.nombre,
-            codigo_barras: prod!.codigo_barras,
-            cantidad_pedida: cant,
-            ya_recibido: 0,
-            precio_costo: 0,
-            cantidad_recibida: String(cant),
-            fecha_vencimiento: nuevoVenc,
-            dias_vencimiento_minimo: null,
-          },
-        ])
-        toast.success(`${prod.nombre} agregado al pedido`)
-      }
-
-      setModalNuevoAbierto(false)
-      setNuevoCodigo('')
-      setNuevoNombre('')
-      setNuevoPrecio('')
-      setNuevoCategoria('')
-      setNuevoCantidad('')
-      setNuevoVenc('')
-      setUltimoNoEncontrado('')
+      await agregarProductoALista(prod, cant, nuevoVenc)
+      cerrarModalNuevo()
     } catch (e) {
       toast.error(`No se pudo agregar: ${(e as Error).message}`)
     } finally {
@@ -360,8 +407,60 @@ export function RecepcionMovil({ pedidoId }: Props) {
     }
   }
 
+  /** Elige un producto de los resultados de búsqueda. */
+  function seleccionarProducto(p: {
+    id: number
+    nombre: string
+    codigo_barras: string | null
+  }) {
+    setProductoSeleccionado({
+      id: p.id,
+      nombre: p.nombre,
+      codigo_barras: p.codigo_barras,
+    })
+    setBusquedaProd('')
+    setBusquedaDebounced('')
+  }
+
+  /** Limpia y cierra el modal de agregar/buscar producto. */
+  function cerrarModalNuevo() {
+    setModalNuevoAbierto(false)
+    setBusquedaProd('')
+    setBusquedaDebounced('')
+    setProductoSeleccionado(null)
+    setNuevoCodigo('')
+    setNuevoNombre('')
+    setNuevoPrecio('')
+    setNuevoCategoria('')
+    setNuevoCantidad('')
+    setNuevoVenc('')
+    setUltimoNoEncontrado('')
+  }
+
+  /** Abre el buscador con un código precargado (desde un escaneo no reconocido). */
+  function abrirBuscadorConCodigo(codigo: string) {
+    setUltimoNoEncontrado(codigo)
+    setProductoSeleccionado(null)
+    setBusquedaProd(codigo)
+    setNuevoCodigo(codigo)
+    setNuevoNombre('')
+    setNuevoPrecio('')
+    setNuevoCategoria('')
+    setNuevoCantidad('')
+    setNuevoVenc('')
+    setModalNuevoAbierto(true)
+  }
+
+  /** Abre el buscador vacío (botón manual). */
   function abrirNuevoProducto() {
+    setProductoSeleccionado(null)
+    setBusquedaProd(ultimoNoEncontrado)
     setNuevoCodigo(ultimoNoEncontrado)
+    setNuevoNombre('')
+    setNuevoPrecio('')
+    setNuevoCategoria('')
+    setNuevoCantidad('')
+    setNuevoVenc('')
     setModalNuevoAbierto(true)
   }
 
@@ -529,7 +628,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#e4c9b0] bg-white/60 px-3 py-3 text-sm font-semibold text-[#9e6b15] transition active:scale-[0.99]"
       >
         <Plus className="h-4 w-4" />
-        Agregar producto que no está en el pedido
+        Buscar o agregar un producto
       </button>
 
       {itemsPorDebajoMinimo.length > 0 && (
@@ -618,8 +717,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
         }}
       />
 
-      {/* Modal: agregar / crear producto que no está en el pedido */}
-      <Dialog open={modalNuevoAbierto} onOpenChange={setModalNuevoAbierto}>
+      {/* Modal: buscar / agregar producto que no está en el pedido */}
+      <Dialog
+        open={modalNuevoAbierto}
+        onOpenChange={(v) => (v ? setModalNuevoAbierto(true) : cerrarModalNuevo())}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[#391511]">
@@ -627,63 +729,153 @@ export function RecepcionMovil({ pedidoId }: Props) {
               Agregar producto
             </DialogTitle>
             <DialogDescription className="text-[#6f3a2a]">
-              Si el código ya existe, se usa ese producto. Si no, se crea uno
-              nuevo y se suma a este pedido.
+              Buscá el producto en el catálogo para sumarlo como recibido, aunque
+              no sea de este proveedor ni esté en el pedido. Si no existe, cargalo
+              nuevo.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {/* Buscador de catálogo */}
             <div>
               <Label className="text-xs text-[#6f3a2a]">
-                Código de barras (opcional)
+                Buscar producto (nombre o código)
               </Label>
-              <Input
-                inputMode="numeric"
-                value={nuevoCodigo}
-                onChange={(e) => setNuevoCodigo(e.target.value)}
-                placeholder="Escaneá o escribí el código…"
-                className="h-11 border-[#e4c9b0] font-mono focus-visible:ring-[#f9b44c]"
-              />
-            </div>
-            <div>
-              <Label className="text-xs text-[#6f3a2a]">Nombre del producto</Label>
-              <Input
-                value={nuevoNombre}
-                onChange={(e) => setNuevoNombre(e.target.value)}
-                placeholder="Ej: Gaseosa Cola 1.5L"
-                className="h-11 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs text-[#6f3a2a]">Precio de venta</Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#c8a58a]" />
                 <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={nuevoPrecio}
-                  onChange={(e) => setNuevoPrecio(e.target.value)}
-                  placeholder="0"
-                  className="h-11 border-[#e4c9b0] tabular-nums focus-visible:ring-[#f9b44c]"
+                  value={busquedaProd}
+                  onChange={(e) => {
+                    setBusquedaProd(e.target.value)
+                    if (productoSeleccionado) setProductoSeleccionado(null)
+                  }}
+                  placeholder="Ej: gaseosa cola, 779…"
+                  className="h-11 border-[#e4c9b0] pl-9 focus-visible:ring-[#f9b44c]"
                 />
               </div>
-              <div>
-                <Label className="text-xs text-[#6f3a2a]">Categoría (opc.)</Label>
-                <select
-                  value={nuevoCategoria}
-                  onChange={(e) => setNuevoCategoria(e.target.value)}
-                  className="h-11 w-full rounded-md border border-[#e4c9b0] bg-white px-2 text-sm text-[#391511] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c]"
-                >
-                  <option value="">Sin categoría</option>
-                  {(categorias ?? []).map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
+
+              {!productoSeleccionado && busquedaDebounced.length >= 2 && (
+                <div className="mt-1 max-h-48 overflow-y-auto rounded-lg border border-[#e4c9b0]/70 bg-white">
+                  {buscandoProd ? (
+                    <div className="p-3 text-center">
+                      <Loader2 className="mx-auto h-4 w-4 animate-spin text-[#9e6b15]" />
+                    </div>
+                  ) : (resultadosBusqueda ?? []).length === 0 ? (
+                    <p className="p-3 text-center text-xs text-[#6f3a2a]">
+                      No hay coincidencias. Podés cargarlo como nuevo abajo.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-[#e4c9b0]/40">
+                      {(resultadosBusqueda ?? []).slice(0, 8).map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            onClick={() => seleccionarProducto(p)}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left active:bg-[#f9d2a2]/30"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-medium text-[#391511]">
+                                {p.nombre}
+                              </span>
+                              {p.codigo_barras && (
+                                <span className="block font-mono text-[10px] text-[#c8a58a]">
+                                  {p.codigo_barras}
+                                </span>
+                              )}
+                            </span>
+                            <span className="shrink-0 text-[10px] text-[#6f3a2a]">
+                              Stock: {p.stock_actual}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
+
+            {productoSeleccionado ? (
+              /* Producto existente elegido */
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-[#2f7d4f]/30 bg-[#2f7d4f]/10 px-3 py-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Check className="h-4 w-4 shrink-0 text-[#2f7d4f]" />
+                  <span className="truncate text-sm font-medium text-[#391511]">
+                    {productoSeleccionado.nombre}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setProductoSeleccionado(null)}
+                  className="shrink-0 text-xs font-semibold text-[#9e6b15]"
+                >
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              /* Alta de producto nuevo (si no está en el catálogo) */
+              <div className="space-y-3 rounded-lg border border-dashed border-[#e4c9b0] p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+                  ¿No lo encontrás? Cargalo nuevo
+                </p>
+                <div>
+                  <Label className="text-xs text-[#6f3a2a]">
+                    Nombre del producto
+                  </Label>
+                  <Input
+                    value={nuevoNombre}
+                    onChange={(e) => setNuevoNombre(e.target.value)}
+                    placeholder="Ej: Gaseosa Cola 1.5L"
+                    className="h-11 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs text-[#6f3a2a]">
+                      Código (opc.)
+                    </Label>
+                    <Input
+                      inputMode="numeric"
+                      value={nuevoCodigo}
+                      onChange={(e) => setNuevoCodigo(e.target.value)}
+                      placeholder="Código de barras"
+                      className="h-11 border-[#e4c9b0] font-mono focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-[#6f3a2a]">
+                      Precio de venta
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={nuevoPrecio}
+                      onChange={(e) => setNuevoPrecio(e.target.value)}
+                      placeholder="0"
+                      className="h-11 border-[#e4c9b0] tabular-nums focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-[#6f3a2a]">Categoría (opc.)</Label>
+                  <select
+                    value={nuevoCategoria}
+                    onChange={(e) => setNuevoCategoria(e.target.value)}
+                    className="h-11 w-full rounded-md border border-[#e4c9b0] bg-white px-2 text-sm text-[#391511] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c]"
+                  >
+                    <option value="">Sin categoría</option>
+                    {(categorias ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <Label className="text-xs text-[#6f3a2a]">Unidades que llegaron</Label>
@@ -713,7 +905,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setModalNuevoAbierto(false)}
+                onClick={cerrarModalNuevo}
                 disabled={guardandoNuevo}
                 className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
               >
@@ -721,7 +913,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
               </Button>
               <Button
                 type="button"
-                onClick={guardarNuevoProducto}
+                onClick={agregarAlPedido}
                 disabled={guardandoNuevo}
                 className="flex-1 bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
               >
@@ -730,8 +922,10 @@ export function RecepcionMovil({ pedidoId }: Props) {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Agregando…
                   </>
-                ) : (
+                ) : productoSeleccionado ? (
                   'Agregar al pedido'
+                ) : (
+                  'Crear y agregar'
                 )}
               </Button>
             </div>
