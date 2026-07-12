@@ -40,6 +40,7 @@ import {
   createProducto,
   getProductoByBarcode,
   getProductos,
+  toggleProductoActivo,
 } from '@/lib/queries/productos'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -58,6 +59,32 @@ interface ItemEstado {
   cantidad_recibida: string
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
+}
+
+/** Datos mínimos de un producto para sumarlo a la recepción (buscado o creado). */
+interface ProdParaAgregar {
+  id: number
+  nombre: string
+  codigo_barras: string | null
+  activo: boolean
+  dias_vencimiento_minimo: number | null
+}
+
+/** Reduce un producto del catálogo (Row/ConRelaciones) a lo que necesita la recepción. */
+function aProdParaAgregar(p: {
+  id: number
+  nombre: string
+  codigo_barras: string | null
+  activo: boolean
+  dias_vencimiento_minimo: number | null
+}): ProdParaAgregar {
+  return {
+    id: p.id,
+    nombre: p.nombre,
+    codigo_barras: p.codigo_barras,
+    activo: p.activo,
+    dias_vencimiento_minimo: p.dias_vencimiento_minimo,
+  }
 }
 
 interface Props {
@@ -105,11 +132,8 @@ export function RecepcionMovil({ pedidoId }: Props) {
   // este proveedor ni esté en el pedido).
   const [busquedaProd, setBusquedaProd] = useState('')
   const [busquedaDebounced, setBusquedaDebounced] = useState('')
-  const [productoSeleccionado, setProductoSeleccionado] = useState<{
-    id: number
-    nombre: string
-    codigo_barras: string | null
-  } | null>(null)
+  const [productoSeleccionado, setProductoSeleccionado] =
+    useState<ProdParaAgregar | null>(null)
 
   useEffect(() => {
     if (!pedido) return
@@ -178,9 +202,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   // Búsqueda en el catálogo (por nombre o código). Solo corre con el modal
   // abierto y al menos 2 caracteres, para no bajar todo el catálogo de gusto.
+  // Incluye inactivos a propósito: si el producto ya existe (aunque esté dado de
+  // baja) queremos reusarlo en vez de crear un duplicado; al sumarlo se reactiva.
   const { data: resultadosBusqueda, isFetching: buscandoProd } = useQuery({
     queryKey: ['recepcion-buscar-producto', busquedaDebounced],
-    queryFn: () => getProductos({ busqueda: busquedaDebounced, activo: true }),
+    queryFn: () => getProductos({ busqueda: busquedaDebounced }),
     enabled: modalNuevoAbierto && busquedaDebounced.length >= 2,
     staleTime: 30 * 1000,
   })
@@ -323,15 +349,37 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   /** Suma un producto (ya existente en el catálogo) a esta recepción. */
   async function agregarProductoALista(
-    prod: { id: number; nombre: string; codigo_barras: string | null },
+    prod: ProdParaAgregar,
     cant: number,
     venc: string
   ) {
     const yaEnLista = itemsEstado.find((it) => it.producto_id === prod.id)
     if (yaEnLista) {
-      toast.info(`${prod.nombre} ya está en la lista.`)
+      // Ya estaba en la lista: en vez de descartar la cantidad tipeada, la
+      // aplicamos al ítem existente y lo resaltamos.
+      setItemsEstado((prev) =>
+        prev.map((it) =>
+          it.producto_id === prod.id
+            ? {
+                ...it,
+                cantidad_recibida: String(cant),
+                fecha_vencimiento: venc || it.fecha_vencimiento,
+              }
+            : it
+        )
+      )
       setActivoId(yaEnLista.item_id)
+      toast.info(`${prod.nombre} ya estaba en la lista — actualicé la cantidad.`)
       return
+    }
+    // Si estaba dado de baja, lo reactivamos: si no, el stock recibido quedaría
+    // en un producto oculto del POS/inventario.
+    if (!prod.activo) {
+      try {
+        await toggleProductoActivo(prod.id, true)
+      } catch {
+        // Si falla la reactivación no bloqueamos la recepción; se corrige a mano.
+      }
     }
     const nuevoItem = await agregarItemPedido({
       pedido_id: pedidoId,
@@ -351,7 +399,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         precio_costo: 0,
         cantidad_recibida: String(cant),
         fecha_vencimiento: venc,
-        dias_vencimiento_minimo: null,
+        dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
       },
     ])
     setActivoId(nuevoItem.id)
@@ -371,12 +419,14 @@ export function RecepcionMovil({ pedidoId }: Props) {
     }
     setGuardandoNuevo(true)
     try {
-      let prod: { id: number; nombre: string; codigo_barras: string | null } | null =
-        productoSeleccionado
+      let prod: ProdParaAgregar | null = productoSeleccionado
       if (!prod) {
         const cod = nuevoCodigo.trim()
         // Red de seguridad: si el código ya existe, se reutiliza ese producto.
-        if (cod) prod = await getProductoByBarcode(cod)
+        if (cod) {
+          const encontrado = await getProductoByBarcode(cod)
+          if (encontrado) prod = aProdParaAgregar(encontrado)
+        }
       }
       if (!prod) {
         if (!nuevoNombre.trim()) {
@@ -390,12 +440,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
           setGuardandoNuevo(false)
           return
         }
-        prod = await createProducto({
+        const creado = await createProducto({
           nombre: nuevoNombre.trim(),
           precio_venta: precio,
           codigo_barras: nuevoCodigo.trim() || null,
           categoria_id: nuevoCategoria ? Number(nuevoCategoria) : null,
         })
+        prod = aProdParaAgregar(creado)
       }
 
       await agregarProductoALista(prod, cant, nuevoVenc)
@@ -408,16 +459,8 @@ export function RecepcionMovil({ pedidoId }: Props) {
   }
 
   /** Elige un producto de los resultados de búsqueda. */
-  function seleccionarProducto(p: {
-    id: number
-    nombre: string
-    codigo_barras: string | null
-  }) {
-    setProductoSeleccionado({
-      id: p.id,
-      nombre: p.nombre,
-      codigo_barras: p.codigo_barras,
-    })
+  function seleccionarProducto(p: ProdParaAgregar) {
+    setProductoSeleccionado(aProdParaAgregar(p))
     setBusquedaProd('')
     setBusquedaDebounced('')
   }
@@ -774,8 +817,15 @@ export function RecepcionMovil({ pedidoId }: Props) {
                             className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left active:bg-[#f9d2a2]/30"
                           >
                             <span className="min-w-0">
-                              <span className="block truncate text-sm font-medium text-[#391511]">
-                                {p.nombre}
+                              <span className="flex items-center gap-1.5">
+                                <span className="truncate text-sm font-medium text-[#391511]">
+                                  {p.nombre}
+                                </span>
+                                {!p.activo && (
+                                  <span className="shrink-0 rounded bg-[#c8a58a]/30 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+                                    Inactivo
+                                  </span>
+                                )}
                               </span>
                               {p.codigo_barras && (
                                 <span className="block font-mono text-[10px] text-[#c8a58a]">
