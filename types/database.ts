@@ -1973,6 +1973,22 @@ export type ConfigComprasUpdate = {
   exige_factura?: boolean
 }
 
+// ─── config_ventas (singleton) ───────────────────────────────────────────────
+
+export type ConfigVentasRow = {
+  id: number
+  permitir_venta_sin_stock: boolean
+}
+
+export type ConfigVentasInsert = {
+  id?: number
+  permitir_venta_sin_stock?: boolean
+}
+
+export type ConfigVentasUpdate = {
+  permitir_venta_sin_stock?: boolean
+}
+
 // ─── config_fiscal (singleton) ───────────────────────────────────────────────
 
 export type ConfigFiscalRow = {
@@ -3013,6 +3029,12 @@ export interface Database {
         Row: ConfigComprasRow
         Insert: ConfigComprasInsert
         Update: ConfigComprasUpdate
+        Relationships: []
+      }
+      config_ventas: {
+        Row: ConfigVentasRow
+        Insert: ConfigVentasInsert
+        Update: ConfigVentasUpdate
         Relationships: []
       }
       pedido_comprobantes: {

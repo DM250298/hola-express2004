@@ -42,6 +42,7 @@ import { SelectorCliente, type ClienteSeleccionado } from './SelectorCliente'
 import { ModalCobroTerminal } from './ModalCobroTerminal'
 import { ModalIngresoPeso } from './ModalIngresoPeso'
 import { useTerminales } from '@/lib/hooks/useTerminales'
+import { useConfigVentas } from '@/lib/hooks/useConfigVentas'
 import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
@@ -84,6 +85,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const enviandoVentaRef = useRef(false)
   const { data: usuario } = useUsuario()
   const { data: terminales } = useTerminales()
+  const { data: configVentas } = useConfigVentas()
+  // Si la config permite vender sin stock, el POS no clampea al stock disponible.
+  const permitirSinStock = configVentas?.permitir_venta_sin_stock ?? false
   const puedeGasto = tienePermiso(usuario?.permisos, 'pos_gasto')
   const puedeDevolver = tienePermiso(usuario?.permisos, 'devoluciones')
   const hayTerminalActiva = (terminales ?? []).some(
@@ -131,10 +135,17 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const carrito = ordenActiva?.items ?? []
 
   function dispatchCarrito(accion: Parameters<typeof reducerCarrito>[1]) {
+    // Inyectamos el flag de "vender sin stock" en las acciones que clampean al
+    // stock, así todos los orígenes (carrito, buscador, modal de peso) lo respetan
+    // sin tener que pasarlo en cada dispatch.
+    const accionConFlag =
+      accion.tipo === 'AGREGAR_PRODUCTO' || accion.tipo === 'CAMBIAR_CANTIDAD'
+        ? { ...accion, permitir_sin_stock: permitirSinStock }
+        : accion
     setOrdenes((prev) =>
       prev.map((o) =>
         o.id === ordenActivaId
-          ? { ...o, items: reducerCarrito(o.items, accion) }
+          ? { ...o, items: reducerCarrito(o.items, accionConFlag) }
           : o
       )
     )
@@ -650,10 +661,15 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       {/* Layout split — buscador/grid + carrito */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-3 p-3 sm:p-4 bg-[#fdfaf6] overflow-hidden">
         <div className="space-y-3 overflow-y-auto min-h-0 pr-1">
-          <BuscadorProducto ref={buscadorRef} onSeleccionar={agregarProducto} />
+          <BuscadorProducto
+            ref={buscadorRef}
+            onSeleccionar={agregarProducto}
+            permitirSinStock={permitirSinStock}
+          />
           <GridProductosFrecuentes
             turnoId={turno.id}
             onSeleccionar={agregarProducto}
+            permitirSinStock={permitirSinStock}
           />
         </div>
 
@@ -661,6 +677,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           <CarritoVenta
             items={carrito}
             dispatch={dispatchCarrito}
+            permitirSinStock={permitirSinStock}
             onCobrar={() => setModalCobroAbierto(true)}
             clienteNombre={ordenActiva?.clienteNombre ?? null}
             onElegirCliente={() => setSelectorClienteAbierto(true)}

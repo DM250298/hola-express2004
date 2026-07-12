@@ -22,10 +22,12 @@ import { cn } from '@/lib/utils'
 function EditorCantidad({
   cantidad,
   stockDisponible,
+  permitirSinStock = false,
   onCambiar,
 }: {
   cantidad: number
   stockDisponible: number
+  permitirSinStock?: boolean
   onCambiar: (nuevaCantidad: number) => void
 }) {
   const [valor, setValor] = useState(String(cantidad))
@@ -40,7 +42,7 @@ function EditorCantidad({
       setValor(String(cantidad))
       return
     }
-    const clamp = Math.min(n, stockDisponible)
+    const clamp = permitirSinStock ? n : Math.min(n, stockDisponible)
     if (clamp !== cantidad) onCambiar(clamp)
     setValor(String(clamp))
   }
@@ -50,7 +52,7 @@ function EditorCantidad({
       type="number"
       inputMode="numeric"
       min={1}
-      max={stockDisponible}
+      max={permitirSinStock ? undefined : stockDisponible}
       value={valor}
       onChange={(e) => setValor(e.target.value.replace(/[^0-9]/g, ''))}
       onFocus={(e) => e.currentTarget.select()}
@@ -70,6 +72,8 @@ function EditorCantidad({
 interface Props {
   items: ItemCarrito[]
   dispatch: React.Dispatch<AccionCarrito>
+  /** Si es true, permite superar el stock disponible (venta en negativo). */
+  permitirSinStock?: boolean
   onCobrar: () => void
   /** Nombre del cliente asociado a la venta, o null si es al mostrador. */
   clienteNombre: string | null
@@ -86,6 +90,7 @@ interface Props {
 export function CarritoVenta({
   items,
   dispatch,
+  permitirSinStock = false,
   onCobrar,
   clienteNombre,
   onElegirCliente,
@@ -242,6 +247,7 @@ export function CarritoVenta({
                       <EditorCantidad
                         cantidad={it.cantidad}
                         stockDisponible={it.stock_disponible}
+                        permitirSinStock={permitirSinStock}
                         onCambiar={(nueva) =>
                           dispatch({
                             tipo: 'CAMBIAR_CANTIDAD',
@@ -260,7 +266,10 @@ export function CarritoVenta({
                             cantidad: it.cantidad + 1,
                           })
                         }
-                        disabled={it.cantidad >= it.stock_disponible}
+                        disabled={
+                          !permitirSinStock &&
+                          it.cantidad >= it.stock_disponible
+                        }
                         className="h-9 w-9 border-[#e4c9b0] hover:bg-[#f9d2a2]/40 disabled:opacity-40"
                         aria-label="Sumar"
                       >
@@ -272,11 +281,19 @@ export function CarritoVenta({
                     <MontoARS monto={it.precio_unitario * it.cantidad} />
                   </div>
                 </div>
-                {!it.venta_por_peso && it.cantidad >= it.stock_disponible && (
-                  <p className="text-[10px] text-[#c43e2c] mt-1">
-                    Stock máximo alcanzado ({it.stock_disponible})
-                  </p>
-                )}
+                {!it.venta_por_peso &&
+                  it.cantidad >= it.stock_disponible &&
+                  (permitirSinStock ? (
+                    it.cantidad > it.stock_disponible && (
+                      <p className="text-[10px] text-[#b5701f] mt-1">
+                        Vendiendo sin stock (disponible: {it.stock_disponible})
+                      </p>
+                    )
+                  ) : (
+                    <p className="text-[10px] text-[#c43e2c] mt-1">
+                      Stock máximo alcanzado ({it.stock_disponible})
+                    </p>
+                  ))}
               </li>
             ))}
           </ul>

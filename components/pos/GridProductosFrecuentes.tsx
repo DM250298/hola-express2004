@@ -15,6 +15,8 @@ type ProductoGrid = ProductoConRelaciones | ProductoFrecuente
 interface Props {
   turnoId: number
   onSeleccionar: (p: ProductoGrid) => void
+  /** Si es true, permite seleccionar productos aunque estén sin stock. */
+  permitirSinStock?: boolean
 }
 
 const MAX_CATALOGO = 12
@@ -31,7 +33,11 @@ function datosProducto(p: ProductoGrid) {
   }
 }
 
-export function GridProductosFrecuentes({ turnoId, onSeleccionar }: Props) {
+export function GridProductosFrecuentes({
+  turnoId,
+  onSeleccionar,
+  permitirSinStock = false,
+}: Props) {
   const { data: frecuentes, isLoading: cargandoFrecuentes } =
     useProductosFrecuentesTurno(turnoId)
   // Catálogo activo vendible: respaldo cuando todavía no hay frecuentes
@@ -83,15 +89,16 @@ export function GridProductosFrecuentes({ turnoId, onSeleccionar }: Props) {
           {lista.map((p) => {
             const d = datosProducto(p)
             const sinStock = d.stock <= 0
+            const bloqueado = sinStock && !permitirSinStock
             return (
               <button
                 key={d.key}
                 type="button"
-                onClick={() => !sinStock && onSeleccionar(p)}
-                disabled={sinStock}
+                onClick={() => !bloqueado && onSeleccionar(p)}
+                disabled={bloqueado}
                 className={cn(
                   'rounded-xl border bg-white flex flex-col text-left transition-all overflow-hidden',
-                  sinStock
+                  bloqueado
                     ? 'opacity-50 cursor-not-allowed border-[#e4c9b0]/60'
                     : 'border-[#e4c9b0]/60 hover:border-[#f9b44c] hover:shadow-md active:scale-95 active:bg-[#f9d2a2]/40'
                 )}

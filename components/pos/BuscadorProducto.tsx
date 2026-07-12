@@ -14,6 +14,8 @@ import type { ProductoConRelaciones } from '@/lib/queries/productos'
 
 interface Props {
   onSeleccionar: (p: ProductoConRelaciones) => void
+  /** Si es true, permite seleccionar productos aunque estén sin stock. */
+  permitirSinStock?: boolean
 }
 
 export interface BuscadorProductoRef {
@@ -33,7 +35,7 @@ function pareceBarcode(valor: string): boolean {
 }
 
 export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
-  function BuscadorProducto({ onSeleccionar }, ref) {
+  function BuscadorProducto({ onSeleccionar, permitirSinStock = false }, ref) {
     const [busquedaInput, setBusquedaInput] = useState('')
     const [busqueda, setBusqueda] = useState('')
     const [indiceSeleccionado, setIndiceSeleccionado] = useState(0)
@@ -85,7 +87,7 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
         )
         return
       }
-      if (p.stock_actual <= 0) {
+      if (!permitirSinStock && p.stock_actual <= 0) {
         toast.error(`"${p.nombre}" sin stock.`)
         return
       }
@@ -187,7 +189,7 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
                 {resultados.map((p, idx) => {
                   const sinPrecio = p.pendiente_precio
                   const sinStock = p.stock_actual <= 0
-                  const deshabilitado = sinStock || sinPrecio
+                  const deshabilitado = sinPrecio || (sinStock && !permitirSinStock)
                   const seleccionado = idx === indiceSeleccionado
                   return (
                     <li key={p.id}>

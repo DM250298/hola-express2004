@@ -1,7 +1,21 @@
 import Link from 'next/link'
-import { Tag, Truck, ChevronRight, Users, Landmark } from 'lucide-react'
+import {
+  Tag,
+  Truck,
+  ChevronRight,
+  Users,
+  Landmark,
+  ShoppingCart,
+} from 'lucide-react'
 
 const SECCIONES = [
+  {
+    href: '/configuracion/ventas',
+    titulo: 'Ventas y stock',
+    descripcion: 'Reglas del POS, como permitir vender sin stock disponible.',
+    icono: ShoppingCart,
+    color: '#b5701f',
+  },
   {
     href: '/configuracion/categorias',
     titulo: 'Categorías',

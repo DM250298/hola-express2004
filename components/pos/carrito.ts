@@ -27,8 +27,16 @@ export type AccionCarrito =
         /** Para productos por peso, la cantidad en kg a agregar. */
         cantidad_kg?: number
       }
+      /** Si es true, se permite agregar/superar aunque no haya stock (venta en negativo). */
+      permitir_sin_stock?: boolean
     }
-  | { tipo: 'CAMBIAR_CANTIDAD'; producto_id: number; cantidad: number }
+  | {
+      tipo: 'CAMBIAR_CANTIDAD'
+      producto_id: number
+      cantidad: number
+      /** Si es true, no se clampea la cantidad al stock disponible. */
+      permitir_sin_stock?: boolean
+    }
   | { tipo: 'ELIMINAR'; producto_id: number }
   | { tipo: 'VACIAR' }
 
@@ -38,8 +46,8 @@ export function reducerCarrito(
 ): ItemCarrito[] {
   switch (accion.tipo) {
     case 'AGREGAR_PRODUCTO': {
-      const { producto } = accion
-      if (producto.stock_actual <= 0) return estado
+      const { producto, permitir_sin_stock } = accion
+      if (!permitir_sin_stock && producto.stock_actual <= 0) return estado
 
       const existente = estado.find((it) => it.producto_id === producto.producto_id)
 
@@ -70,7 +78,8 @@ export function reducerCarrito(
 
       // Por unidad: incrementa
       if (existente) {
-        if (existente.cantidad >= producto.stock_actual) return estado
+        if (!permitir_sin_stock && existente.cantidad >= producto.stock_actual)
+          return estado
         return estado.map((it) =>
           it.producto_id === producto.producto_id
             ? { ...it, cantidad: it.cantidad + 1 }
@@ -98,9 +107,10 @@ export function reducerCarrito(
         it.producto_id === accion.producto_id
           ? {
               ...it,
-              cantidad: it.venta_por_peso
-                ? accion.cantidad
-                : Math.min(accion.cantidad, it.stock_disponible),
+              cantidad:
+                it.venta_por_peso || accion.permitir_sin_stock
+                  ? accion.cantidad
+                  : Math.min(accion.cantidad, it.stock_disponible),
             }
           : it
       )
