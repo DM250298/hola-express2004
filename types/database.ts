@@ -16,6 +16,7 @@ export type TipoMovimiento =
   | 'entrada'
   | 'salida'
   | 'ajuste'
+  | 'ajuste_conteo'
   | 'merma'
   | 'venta'
   | 'consumo_produccion'

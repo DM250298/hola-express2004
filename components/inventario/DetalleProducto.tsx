@@ -8,6 +8,7 @@ import {
   Box,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Package,
   Pencil,
   RefreshCcw,
@@ -71,6 +72,11 @@ const CONFIG_TIPO: Record<
     icono: RefreshCcw,
     clase: 'text-[#6f3a2a] bg-[#c8a58a]/30',
   },
+  ajuste_conteo: {
+    etiqueta: 'Ajuste por conteo',
+    icono: ClipboardCheck,
+    clase: 'text-[#6f3a2a] bg-[#c8a58a]/30',
+  },
   merma: {
     etiqueta: 'Merma',
     icono: ArrowDown,
@@ -91,6 +97,15 @@ const CONFIG_TIPO: Record<
     icono: Box,
     clase: 'text-[#6f3a2a] bg-[#f9b44c]/20',
   },
+}
+
+// Config por defecto para cualquier tipo de movimiento que aún no esté mapeado
+// (p. ej. un valor nuevo del enum agregado por una migración). Evita que la
+// pantalla explote si aparece un tipo desconocido.
+const CONFIG_FALLBACK: { etiqueta: string; icono: React.ElementType; clase: string } = {
+  etiqueta: 'Movimiento',
+  icono: Box,
+  clase: 'text-[#6f3a2a] bg-[#c8a58a]/30',
 }
 
 export function DetalleProducto({ productoId }: Props) {
@@ -349,11 +364,13 @@ export function DetalleProducto({ productoId }: Props) {
                 </TableHeader>
                 <TableBody>
                   {historial.movimientos.map((m) => {
-                    const config = CONFIG_TIPO[m.tipo]
+                    const config = CONFIG_TIPO[m.tipo] ?? CONFIG_FALLBACK
                     const Icono = config.icono
                     const esSuma =
                       m.tipo === 'entrada' ||
-                      (m.tipo === 'ajuste' && m.stock_nuevo > m.stock_anterior)
+                      m.tipo === 'ingreso_produccion' ||
+                      ((m.tipo === 'ajuste' || m.tipo === 'ajuste_conteo') &&
+                        m.stock_nuevo > m.stock_anterior)
                     return (
                       <TableRow
                         key={m.id}

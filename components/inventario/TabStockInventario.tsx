@@ -17,8 +17,6 @@ import {
 } from '@/components/shared/PaginadorTabla'
 import { PanelPendientes } from './PanelPendientes'
 import { TablaStock } from './TablaStock'
-import { ModalAjusteStock } from './ModalAjusteStock'
-import { ModalImprimirEtiquetaPrecio } from './ModalImprimirEtiquetaPrecio'
 import { useProductosConStock, useUbicaciones } from '@/lib/hooks/useInventario'
 import { useProductosConLotesPorVencer } from '@/lib/hooks/useVencimientos'
 import { useCategorias } from '@/lib/hooks/useCategorias'
@@ -28,7 +26,6 @@ import { tienePermiso } from '@/lib/permisos'
 import type {
   EstadoStock,
   FiltrosInventario,
-  ProductoConStock,
 } from '@/lib/queries/inventario'
 
 const TODAS_CAT = '__todas__'
@@ -53,10 +50,6 @@ export function TabStockInventario() {
   const [orden, setOrden] = useState<OrdenInv>('nombre')
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(50)
-  const [productoAjustar, setProductoAjustar] =
-    useState<ProductoConStock | null>(null)
-  const [productoEtiqueta, setProductoEtiqueta] =
-    useState<ProductoConStock | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setBusqueda(busquedaInput), 250)
@@ -233,8 +226,6 @@ export function TabStockInventario() {
         isError={isError}
         orden={orden}
         onCambiarOrden={setOrden}
-        onAjustar={setProductoAjustar}
-        onImprimirEtiqueta={setProductoEtiqueta}
         hayFiltros={hayFiltros}
         idsPorVencer={idsPorVencer}
       />
@@ -248,34 +239,6 @@ export function TabStockInventario() {
           onCambioPagina={setPagina}
         />
       )}
-
-      <ModalAjusteStock
-        abierto={productoAjustar !== null}
-        onCambioAbierto={(v) => !v && setProductoAjustar(null)}
-        producto={
-          productoAjustar
-            ? {
-                id: productoAjustar.id,
-                nombre: productoAjustar.nombre,
-                stock_actual: productoAjustar.stock_actual,
-              }
-            : null
-        }
-      />
-
-      <ModalImprimirEtiquetaPrecio
-        abierto={productoEtiqueta !== null}
-        onCambioAbierto={(v) => !v && setProductoEtiqueta(null)}
-        producto={
-          productoEtiqueta
-            ? {
-                nombre: productoEtiqueta.nombre,
-                codigo_barras: productoEtiqueta.codigo_barras,
-                precio_venta: productoEtiqueta.precio_venta,
-              }
-            : null
-        }
-      />
     </div>
   )
 }

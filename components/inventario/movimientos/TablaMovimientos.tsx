@@ -31,6 +31,10 @@ const BADGE_TIPO: Record<
     label: 'Ajuste',
     className: 'bg-[#f9b44c]/15 text-[#b07d1e] border-[#f9b44c]/40',
   },
+  ajuste_conteo: {
+    label: 'Ajuste por conteo',
+    className: 'bg-[#f9b44c]/15 text-[#b07d1e] border-[#f9b44c]/40',
+  },
   merma: {
     label: 'Merma',
     className: 'bg-[#e97318]/15 text-[#c45e14] border-[#e97318]/30',

@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowUpDown, CalendarClock, Package, Pencil, Eye, Tag } from 'lucide-react'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { ArrowUpDown, CalendarClock, Package, Eye } from 'lucide-react'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -49,8 +49,6 @@ interface Props {
   isError: boolean
   orden: NonNullable<FiltrosInventario['orden']>
   onCambiarOrden: (o: NonNullable<FiltrosInventario['orden']>) => void
-  onAjustar: (producto: ProductoConStock) => void
-  onImprimirEtiqueta: (producto: ProductoConStock) => void
   hayFiltros: boolean
   /** IDs de productos con lotes por vencer (<7 días), para marcar la fila. */
   idsPorVencer?: Set<number>
@@ -62,8 +60,6 @@ export function TablaStock({
   isError,
   orden,
   onCambiarOrden,
-  onAjustar,
-  onImprimirEtiqueta,
   hayFiltros,
   idsPorVencer,
 }: Props) {
@@ -231,24 +227,6 @@ export function TablaStock({
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </Link>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onImprimirEtiqueta(p)}
-                          title="Imprimir etiqueta de precio"
-                          className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]"
-                        >
-                          <Tag className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onAjustar(p)}
-                          title="Ajustar stock"
-                          className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
