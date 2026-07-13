@@ -197,13 +197,28 @@ begin
         where id = v_cuenta_id;
     end if;
 
-    update public.items_pedido
+    update public.items_pedido ip
       set cuenta_a_pagar_id = v_cuenta_id
-      where pedido_id = p_pedido_id
-        and id in (
+      where ip.pedido_id = p_pedido_id
+        and ip.id in (
           select (v_i->>'item_id')::integer
           from jsonb_array_elements(p_items) v_i
           where coalesce(nullif(v_i->>'factura_ref', ''), '__default__') = v_fact.ref
+        )
+        -- No mover renglones que ya están en una deuda BLOQUEADA (con factura
+        -- cargada o con pagos): esa deuda queda congelada, así no se rompe la
+        -- contabilidad ni el historial de pagos.
+        and not exists (
+          select 1 from public.cuentas_a_pagar cbl
+          where cbl.id = ip.cuenta_a_pagar_id
+            and (
+              cbl.tiene_factura = true
+              or coalesce(cbl.monto_pagado, 0) > 0
+              or exists (
+                select 1 from public.pagos_cuenta pg
+                where pg.cuenta_a_pagar_id = cbl.id
+              )
+            )
         );
   end loop;
 
@@ -224,18 +239,29 @@ begin
       where pedido_id = p_pedido_id and cuenta_a_pagar_id is null;
   end if;
 
-  -- Paso 2: RECONCILIA. Recalcula el monto de CADA provisoria del pedido desde
-  -- sus renglones imputados, y borra las que quedaron sin renglones (un ítem
-  -- pudo migrar de factura). Garantiza sum(montos provisorios) = total recibido.
+  -- Paso 2: RECONCILIA. Recalcula el monto de cada provisoria NO bloqueada del
+  -- pedido desde sus renglones imputados, y borra las que quedan sin renglones
+  -- (un ítem pudo migrar de factura). Garantiza que sum(montos) = total recibido
+  -- para las deudas todavía abiertas. Las deudas con pagos quedan CONGELADAS
+  -- (no se recalculan ni se borran) para no cascadear el borrado sobre
+  -- pagos_cuenta (FK on delete cascade) ni perder el historial de pagos.
   update public.cuentas_a_pagar c
     set monto = coalesce((
       select sum(coalesce(ip.cantidad_recibida, 0) * ip.precio_costo)
       from public.items_pedido ip where ip.cuenta_a_pagar_id = c.id
     ), 0)
-    where c.pedido_id = p_pedido_id and c.tiene_factura = false;
+    where c.pedido_id = p_pedido_id and c.tiene_factura = false
+      and coalesce(c.monto_pagado, 0) = 0
+      and not exists (
+        select 1 from public.pagos_cuenta pg where pg.cuenta_a_pagar_id = c.id
+      );
 
   delete from public.cuentas_a_pagar c
     where c.pedido_id = p_pedido_id and c.tiene_factura = false
+      and coalesce(c.monto_pagado, 0) = 0
+      and not exists (
+        select 1 from public.pagos_cuenta pg where pg.cuenta_a_pagar_id = c.id
+      )
       and not exists (
         select 1 from public.items_pedido ip where ip.cuenta_a_pagar_id = c.id
       );
