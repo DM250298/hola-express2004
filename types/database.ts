@@ -2009,6 +2009,10 @@ export type ConfigFiscalRow = {
   iva_dia_vencimiento: number
   iibb_dia_vencimiento: number
   actividad: string
+  /** Imp. créditos y débitos, % sobre el total (1.20 = 1.2% completo). Mig 108. */
+  impuesto_deb_cred_alicuota: number
+  /** Múltiplo del redondeo comercial del precio, en pesos (ej: 50). Mig 108. */
+  redondeo_multiplo: number
   updated_at: string
 }
 
@@ -2023,6 +2027,8 @@ export type ConfigFiscalInsert = {
   iva_dia_vencimiento?: number
   iibb_dia_vencimiento?: number
   actividad?: string
+  impuesto_deb_cred_alicuota?: number
+  redondeo_multiplo?: number
   updated_at?: string
 }
 

@@ -31,6 +31,7 @@ import {
 } from '@/lib/hooks/useProductos'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
+import { usePricing } from '@/lib/hooks/usePricing'
 import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CostoAdicional, ProductoRow } from '@/types/database'
@@ -140,6 +141,7 @@ export function DrawerProducto({
   const actualizar = useUpdateProducto()
   const { data: categorias } = useCategorias()
   const { data: proveedores } = useProveedores()
+  const pricing = usePricing()
   const refCodigoBarras = useRef<HTMLInputElement | null>(null)
 
   // ── Bloque de costo / precio (estado propio, fuera de react-hook-form) ──
@@ -236,18 +238,32 @@ export function DrawerProducto({
 
   const guardando = crear.isPending || actualizar.isPending
 
-  // ── Cálculos en vivo ──
+  // ── Cálculos en vivo (motor de precios con margen asegurado) ──
+  // El precio ya NO se calcula multiplicando (costo × (1+margen) × (1+iva)):
+  // eso dejaba las cargas (IIBB, imp. créd/déb, comisión MP) fuera del precio,
+  // erosionando el margen. El motor DIVIDE por (1 − cargas) para asegurar la
+  // ganancia después de impuestos y comisiones. Ver lib/pricing.
   const calc = useMemo(() => {
-    const sumaAdic = adicionales.reduce(
-      (s, a) => s + (Number(a.monto) || 0),
-      0
-    )
+    const sumaAdic = adicionales.reduce((s, a) => s + (Number(a.monto) || 0), 0)
     const costoNeto = (Number(costoBase) || 0) + sumaAdic
     const costoConIva = costoNeto * (1 + (Number(ivaCompra) || 0) / 100)
-    const precioSinIva = costoNeto * (1 + (Number(margen) || 0) / 100)
-    const precioConIva = precioSinIva * (1 + (Number(ivaVenta) || 0) / 100)
-    return { sumaAdic, costoNeto, costoConIva, precioSinIva, precioConIva }
-  }, [adicionales, costoBase, ivaCompra, margen, ivaVenta])
+    // El Monotributista pricea sobre el costo CON IVA (no recupera crédito fiscal).
+    const costoParaMotor =
+      pricing.regimen === 'monotributista' ? costoConIva : costoNeto
+    const { desglose, error } = pricing.calcular(
+      costoParaMotor,
+      Number(margen) || 0
+    )
+    return {
+      sumaAdic,
+      costoNeto,
+      costoConIva,
+      desglose,
+      error,
+      // Lo que se guarda como precio_venta: el precio comercial redondeado.
+      precioVenta: desglose?.precioRedondeado ?? 0,
+    }
+  }, [adicionales, costoBase, ivaCompra, margen, pricing])
 
   function simularEscaneo() {
     const codigo = generarCodigoBarrasSimulado()
@@ -292,7 +308,7 @@ export function DrawerProducto({
       categoria_id: validado.categoria_id,
       proveedor_id: validado.proveedor_id,
       precio_costo: r2(calc.costoNeto),
-      precio_venta: r2(calc.precioConIva),
+      precio_venta: r2(calc.precioVenta),
       iva_compra: Number(ivaCompra) || 0,
       iva_venta: Number(ivaVenta) || 0,
       margen: Number(margen) || 0,
@@ -310,7 +326,7 @@ export function DrawerProducto({
       // Sin precio de venta cargado → queda "pendiente de precio": visible en
       // el POS pero bloqueado para vender hasta que se complete (factura o
       // carga manual). Con precio > 0 se habilita.
-      pendiente_precio: r2(calc.precioConIva) <= 0,
+      pendiente_precio: r2(calc.precioVenta) <= 0,
       notas: validado.notas?.trim() ? validado.notas.trim() : null,
       imagen_url: imagenUrl,
     }
@@ -692,7 +708,7 @@ export function DrawerProducto({
             )}
           </div>
 
-          {/* ── Precio de venta ── */}
+          {/* ── Precio de venta (motor con margen asegurado) ── */}
           <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
             <h3 className="text-[#391511] font-bold text-sm">Precio de venta</h3>
             <div className="grid grid-cols-2 gap-3">
@@ -724,24 +740,81 @@ export function DrawerProducto({
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Precio sin IVA
-                </span>
-                <div className="font-bold text-[#391511] tabular-nums">
-                  <MontoARS monto={calc.precioSinIva} />
+
+            {/* Resultado del motor: precio que asegura el margen tras las cargas */}
+            {pricing.cargando ? (
+              <p className="text-xs text-[#c8a58a]">
+                Cargando configuración de precios…
+              </p>
+            ) : calc.error ? (
+              <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-3">
+                <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-bold text-[#c43e2c]">
+                    No se puede calcular el precio
+                  </p>
+                  <p className="text-[#391511] mt-0.5">{calc.error}</p>
                 </div>
               </div>
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Precio con IVA (venta)
-                </span>
-                <div className="font-extrabold text-[#391511] text-base tabular-nums">
-                  <MontoARS monto={calc.precioConIva} />
+            ) : calc.desglose && calc.precioVenta > 0 ? (
+              <>
+                <div className="flex items-end justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      Precio de venta (redondeado)
+                    </span>
+                    <div className="font-extrabold text-[#391511] text-xl tabular-nums">
+                      <MontoARS monto={calc.desglose.precioRedondeado} />
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      Exacto
+                    </span>
+                    <div className="text-sm text-[#6f3a2a] tabular-nums">
+                      <MontoARS monto={calc.desglose.precioFinalExacto} />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
+
+                <ul className="text-xs text-[#6f3a2a] space-y-1">
+                  <li className="flex justify-between">
+                    <span>Costo</span>
+                    <MontoARS monto={calc.desglose.costo} />
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Ganancia asegurada</span>
+                    <MontoARS monto={calc.desglose.ganancia} />
+                  </li>
+                  <li className="flex justify-between">
+                    <span>IIBB</span>
+                    <MontoARS monto={calc.desglose.iibbMonto} />
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Imp. créd/déb</span>
+                    <MontoARS monto={calc.desglose.debcredMonto} />
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Comisión MP (peor caso)</span>
+                    <MontoARS monto={calc.desglose.comisionMonto} />
+                  </li>
+                  <li className="flex justify-between text-[#c8a58a]">
+                    <span>Margen extra por redondeo</span>
+                    <MontoARS monto={calc.desglose.margenExtraRedondeo} />
+                  </li>
+                </ul>
+                <p className="text-[10px] text-[#c8a58a] leading-relaxed">
+                  El precio incluye IIBB, impuesto a los créditos/débitos y la
+                  comisión de Mercado Pago del peor caso, tomados de la config
+                  fiscal y de los medios de pago. Cambiá esas tasas y el precio
+                  se recalcula solo.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-[#c8a58a]">
+                Cargá el costo y el margen para ver el precio de venta.
+              </p>
+            )}
           </div>
 
           {/* Tipo y Unidad */}
