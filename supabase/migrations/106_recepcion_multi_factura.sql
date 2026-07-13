@@ -74,7 +74,6 @@ declare
   v_estado text;
   -- Multi-factura
   v_fact record;
-  v_monto_cuenta numeric;
   v_cuentas jsonb := '[]'::jsonb;
   v_primera_cuenta integer := null;
 begin
@@ -164,7 +163,12 @@ begin
   --   Cada item puede traer 'factura_ref' (agrupador de esta entrega) y
   --   'numero_factura'. Sin factura_ref → grupo '__default__' (numero NULL),
   --   que reproduce el comportamiento histórico de una sola deuda.
-  --   Sólo se procesan las facturas que recibieron algo en esta entrega.
+  --
+  --   Paso 1: para cada factura que recibió algo en esta entrega, crea/reusa su
+  --   provisoria (match por numero) e IMPUTA sus renglones (cuenta_a_pagar_id).
+  --   NO calcula el monto acá: eso se hace en el paso 2 sobre TODAS las
+  --   provisorias, para no dejar montos obsoletos cuando un renglón migra de
+  --   factura entre recepciones (double-count).
   for v_fact in
     select
       coalesce(nullif(v_i->>'factura_ref', ''), '__default__') as ref,
@@ -173,7 +177,6 @@ begin
     group by 1
     having sum(coalesce((v_i->>'cantidad_recibida')::numeric, 0)) > 0
   loop
-    -- Reusa la provisoria de esta factura (match por numero) si existe.
     select id into v_cuenta_id from public.cuentas_a_pagar
       where pedido_id = p_pedido_id and tiene_factura = false
         and coalesce(numero_factura, '') = coalesce(v_fact.numero, '')
@@ -186,9 +189,14 @@ begin
         p_pedido_id, p_proveedor_id, 0,
         current_date + p_condicion_pago_dias, 'pendiente', true, false, v_fact.numero
       ) returning id into v_cuenta_id;
+    else
+      update public.cuentas_a_pagar
+        set proveedor_id = p_proveedor_id,
+            fecha_vencimiento = current_date + p_condicion_pago_dias,
+            numero_factura = coalesce(v_fact.numero, numero_factura)
+        where id = v_cuenta_id;
     end if;
 
-    -- Imputa los renglones de esta factura a su cuenta.
     update public.items_pedido
       set cuenta_a_pagar_id = v_cuenta_id
       where pedido_id = p_pedido_id
@@ -197,50 +205,53 @@ begin
           from jsonb_array_elements(p_items) v_i
           where coalesce(nullif(v_i->>'factura_ref', ''), '__default__') = v_fact.ref
         );
-
-    -- Monto = suma acumulada de los items imputados a esta cuenta.
-    select coalesce(sum(coalesce(cantidad_recibida, 0) * precio_costo), 0)
-      into v_monto_cuenta
-      from public.items_pedido where cuenta_a_pagar_id = v_cuenta_id;
-
-    update public.cuentas_a_pagar
-      set monto = v_monto_cuenta, proveedor_id = p_proveedor_id,
-          fecha_vencimiento = current_date + p_condicion_pago_dias,
-          numero_factura = coalesce(v_fact.numero, numero_factura)
-      where id = v_cuenta_id;
-
-    if v_primera_cuenta is null then v_primera_cuenta := v_cuenta_id; end if;
-    v_cuentas := v_cuentas || jsonb_build_object(
-      'cuenta_a_pagar_id', v_cuenta_id,
-      'numero_factura', v_fact.numero,
-      'monto', v_monto_cuenta
-    );
   end loop;
 
-  -- Salvaguarda: si por algún motivo no se agrupó ninguna factura pero hubo
-  -- recepción, cae al comportamiento histórico (una provisoria default).
-  if v_primera_cuenta is null then
-    select id into v_cuenta_id from public.cuentas_a_pagar
-      where pedido_id = p_pedido_id and tiene_factura = false
-      order by id desc limit 1;
-    if v_cuenta_id is null then
-      insert into public.cuentas_a_pagar (
-        pedido_id, proveedor_id, monto, fecha_vencimiento, estado, provisoria, tiene_factura
-      ) values (
-        p_pedido_id, p_proveedor_id, v_total_acumulado,
-        current_date + p_condicion_pago_dias, 'pendiente', true, false
-      ) returning id into v_cuenta_id;
-    else
-      update public.cuentas_a_pagar
-        set monto = v_total_acumulado, proveedor_id = p_proveedor_id,
-            fecha_vencimiento = current_date + p_condicion_pago_dias
-        where id = v_cuenta_id;
-    end if;
-    v_primera_cuenta := v_cuenta_id;
-    v_cuentas := jsonb_build_array(jsonb_build_object(
-      'cuenta_a_pagar_id', v_cuenta_id, 'numero_factura', null, 'monto', v_total_acumulado
-    ));
+  -- Salvaguarda: recepción sin ninguna provisoria (p. ej. no se recibió nada
+  -- nuevo y no había ninguna). Crea la default e imputa los renglones sueltos
+  -- (los que NO quedaron ya en otra factura), sin pisar imputaciones previas.
+  if not exists (
+    select 1 from public.cuentas_a_pagar
+    where pedido_id = p_pedido_id and tiene_factura = false
+  ) then
+    insert into public.cuentas_a_pagar (
+      pedido_id, proveedor_id, monto, fecha_vencimiento, estado, provisoria, tiene_factura
+    ) values (
+      p_pedido_id, p_proveedor_id, 0,
+      current_date + p_condicion_pago_dias, 'pendiente', true, false
+    ) returning id into v_cuenta_id;
+    update public.items_pedido set cuenta_a_pagar_id = v_cuenta_id
+      where pedido_id = p_pedido_id and cuenta_a_pagar_id is null;
   end if;
+
+  -- Paso 2: RECONCILIA. Recalcula el monto de CADA provisoria del pedido desde
+  -- sus renglones imputados, y borra las que quedaron sin renglones (un ítem
+  -- pudo migrar de factura). Garantiza sum(montos provisorios) = total recibido.
+  update public.cuentas_a_pagar c
+    set monto = coalesce((
+      select sum(coalesce(ip.cantidad_recibida, 0) * ip.precio_costo)
+      from public.items_pedido ip where ip.cuenta_a_pagar_id = c.id
+    ), 0)
+    where c.pedido_id = p_pedido_id and c.tiene_factura = false;
+
+  delete from public.cuentas_a_pagar c
+    where c.pedido_id = p_pedido_id and c.tiene_factura = false
+      and not exists (
+        select 1 from public.items_pedido ip where ip.cuenta_a_pagar_id = c.id
+      );
+
+  -- Resultado: las provisorias que sobrevivieron.
+  select id into v_primera_cuenta from public.cuentas_a_pagar
+    where pedido_id = p_pedido_id and tiene_factura = false
+    order by id limit 1;
+  select coalesce(jsonb_agg(
+      jsonb_build_object(
+        'cuenta_a_pagar_id', id, 'numero_factura', numero_factura, 'monto', monto
+      ) order by id
+    ), '[]'::jsonb)
+    into v_cuentas
+    from public.cuentas_a_pagar
+    where pedido_id = p_pedido_id and tiene_factura = false;
 
   return jsonb_build_object(
     'cuenta_a_pagar_id', v_primera_cuenta,
