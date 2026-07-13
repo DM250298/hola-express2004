@@ -1344,6 +1344,7 @@ export type ItemPedidoRow = {
   cantidad_recibida: number | null
   precio_costo: number
   subtotal: number
+  cuenta_a_pagar_id: number | null
 }
 
 export type ItemPedidoInsert = {
@@ -1354,6 +1355,7 @@ export type ItemPedidoInsert = {
   cantidad_recibida?: number | null
   precio_costo: number
   subtotal: number
+  cuenta_a_pagar_id?: number | null
 }
 
 export type ItemPedidoUpdate = {
@@ -1361,6 +1363,7 @@ export type ItemPedidoUpdate = {
   cantidad_recibida?: number | null
   precio_costo?: number
   subtotal?: number
+  cuenta_a_pagar_id?: number | null
 }
 
 // ─── producción (recetas, órdenes) ────────────────────────────────────────────
@@ -1709,6 +1712,7 @@ export type CuentaAPagarRow = {
   estado: EstadoCuentaPagar
   provisoria: boolean
   tiene_factura: boolean
+  numero_factura: string | null
   nota: string | null
   created_at: string
 }
@@ -1723,6 +1727,7 @@ export type CuentaAPagarInsert = {
   estado?: EstadoCuentaPagar
   provisoria?: boolean
   tiene_factura?: boolean
+  numero_factura?: string | null
   created_at?: string
 }
 
@@ -1734,6 +1739,7 @@ export type CuentaAPagarUpdate = {
   estado?: EstadoCuentaPagar
   provisoria?: boolean
   tiene_factura?: boolean
+  numero_factura?: string | null
   nota?: string | null
 }
 
@@ -3736,6 +3742,11 @@ export interface Database {
         }
         Returns: {
           cuenta_a_pagar_id: number
+          cuentas: {
+            cuenta_a_pagar_id: number
+            numero_factura: string | null
+            monto: number
+          }[]
           total_recibido: number
           es_parcial: boolean
           variaciones: {
