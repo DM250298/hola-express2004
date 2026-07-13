@@ -157,6 +157,7 @@ export interface CuentaAPagarConProveedor {
   parcial: boolean
   tiene_factura: boolean
   provisoria: boolean
+  numero_factura: string | null
   nota: string | null
   proveedor_nombre: string | null
 }
@@ -183,7 +184,7 @@ export async function getCuentasAPagar(
   const { data, error } = await supabase
     .from('cuentas_a_pagar')
     .select(
-      'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, nota, proveedores(nombre)'
+      'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre)'
     )
     .order('fecha_vencimiento', { ascending: true })
 
@@ -200,6 +201,7 @@ export async function getCuentasAPagar(
     estado: 'pendiente' | 'pagada' | 'vencida'
     tiene_factura: boolean
     provisoria: boolean
+    numero_factura: string | null
     nota: string | null
     proveedores: { nombre: string } | null
   }
@@ -220,6 +222,7 @@ export async function getCuentasAPagar(
       parcial: f.estado !== 'pagada' && pagado > 0.009,
       tiene_factura: f.tiene_factura,
       provisoria: f.provisoria,
+      numero_factura: f.numero_factura,
       nota: f.nota,
       proveedor_nombre: f.proveedores?.nombre ?? null,
     }

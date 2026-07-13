@@ -240,8 +240,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         }
       })
     } else {
+      // Solo los renglones imputados a ESTA factura/deuda (multi-factura).
+      // Fallback para pedidos viejos (pre multi-factura): si ningún renglón tiene
+      // cuenta imputada, se muestran todos los recibidos (comportamiento anterior).
+      const hayImputacion = items.some((it) => it.cuenta_a_pagar_id != null)
       nuevas = items
         .filter((it) => (it.cantidad_recibida ?? 0) > 0)
+        .filter((it) => !hayImputacion || it.cuenta_a_pagar_id === cuenta?.id)
         .map((it) => ({
           key: `prod-${it.producto_id}`,
           item_pedido_id: it.id,

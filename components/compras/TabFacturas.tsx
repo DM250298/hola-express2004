@@ -89,6 +89,9 @@ export function TabFacturas() {
                   Pedido
                 </TableHead>
                 <TableHead className="text-[#391511] font-semibold">
+                  Factura N°
+                </TableHead>
+                <TableHead className="text-[#391511] font-semibold">
                   Vence
                 </TableHead>
                 <TableHead className="text-right text-[#391511] font-semibold">
@@ -123,6 +126,13 @@ export function TabFacturas() {
                       #{c.pedido_id}
                       <ExternalLink className="h-3 w-3" />
                     </Link>
+                  </TableCell>
+                  <TableCell className="text-[#6f3a2a] text-sm">
+                    {c.numero_factura ? (
+                      <span className="font-mono">{c.numero_factura}</span>
+                    ) : (
+                      <span className="text-[#c8a58a] italic">sin identificar</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-[#6f3a2a] text-sm tabular-nums">
                     {formatearFechaCorta(c.fecha_vencimiento)}
