@@ -252,7 +252,8 @@ export function DrawerProducto({
       pricing.regimen === 'monotributista' ? costoConIva : costoNeto
     const { desglose, error } = pricing.calcular(
       costoParaMotor,
-      Number(margen) || 0
+      Number(margen) || 0,
+      Number(ivaVenta) || 0
     )
     return {
       sumaAdic,
@@ -263,7 +264,7 @@ export function DrawerProducto({
       // Lo que se guarda como precio_venta: el precio comercial redondeado.
       precioVenta: desglose?.precioRedondeado ?? 0,
     }
-  }, [adicionales, costoBase, ivaCompra, margen, pricing])
+  }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, pricing])
 
   function simularEscaneo() {
     const codigo = generarCodigoBarrasSimulado()

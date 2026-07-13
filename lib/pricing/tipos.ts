@@ -48,6 +48,14 @@ export interface InputPrecio {
   costo: number
   /** Margen de ganancia como fracción sobre el costo (0.40 = 40%). */
   margen: number
+  /**
+   * IVA de venta del PRODUCTO como fracción (ej: 0.105 para pan). Si se
+   * omite, se usa el IVA general de la config. Solo afecta la conversión
+   * neto↔total (y el gross-up de las cargas a base neta); el IVA de la
+   * comisión de MP sigue siendo el general (es IVA de servicios, no del
+   * producto). Ignorado para Monotributista (no discrimina IVA).
+   */
+  ivaVenta?: number
 }
 
 /**

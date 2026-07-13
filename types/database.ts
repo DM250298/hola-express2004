@@ -3847,6 +3847,15 @@ export interface Database {
         }
         Returns: undefined
       }
+      /** Motor de precios en SQL (mig 109) — espejo de lib/pricing/motor.ts. */
+      fn_precio_venta: {
+        Args: {
+          p_costo: number
+          p_margen_pct: number
+          p_iva_venta_pct?: number | null
+        }
+        Returns: number
+      }
       fn_abrir_sesion_conteo: {
         Args: {
           p_nombre: string

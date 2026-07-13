@@ -7,12 +7,7 @@
 // ║  ni una alícuota escrita a mano.                                       ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
-import type {
-  ConfigPricing,
-  DesglosePrecio,
-  InputPrecio,
-  RegimenFiscal,
-} from './tipos'
+import type { ConfigPricing, DesglosePrecio, InputPrecio } from './tipos'
 
 /** Error de dominio del motor (divisor inválido, tasas vacías, etc.). */
 export class ErrorPricing extends Error {
@@ -67,20 +62,26 @@ function comisionEfectiva(config: ConfigPricing): number {
 }
 
 /**
+ * IVA de venta efectivo del producto: el propio si se indicó, o el general de
+ * la config. Es el que convierte neto↔total (el IVA de la comisión de MP es
+ * siempre el general — grava el servicio de MP, no el producto).
+ */
+function ivaVentaDe(input: InputPrecio, config: ConfigPricing): number {
+  return input.ivaVenta ?? config.iva
+}
+
+/**
  * Divisor de la fórmula según régimen. Es 1 menos la suma de las cargas que
  * se llevan una porción del PRECIO. Para el RI las tres cargas están sobre el
- * total, así que se convierten a base neta multiplicando por (1 + IVA); el
- * IVA de la venta no entra porque el RI es intermediario (lo cobra y lo
- * remite, es neutro). Para el Monotributista todo se calcula sobre el precio
- * final directo.
+ * total, así que se convierten a base neta multiplicando por (1 + IVA venta
+ * del producto); el IVA de la venta no entra como carga porque el RI es
+ * intermediario (lo cobra y lo remite, es neutro). Para el Monotributista
+ * todo se calcula sobre el precio final directo.
  */
-function calcularDivisor(
-  regimen: RegimenFiscal,
-  config: ConfigPricing
-): number {
+function calcularDivisor(input: InputPrecio, config: ConfigPricing): number {
   const cargas = config.iibb + config.debcred + comisionEfectiva(config)
-  return regimen === 'responsable_inscripto'
-    ? 1 - cargas * (1 + config.iva)
+  return input.regimen === 'responsable_inscripto'
+    ? 1 - cargas * (1 + ivaVentaDe(input, config))
     : 1 - cargas
 }
 
@@ -96,7 +97,7 @@ function gananciaAlPrecioFinal(
 ): number {
   const base =
     input.regimen === 'responsable_inscripto'
-      ? precioFinal / (1 + config.iva)
+      ? precioFinal / (1 + ivaVentaDe(input, config))
       : precioFinal
   const cargas = config.iibb + config.debcred + comisionEfectiva(config)
   return base - input.costo - precioFinal * cargas
@@ -119,7 +120,7 @@ export function calcularPrecio(
 
   const comEf = comisionEfectiva(config)
   const ganancia = input.costo * input.margen
-  const divisor = calcularDivisor(input.regimen, config)
+  const divisor = calcularDivisor(input, config)
 
   if (divisor <= 0) {
     throw new ErrorPricing(
@@ -130,14 +131,15 @@ export function calcularPrecio(
     )
   }
 
+  const ivaVenta = ivaVentaDe(input, config)
   let precioNetoExacto: number
   let precioFinalExacto: number
   if (input.regimen === 'responsable_inscripto') {
     precioNetoExacto = (input.costo + ganancia) / divisor
-    precioFinalExacto = precioNetoExacto * (1 + config.iva)
+    precioFinalExacto = precioNetoExacto * (1 + ivaVenta)
   } else {
     precioFinalExacto = (input.costo + ganancia) / divisor
-    precioNetoExacto = precioFinalExacto / (1 + config.iva)
+    precioNetoExacto = precioFinalExacto / (1 + ivaVenta)
   }
 
   const precioRedondeado = redondearComercial(

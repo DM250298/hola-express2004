@@ -33,6 +33,7 @@ import {
   useFacturaCompra,
   useGuardarFacturaCompra,
 } from '@/lib/hooks/useFacturasCompra'
+import { usePricing } from '@/lib/hooks/usePricing'
 import { calcularLinea } from '@/lib/queries/facturasCompra'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
@@ -172,6 +173,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const { data: facturaGuardada, isLoading: cargandoFactura } =
     useFacturaCompra(cuenta?.id ?? null)
   const guardar = useGuardarFacturaCompra()
+  const pricing = usePricing()
 
   const [afectaVenta, setAfectaVenta] = useState(true)
   const [lineas, setLineas] = useState<LineaFactura[]>([])
@@ -201,6 +203,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   }, [catalogoProductos])
   const [productoEditar, setProductoEditar] =
     useState<ProductoConRelaciones | null>(null)
+
+  /**
+   * Margen a precargar en una línea: el margen guardado del producto (desde
+   * el repricing del motor, cada producto tiene el suyo) o el default. Es
+   * best-effort: si el catálogo todavía no cargó, cae al default y el
+   * usuario lo puede ajustar a mano.
+   */
+  function margenInicial(productoId: number): string {
+    const m = productosMap.get(productoId)?.margen
+    return m && m > 0 ? String(m) : DEFAULTS.margen
+  }
 
   // Proveedor de la cuenta → para autocompletar su CUIT en el comprobante.
   const { data: proveedores } = useProveedores()
@@ -256,6 +269,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           cantidad: String(it.cantidad_recibida ?? 0),
           costo: String(it.precio_costo || 0),
           ...DEFAULTS,
+          margen: margenInicial(it.producto_id),
         }))
     }
     setLineas(nuevas)
@@ -323,6 +337,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         cantidad: it?.cantidad_recibida ? String(it.cantidad_recibida) : '1',
         costo: String((it?.precio_costo ?? p.precio_costo ?? 0) || 0),
         ...DEFAULTS,
+        margen: margenInicial(p.id),
       },
     ])
     setBusqueda('')
@@ -371,8 +386,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       },
       factorGastos
     )
-    return { l, calc, cantidad }
+    // Precio de venta con el MOTOR (margen asegurado neto de IIBB + imp.
+    // créd/déb + comisión MP), sobre el costo ya prorrateado — espejo de lo
+    // que guarda el RPC vía fn_precio_venta (migración 109).
+    const venta = pricing.calcular(
+      calc.costoFinal,
+      Number(l.margen) || 0,
+      Number(l.iva_venta) || 0
+    )
+    return { l, calc, venta, cantidad }
   })
+  // Con un divisor inválido (cargas > 100%) el RPC rechazaría la factura:
+  // se bloquea el guardado y se muestra el error en la línea.
+  const hayErrorPrecio = calculadas.some((c) => c.venta.error !== null)
 
   const totales = calculadas.reduce(
     (acc, { calc, cantidad }) => {
@@ -404,6 +430,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (lineas.length === 0) return
     if (hayErroresCab) {
       toast.error('Revisá los datos del comprobante (CUIT o número).')
+      return
+    }
+    if (hayErrorPrecio) {
+      toast.error(
+        'No se puede calcular el precio de venta (revisá las tasas en la configuración fiscal / medios de pago).'
+      )
       return
     }
     const limpio = (s: string) => {
@@ -478,6 +510,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               Afectar precio de venta
             </label>
           </div>
+          <p className="text-[11px] text-[#c8a58a] -mt-2">
+            El precio de venta asegura el margen después de IIBB, imp.
+            créd/déb y la comisión de Mercado Pago (peor caso), y se redondea
+            para arriba
+            {pricing.config
+              ? ` a múltiplos de $${pricing.config.redondeoMultiplo}`
+              : ''}
+            . El margen viene precargado del que tiene cada producto.
+          </p>
 
           {/* Comprobante escaneado en la recepción (se puede agregar más acá) */}
           <GaleriaComprobantes
@@ -638,7 +679,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             {/* Mobile (< md): cada línea como tarjeta apilada, compra arriba y
                 venta abajo, para no tener que hacer scroll horizontal. */}
             <div className="space-y-3 md:hidden">
-              {calculadas.map(({ l, calc, cantidad }) => (
+              {calculadas.map(({ l, calc, venta, cantidad }) => (
                 <div
                   key={l.key}
                   className="overflow-hidden rounded-xl border border-[#e4c9b0] bg-white"
@@ -764,20 +805,36 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         min="0"
                       />
                     </div>
-                    <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
-                      <span className="text-[#6f3a2a]">Precio s/IVA</span>
-                      <span className="font-medium text-[#6f3a2a]">
-                        <MontoARS monto={calc.precioSinIva} />
-                      </span>
-                    </div>
-                    <div className="mt-1 flex items-center justify-between text-sm">
-                      <span className="font-semibold text-[#391511]">
-                        Precio c/IVA
-                      </span>
-                      <span className="font-bold text-[#391511]">
-                        <MontoARS monto={calc.precioConIva} />
-                      </span>
-                    </div>
+                    {venta.error ? (
+                      <p className="mt-2.5 border-t border-[#e4c9b0]/60 pt-2 text-xs text-[#c43e2c]">
+                        {venta.error}
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
+                          <span className="text-[#6f3a2a]">Precio exacto</span>
+                          <span className="font-medium text-[#6f3a2a]">
+                            {venta.desglose ? (
+                              <MontoARS monto={venta.desglose.precioFinalExacto} />
+                            ) : (
+                              '…'
+                            )}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center justify-between text-sm">
+                          <span className="font-semibold text-[#391511]">
+                            Precio venta
+                          </span>
+                          <span className="font-bold text-[#391511]">
+                            {venta.desglose ? (
+                              <MontoARS monto={venta.desglose.precioRedondeado} />
+                            ) : (
+                              '…'
+                            )}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -820,13 +877,23 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       </th>
                     )}
                     <th className="p-1.5 font-medium">Margen %</th>
-                    <th className="p-1.5 font-medium">Precio s/IVA</th>
+                    <th
+                      className="p-1.5 font-medium"
+                      title="Precio final exacto que asegura el margen (antes del redondeo comercial)"
+                    >
+                      Precio exacto
+                    </th>
                     <th className="p-1.5 font-medium">IVA %</th>
-                    <th className="p-1.5 font-medium">Precio c/IVA</th>
+                    <th
+                      className="p-1.5 font-medium"
+                      title="Precio final redondeado hacia arriba — es el que se guarda en el producto"
+                    >
+                      Precio venta
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {calculadas.map(({ l, calc, cantidad }) => (
+                  {calculadas.map(({ l, calc, venta, cantidad }) => (
                     <tr
                       key={l.key}
                       className="border-b border-[#e4c9b0]/40 bg-white"
@@ -939,8 +1006,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           className={inputCls}
                         />
                       </td>
-                      <td className="p-2 text-right tabular-nums text-[#6f3a2a]">
-                        <MontoARS monto={calc.precioSinIva} />
+                      <td
+                        className="p-2 text-right tabular-nums text-[#6f3a2a]"
+                        title={venta.error ?? undefined}
+                      >
+                        {venta.error ? (
+                          <span className="text-[#c43e2c] font-bold">—</span>
+                        ) : venta.desglose ? (
+                          <MontoARS monto={venta.desglose.precioFinalExacto} />
+                        ) : (
+                          '…'
+                        )}
                       </td>
                       <td className="p-1 w-16">
                         <Input
@@ -953,8 +1029,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           className={inputCls}
                         />
                       </td>
-                      <td className="p-2 text-right tabular-nums font-bold text-[#391511]">
-                        <MontoARS monto={calc.precioConIva} />
+                      <td
+                        className="p-2 text-right tabular-nums font-bold text-[#391511]"
+                        title={venta.error ?? undefined}
+                      >
+                        {venta.error ? (
+                          <span className="text-[#c43e2c]">—</span>
+                        ) : venta.desglose ? (
+                          <MontoARS monto={venta.desglose.precioRedondeado} />
+                        ) : (
+                          '…'
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1067,7 +1152,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </Button>
             <Button
               onClick={handleGuardar}
-              disabled={guardar.isPending || lineas.length === 0 || hayErroresCab}
+              disabled={
+                guardar.isPending ||
+                lineas.length === 0 ||
+                hayErroresCab ||
+                hayErrorPrecio
+              }
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
               {guardar.isPending ? (

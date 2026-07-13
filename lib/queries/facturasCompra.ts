@@ -26,22 +26,23 @@ export interface LineaCalculada {
    * producto y la base sobre la que se calcula el precio de venta.
    */
   costoFinal: number
-  precioSinIva: number
-  precioConIva: number
 }
 
 /**
- * Cálculo de una línea de factura a partir de los valores editables.
+ * Cálculo del lado COMPRA de una línea de factura a partir de los valores
+ * editables.
  *
  * `factorGastos` (≥ 1) prorratea los gastos no debitables (flete, etc.) al
- * costo: el costo final y el precio de venta se calculan sobre
- * `costoNeto × factorGastos`, exactamente como el RPC
- * `fn_guardar_factura_compra` (migración 086). El neto y el IVA del
- * comprobante NO se tocan — los gastos no generan IVA crédito.
+ * costo: el costo final se calcula sobre `costoNeto × factorGastos`,
+ * exactamente como el RPC `fn_guardar_factura_compra` (migración 086). El
+ * neto y el IVA del comprobante NO se tocan — los gastos no generan IVA
+ * crédito. El redondeo es paso a paso (cada valor a 2 decimales) para que lo
+ * que muestra el modal coincida al centavo con lo que el RPC guarda.
  *
- * El redondeo es paso a paso (cada valor a 2 decimales antes de encadenar el
- * siguiente) para que lo que muestra el modal coincida al centavo con lo que
- * el RPC termina guardando.
+ * El lado VENTA ya no se calcula acá: el precio sale del motor de pricing
+ * (lib/pricing vía usePricing en el modal; fn_precio_venta en el RPC,
+ * migración 109), que asegura el margen neto de cargas en lugar de
+ * multiplicar costo × (1+margen) × (1+IVA).
  */
 export function calcularLinea(
   e: EntradaLinea,
@@ -50,9 +51,7 @@ export function calcularLinea(
   const costoNeto = r2(e.costo_sin_iva * (1 - (e.descuento_porcentaje || 0) / 100))
   const costoConIva = r2(costoNeto * (1 + (e.iva_compra_porcentaje || 0) / 100))
   const costoFinal = r2(costoNeto * factorGastos)
-  const precioSinIva = r2(costoFinal * (1 + (e.margen_porcentaje || 0) / 100))
-  const precioConIva = r2(precioSinIva * (1 + (e.iva_venta_porcentaje || 0) / 100))
-  return { costoNeto, costoConIva, costoFinal, precioSinIva, precioConIva }
+  return { costoNeto, costoConIva, costoFinal }
 }
 
 export interface LineaFacturaPayload extends EntradaLinea {

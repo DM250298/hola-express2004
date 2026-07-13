@@ -188,6 +188,37 @@ test('Test 7 — reproduce los descuentos de una venta real por QR', () => {
   assert.ok(Math.abs(d.netoRecibido - 6298.49) <= TOL_PRECIO, `neto ${d.netoRecibido}`)
 })
 
+// ── IVA de venta por producto (ej: pan al 10.5%) ─────────────────────────
+test('IVA venta por producto — gross-up con IVA propio, comisión MP con IVA general', () => {
+  const config: ConfigPricing = { ...CONFIG_BASE, tasaMp: 0.0629 }
+  const input: InputPrecio = {
+    regimen: 'responsable_inscripto',
+    costo: 10000,
+    margen: 0.4,
+    ivaVenta: 0.105,
+  }
+  const d = calcularPrecio(input, config)
+
+  // Cálculo de referencia a mano: comEf usa el IVA GENERAL (21%, servicio de
+  // MP); el gross-up y neto→total usan el IVA del producto (10.5%).
+  const comEf = 0.0629 * 1.21
+  const cargas = 0.03 + 0.012 + comEf
+  const divisor = 1 - cargas * 1.105
+  const neto = 14000 / divisor
+  const final = neto * 1.105
+  assert.ok(Math.abs(d.divisor - divisor) < 1e-12, `divisor ${d.divisor}`)
+  assert.ok(Math.abs(d.precioFinalExacto - final) < 1e-9, `final ${d.precioFinalExacto}`)
+
+  // Invariante con IVA propio: la ganancia se reconstruye igual.
+  assert.ok(
+    Math.abs(d.gananciaReal - 4000) < TOL_GANANCIA,
+    `ganancia ${d.gananciaReal}`
+  )
+  // Sin ivaVenta explícito cae al IVA general (comportamiento anterior intacto).
+  const d21 = calcularPrecio({ ...input, ivaVenta: undefined }, config)
+  assert.ok(Math.abs(d21.precioFinalExacto - 19764.58) <= TOL_PRECIO)
+})
+
 // ── Invariante (property test) ───────────────────────────────────────────
 // Para cualquier input válido, el desglose debe reconstruir la ganancia
 // objetivo con tolerancia de $0.01 sobre el precio pre-redondeo; y sobre el
@@ -223,6 +254,9 @@ test('Invariante — la ganancia se reconstruye para todo input válido', () => 
       regimen: regimenes[Math.floor(rnd() * regimenes.length)],
       costo: 1 + rnd() * 100000,
       margen: rnd() * 2, // 0..200%
+      // La mitad de los casos con IVA de venta propio (0%, 10.5%, 21%, 27%).
+      ivaVenta:
+        rnd() < 0.5 ? [0, 0.105, 0.21, 0.27][Math.floor(rnd() * 4)] : undefined,
     }
 
     let d

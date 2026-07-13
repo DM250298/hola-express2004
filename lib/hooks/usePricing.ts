@@ -20,10 +20,13 @@ export interface PricingListo {
    * Calcula el precio con margen asegurado para un costo dado. Devuelve el
    * desglose completo, o null si la config todavía no cargó. Si el divisor es
    * inválido, `error` trae el mensaje y el desglose es null.
+   * `ivaVentaPorcentaje`: IVA de venta del producto (ej: 10.5); si se omite,
+   * usa el IVA general de la config fiscal.
    */
   calcular: (
     costo: number,
-    margenPorcentaje: number
+    margenPorcentaje: number,
+    ivaVentaPorcentaje?: number
   ) => { desglose: DesglosePrecio | null; error: string | null }
 }
 
@@ -48,11 +51,17 @@ export function usePricing(): PricingListo {
   )
 
   const calcular = useCallback(
-    (costo: number, margenPorcentaje: number) => {
+    (costo: number, margenPorcentaje: number, ivaVentaPorcentaje?: number) => {
       if (!config || !regimen) return { desglose: null, error: null }
       try {
         const desglose = calcularPrecio(
-          { regimen, costo, margen: margenPorcentaje / 100 },
+          {
+            regimen,
+            costo,
+            margen: margenPorcentaje / 100,
+            ivaVenta:
+              ivaVentaPorcentaje != null ? ivaVentaPorcentaje / 100 : undefined,
+          },
           config
         )
         return { desglose, error: null }
