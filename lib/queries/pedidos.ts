@@ -279,6 +279,10 @@ export interface ItemRecepcion {
   cantidad_recibida: number
   precio_costo: number
   fecha_vencimiento: string | null
+  /** Agrupador de la factura de esta entrega a la que se imputa el renglón. */
+  factura_ref?: string
+  /** Nº de factura tal como lo tipeó quien recibe (NULL = sin identificar). */
+  numero_factura?: string | null
 }
 
 export interface RecibirPedidoPayload {
@@ -328,6 +332,8 @@ export async function recibirPedido(
       cantidad_recibida: it.cantidad_recibida,
       precio_costo: it.precio_costo,
       fecha_vencimiento: it.fecha_vencimiento,
+      factura_ref: it.factura_ref ?? null,
+      numero_factura: it.numero_factura ?? null,
     })) as unknown as Json,
   })
 

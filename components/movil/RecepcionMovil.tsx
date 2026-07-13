@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -59,6 +60,14 @@ interface ItemEstado {
   cantidad_recibida: string
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
+  /** Factura de esta entrega a la que se imputa el renglón (ref local). */
+  factura_ref: string
+}
+
+/** Una factura de la entrega (varias por pedido). `ref` es un id local estable. */
+interface FacturaEntrega {
+  ref: string
+  numero: string
 }
 
 /** Datos mínimos de un producto para sumarlo a la recepción (buscado o creado). */
@@ -107,6 +116,12 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const cambiarEstado = useActualizarEstadoPedido()
 
   const [itemsEstado, setItemsEstado] = useState<ItemEstado[]>([])
+  // Facturas de esta entrega (una deuda por factura). Empieza con una.
+  const [facturas, setFacturas] = useState<FacturaEntrega[]>([
+    { ref: 'f1', numero: '' },
+  ])
+  const [facturaActivaRef, setFacturaActivaRef] = useState('f1')
+  const contadorFacturaRef = useRef(1)
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
   const [excesoAutorizado, setExcesoAutorizado] = useState(false)
   const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
@@ -149,12 +164,51 @@ export function RecepcionMovil({ pedidoId }: Props) {
         cantidad_recibida: '',
         fecha_vencimiento: '',
         dias_vencimiento_minimo: it.producto?.dias_vencimiento_minimo ?? null,
+        factura_ref: 'f1',
       }))
     )
+    // Arranca cada pedido con una sola factura.
+    setFacturas([{ ref: 'f1', numero: '' }])
+    setFacturaActivaRef('f1')
+    contadorFacturaRef.current = 1
     setAceptaPorDebajoMin(false)
     setExcesoAutorizado(false)
     setAutorizadoPor(null)
   }, [pedido])
+
+  // ── Facturas de la entrega ──────────────────────────────────────────
+  function agregarFactura() {
+    contadorFacturaRef.current += 1
+    const ref = `f${contadorFacturaRef.current}`
+    setFacturas((prev) => [...prev, { ref, numero: '' }])
+    setFacturaActivaRef(ref)
+  }
+
+  function quitarFactura(ref: string) {
+    if (facturas.length <= 1) return
+    const restantes = facturas.filter((f) => f.ref !== ref)
+    const destino = restantes[0].ref
+    // Los renglones de la factura borrada pasan a la primera que quede.
+    setItemsEstado((prev) =>
+      prev.map((it) =>
+        it.factura_ref === ref ? { ...it, factura_ref: destino } : it
+      )
+    )
+    setFacturas(restantes)
+    if (facturaActivaRef === ref) setFacturaActivaRef(destino)
+  }
+
+  function cambiarNumeroFactura(ref: string, numero: string) {
+    setFacturas((prev) =>
+      prev.map((f) => (f.ref === ref ? { ...f, numero } : f))
+    )
+  }
+
+  function moverItemAFactura(item_id: number, ref: string) {
+    setItemsEstado((prev) =>
+      prev.map((it) => (it.item_id === item_id ? { ...it, factura_ref: ref } : it))
+    )
+  }
 
   function actualizarItem(
     item_id: number,
@@ -230,10 +284,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
     // Si ya es el activo, ignorar (evita que la cámara lo re-dispare al tipear).
     if (activoId === item.item_id) return
     setActivoId(item.item_id)
+    // Al escanear, el renglón se imputa a la factura activa (así separás por
+    // factura escaneando bajo cada una).
     setItemsEstado((prev) => {
       const sel = prev.find((it) => it.item_id === item.item_id)
       if (!sel) return prev
-      return [sel, ...prev.filter((it) => it.item_id !== item.item_id)]
+      const actualizado = { ...sel, factura_ref: facturaActivaRef }
+      return [actualizado, ...prev.filter((it) => it.item_id !== item.item_id)]
     })
     toast.success(`${item.nombre} — cargá la cantidad`)
   }
@@ -306,9 +363,27 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   const requiereAceptacion =
     itemsPorDebajoMinimo.length > 0 && !aceptaPorDebajoMin
+
+  // Con 2+ facturas, cada una con mercadería tiene que tener número: si dos
+  // quedaran sin número, el sistema no podría separarlas en deudas distintas.
+  const facturasSinNumero = useMemo(() => {
+    if (facturas.length <= 1) return []
+    return facturas.filter((f) => {
+      if (f.numero.trim()) return false
+      const uds = itemsEstado
+        .filter((it) => it.factura_ref === f.ref)
+        .reduce((a, it) => a + (Number(it.cantidad_recibida) || 0), 0)
+      return uds > 0
+    })
+  }, [facturas, itemsEstado])
+
   const procesando = recibir.isPending || cambiarEstado.isPending
   const accionDeshabilitada =
-    procesando || hayErrores || totalUnidades <= 0 || requiereAceptacion
+    procesando ||
+    hayErrores ||
+    totalUnidades <= 0 ||
+    requiereAceptacion ||
+    facturasSinNumero.length > 0
 
   function confirmar(cerrarPedido: boolean) {
     if (!usuario || hayErrores || !pedido?.proveedor) return
@@ -334,6 +409,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
           cantidad_recibida: Math.max(0, Number(it.cantidad_recibida) || 0),
           precio_costo: it.precio_costo,
           fecha_vencimiento: it.fecha_vencimiento || null,
+          factura_ref: it.factura_ref,
+          numero_factura:
+            facturas.find((f) => f.ref === it.factura_ref)?.numero.trim() || null,
         })),
       },
       {
@@ -400,6 +478,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         cantidad_recibida: String(cant),
         fecha_vencimiento: venc,
         dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
+        factura_ref: facturaActivaRef,
       },
     ])
     setActivoId(nuevoItem.id)
@@ -556,6 +635,100 @@ export function RecepcionMovil({ pedidoId }: Props) {
         />
       </div>
 
+      {/* Facturas de esta entrega — una deuda por factura */}
+      <div className="mb-4">
+        <div className="mb-1.5 flex items-center justify-between">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+            Facturas de esta entrega
+          </p>
+          <button
+            type="button"
+            onClick={agregarFactura}
+            className="flex items-center gap-1 text-xs font-semibold text-[#9e6b15] active:scale-95"
+          >
+            <Plus className="h-3.5 w-3.5" /> Agregar factura
+          </button>
+        </div>
+
+        <div className="space-y-1.5">
+          {facturas.map((f, idx) => {
+            const activa = f.ref === facturaActivaRef
+            const items = itemsEstado.filter((it) => it.factura_ref === f.ref)
+            const uds = items.reduce(
+              (a, it) => a + (Number(it.cantidad_recibida) || 0),
+              0
+            )
+            return (
+              <div
+                key={f.ref}
+                onClick={() => setFacturaActivaRef(f.ref)}
+                className={cn(
+                  'rounded-xl border p-2.5 transition',
+                  activa
+                    ? 'border-[#f9b44c] bg-[#f9b44c]/10 ring-1 ring-[#f9b44c]/40'
+                    : 'border-[#e4c9b0]/70 bg-white'
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
+                      activa
+                        ? 'bg-[#f9b44c] text-[#391511]'
+                        : 'bg-[#e4c9b0]/60 text-[#6f3a2a]'
+                    )}
+                  >
+                    {idx + 1}
+                  </span>
+                  <Input
+                    value={f.numero}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => cambiarNumeroFactura(f.ref, e.target.value)}
+                    placeholder={`N° de la factura ${idx + 1}`}
+                    className="h-9 flex-1 border-[#e4c9b0] text-sm focus-visible:ring-[#f9b44c]"
+                  />
+                  {facturas.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        quitarFactura(f.ref)
+                      }}
+                      className="shrink-0 text-[#c8a58a] active:text-[#c43e2c]"
+                      aria-label="Quitar factura"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="mt-1 pl-8 text-[10px] text-[#6f3a2a]">
+                  {activa && (
+                    <span className="font-semibold text-[#9e6b15]">Activa · </span>
+                  )}
+                  {items.length} {items.length === 1 ? 'producto' : 'productos'} ·{' '}
+                  {uds} u.
+                </p>
+              </div>
+            )
+          })}
+        </div>
+
+        {facturas.length > 1 && facturasSinNumero.length > 0 && (
+          <p className="mt-1.5 flex items-start gap-1 text-[10px] leading-snug text-[#c43e2c]">
+            <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+            Poné el número de cada factura con productos para poder separarlas en
+            deudas distintas.
+          </p>
+        )}
+        {facturas.length > 1 && facturasSinNumero.length === 0 && (
+          <p className="mt-1.5 text-[10px] leading-snug text-[#6f3a2a]">
+            Lo que escaneés/cargues se imputa a la factura{' '}
+            <strong>activa</strong>. Tocá una factura para activarla, o cambiá la
+            factura de un producto con el selector de su fila.
+          </p>
+        )}
+      </div>
+
       {excesoAutorizado && autorizadoPor && (
         <div className="mb-3 flex items-center gap-2 rounded-lg border border-[#2f7d4f]/30 bg-[#2f7d4f]/10 px-3 py-2 text-xs text-[#2f7d4f]">
           <ShieldCheck className="h-4 w-4 shrink-0" />
@@ -578,23 +751,40 @@ export function RecepcionMovil({ pedidoId }: Props) {
                   : 'border-[#e4c9b0]/70'
               )}
             >
-              <div className="min-w-0">
-                <p className="font-medium text-[#391511]">{it.nombre}</p>
-                <p className="text-xs text-[#6f3a2a]">
-                  Pedido:{' '}
-                  <span className="font-semibold tabular-nums">
-                    {it.cantidad_pedida}
-                  </span>
-                  {it.ya_recibido > 0 && (
-                    <>
-                      {' '}
-                      · ya recibido{' '}
-                      <span className="font-semibold tabular-nums">
-                        {it.ya_recibido}
-                      </span>
-                    </>
-                  )}
-                </p>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-[#391511]">{it.nombre}</p>
+                  <p className="text-xs text-[#6f3a2a]">
+                    Pedido:{' '}
+                    <span className="font-semibold tabular-nums">
+                      {it.cantidad_pedida}
+                    </span>
+                    {it.ya_recibido > 0 && (
+                      <>
+                        {' '}
+                        · ya recibido{' '}
+                        <span className="font-semibold tabular-nums">
+                          {it.ya_recibido}
+                        </span>
+                      </>
+                    )}
+                  </p>
+                </div>
+                {facturas.length > 1 && (
+                  <select
+                    value={it.factura_ref}
+                    onChange={(e) => moverItemAFactura(it.item_id, e.target.value)}
+                    aria-label="Factura del producto"
+                    className="h-8 shrink-0 rounded-md border border-[#e4c9b0] bg-white px-1.5 text-[11px] font-medium text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c]"
+                  >
+                    {facturas.map((f, idx) => (
+                      <option key={f.ref} value={f.ref}>
+                        F{idx + 1}
+                        {f.numero ? ` · ${f.numero}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
