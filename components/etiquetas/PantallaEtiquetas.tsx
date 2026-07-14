@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, Check, Loader2, Printer, Search, Tag } from 'lucide-react'
+import {
+  ArrowRight,
+  Check,
+  CheckCheck,
+  Loader2,
+  Printer,
+  Search,
+  Tag,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,14 +19,19 @@ import { ModalImprimirEtiquetaPrecio } from '@/components/inventario/ModalImprim
 import {
   useEtiquetasPendientes,
   useQuitarEtiqueta,
+  useQuitarEtiquetas,
 } from '@/lib/hooks/useEtiquetas'
 import { getProductos } from '@/lib/queries/productos'
 import { formatearFechaHora } from '@/lib/utils/formato'
-import type { DatosEtiquetaPrecio } from '@/components/inventario/EtiquetaPrecio'
+import {
+  EtiquetaPrecio,
+  type DatosEtiquetaPrecio,
+} from '@/components/inventario/EtiquetaPrecio'
 
 export function PantallaEtiquetas() {
   const { data: etiquetas, isLoading, isError } = useEtiquetasPendientes()
   const quitar = useQuitarEtiqueta()
+  const quitarLote = useQuitarEtiquetas()
   const [productoImprimir, setProductoImprimir] =
     useState<DatosEtiquetaPrecio | null>(null)
 
@@ -33,6 +46,37 @@ export function PantallaEtiquetas() {
         (e.codigo_barras ?? '').toLowerCase().includes(q)
     )
   }, [etiquetas, busqueda])
+
+  // ── Impresión masiva: imprime TODAS las pendientes visibles (con el
+  //    filtro aplicado, si hay) en un solo trabajo de impresión — una
+  //    etiqueta por corte del rollo térmico, igual que la impresión de a una.
+  const [imprimiendoMasivo, setImprimiendoMasivo] = useState(false)
+  useEffect(() => {
+    if (!imprimiendoMasivo) return
+    // Doble rAF: espera a que el navegador pinte las etiquetas montadas
+    // off-screen antes de abrir el diálogo de impresión (miles de nodos).
+    let cancelado = false
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (cancelado) return
+        window.print()
+        setImprimiendoMasivo(false)
+      })
+    )
+    return () => {
+      cancelado = true
+    }
+  }, [imprimiendoMasivo])
+
+  function marcarTodasColocadas() {
+    if (filtradas.length === 0 || quitarLote.isPending) return
+    const ok = window.confirm(
+      `¿Marcar ${filtradas.length} etiqueta(s) como colocadas? Salen de la cola de pendientes.`
+    )
+    if (ok) quitarLote.mutate(filtradas.map((e) => e.id))
+  }
+
+  const etiquetaFiltro = busqueda.trim() ? 'filtradas' : 'todas'
 
   // ── Buscador de catálogo (reimprimir cualquier etiqueta) ──
   const [catInput, setCatInput] = useState('')
@@ -103,7 +147,7 @@ export function PantallaEtiquetas() {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <p className="text-sm text-[#6f3a2a]">
                 <span className="font-bold text-[#391511]">
-                  {etiquetas.length}
+                  {etiquetas.length.toLocaleString('es-AR')}
                 </span>{' '}
                 etiqueta(s) pendiente(s) de colocar
               </p>
@@ -116,6 +160,41 @@ export function PantallaEtiquetas() {
                   className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
                 />
               </div>
+            </div>
+
+            {/* Acciones masivas: sobre lo visible (todas, o lo filtrado) */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                onClick={() => setImprimiendoMasivo(true)}
+                disabled={imprimiendoMasivo || filtradas.length === 0}
+                className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold gap-1.5"
+              >
+                {imprimiendoMasivo ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Printer className="h-4 w-4" />
+                )}
+                Imprimir {etiquetaFiltro} (
+                {filtradas.length.toLocaleString('es-AR')})
+              </Button>
+              <Button
+                variant="outline"
+                onClick={marcarTodasColocadas}
+                disabled={quitarLote.isPending || filtradas.length === 0}
+                className="border-[#e4c9b0] text-[#2f8f4e] font-semibold gap-1.5"
+              >
+                {quitarLote.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCheck className="h-4 w-4" />
+                )}
+                Marcar {etiquetaFiltro} como colocadas
+              </Button>
+              {busqueda.trim() && (
+                <span className="text-xs text-[#c8a58a]">
+                  Las acciones aplican solo a lo que coincide con la búsqueda.
+                </span>
+              )}
             </div>
             <ul className="space-y-2">
               {filtradas.map((e) => (
@@ -266,6 +345,24 @@ export function PantallaEtiquetas() {
         }}
         producto={productoImprimir}
       />
+
+      {/* Render off-screen de la impresión masiva — una etiqueta por corte
+          del rollo (page-break-after en .etiqueta-termica, ver globals.css).
+          Imprimir no marca como colocada: eso se hace con el botón. */}
+      {imprimiendoMasivo && (
+        <div className="etiquetas-imprimir" aria-hidden>
+          {filtradas.map((e) => (
+            <EtiquetaPrecio
+              key={e.id}
+              datos={{
+                nombre: e.producto_nombre,
+                codigo_barras: e.codigo_barras,
+                precio_venta: e.precio,
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

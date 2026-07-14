@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   getEtiquetasPendientes,
   quitarEtiquetaPendiente,
+  quitarEtiquetasPendientes,
 } from '@/lib/queries/etiquetas'
 
 export const ETIQUETAS_PENDIENTES_KEY = ['etiquetas-pendientes'] as const
@@ -24,6 +25,21 @@ export function useQuitarEtiqueta() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ETIQUETAS_PENDIENTES_KEY })
       toast.success('Etiqueta marcada como colocada')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo actualizar: ${error.message}`)
+    },
+  })
+}
+
+/** Marca un lote entero de etiquetas como colocadas (tras imprimir masivo). */
+export function useQuitarEtiquetas() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: number[]) => quitarEtiquetasPendientes(ids),
+    onSuccess: (_, ids) => {
+      qc.invalidateQueries({ queryKey: ETIQUETAS_PENDIENTES_KEY })
+      toast.success(`${ids.length} etiquetas marcadas como colocadas`)
     },
     onError: (error: Error) => {
       toast.error(`No se pudo actualizar: ${error.message}`)
