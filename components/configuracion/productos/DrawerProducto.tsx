@@ -643,13 +643,14 @@ export function DrawerProducto({
 
   return (
     <Sheet open={abierto} onOpenChange={onCambioAbierto}>
-      {/* En desktop el drawer se ensancha (hasta ~1240px) y el formulario se
-          reparte en 3 columnas temáticas; en mobile sigue siendo full-width
-          de una columna. El max-w se declara con la misma cadena de variantes
-          que el default del Sheet (data-[side=right]:sm:) para pisarlo. */}
+      {/* En desktop el drawer ocupa casi toda la pantalla (97vw) y el
+          formulario se reparte en 3 columnas temáticas; en mobile sigue
+          siendo full-width de una columna. El max-w se declara con la misma
+          cadena de variantes que el default del Sheet (data-[side=right]:sm:)
+          para pisarlo. */}
       <SheetContent
         side="right"
-        className="w-full data-[side=right]:w-full data-[side=right]:sm:max-w-[min(1240px,94vw)] flex flex-col gap-0 p-0"
+        className="w-full data-[side=right]:w-full data-[side=right]:sm:max-w-[min(1800px,97vw)] flex flex-col gap-0 p-0"
       >
         <SheetHeader className="px-6 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
           <SheetTitle className="text-[#391511] text-lg">
@@ -679,6 +680,137 @@ export function DrawerProducto({
                   habilitarlo en el punto de venta.
                 </p>
               </div>
+            </div>
+          )}
+
+          {/* ── Componentes del combo (ancho completo, estilo planilla) ── */}
+          {esCombo && (
+            <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#fdfaf6] p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                    <Gift className="h-4 w-4 text-[#e4a42a]" />
+                    Componentes del combo
+                    {componentesSel.length > 0 && (
+                      <span className="text-xs font-semibold text-[#6f3a2a]">
+                        ({componentesSel.length})
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-[#6f3a2a] mt-0.5">
+                    Al vender el combo, el stock se descuenta de estos
+                    productos (no del combo).
+                  </p>
+                </div>
+                {componentesSel.length > 0 && (
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <span className="block text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Stock armable
+                      </span>
+                      <span className="font-extrabold text-[#391511] tabular-nums">
+                        {stockArmable}
+                      </span>
+                    </div>
+                    <div className="h-8 w-px bg-[#e4c9b0]/60" />
+                    <div className="text-right">
+                      <span className="block text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Costo componentes
+                      </span>
+                      <span className="font-extrabold text-[#391511] tabular-nums">
+                        <MontoARS monto={costoComponentes} />
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="max-w-2xl">
+                <BuscadorComponente
+                  excluidos={componentesSel.map((c) => c.componente_id)}
+                  productoId={producto?.id ?? null}
+                  disabled={guardando}
+                  onSeleccionar={agregarComponente}
+                />
+              </div>
+
+              {componentesSel.length === 0 ? (
+                <p className="text-xs text-[#c8a58a]">
+                  Buscá y agregá los productos que van adentro del combo.
+                </p>
+              ) : (
+                <div className="rounded-lg border border-[#e4c9b0]/60 bg-white overflow-hidden">
+                  <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_110px_130px_130px_44px] gap-2 px-3 py-2 bg-[#fdfaf6] border-b border-[#e4c9b0]/60 text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                    <span>Producto</span>
+                    <span className="text-right">Cantidad</span>
+                    <span className="text-right">Costo unit.</span>
+                    <span className="text-right">Subtotal</span>
+                    <span />
+                  </div>
+                  <ul className="divide-y divide-[#e4c9b0]/40">
+                    {componentesSel.map((c) => {
+                      const cant = Number(c.cantidad) || 0
+                      return (
+                        <li
+                          key={c.componente_id}
+                          className="px-3 py-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_110px_130px_130px_44px] sm:items-center"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-[#391511] truncate">
+                              {c.nombre}
+                            </div>
+                            <div className="text-[11px] text-[#c8a58a]">
+                              Stock {c.stock_actual} {c.unidad}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 sm:contents">
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="any"
+                              value={c.cantidad}
+                              onChange={(e) =>
+                                cambiarCantidadComponente(
+                                  c.componente_id,
+                                  e.target.value
+                                )
+                              }
+                              disabled={guardando}
+                              aria-label={`Cantidad de ${c.nombre}`}
+                              className="w-24 sm:w-full h-8 text-right tabular-nums bg-white border-[#e4c9b0]"
+                            />
+                            <div className="text-right text-sm text-[#6f3a2a] tabular-nums">
+                              {c.precio_costo > 0 ? (
+                                <MontoARS monto={c.precio_costo} />
+                              ) : (
+                                '—'
+                              )}
+                            </div>
+                            <div className="text-right text-sm font-semibold text-[#391511] tabular-nums">
+                              {c.precio_costo > 0 ? (
+                                <MontoARS monto={cant * c.precio_costo} />
+                              ) : (
+                                '—'
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => quitarComponente(c.componente_id)}
+                              disabled={guardando}
+                              className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c] justify-self-end"
+                              aria-label="Quitar componente"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -899,107 +1031,6 @@ export function DrawerProducto({
 
             {/* ══ Columna 2: costos y precio de venta ══ */}
             <section className="space-y-5">
-              {/* ── Componentes del combo ── */}
-              {esCombo && (
-                <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#fdfaf6] p-4 space-y-3">
-                  <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
-                    <Gift className="h-4 w-4 text-[#e4a42a]" />
-                    Componentes del combo
-                    {componentesSel.length > 0 && (
-                      <span className="text-xs font-semibold text-[#6f3a2a]">
-                        ({componentesSel.length})
-                      </span>
-                    )}
-                  </h3>
-                  <p className="text-xs text-[#6f3a2a]">
-                    Al vender el combo, el stock se descuenta de estos
-                    productos (no del combo).
-                  </p>
-
-                  <BuscadorComponente
-                    excluidos={componentesSel.map((c) => c.componente_id)}
-                    productoId={producto?.id ?? null}
-                    disabled={guardando}
-                    onSeleccionar={agregarComponente}
-                  />
-
-                  {componentesSel.length === 0 ? (
-                    <p className="text-xs text-[#c8a58a]">
-                      Buscá y agregá los productos que van adentro del combo.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-[#e4c9b0]/40">
-                      {componentesSel.map((c) => {
-                        const cant = Number(c.cantidad) || 0
-                        return (
-                          <li
-                            key={c.componente_id}
-                            className="flex items-center gap-2 py-2"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium text-[#391511] truncate">
-                                {c.nombre}
-                              </div>
-                              <div className="text-[11px] text-[#c8a58a]">
-                                Stock {c.stock_actual} {c.unidad}
-                                {c.precio_costo > 0 && (
-                                  <>
-                                    {' · '}
-                                    <MontoARS monto={c.precio_costo} /> c/u
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <Input
-                              type="number"
-                              min="0.01"
-                              step="any"
-                              value={c.cantidad}
-                              onChange={(e) =>
-                                cambiarCantidadComponente(
-                                  c.componente_id,
-                                  e.target.value
-                                )
-                              }
-                              disabled={guardando}
-                              aria-label={`Cantidad de ${c.nombre}`}
-                              className="w-20 h-8 text-right tabular-nums bg-white border-[#e4c9b0]"
-                            />
-                            {c.precio_costo > 0 && (
-                              <div className="w-24 text-right text-sm font-semibold text-[#391511] tabular-nums shrink-0">
-                                <MontoARS monto={cant * c.precio_costo} />
-                              </div>
-                            )}
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => quitarComponente(c.componente_id)}
-                              disabled={guardando}
-                              className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c]"
-                              aria-label="Quitar componente"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-
-                  {componentesSel.length > 0 && (
-                    <div className="flex items-center justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
-                      <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                        Costo total de componentes
-                      </span>
-                      <span className="font-bold text-[#391511] tabular-nums">
-                        <MontoARS monto={costoComponentes} />
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* ── Costo de compra ── */}
               <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
                 <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
