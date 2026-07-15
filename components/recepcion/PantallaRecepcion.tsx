@@ -14,6 +14,11 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { MontoARS } from '@/components/shared/MontoARS'
+import {
+  PaginadorTabla,
+  paginarArreglo,
+  type PorPagina,
+} from '@/components/shared/PaginadorTabla'
 import { ModalRecepcion } from '@/components/pedidos/ModalRecepcion'
 import {
   ModalImprimirEtiquetas,
@@ -25,6 +30,9 @@ import { formatearFechaCorta, formatearFechaHora } from '@/lib/utils/formato'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
+/** El historial de recibidos crece sin tope: se traen solo los últimos N. */
+const LIMITE_RECIBIDOS = 200
+
 export function PantallaRecepcion() {
   const {
     data: soloEnviados,
@@ -34,7 +42,15 @@ export function PantallaRecepcion() {
   const { data: parciales } = usePedidos({ estado: 'recepcion_parcial' })
   const { data: recibidos, isLoading: cargandoRecibidos } = usePedidos({
     estado: 'recibido',
+    limite: LIMITE_RECIBIDOS,
   })
+  const [paginaRecibidos, setPaginaRecibidos] = useState(0)
+  const [porPaginaRecibidos, setPorPaginaRecibidos] = useState<PorPagina>(25)
+  const recibidosPagina = paginarArreglo(
+    recibidos ?? [],
+    paginaRecibidos,
+    porPaginaRecibidos
+  )
 
   // "Por recibir" = pedidos enviados + parciales (que esperan el faltante)
   const enviados = [...(soloEnviados ?? []), ...(parciales ?? [])].sort(
@@ -112,6 +128,7 @@ export function PantallaRecepcion() {
             {recibidos && recibidos.length > 0 && (
               <span className="ml-1 text-[10px] font-bold bg-[#c8a58a]/40 text-[#6f3a2a] rounded-full px-1.5 py-0.5 tabular-nums">
                 {recibidos.length}
+                {recibidos.length >= LIMITE_RECIBIDOS ? '+' : ''}
               </span>
             )}
           </TabsTrigger>
@@ -258,7 +275,7 @@ export function PantallaRecepcion() {
             </div>
           ) : (
             <ul className="space-y-2">
-              {recibidos.map((p) => (
+              {recibidosPagina.map((p) => (
                 <li
                   key={p.id}
                   className="bg-white border border-[#e4c9b0]/60 rounded-xl p-3 flex items-center justify-between gap-3"
@@ -299,6 +316,21 @@ export function PantallaRecepcion() {
                 </li>
               ))}
             </ul>
+          )}
+
+          {recibidos && recibidos.length > 0 && (
+            <PaginadorTabla
+              total={recibidos.length}
+              porPagina={porPaginaRecibidos}
+              pagina={paginaRecibidos}
+              onCambioPorPagina={setPorPaginaRecibidos}
+              onCambioPagina={setPaginaRecibidos}
+            />
+          )}
+          {recibidos && recibidos.length >= LIMITE_RECIBIDOS && (
+            <p className="text-[10px] text-[#c8a58a]">
+              Se muestran los últimos {LIMITE_RECIBIDOS} pedidos recibidos.
+            </p>
           )}
         </TabsContent>
       </Tabs>

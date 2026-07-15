@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ClipboardList, Eye, Plus } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -22,8 +22,14 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { BadgeEstadoPedido } from '@/components/shared/BadgeEstadoPedido'
 import { MontoARS } from '@/components/shared/MontoARS'
+import {
+  PaginadorTabla,
+  paginarArreglo,
+  type PorPagina,
+} from '@/components/shared/PaginadorTabla'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { usePedidos } from '@/lib/hooks/usePedidos'
+import { LIMITE_PEDIDOS_DEFAULT } from '@/lib/queries/pedidos'
 import { cn } from '@/lib/utils'
 import type { EstadoPedido } from '@/types/database'
 
@@ -40,9 +46,16 @@ const ITEMS_ESTADO: Record<string, string> = {
 
 export function PantallaPedidos() {
   const [estadoFiltro, setEstadoFiltro] = useState<string>(TODOS)
+  const [pagina, setPagina] = useState(0)
+  const [porPagina, setPorPagina] = useState<PorPagina>(25)
   const filtros =
     estadoFiltro === TODOS ? {} : { estado: estadoFiltro as EstadoPedido }
   const { data: pedidos, isLoading, isError } = usePedidos(filtros)
+
+  const pedidosPagina = useMemo(
+    () => paginarArreglo(pedidos ?? [], pagina, porPagina),
+    [pedidos, pagina, porPagina]
+  )
 
   return (
     <div className="space-y-5">
@@ -67,7 +80,10 @@ export function PantallaPedidos() {
         <Select
           items={ITEMS_ESTADO}
           value={estadoFiltro}
-          onValueChange={(v) => setEstadoFiltro(v ?? TODOS)}
+          onValueChange={(v) => {
+            setEstadoFiltro(v ?? TODOS)
+            setPagina(0)
+          }}
         >
           <SelectTrigger className="w-[200px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
             <SelectValue placeholder="Estado" />
@@ -134,7 +150,7 @@ export function PantallaPedidos() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pedidos.map((p) => (
+              {pedidosPagina.map((p) => (
                 <TableRow
                   key={p.id}
                   className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
@@ -180,6 +196,21 @@ export function PantallaPedidos() {
           </Table>
         )}
       </div>
+
+      {pedidos && pedidos.length > 0 && (
+        <PaginadorTabla
+          total={pedidos.length}
+          porPagina={porPagina}
+          pagina={pagina}
+          onCambioPorPagina={setPorPagina}
+          onCambioPagina={setPagina}
+        />
+      )}
+      {pedidos && pedidos.length >= LIMITE_PEDIDOS_DEFAULT && (
+        <p className="text-[10px] text-[#c8a58a]">
+          Se muestran los últimos {LIMITE_PEDIDOS_DEFAULT} pedidos.
+        </p>
+      )}
     </div>
   )
 }

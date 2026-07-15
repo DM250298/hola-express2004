@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
+import { traerTodo } from '@/lib/supabase/paginacion'
 import { claveSemana, semanasEnRango } from '@/lib/utils/periodos'
 import type { CuentaAPagarUpdate, EgresoRow } from '@/types/database'
 
@@ -177,61 +178,126 @@ function derivarEstado(
   return 'pendiente'
 }
 
+/**
+ * Filtro de estado del listado. `'abiertas'` = pendientes + vencidas (todo lo
+ * no pagado); `null` = abiertas completas + las últimas pagadas.
+ */
+export type FiltroEstadoCuentas = EstadoCuentaDerivado | 'abiertas' | null
+
+/**
+ * Tope de cuentas pagadas históricas (las más recientes). Las abiertas son la
+ * cartera de trabajo y se traen siempre completas; las pagadas crecen sin
+ * tope con el histórico y se acotan acá.
+ */
+export const LIMITE_CUENTAS_PAGADAS = 500
+
+const SELECT_CUENTAS =
+  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre)'
+
+type FilaCuentaCruda = {
+  id: number
+  pedido_id: number
+  proveedor_id: number
+  monto: number
+  monto_pagado: number | null
+  fecha_vencimiento: string
+  fecha_pago: string | null
+  estado: 'pendiente' | 'pagada' | 'vencida'
+  tiene_factura: boolean
+  provisoria: boolean
+  numero_factura: string | null
+  nota: string | null
+  proveedores: { nombre: string } | null
+}
+
+function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
+  const pagado = Number(f.monto_pagado ?? 0)
+  const saldo = Number(f.monto) - pagado
+  return {
+    id: f.id,
+    pedido_id: f.pedido_id,
+    proveedor_id: f.proveedor_id,
+    monto: Number(f.monto),
+    monto_pagado: pagado,
+    saldo_pendiente: saldo,
+    fecha_vencimiento: f.fecha_vencimiento,
+    fecha_pago: f.fecha_pago,
+    estado: derivarEstado(f.estado, f.fecha_vencimiento),
+    parcial: f.estado !== 'pagada' && pagado > 0.009,
+    tiene_factura: f.tiene_factura,
+    provisoria: f.provisoria,
+    numero_factura: f.numero_factura,
+    nota: f.nota,
+    proveedor_nombre: f.proveedores?.nombre ?? null,
+  }
+}
+
 export async function getCuentasAPagar(
-  estadoFiltro?: EstadoCuentaDerivado | null
+  estadoFiltro?: FiltroEstadoCuentas
 ): Promise<CuentaAPagarConProveedor[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('cuentas_a_pagar')
-    .select(
-      'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre)'
+
+  // Abiertas (no pagadas): cartera de trabajo, completa y sin truncar.
+  const traerAbiertas = () =>
+    traerTodo<FilaCuentaCruda>(() =>
+      supabase
+        .from('cuentas_a_pagar')
+        .select(SELECT_CUENTAS)
+        .neq('estado', 'pagada')
+        .order('fecha_vencimiento', { ascending: true })
     )
-    .order('fecha_vencimiento', { ascending: true })
 
-  if (error) throw error
-
-  type FilaCruda = {
-    id: number
-    pedido_id: number
-    proveedor_id: number
-    monto: number
-    monto_pagado: number | null
-    fecha_vencimiento: string
-    fecha_pago: string | null
-    estado: 'pendiente' | 'pagada' | 'vencida'
-    tiene_factura: boolean
-    provisoria: boolean
-    numero_factura: string | null
-    nota: string | null
-    proveedores: { nombre: string } | null
+  // Pagadas: histórico acotado a las más recientes.
+  const traerPagadas = async (): Promise<FilaCuentaCruda[]> => {
+    const { data, error } = await supabase
+      .from('cuentas_a_pagar')
+      .select(SELECT_CUENTAS)
+      .eq('estado', 'pagada')
+      .order('fecha_vencimiento', { ascending: false })
+      .limit(LIMITE_CUENTAS_PAGADAS)
+    if (error) throw error
+    return (data ?? []) as unknown as FilaCuentaCruda[]
   }
 
-  const filas = ((data ?? []) as unknown as FilaCruda[]).map((f) => {
-    const pagado = Number(f.monto_pagado ?? 0)
-    const saldo = Number(f.monto) - pagado
-    return {
-      id: f.id,
-      pedido_id: f.pedido_id,
-      proveedor_id: f.proveedor_id,
-      monto: Number(f.monto),
-      monto_pagado: pagado,
-      saldo_pendiente: saldo,
-      fecha_vencimiento: f.fecha_vencimiento,
-      fecha_pago: f.fecha_pago,
-      estado: derivarEstado(f.estado, f.fecha_vencimiento),
-      parcial: f.estado !== 'pagada' && pagado > 0.009,
-      tiene_factura: f.tiene_factura,
-      provisoria: f.provisoria,
-      numero_factura: f.numero_factura,
-      nota: f.nota,
-      proveedor_nombre: f.proveedores?.nombre ?? null,
-    }
-  })
+  let crudas: FilaCuentaCruda[]
+  if (estadoFiltro === 'pagada') {
+    crudas = await traerPagadas()
+  } else if (estadoFiltro) {
+    crudas = await traerAbiertas()
+  } else {
+    const [abiertas, pagadas] = await Promise.all([
+      traerAbiertas(),
+      traerPagadas(),
+    ])
+    crudas = [...abiertas, ...pagadas]
+  }
 
-  if (estadoFiltro) {
+  const filas = crudas
+    .map(mapearCuenta)
+    .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
+
+  if (estadoFiltro === 'pendiente' || estadoFiltro === 'vencida') {
     return filas.filter((f) => f.estado === estadoFiltro)
   }
   return filas
+}
+
+/**
+ * Cuentas a pagar sin factura cargada (cola de trabajo del three-way match).
+ * Filtra server-side: la cola es chica por naturaleza, el histórico no viaja.
+ */
+export async function getCuentasSinFactura(): Promise<
+  CuentaAPagarConProveedor[]
+> {
+  const supabase = createClient()
+  const crudas = await traerTodo<FilaCuentaCruda>(() =>
+    supabase
+      .from('cuentas_a_pagar')
+      .select(SELECT_CUENTAS)
+      .eq('tiene_factura', false)
+      .order('fecha_vencimiento', { ascending: true })
+  )
+  return crudas.map(mapearCuenta)
 }
 
 export interface PagarCuentaPayload {

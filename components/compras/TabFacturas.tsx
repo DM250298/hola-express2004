@@ -16,16 +16,13 @@ import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalEditarFactura } from '@/components/finanzas/ModalEditarFactura'
 import { formatearFechaCorta } from '@/lib/utils/formato'
-import { useCuentasAPagar } from '@/lib/hooks/useFinanzas'
+import { useCuentasSinFactura } from '@/lib/hooks/useFinanzas'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
 
 /** Cuentas a pagar todavía sin factura cargada (provisorias de recepción). */
 function usarPendientesFactura() {
-  const { data: cuentas, isLoading, isError } = useCuentasAPagar(null)
-  const pendientes = (cuentas ?? [])
-    .filter((c) => !c.tiene_factura)
-    .sort((a, b) => a.fecha_vencimiento.localeCompare(b.fecha_vencimiento))
-  return { pendientes, isLoading, isError }
+  const { data: cuentas, isLoading, isError } = useCuentasSinFactura()
+  return { pendientes: cuentas ?? [], isLoading, isError }
 }
 
 /**

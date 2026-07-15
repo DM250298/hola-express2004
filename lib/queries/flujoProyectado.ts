@@ -102,7 +102,7 @@ export async function getFlujoProyectado(
 
   const [cuentas, cuentasPagar, acreditaciones, cfg] = await Promise.all([
     getCuentas(true),
-    getCuentasAPagar(null),
+    getCuentasAPagar('abiertas'),
     getAcreditaciones({ estado: 'pendiente' }),
     getConfigFiscal().catch(() => null),
   ])

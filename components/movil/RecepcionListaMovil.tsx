@@ -12,10 +12,10 @@ const ETIQUETA_ESTADO: Record<string, string> = {
 }
 
 export function RecepcionListaMovil() {
-  const { data, isLoading } = usePedidos({})
-  const pendientes = (data ?? []).filter(
-    (p) => p.estado === 'enviado' || p.estado === 'recepcion_parcial'
-  )
+  const { data, isLoading } = usePedidos({
+    estados: ['enviado', 'recepcion_parcial'],
+  })
+  const pendientes = data ?? []
 
   return (
     <div className="mx-auto max-w-md px-4 py-4 pb-24">

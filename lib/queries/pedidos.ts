@@ -38,7 +38,17 @@ export function parsearDiasCondicionPago(
 
 export interface FiltrosPedidos {
   estado?: EstadoPedido | null
+  /** Varios estados a la vez (OR). Se ignora si `estado` viene seteado. */
+  estados?: EstadoPedido[]
+  /** Tope de filas; se traen los pedidos más recientes. */
+  limite?: number
 }
+
+/**
+ * Tope explícito del listado: PostgREST corta en 1000 filas por default y
+ * truncaría el historial en silencio. Se traen los más recientes.
+ */
+export const LIMITE_PEDIDOS_DEFAULT = 500
 
 export async function getPedidos(
   filtros: FiltrosPedidos = {}
@@ -48,12 +58,17 @@ export async function getPedidos(
     .from('pedidos')
     .select('*, proveedores(id, nombre)')
     .order('fecha_pedido', { ascending: false })
+    .order('id', { ascending: false })
 
   if (filtros.estado) {
     query = query.eq('estado', filtros.estado)
+  } else if (filtros.estados && filtros.estados.length > 0) {
+    query = query.in('estado', filtros.estados)
   }
 
-  const { data, error } = await query
+  const { data, error } = await query.limit(
+    filtros.limite ?? LIMITE_PEDIDOS_DEFAULT
+  )
   if (error) throw error
 
   type FilaCruda = PedidoRow & {

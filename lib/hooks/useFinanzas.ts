@@ -8,13 +8,14 @@ import {
   editarCuentaAPagar,
   eliminarEgreso,
   getCuentasAPagar,
+  getCuentasSinFactura,
   getEgresos,
   getPagosCuenta,
   getResumenFinanciero,
   pagarCuenta,
   type ActualizarEgresoPayload,
   type EditarCuentaPayload,
-  type EstadoCuentaDerivado,
+  type FiltroEstadoCuentas,
   type NuevoEgresoPayload,
   type PagarCuentaPayload,
 } from '@/lib/queries/finanzas'
@@ -31,10 +32,19 @@ export function useResumenFinanciero(desde: string, hasta: string) {
   })
 }
 
-export function useCuentasAPagar(estado?: EstadoCuentaDerivado | null) {
+export function useCuentasAPagar(estado?: FiltroEstadoCuentas) {
   return useQuery({
     queryKey: [...CUENTAS_PAGAR_KEY, estado ?? 'todas'],
     queryFn: () => getCuentasAPagar(estado),
+    staleTime: 30 * 1000,
+  })
+}
+
+/** Cuentas sin factura cargada (three-way match), filtradas server-side. */
+export function useCuentasSinFactura() {
+  return useQuery({
+    queryKey: [...CUENTAS_PAGAR_KEY, 'sin-factura'],
+    queryFn: () => getCuentasSinFactura(),
     staleTime: 30 * 1000,
   })
 }

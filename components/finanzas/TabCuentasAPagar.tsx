@@ -28,9 +28,10 @@ import { ModalEditarFactura } from './ModalEditarFactura'
 import { ModalPagarCuenta } from './ModalPagarCuenta'
 import { DrawerCuentaPagar } from './DrawerCuentaPagar'
 import { cn } from '@/lib/utils'
-import type {
-  CuentaAPagarConProveedor,
-  EstadoCuentaDerivado,
+import {
+  LIMITE_CUENTAS_PAGADAS,
+  type CuentaAPagarConProveedor,
+  type FiltroEstadoCuentas,
 } from '@/lib/queries/finanzas'
 
 const TODOS = '__todos__'
@@ -52,12 +53,12 @@ export function TabCuentasAPagar() {
   const [cuentaDrawer, setCuentaDrawer] =
     useState<CuentaAPagarConProveedor | null>(null)
 
-  const estadoQuery: EstadoCuentaDerivado | null =
+  const estadoQuery: FiltroEstadoCuentas =
     estadoFiltro === TODOS
       ? null
       : estadoFiltro === 'pendientes'
-        ? null // se filtra en memoria
-        : (estadoFiltro as EstadoCuentaDerivado)
+        ? 'abiertas' // pendientes + vencidas, filtradas en el server
+        : (estadoFiltro as FiltroEstadoCuentas)
 
   const { data: cuentas, isLoading, isError, refetch } =
     useCuentasAPagar(estadoQuery)
@@ -259,6 +260,13 @@ export function TabCuentasAPagar() {
           </Table>
         )}
       </div>
+
+      {estadoFiltro === 'pagada' &&
+        cuentasFiltradas.length >= LIMITE_CUENTAS_PAGADAS && (
+          <p className="text-[10px] text-[#c8a58a]">
+            Se muestran las últimas {LIMITE_CUENTAS_PAGADAS} cuentas pagadas.
+          </p>
+        )}
 
       <ModalEditarFactura
         abierto={cuentaEditar !== null}
