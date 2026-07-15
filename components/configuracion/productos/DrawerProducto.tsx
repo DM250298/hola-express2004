@@ -4,7 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { AlertTriangle, Loader2, Plus, ScanLine, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  Boxes,
+  Layers,
+  Loader2,
+  Package,
+  Plus,
+  Receipt,
+  ScanLine,
+  Settings2,
+  StickyNote,
+  Tags,
+  Trash2,
+  TrendingUp,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -119,6 +133,48 @@ interface AdicionalState {
   descripcion: string
   monto: string
 }
+
+const OPCIONES_VENTA: {
+  campo:
+    | 'venta_por_peso'
+    | 'visible_tienda'
+    | 'controlar_stock'
+    | 'no_ofrecer_ventas'
+    | 'activo'
+  etiqueta: string
+  descripcion: string
+  destructivo?: boolean
+}[] = [
+  {
+    campo: 'venta_por_peso',
+    etiqueta: 'Venta por kg',
+    descripcion:
+      'En el POS se ingresa el peso en lugar de la cantidad. El precio es por kg.',
+  },
+  {
+    campo: 'visible_tienda',
+    etiqueta: 'Visible en la tienda online',
+    descripcion: 'Si lo apagás, no aparece en la tienda web (sí en el POS).',
+  },
+  {
+    campo: 'controlar_stock',
+    etiqueta: 'Controlar stock',
+    descripcion:
+      'Si lo apagás, se vende sin descontar stock (servicios, granel sin control).',
+  },
+  {
+    campo: 'no_ofrecer_ventas',
+    etiqueta: 'No ofrecer en ventas',
+    descripcion:
+      'Lo oculta del punto de venta (no se puede vender), pero sigue en el stock.',
+    destructivo: true,
+  },
+  {
+    campo: 'activo',
+    etiqueta: 'Producto activo',
+    descripcion: 'Los inactivos no aparecen en el POS.',
+  },
+]
 
 function generarCodigoBarrasSimulado(): string {
   let codigo = ''
@@ -349,11 +405,15 @@ export function DrawerProducto({
 
   return (
     <Sheet open={abierto} onOpenChange={onCambioAbierto}>
+      {/* En desktop el drawer se ensancha (hasta ~1240px) y el formulario se
+          reparte en 3 columnas temáticas; en mobile sigue siendo full-width
+          de una columna. El max-w se declara con la misma cadena de variantes
+          que el default del Sheet (data-[side=right]:sm:) para pisarlo. */}
       <SheetContent
         side="right"
-        className="sm:max-w-lg w-full flex flex-col p-0"
+        className="w-full data-[side=right]:w-full data-[side=right]:sm:max-w-[min(1240px,94vw)] flex flex-col gap-0 p-0"
       >
-        <SheetHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
+        <SheetHeader className="px-6 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
           <SheetTitle className="text-[#391511] text-lg">
             {esEdicion ? 'Editar producto' : 'Nuevo producto'}
           </SheetTitle>
@@ -384,715 +444,697 @@ export function DrawerProducto({
             </div>
           )}
 
-          {/* Código de barras + escáner */}
-          <div className="space-y-1.5">
-            <Label htmlFor="codigo_barras" className="text-[#391511] font-medium">
-              Código de barras
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="codigo_barras"
-                {...codigoBarrasReg}
-                ref={(el) => {
-                  codigoBarrasReg.ref(el)
-                  refCodigoBarras.current = el
-                }}
-                placeholder="Escaneá o ingresá manualmente"
-                disabled={guardando}
-                className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={simularEscaneo}
-                disabled={guardando}
-                title="Simular escaneo"
-                className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5 shrink-0"
-              >
-                <ScanLine className="h-4 w-4" />
-                <span className="hidden sm:inline">Escanear</span>
-              </Button>
-            </div>
-            {errors.codigo_barras && (
-              <p className="text-[#c43e2c] text-xs mt-1">
-                {errors.codigo_barras.message}
-              </p>
-            )}
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 items-start">
+            {/* ══ Columna 1: identificación y catálogo ══ */}
+            <section className="space-y-5">
+              <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-4">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                  <Package className="h-4 w-4 text-[#e4a42a]" />
+                  Datos principales
+                </h3>
 
-          {/* Nombre */}
-          <div className="space-y-1.5">
-            <Label htmlFor="nombre" className="text-[#391511] font-medium">
-              Nombre <span className="text-[#c43e2c]">*</span>
-            </Label>
-            <Input
-              id="nombre"
-              {...register('nombre')}
-              placeholder="Ej: Coca-Cola 500ml"
-              disabled={guardando}
-              className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-            />
-            {errors.nombre && (
-              <p className="text-[#c43e2c] text-xs mt-1">{errors.nombre.message}</p>
-            )}
-          </div>
-
-          {/* Imagen */}
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium">Imagen del producto</Label>
-            <SubirImagenProducto
-              value={imagenUrl}
-              onChange={setImagenUrl}
-              disabled={guardando}
-            />
-          </div>
-
-          {/* Categoría + Proveedor */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-[#391511] font-medium">Categoría</Label>
-              <Controller
-                control={control}
-                name="categoria_id"
-                render={({ field }) => (
-                  <Select
-                    value={
-                      field.value === null || field.value === undefined
-                        ? SIN_VALOR
-                        : String(field.value)
-                    }
-                    onValueChange={field.onChange}
-                    disabled={guardando}
-                  >
-                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
-                      <SelectValue placeholder="Seleccionar..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={SIN_VALOR}>
-                        <span className="text-[#c8a58a] italic">Sin categoría</span>
-                      </SelectItem>
-                      {categorias?.map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-[#391511] font-medium">Proveedor</Label>
-              <Controller
-                control={control}
-                name="proveedor_id"
-                render={({ field }) => (
-                  <Select
-                    value={
-                      field.value === null || field.value === undefined
-                        ? SIN_VALOR
-                        : String(field.value)
-                    }
-                    onValueChange={field.onChange}
-                    disabled={guardando}
-                  >
-                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
-                      <SelectValue placeholder="Seleccionar..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={SIN_VALOR}>
-                        <span className="text-[#c8a58a] italic">Sin proveedor</span>
-                      </SelectItem>
-                      {proveedores?.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>
-                          {p.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-          </div>
-
-          {/* ── Datos de catálogo ── */}
-          <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-3">
-            <h3 className="text-[#391511] font-bold text-sm">Datos de catálogo</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="marca" className="text-[#391511] font-medium">
-                  Marca
-                </Label>
-                <Input
-                  id="marca"
-                  {...register('marca')}
-                  placeholder="Ej: Coca-Cola"
-                  disabled={guardando}
-                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="ubicacion" className="text-[#391511] font-medium">
-                  Ubicación
-                </Label>
-                <Input
-                  id="ubicacion"
-                  {...register('ubicacion')}
-                  placeholder="Ej: Góndola 3 / Heladera 2"
-                  disabled={guardando}
-                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="subcategoria" className="text-[#391511] font-medium">
-                  Subcategoría
-                </Label>
-                <Input
-                  id="subcategoria"
-                  {...register('subcategoria')}
-                  placeholder="Opcional"
-                  disabled={guardando}
-                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="codigo_interno" className="text-[#391511] font-medium">
-                  Código interno
-                </Label>
-                <Input
-                  id="codigo_interno"
-                  {...register('codigo_interno')}
-                  placeholder="Opcional"
-                  disabled={guardando}
-                  className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="codigo_barras_2" className="text-[#391511] font-medium">
-                  Código de barras secundario
-                </Label>
-                <Input
-                  id="codigo_barras_2"
-                  {...register('codigo_barras_2')}
-                  placeholder="EAN del fabricante, si difiere del código principal"
-                  disabled={guardando}
-                  className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-                <p className="text-[11px] text-[#c8a58a]">
-                  También se reconoce al escanear en el POS.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Costo de compra ── */}
-          <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
-            <h3 className="text-[#391511] font-bold text-sm">Costo de compra</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  IVA compra %
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={ivaCompra}
-                  onChange={(e) => setIvaCompra(e.target.value)}
-                  disabled={guardando}
-                  className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Costo sin IVA <span className="text-[#c43e2c]">*</span>
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={costoBase}
-                  onChange={(e) => setCostoBase(e.target.value)}
-                  placeholder="0.00"
-                  disabled={guardando}
-                  className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Costo neto (con adicionales)
-                </span>
-                <div className="font-bold text-[#391511] tabular-nums">
-                  <MontoARS monto={calc.costoNeto} />
-                </div>
-              </div>
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Costo con IVA
-                </span>
-                <div className="font-bold text-[#391511] tabular-nums">
-                  <MontoARS monto={calc.costoConIva} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Costos adicionales ── */}
-          <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-[#391511] font-bold text-sm">
-                Costos adicionales
-              </h3>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={agregarAdicional}
-                disabled={guardando}
-                className="h-7 gap-1 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Agregar
-              </Button>
-            </div>
-            {adicionales.length === 0 ? (
-              <p className="text-xs text-[#c8a58a]">
-                Flete, embalaje, impuestos internos, etc. (opcional)
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {adicionales.map((a, idx) => (
-                  <li key={idx} className="flex items-center gap-2">
+                {/* Código de barras + escáner */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="codigo_barras" className="text-[#391511] font-medium">
+                    Código de barras
+                  </Label>
+                  <div className="flex gap-2">
                     <Input
-                      value={a.descripcion}
-                      onChange={(e) =>
-                        cambiarAdicional(idx, 'descripcion', e.target.value)
-                      }
-                      placeholder="Descripción"
+                      id="codigo_barras"
+                      {...codigoBarrasReg}
+                      ref={(el) => {
+                        codigoBarrasReg.ref(el)
+                        refCodigoBarras.current = el
+                      }}
+                      placeholder="Escaneá o ingresá manualmente"
                       disabled={guardando}
-                      className="flex-1 h-8 border-[#e4c9b0] text-sm"
+                      className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                     />
-                    <div className="relative w-28">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">
-                        $
-                      </span>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={a.monto}
-                        onChange={(e) =>
-                          cambiarAdicional(idx, 'monto', e.target.value)
-                        }
-                        placeholder="0.00"
-                        disabled={guardando}
-                        className="h-8 pl-5 text-right tabular-nums border-[#e4c9b0]"
-                      />
-                    </div>
                     <Button
                       type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => quitarAdicional(idx)}
+                      variant="outline"
+                      onClick={simularEscaneo}
                       disabled={guardando}
-                      className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c]"
-                      aria-label="Quitar"
+                      title="Simular escaneo"
+                      className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5 shrink-0"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <ScanLine className="h-4 w-4" />
+                      <span className="hidden sm:inline">Escanear</span>
                     </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+                  </div>
+                  {errors.codigo_barras && (
+                    <p className="text-[#c43e2c] text-xs mt-1">
+                      {errors.codigo_barras.message}
+                    </p>
+                  )}
+                </div>
 
-          {/* ── Precio de venta (motor con margen asegurado) ── */}
-          <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
-            <h3 className="text-[#391511] font-bold text-sm">Precio de venta</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  IVA venta %
-                </Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={ivaVenta}
-                  onChange={(e) => setIvaVenta(e.target.value)}
-                  disabled={guardando}
-                  className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                  Margen ganancia %
-                </Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={margen}
-                  onChange={(e) => setMargen(e.target.value)}
-                  disabled={guardando}
-                  className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                />
-              </div>
-            </div>
+                {/* Nombre */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="nombre" className="text-[#391511] font-medium">
+                    Nombre <span className="text-[#c43e2c]">*</span>
+                  </Label>
+                  <Input
+                    id="nombre"
+                    {...register('nombre')}
+                    placeholder="Ej: Coca-Cola 500ml"
+                    disabled={guardando}
+                    className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                  />
+                  {errors.nombre && (
+                    <p className="text-[#c43e2c] text-xs mt-1">{errors.nombre.message}</p>
+                  )}
+                </div>
 
-            {/* Resultado del motor: precio que asegura el margen tras las cargas */}
-            {pricing.cargando ? (
-              <p className="text-xs text-[#c8a58a]">
-                Cargando configuración de precios…
-              </p>
-            ) : calc.error ? (
-              <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-3">
-                <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-bold text-[#c43e2c]">
-                    No se puede calcular el precio
-                  </p>
-                  <p className="text-[#391511] mt-0.5">{calc.error}</p>
+                {/* Categoría (ancho completo: los nombres largos se leen enteros) */}
+                <div className="space-y-1.5">
+                  <Label className="text-[#391511] font-medium">Categoría</Label>
+                  <Controller
+                    control={control}
+                    name="categoria_id"
+                    render={({ field }) => (
+                      <Select
+                        value={
+                          field.value === null || field.value === undefined
+                            ? SIN_VALOR
+                            : String(field.value)
+                        }
+                        onValueChange={field.onChange}
+                        disabled={guardando}
+                      >
+                        <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
+                          <SelectValue placeholder="Seleccionar..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SIN_VALOR}>
+                            <span className="text-[#c8a58a] italic">Sin categoría</span>
+                          </SelectItem>
+                          {categorias?.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                              {c.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+
+                {/* Proveedor */}
+                <div className="space-y-1.5">
+                  <Label className="text-[#391511] font-medium">Proveedor</Label>
+                  <Controller
+                    control={control}
+                    name="proveedor_id"
+                    render={({ field }) => (
+                      <Select
+                        value={
+                          field.value === null || field.value === undefined
+                            ? SIN_VALOR
+                            : String(field.value)
+                        }
+                        onValueChange={field.onChange}
+                        disabled={guardando}
+                      >
+                        <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
+                          <SelectValue placeholder="Seleccionar..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SIN_VALOR}>
+                            <span className="text-[#c8a58a] italic">Sin proveedor</span>
+                          </SelectItem>
+                          {proveedores?.map((p) => (
+                            <SelectItem key={p.id} value={String(p.id)}>
+                              {p.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+
+                {/* Imagen */}
+                <div className="space-y-1.5">
+                  <Label className="text-[#391511] font-medium">Imagen del producto</Label>
+                  <SubirImagenProducto
+                    value={imagenUrl}
+                    onChange={setImagenUrl}
+                    disabled={guardando}
+                  />
                 </div>
               </div>
-            ) : calc.desglose && calc.precioVenta > 0 ? (
-              <>
-                <div className="flex items-end justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
+
+              {/* ── Datos de catálogo ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-3">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                  <Tags className="h-4 w-4 text-[#e4a42a]" />
+                  Datos de catálogo
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="marca" className="text-[#391511] font-medium">
+                      Marca
+                    </Label>
+                    <Input
+                      id="marca"
+                      {...register('marca')}
+                      placeholder="Ej: Coca-Cola"
+                      disabled={guardando}
+                      className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="ubicacion" className="text-[#391511] font-medium">
+                      Ubicación
+                    </Label>
+                    <Input
+                      id="ubicacion"
+                      {...register('ubicacion')}
+                      placeholder="Ej: Góndola 3 / Heladera 2"
+                      disabled={guardando}
+                      className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="subcategoria" className="text-[#391511] font-medium">
+                      Subcategoría
+                    </Label>
+                    <Input
+                      id="subcategoria"
+                      {...register('subcategoria')}
+                      placeholder="Opcional"
+                      disabled={guardando}
+                      className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="codigo_interno" className="text-[#391511] font-medium">
+                      Código interno
+                    </Label>
+                    <Input
+                      id="codigo_interno"
+                      {...register('codigo_interno')}
+                      placeholder="Opcional"
+                      disabled={guardando}
+                      className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label htmlFor="codigo_barras_2" className="text-[#391511] font-medium">
+                      Código de barras secundario
+                    </Label>
+                    <Input
+                      id="codigo_barras_2"
+                      {...register('codigo_barras_2')}
+                      placeholder="EAN del fabricante, si difiere del código principal"
+                      disabled={guardando}
+                      className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                    <p className="text-[11px] text-[#c8a58a]">
+                      También se reconoce al escanear en el POS.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* ══ Columna 2: costos y precio de venta ══ */}
+            <section className="space-y-5">
+              {/* ── Costo de compra ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                  <Receipt className="h-4 w-4 text-[#e4a42a]" />
+                  Costo de compra
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      IVA compra %
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={ivaCompra}
+                      onChange={(e) => setIvaCompra(e.target.value)}
+                      disabled={guardando}
+                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      Costo sin IVA <span className="text-[#c43e2c]">*</span>
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={costoBase}
+                      onChange={(e) => setCostoBase(e.target.value)}
+                      placeholder="0.00"
+                      disabled={guardando}
+                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                      Precio de venta (redondeado)
+                      Costo neto (con adicionales)
                     </span>
-                    <div className="font-extrabold text-[#391511] text-xl tabular-nums">
-                      <MontoARS monto={calc.desglose.precioRedondeado} />
+                    <div className="font-bold text-[#391511] tabular-nums">
+                      <MontoARS monto={calc.costoNeto} />
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div>
                     <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                      Exacto
+                      Costo con IVA
                     </span>
-                    <div className="text-sm text-[#6f3a2a] tabular-nums">
-                      <MontoARS monto={calc.desglose.precioFinalExacto} />
+                    <div className="font-bold text-[#391511] tabular-nums">
+                      <MontoARS monto={calc.costoConIva} />
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <ul className="text-xs text-[#6f3a2a] space-y-1">
-                  <li className="flex justify-between">
-                    <span>Costo</span>
-                    <MontoARS monto={calc.desglose.costo} />
-                  </li>
-                  <li className="flex justify-between">
-                    <span>Ganancia asegurada</span>
-                    <MontoARS monto={calc.desglose.ganancia} />
-                  </li>
-                  <li className="flex justify-between">
-                    <span>IIBB</span>
-                    <MontoARS monto={calc.desglose.iibbMonto} />
-                  </li>
-                  <li className="flex justify-between">
-                    <span>Imp. créd/déb</span>
-                    <MontoARS monto={calc.desglose.debcredMonto} />
-                  </li>
-                  <li className="flex justify-between">
-                    <span>Comisión MP (peor caso)</span>
-                    <MontoARS monto={calc.desglose.comisionMonto} />
-                  </li>
-                  <li className="flex justify-between text-[#c8a58a]">
-                    <span>Margen extra por redondeo</span>
-                    <MontoARS monto={calc.desglose.margenExtraRedondeo} />
-                  </li>
-                </ul>
-                <p className="text-[10px] text-[#c8a58a] leading-relaxed">
-                  El precio incluye IIBB, impuesto a los créditos/débitos y la
-                  comisión de Mercado Pago del peor caso, tomados de la config
-                  fiscal y de los medios de pago. Cambiá esas tasas y el precio
-                  se recalcula solo.
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-[#c8a58a]">
-                Cargá el costo y el margen para ver el precio de venta.
-              </p>
-            )}
-          </div>
+              {/* ── Costos adicionales ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                    <Layers className="h-4 w-4 text-[#e4a42a]" />
+                    Costos adicionales
+                  </h3>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={agregarAdicional}
+                    disabled={guardando}
+                    className="h-7 gap-1 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Agregar
+                  </Button>
+                </div>
+                {adicionales.length === 0 ? (
+                  <p className="text-xs text-[#c8a58a]">
+                    Flete, embalaje, impuestos internos, etc. (opcional)
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {adicionales.map((a, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <Input
+                          value={a.descripcion}
+                          onChange={(e) =>
+                            cambiarAdicional(idx, 'descripcion', e.target.value)
+                          }
+                          placeholder="Descripción"
+                          disabled={guardando}
+                          className="flex-1 h-8 border-[#e4c9b0] text-sm"
+                        />
+                        <div className="relative w-28">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={a.monto}
+                            onChange={(e) =>
+                              cambiarAdicional(idx, 'monto', e.target.value)
+                            }
+                            placeholder="0.00"
+                            disabled={guardando}
+                            className="h-8 pl-5 text-right tabular-nums border-[#e4c9b0]"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => quitarAdicional(idx)}
+                          disabled={guardando}
+                          className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c]"
+                          aria-label="Quitar"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
 
-          {/* Tipo y Unidad */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="tipo" className="text-[#391511] font-medium">
-                Tipo
-              </Label>
-              <select
-                id="tipo"
-                {...register('tipo')}
-                disabled={guardando}
-                className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
-              >
-                <option value="reventa">Reventa (compra-venta)</option>
-                <option value="insumo">Insumo (ingrediente)</option>
-                <option value="semi_elaborado">Semi-elaborado</option>
-                <option value="elaborado">Elaborado (se vende hecho)</option>
-                {producto?.tipo &&
-                  !['reventa', 'insumo', 'semi_elaborado', 'elaborado'].includes(
-                    producto.tipo
-                  ) && (
-                    <option value={producto.tipo}>{producto.tipo} (actual)</option>
+              {/* ── Precio de venta (motor con margen asegurado) ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                  <TrendingUp className="h-4 w-4 text-[#e4a42a]" />
+                  Precio de venta
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      IVA venta %
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={ivaVenta}
+                      onChange={(e) => setIvaVenta(e.target.value)}
+                      disabled={guardando}
+                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      Margen ganancia %
+                    </Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={margen}
+                      onChange={(e) => setMargen(e.target.value)}
+                      disabled={guardando}
+                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                  </div>
+                </div>
+
+                {/* Resultado del motor: precio que asegura el margen tras las cargas */}
+                {pricing.cargando ? (
+                  <p className="text-xs text-[#c8a58a]">
+                    Cargando configuración de precios…
+                  </p>
+                ) : calc.error ? (
+                  <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-3">
+                    <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
+                    <div className="text-sm">
+                      <p className="font-bold text-[#c43e2c]">
+                        No se puede calcular el precio
+                      </p>
+                      <p className="text-[#391511] mt-0.5">{calc.error}</p>
+                    </div>
+                  </div>
+                ) : calc.desglose && calc.precioVenta > 0 ? (
+                  <>
+                    <div className="flex items-end justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Precio de venta (redondeado)
+                        </span>
+                        <div className="font-extrabold text-[#391511] text-xl tabular-nums">
+                          <MontoARS monto={calc.desglose.precioRedondeado} />
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Exacto
+                        </span>
+                        <div className="text-sm text-[#6f3a2a] tabular-nums">
+                          <MontoARS monto={calc.desglose.precioFinalExacto} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <ul className="text-xs text-[#6f3a2a] space-y-1">
+                      <li className="flex justify-between">
+                        <span>Costo</span>
+                        <MontoARS monto={calc.desglose.costo} />
+                      </li>
+                      <li className="flex justify-between">
+                        <span>Ganancia asegurada</span>
+                        <MontoARS monto={calc.desglose.ganancia} />
+                      </li>
+                      <li className="flex justify-between">
+                        <span>IIBB</span>
+                        <MontoARS monto={calc.desglose.iibbMonto} />
+                      </li>
+                      <li className="flex justify-between">
+                        <span>Imp. créd/déb</span>
+                        <MontoARS monto={calc.desglose.debcredMonto} />
+                      </li>
+                      <li className="flex justify-between">
+                        <span>Comisión MP (peor caso)</span>
+                        <MontoARS monto={calc.desglose.comisionMonto} />
+                      </li>
+                      <li className="flex justify-between text-[#c8a58a]">
+                        <span>Margen extra por redondeo</span>
+                        <MontoARS monto={calc.desglose.margenExtraRedondeo} />
+                      </li>
+                    </ul>
+                    <p className="text-[10px] text-[#c8a58a] leading-relaxed">
+                      El precio incluye IIBB, impuesto a los créditos/débitos y la
+                      comisión de Mercado Pago del peor caso, tomados de la config
+                      fiscal y de los medios de pago. Cambiá esas tasas y el precio
+                      se recalcula solo.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-[#c8a58a]">
+                    Cargá el costo y el margen para ver el precio de venta.
+                  </p>
+                )}
+              </div>
+            </section>
+
+            {/* ══ Columna 3: inventario, opciones y notas ══ */}
+            <section className="md:col-span-2 xl:col-span-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-5 items-start">
+              {/* ── Inventario y stock ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-4">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                  <Boxes className="h-4 w-4 text-[#e4a42a]" />
+                  Inventario y stock
+                </h3>
+
+                {/* Tipo y Unidad */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="tipo" className="text-[#391511] font-medium">
+                      Tipo
+                    </Label>
+                    <select
+                      id="tipo"
+                      {...register('tipo')}
+                      disabled={guardando}
+                      className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
+                    >
+                      <option value="reventa">Reventa (compra-venta)</option>
+                      <option value="insumo">Insumo (ingrediente)</option>
+                      <option value="semi_elaborado">Semi-elaborado</option>
+                      <option value="elaborado">Elaborado (se vende hecho)</option>
+                      {producto?.tipo &&
+                        !['reventa', 'insumo', 'semi_elaborado', 'elaborado'].includes(
+                          producto.tipo
+                        ) && (
+                          <option value={producto.tipo}>{producto.tipo} (actual)</option>
+                        )}
+                    </select>
+                    {errors.tipo && (
+                      <p className="text-[#c43e2c] text-xs mt-1">{errors.tipo.message}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="unidad" className="text-[#391511] font-medium">
+                      Unidad
+                    </Label>
+                    <select
+                      id="unidad"
+                      {...register('unidad')}
+                      disabled={guardando}
+                      className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
+                    >
+                      <option value="unidad">Unidad (por pieza)</option>
+                      <option value="kg">Kilogramo (kg)</option>
+                      <option value="g">Gramo (g)</option>
+                      <option value="lt">Litro (lt)</option>
+                      <option value="ml">Mililitro (ml)</option>
+                      {producto?.unidad &&
+                        !['unidad', 'kg', 'g', 'lt', 'ml'].includes(producto.unidad) && (
+                          <option value={producto.unidad}>{producto.unidad} (actual)</option>
+                        )}
+                    </select>
+                    {errors.unidad && (
+                      <p className="text-[#c43e2c] text-xs mt-1">{errors.unidad.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Stock */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="stock_actual" className="text-[#391511] font-medium">
+                      Stock actual
+                    </Label>
+                    <Input
+                      id="stock_actual"
+                      type="number"
+                      min="0"
+                      step="1"
+                      {...register('stock_actual')}
+                      disabled={guardando}
+                      className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                    {errors.stock_actual && (
+                      <p className="text-[#c43e2c] text-xs mt-1">
+                        {errors.stock_actual.message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="stock_minimo" className="text-[#391511] font-medium">
+                      Stock mínimo
+                    </Label>
+                    <Input
+                      id="stock_minimo"
+                      type="number"
+                      min="0"
+                      step="1"
+                      {...register('stock_minimo')}
+                      disabled={guardando}
+                      className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                    {errors.stock_minimo && (
+                      <p className="text-[#c43e2c] text-xs mt-1">
+                        {errors.stock_minimo.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Vencimiento mínimo al recibir */}
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="dias_vencimiento_minimo"
+                    className="text-[#391511] font-medium"
+                  >
+                    Vencimiento mínimo al recibir (días)
+                  </Label>
+                  <Input
+                    id="dias_vencimiento_minimo"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="Sin mínimo"
+                    {...register('dias_vencimiento_minimo')}
+                    disabled={guardando}
+                    className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                  />
+                  <p className="text-[11px] text-[#c8a58a]">
+                    Si lo definís, al recibir el producto se alerta cuando la fecha
+                    de vencimiento esté por debajo de este margen. Dejalo en blanco
+                    para no validar.
+                  </p>
+                  {errors.dias_vencimiento_minimo && (
+                    <p className="text-[#c43e2c] text-xs">
+                      {errors.dias_vencimiento_minimo.message}
+                    </p>
                   )}
-              </select>
-              {errors.tipo && (
-                <p className="text-[#c43e2c] text-xs mt-1">{errors.tipo.message}</p>
-              )}
-            </div>
+                </div>
+              </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="unidad" className="text-[#391511] font-medium">
-                Unidad
-              </Label>
-              <select
-                id="unidad"
-                {...register('unidad')}
-                disabled={guardando}
-                className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
-              >
-                <option value="unidad">Unidad (por pieza)</option>
-                <option value="kg">Kilogramo (kg)</option>
-                <option value="g">Gramo (g)</option>
-                <option value="lt">Litro (lt)</option>
-                <option value="ml">Mililitro (ml)</option>
-                {producto?.unidad &&
-                  !['unidad', 'kg', 'g', 'lt', 'ml'].includes(producto.unidad) && (
-                    <option value={producto.unidad}>{producto.unidad} (actual)</option>
-                  )}
-              </select>
-              {errors.unidad && (
-                <p className="text-[#c43e2c] text-xs mt-1">{errors.unidad.message}</p>
-              )}
-            </div>
-          </div>
+              {/* ── Opciones de venta (toggles compactos) ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm mb-1">
+                  <Settings2 className="h-4 w-4 text-[#e4a42a]" />
+                  Opciones de venta
+                </h3>
+                <div className="divide-y divide-[#e4c9b0]/40">
+                  {OPCIONES_VENTA.map((op) => (
+                    <div
+                      key={op.campo}
+                      className="flex items-center justify-between gap-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <Label
+                          htmlFor={op.campo}
+                          className="text-[#391511] font-medium cursor-pointer"
+                        >
+                          {op.etiqueta}
+                        </Label>
+                        <p className="text-[#6f3a2a] text-xs mt-0.5">
+                          {op.descripcion}
+                        </p>
+                      </div>
+                      <Controller
+                        control={control}
+                        name={op.campo}
+                        render={({ field }) => (
+                          <Switch
+                            id={op.campo}
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            disabled={guardando}
+                            className={
+                              op.destructivo
+                                ? 'data-[state=checked]:bg-[#c43e2c]'
+                                : 'data-[state=checked]:bg-[#f9b44c]'
+                            }
+                          />
+                        )}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-          {/* Stock */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="stock_actual" className="text-[#391511] font-medium">
-                Stock actual
-              </Label>
-              <Input
-                id="stock_actual"
-                type="number"
-                min="0"
-                step="1"
-                {...register('stock_actual')}
-                disabled={guardando}
-                className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-              />
-              {errors.stock_actual && (
-                <p className="text-[#c43e2c] text-xs mt-1">
-                  {errors.stock_actual.message}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="stock_minimo" className="text-[#391511] font-medium">
-                Stock mínimo
-              </Label>
-              <Input
-                id="stock_minimo"
-                type="number"
-                min="0"
-                step="1"
-                {...register('stock_minimo')}
-                disabled={guardando}
-                className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-              />
-              {errors.stock_minimo && (
-                <p className="text-[#c43e2c] text-xs mt-1">
-                  {errors.stock_minimo.message}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Vencimiento mínimo al recibir */}
-          <div className="space-y-1.5">
-            <Label
-              htmlFor="dias_vencimiento_minimo"
-              className="text-[#391511] font-medium"
-            >
-              Vencimiento mínimo al recibir (días)
-            </Label>
-            <Input
-              id="dias_vencimiento_minimo"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Sin mínimo"
-              {...register('dias_vencimiento_minimo')}
-              disabled={guardando}
-              className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-            />
-            <p className="text-[11px] text-[#c8a58a]">
-              Si lo definís, al recibir el producto se alerta cuando la fecha
-              de vencimiento esté por debajo de este margen. Dejalo en blanco
-              para no validar.
-            </p>
-            {errors.dias_vencimiento_minimo && (
-              <p className="text-[#c43e2c] text-xs">
-                {errors.dias_vencimiento_minimo.message}
-              </p>
-            )}
-          </div>
-
-          {/* Toggle venta por peso */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
-            <div>
-              <Label htmlFor="venta_por_peso" className="text-[#391511] font-medium cursor-pointer">
-                Venta por kg
-              </Label>
-              <p className="text-[#6f3a2a] text-xs mt-0.5">
-                En el POS se ingresa el peso en lugar de la cantidad. El precio es por kg.
-              </p>
-            </div>
-            <Controller
-              control={control}
-              name="venta_por_peso"
-              render={({ field }) => (
-                <Switch
-                  id="venta_por_peso"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
+              {/* ── Notas ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 p-4 space-y-2 md:col-span-2 xl:col-span-1">
+                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                  <StickyNote className="h-4 w-4 text-[#e4a42a]" />
+                  Notas
+                </h3>
+                <textarea
+                  id="notas"
+                  rows={3}
+                  {...register('notas')}
                   disabled={guardando}
-                  className="data-[state=checked]:bg-[#f9b44c]"
+                  placeholder="Observaciones internas (opcional)"
+                  className="w-full rounded-md border border-[#e4c9b0] bg-white px-3 py-2 text-sm text-[#391511] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c] disabled:opacity-50"
                 />
-              )}
-            />
-          </div>
-
-          {/* Notas */}
-          <div className="space-y-1.5">
-            <Label htmlFor="notas" className="text-[#391511] font-medium">
-              Notas
-            </Label>
-            <textarea
-              id="notas"
-              rows={2}
-              {...register('notas')}
-              disabled={guardando}
-              placeholder="Observaciones internas (opcional)"
-              className="w-full rounded-md border border-[#e4c9b0] bg-white px-3 py-2 text-sm text-[#391511] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c] disabled:opacity-50"
-            />
-          </div>
-
-          {/* Toggle visible en tienda */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
-            <div>
-              <Label htmlFor="visible_tienda" className="text-[#391511] font-medium cursor-pointer">
-                Visible en la tienda online
-              </Label>
-              <p className="text-[#6f3a2a] text-xs mt-0.5">
-                Si lo apagás, no aparece en la tienda web (sí en el POS).
-              </p>
-            </div>
-            <Controller
-              control={control}
-              name="visible_tienda"
-              render={({ field }) => (
-                <Switch
-                  id="visible_tienda"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={guardando}
-                  className="data-[state=checked]:bg-[#f9b44c]"
-                />
-              )}
-            />
-          </div>
-
-          {/* Toggle controlar stock */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
-            <div>
-              <Label htmlFor="controlar_stock" className="text-[#391511] font-medium cursor-pointer">
-                Controlar stock
-              </Label>
-              <p className="text-[#6f3a2a] text-xs mt-0.5">
-                Si lo apagás, se vende sin descontar stock (servicios, granel sin control).
-              </p>
-            </div>
-            <Controller
-              control={control}
-              name="controlar_stock"
-              render={({ field }) => (
-                <Switch
-                  id="controlar_stock"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={guardando}
-                  className="data-[state=checked]:bg-[#f9b44c]"
-                />
-              )}
-            />
-          </div>
-
-          {/* Toggle no ofrecer en ventas */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
-            <div>
-              <Label htmlFor="no_ofrecer_ventas" className="text-[#391511] font-medium cursor-pointer">
-                No ofrecer en ventas
-              </Label>
-              <p className="text-[#6f3a2a] text-xs mt-0.5">
-                Lo oculta del punto de venta (no se puede vender), pero sigue en el stock.
-              </p>
-            </div>
-            <Controller
-              control={control}
-              name="no_ofrecer_ventas"
-              render={({ field }) => (
-                <Switch
-                  id="no_ofrecer_ventas"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={guardando}
-                  className="data-[state=checked]:bg-[#c43e2c]"
-                />
-              )}
-            />
-          </div>
-
-          {/* Toggle activo */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60">
-            <div>
-              <Label htmlFor="activo" className="text-[#391511] font-medium cursor-pointer">
-                Producto activo
-              </Label>
-              <p className="text-[#6f3a2a] text-xs mt-0.5">
-                Los inactivos no aparecen en el POS.
-              </p>
-            </div>
-            <Controller
-              control={control}
-              name="activo"
-              render={({ field }) => (
-                <Switch
-                  id="activo"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                  disabled={guardando}
-                  className="data-[state=checked]:bg-[#f9b44c]"
-                />
-              )}
-            />
+              </div>
+            </section>
           </div>
         </form>
 
-        <SheetFooter className="px-6 py-4 border-t border-[#e4c9b0]/60 bg-[#fdfaf6] flex-row gap-2 sm:gap-2">
+        <SheetFooter className="px-6 py-4 border-t border-[#e4c9b0]/60 bg-[#fdfaf6] flex-row items-center gap-2 sm:gap-3">
+          {/* Resumen en vivo: siempre visible aunque el bloque de precio quede
+              fuera de pantalla al scrollear (solo desktop) */}
+          <div className="hidden lg:flex items-center gap-4 mr-auto">
+            <div>
+              <span className="block text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Costo neto
+              </span>
+              <span className="font-bold text-[#391511] text-sm tabular-nums">
+                <MontoARS monto={calc.costoNeto} />
+              </span>
+            </div>
+            <div className="h-8 w-px bg-[#e4c9b0]/60" />
+            <div>
+              <span className="block text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Precio de venta
+              </span>
+              <span className="font-extrabold text-[#391511] tabular-nums">
+                {calc.precioVenta > 0 ? (
+                  <MontoARS monto={calc.precioVenta} />
+                ) : (
+                  <span className="text-[#c8a58a] font-medium">Sin precio</span>
+                )}
+              </span>
+            </div>
+          </div>
+
           <Button
             type="button"
             variant="outline"
             onClick={() => onCambioAbierto(false)}
             disabled={guardando}
-            className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
+            className="flex-1 lg:flex-none lg:min-w-32 border-[#e4c9b0] text-[#6f3a2a]"
           >
             Cancelar
           </Button>
@@ -1100,7 +1142,7 @@ export function DrawerProducto({
             type="submit"
             onClick={handleSubmit(onSubmit)}
             disabled={guardando}
-            className="flex-1 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+            className="flex-1 lg:flex-none lg:min-w-44 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
           >
             {guardando ? (
               <>
