@@ -52,9 +52,19 @@ export function PantallaPedidos() {
     estadoFiltro === TODOS ? {} : { estado: estadoFiltro as EstadoPedido }
   const { data: pedidos, isLoading, isError } = usePedidos(filtros)
 
+  // Si la lista se achica (cambio de filtro, refetch) con el usuario en una
+  // página alta, se recorta a la última página válida (no tabla vacía).
+  const paginaEfectiva =
+    porPagina < 0
+      ? 0
+      : Math.min(
+          pagina,
+          Math.max(0, Math.ceil((pedidos ?? []).length / porPagina) - 1)
+        )
+
   const pedidosPagina = useMemo(
-    () => paginarArreglo(pedidos ?? [], pagina, porPagina),
-    [pedidos, pagina, porPagina]
+    () => paginarArreglo(pedidos ?? [], paginaEfectiva, porPagina),
+    [pedidos, paginaEfectiva, porPagina]
   )
 
   return (
@@ -201,7 +211,7 @@ export function PantallaPedidos() {
         <PaginadorTabla
           total={pedidos.length}
           porPagina={porPagina}
-          pagina={pagina}
+          pagina={paginaEfectiva}
           onCambioPorPagina={setPorPagina}
           onCambioPagina={setPagina}
         />

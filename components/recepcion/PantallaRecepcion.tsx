@@ -46,9 +46,21 @@ export function PantallaRecepcion() {
   })
   const [paginaRecibidos, setPaginaRecibidos] = useState(0)
   const [porPaginaRecibidos, setPorPaginaRecibidos] = useState<PorPagina>(25)
+  // Clamp: si la lista se achica con el usuario en una página alta, se
+  // recorta a la última página válida (no tabla vacía).
+  const paginaRecibidosEfectiva =
+    porPaginaRecibidos < 0
+      ? 0
+      : Math.min(
+          paginaRecibidos,
+          Math.max(
+            0,
+            Math.ceil((recibidos ?? []).length / porPaginaRecibidos) - 1
+          )
+        )
   const recibidosPagina = paginarArreglo(
     recibidos ?? [],
-    paginaRecibidos,
+    paginaRecibidosEfectiva,
     porPaginaRecibidos
   )
 
@@ -322,7 +334,7 @@ export function PantallaRecepcion() {
             <PaginadorTabla
               total={recibidos.length}
               porPagina={porPaginaRecibidos}
-              pagina={paginaRecibidos}
+              pagina={paginaRecibidosEfectiva}
               onCambioPorPagina={setPorPaginaRecibidos}
               onCambioPagina={setPaginaRecibidos}
             />

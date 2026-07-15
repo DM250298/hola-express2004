@@ -238,6 +238,9 @@ export async function getCuentasAPagar(
   const supabase = createClient()
 
   // Abiertas (no pagadas): cartera de trabajo, completa y sin truncar.
+  // El desempate por id hace el orden único: sin él, la paginación de
+  // traerTodo puede duplicar/saltear filas entre páginas ante empates de
+  // vencimiento (multi-factura comparte fecha).
   const traerAbiertas = () =>
     traerTodo<FilaCuentaCruda>(() =>
       supabase
@@ -245,15 +248,19 @@ export async function getCuentasAPagar(
         .select(SELECT_CUENTAS)
         .neq('estado', 'pagada')
         .order('fecha_vencimiento', { ascending: true })
+        .order('id', { ascending: true })
     )
 
-  // Pagadas: histórico acotado a las más recientes.
+  // Pagadas: histórico acotado a las ÚLTIMAS PAGADAS (fecha_pago, no
+  // vencimiento): un pago de hoy sobre una deuda vencida hace meses tiene
+  // que aparecer siempre, o el pago parece perdido.
   const traerPagadas = async (): Promise<FilaCuentaCruda[]> => {
     const { data, error } = await supabase
       .from('cuentas_a_pagar')
       .select(SELECT_CUENTAS)
       .eq('estado', 'pagada')
-      .order('fecha_vencimiento', { ascending: false })
+      .order('fecha_pago', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: false })
       .limit(LIMITE_CUENTAS_PAGADAS)
     if (error) throw error
     return (data ?? []) as unknown as FilaCuentaCruda[]
@@ -296,8 +303,27 @@ export async function getCuentasSinFactura(): Promise<
       .select(SELECT_CUENTAS)
       .eq('tiene_factura', false)
       .order('fecha_vencimiento', { ascending: true })
+      .order('id', { ascending: true })
   )
   return crudas.map(mapearCuenta)
+}
+
+/**
+ * Una cuenta puntual por id. Para abrir desde Comprobantes una factura
+ * histórica cuya cuenta pagada quedó fuera de la ventana de 500 de
+ * getCuentasAPagar.
+ */
+export async function getCuentaAPagarPorId(
+  id: number
+): Promise<CuentaAPagarConProveedor | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('cuentas_a_pagar')
+    .select(SELECT_CUENTAS)
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  return data ? mapearCuenta(data as unknown as FilaCuentaCruda) : null
 }
 
 export interface PagarCuentaPayload {

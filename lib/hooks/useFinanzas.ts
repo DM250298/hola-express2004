@@ -7,6 +7,7 @@ import {
   crearEgreso,
   editarCuentaAPagar,
   eliminarEgreso,
+  getCuentaAPagarPorId,
   getCuentasAPagar,
   getCuentasSinFactura,
   getEgresos,
@@ -47,6 +48,21 @@ export function useCuentasSinFactura() {
     queryFn: () => getCuentasSinFactura(),
     staleTime: 30 * 1000,
   })
+}
+
+/**
+ * Fetch imperativo de una cuenta por id (con caché). Para resolver bajo
+ * demanda cuentas pagadas viejas que quedaron fuera de la ventana de 500
+ * del listado (ej. botón "Ver" de un comprobante histórico).
+ */
+export function useBuscarCuentaAPagar() {
+  const qc = useQueryClient()
+  return (id: number) =>
+    qc.fetchQuery({
+      queryKey: [...CUENTAS_PAGAR_KEY, 'por-id', id],
+      queryFn: () => getCuentaAPagarPorId(id),
+      staleTime: 30 * 1000,
+    })
 }
 
 export function useEgresos(

@@ -261,8 +261,10 @@ export function TabCuentasAPagar() {
         )}
       </div>
 
-      {estadoFiltro === 'pagada' &&
-        cuentasFiltradas.length >= LIMITE_CUENTAS_PAGADAS && (
+      {/* El tope de pagadas también recorta la vista "Todas": avisar en ambas. */}
+      {(estadoFiltro === 'pagada' || estadoFiltro === TODOS) &&
+        cuentasFiltradas.filter((c) => c.estado === 'pagada').length >=
+          LIMITE_CUENTAS_PAGADAS && (
           <p className="text-[10px] text-[#c8a58a]">
             Se muestran las últimas {LIMITE_CUENTAS_PAGADAS} cuentas pagadas.
           </p>

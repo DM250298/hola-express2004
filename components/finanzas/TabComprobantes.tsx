@@ -21,7 +21,11 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { formatearFechaCorta } from '@/lib/utils/formato'
-import { useCuentasAPagar } from '@/lib/hooks/useFinanzas'
+import { toast } from 'sonner'
+import {
+  useBuscarCuentaAPagar,
+  useCuentasAPagar,
+} from '@/lib/hooks/useFinanzas'
 import { useComprobantesCargados } from '@/lib/hooks/useFacturasCompra'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { ModalEditarFactura } from './ModalEditarFactura'
@@ -54,6 +58,7 @@ export function TabComprobantes({ desde, hasta }: Props) {
   const { data: comprobantes, isLoading: cargandoComp } =
     useComprobantesCargados()
   const { data: proveedores } = useProveedores()
+  const buscarCuenta = useBuscarCuentaAPagar()
   const [cuentaEditar, setCuentaEditar] =
     useState<CuentaAPagarConProveedor | null>(null)
   const [busqueda, setBusqueda] = useState('')
@@ -64,6 +69,24 @@ export function TabComprobantes({ desde, hasta }: Props) {
     for (const c of cuentas ?? []) m.set(c.id, c)
     return m
   }, [cuentas])
+
+  // Abre el modal de la factura. El listado solo trae las últimas 500
+  // cuentas pagadas: si la cuenta de un comprobante viejo no está en el
+  // mapa, se busca puntual por id en vez de dejar el botón muerto.
+  async function abrirComprobante(cuentaId: number) {
+    const enMapa = cuentasPorId.get(cuentaId)
+    if (enMapa) {
+      setCuentaEditar(enMapa)
+      return
+    }
+    try {
+      const cuenta = await buscarCuenta(cuentaId)
+      if (cuenta) setCuentaEditar(cuenta)
+      else toast.error('No se encontró la cuenta asociada al comprobante.')
+    } catch {
+      toast.error('No se pudo cargar la cuenta del comprobante.')
+    }
+  }
 
   // Mapa proveedor_id → nombre (respaldo cuando no hay cuenta asociada)
   const proveedoresPorId = useMemo(() => {
@@ -266,8 +289,6 @@ export function TabComprobantes({ desde, hasta }: Props) {
                     c.punto_venta,
                     c.numero_comprobante
                   )
-                  const cuenta =
-                    c.cuenta_id != null ? cuentasPorId.get(c.cuenta_id) : null
                   return (
                     <TableRow
                       key={`${c.cuenta_id}-${i}`}
@@ -305,8 +326,10 @@ export function TabComprobantes({ desde, hasta }: Props) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={!cuenta}
-                          onClick={() => cuenta && setCuentaEditar(cuenta)}
+                          disabled={c.cuenta_id == null}
+                          onClick={() =>
+                            c.cuenta_id != null && abrirComprobante(c.cuenta_id)
+                          }
                           className="h-8 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] text-xs"
                         >
                           Ver
