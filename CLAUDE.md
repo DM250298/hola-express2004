@@ -354,6 +354,14 @@ de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
   un cajero el embed viene null → costo 0. Las escrituras (`createProducto`,
   `updateProducto`, importación) hacen upsert en `costos_producto`, no en
   productos. En los RPCs se usa `fn_costo()` / `fn_set_costo()`.
+- **Combos / packs (migración 112)**: un producto `tipo='combo'` tiene sus
+  componentes en `producto_componentes` (sin anidamiento, trigger lo valida).
+  Al vender, `fn_crear_venta` descuenta stock/lotes/CMV de los COMPONENTES
+  (no del combo); anulación y devolución los reponen. La detección en los
+  RPCs es por EXISTENCIA de componentes, no por `tipo`. El `stock_actual`
+  que devuelven las queries de productos para un combo es **virtual**
+  (mínimo armable, `stockVirtualCombo()`); el real queda en 0 y el drawer lo
+  fuerza a 0 al guardar — no escribirle stock a un combo.
 
 ---
 

@@ -16,6 +16,36 @@ import type {
 export interface ProductoConRelaciones extends ProductoRow {
   categorias: { id: number; nombre: string } | null
   proveedores: { id: number; nombre: string } | null
+  /** Solo combos: componentes que descuentan stock al vender (migración 112). */
+  componentes?: ComponenteCombo[]
+}
+
+/** Componente de un producto combo, con los datos del producto hijo. */
+export interface ComponenteCombo {
+  componente_id: number
+  cantidad: number
+  nombre: string
+  unidad: string
+  stock_actual: number
+  controlar_stock: boolean | null
+  /** 0 si el usuario no tiene permiso de costos (RLS). */
+  precio_costo: number
+}
+
+/**
+ * Stock "virtual" de un combo: cuántas unidades se pueden armar con el stock
+ * de los componentes (el mínimo de stock/cantidad, redondeado para abajo).
+ * Los componentes sin control de stock no limitan; si ninguno controla,
+ * el combo no tiene límite físico (se devuelve un tope alto para que el POS
+ * no lo bloquee por "sin stock").
+ */
+export function stockVirtualCombo(componentes: ComponenteCombo[]): number {
+  const limitantes = componentes.filter((c) => c.controlar_stock !== false)
+  if (limitantes.length === 0) return 9999
+  const posibles = limitantes.map((c) =>
+    c.cantidad > 0 ? c.stock_actual / c.cantidad : 0
+  )
+  return Math.max(0, Math.floor(Math.min(...posibles)))
 }
 
 export type CostoEmbed =
@@ -47,6 +77,74 @@ function mapearCosto(r: ProductoRaw): ProductoConRelaciones {
 
 const SELECT_PRODUCTO =
   '*, categorias(id, nombre), proveedores(id, nombre), costos_producto(precio_costo)'
+
+// Embed del componente vía la FK componente_id (la tabla tiene dos FKs a
+// productos, hay que desambiguar por nombre de constraint).
+const SELECT_COMPONENTES =
+  'producto_id, componente_id, cantidad, componente:productos!producto_componentes_componente_id_fkey(id, nombre, unidad, stock_actual, controlar_stock, costos_producto(precio_costo))'
+
+type ComponenteRaw = {
+  producto_id: number
+  componente_id: number
+  cantidad: number
+  componente: {
+    id: number
+    nombre: string
+    unidad: string
+    stock_actual: number
+    controlar_stock: boolean | null
+    costos_producto: CostoEmbed
+  } | null
+}
+
+function mapearComponente(fila: ComponenteRaw): ComponenteCombo {
+  return {
+    componente_id: fila.componente_id,
+    cantidad: Number(fila.cantidad),
+    nombre: fila.componente?.nombre ?? `#${fila.componente_id}`,
+    unidad: fila.componente?.unidad ?? 'unidad',
+    stock_actual: Number(fila.componente?.stock_actual ?? 0),
+    controlar_stock: fila.componente?.controlar_stock ?? true,
+    precio_costo: costoDesdeEmbed(fila.componente?.costos_producto ?? null),
+  }
+}
+
+/**
+ * Adjunta los componentes a los productos tipo 'combo' y reemplaza su
+ * stock_actual por el stock virtual (cuántos combos se pueden armar).
+ * Soft-fail: si la tabla todavía no existe (migración 112 sin correr),
+ * los combos quedan sin componentes y se comportan como productos comunes.
+ */
+async function adjuntarComponentesCombos(
+  supabase: ReturnType<typeof createClient>,
+  productos: ProductoConRelaciones[]
+): Promise<void> {
+  const combos = productos.filter((p) => p.tipo === 'combo')
+  if (combos.length === 0) return
+  try {
+    const { data, error } = await supabase
+      .from('producto_componentes')
+      .select(SELECT_COMPONENTES)
+      .in(
+        'producto_id',
+        combos.map((c) => c.id)
+      )
+    if (error) throw error
+    const porProducto = new Map<number, ComponenteCombo[]>()
+    for (const fila of (data ?? []) as unknown as ComponenteRaw[]) {
+      const lista = porProducto.get(fila.producto_id) ?? []
+      lista.push(mapearComponente(fila))
+      porProducto.set(fila.producto_id, lista)
+    }
+    for (const combo of combos) {
+      const comps = porProducto.get(combo.id) ?? []
+      combo.componentes = comps
+      if (comps.length > 0) combo.stock_actual = stockVirtualCombo(comps)
+    }
+  } catch {
+    // Tabla aún no migrada u offline: combos sin expansión, no romper la lista.
+  }
+}
 
 export interface FiltrosProducto {
   busqueda?: string
@@ -98,7 +196,10 @@ async function fetchProductosRemoto(
     }
     return q
   })
-  return filas.map(mapearCosto)
+  const productos = filas.map(mapearCosto)
+  // Combos: adjunta componentes y calcula el stock virtual (min. armable).
+  await adjuntarComponentesCombos(supabase, productos)
+  return productos
 }
 
 /** ¿Los filtros representan el catálogo activo completo (sin acotar)? */
@@ -185,13 +286,57 @@ export async function getProductoByBarcode(
     const { data, error } = await q.limit(1).maybeSingle()
 
     if (error) throw error
-    return data ? mapearCosto(data as unknown as ProductoRaw) : null
+    if (!data) return null
+    const producto = mapearCosto(data as unknown as ProductoRaw)
+    // Si es combo, calcula el stock virtual también en el escaneo directo.
+    await adjuntarComponentesCombos(supabase, [producto])
+    return producto
   } catch (error) {
     if (esErrorDeRed(error)) {
       return buscarPorBarcodeLocal(codigo, soloVendible)
     }
     throw error
   }
+}
+
+/** Componentes de un combo, con nombre/stock/costo del producto hijo. */
+export async function getComponentesCombo(
+  productoId: number
+): Promise<ComponenteCombo[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('producto_componentes')
+    .select(SELECT_COMPONENTES)
+    .eq('producto_id', productoId)
+    .order('id', { ascending: true })
+  // Tabla aún no migrada → tratamos el combo como si no tuviera componentes.
+  if (error) return []
+  return ((data ?? []) as unknown as ComponenteRaw[]).map(mapearComponente)
+}
+
+/**
+ * Reemplaza la composición de un combo (borra y vuelve a insertar).
+ * Con lista vacía, deja de ser combo operativamente (vende su propio stock).
+ */
+export async function guardarComponentesCombo(
+  productoId: number,
+  componentes: { componente_id: number; cantidad: number }[]
+): Promise<void> {
+  const supabase = createClient()
+  const { error: errorBorrar } = await supabase
+    .from('producto_componentes')
+    .delete()
+    .eq('producto_id', productoId)
+  if (errorBorrar) throw errorBorrar
+  if (componentes.length === 0) return
+  const { error } = await supabase.from('producto_componentes').insert(
+    componentes.map((c) => ({
+      producto_id: productoId,
+      componente_id: c.componente_id,
+      cantidad: c.cantidad,
+    }))
+  )
+  if (error) throw error
 }
 
 /** Guarda el costo en la tabla gateada costos_producto. */

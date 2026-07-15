@@ -1428,6 +1428,27 @@ export type RecetaIngredienteUpdate = {
   merma_pct?: number
 }
 
+// ── Combos / packs (migración 112): componentes de un producto combo ──
+export type ProductoComponenteRow = {
+  id: number
+  producto_id: number
+  componente_id: number
+  cantidad: number
+  created_at: string
+}
+
+export type ProductoComponenteInsert = {
+  id?: number
+  producto_id: number
+  componente_id: number
+  cantidad: number
+  created_at?: string
+}
+
+export type ProductoComponenteUpdate = {
+  cantidad?: number
+}
+
 export type OrdenProduccionRow = {
   id: number
   producto_id: number
@@ -3018,6 +3039,12 @@ export interface Database {
         Row: RecetaIngredienteRow
         Insert: RecetaIngredienteInsert
         Update: RecetaIngredienteUpdate
+        Relationships: []
+      }
+      producto_componentes: {
+        Row: ProductoComponenteRow
+        Insert: ProductoComponenteInsert
+        Update: ProductoComponenteUpdate
         Relationships: []
       }
       ordenes_produccion: {

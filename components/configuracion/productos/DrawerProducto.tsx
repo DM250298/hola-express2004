@@ -1,18 +1,21 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { toast } from 'sonner'
 import {
   AlertTriangle,
   Boxes,
+  Gift,
   Layers,
   Loader2,
   Package,
   Plus,
   Receipt,
   ScanLine,
+  Search,
   Settings2,
   StickyNote,
   Tags,
@@ -40,13 +43,17 @@ import {
 } from '@/components/ui/sheet'
 import { MontoARS } from '@/components/shared/MontoARS'
 import {
+  useBuscarProductos,
+  useComponentesCombo,
   useCreateProducto,
+  useGuardarComponentesCombo,
   useUpdateProducto,
 } from '@/lib/hooks/useProductos'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { usePricing } from '@/lib/hooks/usePricing'
 import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
+import { stockVirtualCombo } from '@/lib/queries/productos'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CostoAdicional, ProductoRow } from '@/types/database'
 
@@ -184,6 +191,111 @@ function generarCodigoBarrasSimulado(): string {
   return codigo
 }
 
+/** Componente elegido para el combo (cantidad editable como string). */
+interface ComponenteSel {
+  componente_id: number
+  nombre: string
+  unidad: string
+  cantidad: string
+  precio_costo: number
+  stock_actual: number
+  controlar_stock: boolean | null
+}
+
+/** Buscador de productos para armar el combo (excluye combos y ya agregados). */
+function BuscadorComponente({
+  excluidos,
+  productoId,
+  disabled,
+  onSeleccionar,
+}: {
+  excluidos: number[]
+  productoId: number | null
+  disabled: boolean
+  onSeleccionar: (p: ProductoConRelaciones) => void
+}) {
+  const [input, setInput] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+
+  useEffect(() => {
+    const t = setTimeout(() => setBusqueda(input.trim()), 250)
+    return () => clearTimeout(t)
+  }, [input])
+
+  const { data: productos, isLoading } = useBuscarProductos(busqueda)
+
+  const resultados = (busqueda.length >= 2 ? (productos ?? []) : [])
+    .filter(
+      (p) =>
+        p.tipo !== 'combo' && // un combo no puede contener otro combo
+        p.id !== productoId &&
+        !excluidos.includes(p.id)
+    )
+    .slice(0, 8)
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a] pointer-events-none" />
+        <Input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Buscar producto por nombre o código…"
+          disabled={disabled}
+          className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
+          autoComplete="off"
+        />
+      </div>
+
+      {busqueda.length >= 2 && (
+        <div className="bg-white border border-[#e4c9b0]/60 rounded-xl overflow-hidden shadow-sm max-h-[220px] overflow-y-auto">
+          {isLoading ? (
+            <div className="p-3 flex items-center justify-center gap-2 text-[#6f3a2a] text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Buscando…
+            </div>
+          ) : resultados.length === 0 ? (
+            <div className="p-3 text-center text-[#6f3a2a] text-sm">
+              Sin resultados.
+            </div>
+          ) : (
+            <ul className="divide-y divide-[#e4c9b0]/40">
+              {resultados.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSeleccionar(p)
+                      setInput('')
+                    }}
+                    className="w-full px-3 py-2 flex items-center justify-between gap-3 text-left transition-colors hover:bg-[#fdfaf6]"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-[#391511] truncate text-sm">
+                        {p.nombre}
+                      </div>
+                      <div className="text-xs text-[#c8a58a] mt-0.5">
+                        Stock {p.stock_actual} {p.unidad}
+                        {p.precio_costo > 0 && (
+                          <>
+                            {' · costo '}
+                            <MontoARS monto={p.precio_costo} />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <Plus className="h-4 w-4 text-[#e4a42a] shrink-0" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function DrawerProducto({
   abierto,
   onCambioAbierto,
@@ -195,6 +307,7 @@ export function DrawerProducto({
   const esEdicion = producto !== null
   const crear = useCreateProducto()
   const actualizar = useUpdateProducto()
+  const guardarComponentes = useGuardarComponentesCombo()
   const { data: categorias } = useCategorias()
   const { data: proveedores } = useProveedores()
   const pricing = usePricing()
@@ -207,6 +320,11 @@ export function DrawerProducto({
   const [ivaVenta, setIvaVenta] = useState('21')
   const [margen, setMargen] = useState('0')
   const [imagenUrl, setImagenUrl] = useState<string | null>(null)
+
+  // ── Combo: componentes elegidos ──
+  const [componentesSel, setComponentesSel] = useState<ComponenteSel[]>([])
+  // Evita que un refetch pise lo que el usuario editó con el drawer abierto.
+  const refComponentesCargados = useRef(false)
 
   const {
     register,
@@ -240,6 +358,44 @@ export function DrawerProducto({
       notas: '',
     },
   })
+
+  // Tipo elegido en vivo (para mostrar/ocultar la sección de combo).
+  const tipoSel = useWatch({ control, name: 'tipo' })
+  const esCombo = tipoSel === 'combo'
+
+  // Componentes guardados del combo (solo al editar un combo existente).
+  const { data: componentesGuardados } = useComponentesCombo(
+    producto?.id ?? null,
+    abierto && esEdicion && producto?.tipo === 'combo'
+  )
+
+  useEffect(() => {
+    if (abierto) refComponentesCargados.current = false
+  }, [abierto, producto])
+
+  useEffect(() => {
+    if (!abierto || refComponentesCargados.current) return
+    // Alta nueva o producto que no es combo: arranca sin componentes.
+    if (!esEdicion || producto?.tipo !== 'combo') {
+      setComponentesSel([])
+      refComponentesCargados.current = true
+      return
+    }
+    if (componentesGuardados) {
+      setComponentesSel(
+        componentesGuardados.map((c) => ({
+          componente_id: c.componente_id,
+          nombre: c.nombre,
+          unidad: c.unidad,
+          cantidad: String(c.cantidad),
+          precio_costo: c.precio_costo,
+          stock_actual: c.stock_actual,
+          controlar_stock: c.controlar_stock,
+        }))
+      )
+      refComponentesCargados.current = true
+    }
+  }, [abierto, esEdicion, producto, componentesGuardados])
 
   useEffect(() => {
     if (!abierto) return
@@ -292,16 +448,44 @@ export function DrawerProducto({
     setCostoBase(producto ? String(r2(base)) : '')
   }, [abierto, producto, reset, nombreInicial, proveedorIdInicial])
 
-  const guardando = crear.isPending || actualizar.isPending
+  const guardando =
+    crear.isPending || actualizar.isPending || guardarComponentes.isPending
+
+  // ── Combo: costo y stock derivados de los componentes ──
+  const costoComponentes = useMemo(
+    () =>
+      componentesSel.reduce(
+        (s, c) => s + (Number(c.cantidad) || 0) * c.precio_costo,
+        0
+      ),
+    [componentesSel]
+  )
+  const stockArmable = useMemo(
+    () =>
+      stockVirtualCombo(
+        componentesSel.map((c) => ({
+          componente_id: c.componente_id,
+          cantidad: Number(c.cantidad) || 0,
+          nombre: c.nombre,
+          unidad: c.unidad,
+          stock_actual: c.stock_actual,
+          controlar_stock: c.controlar_stock,
+          precio_costo: c.precio_costo,
+        }))
+      ),
+    [componentesSel]
+  )
 
   // ── Cálculos en vivo (motor de precios con margen asegurado) ──
   // El precio ya NO se calcula multiplicando (costo × (1+margen) × (1+iva)):
   // eso dejaba las cargas (IIBB, imp. créd/déb, comisión MP) fuera del precio,
   // erosionando el margen. El motor DIVIDE por (1 − cargas) para asegurar la
   // ganancia después de impuestos y comisiones. Ver lib/pricing.
+  // Para un combo, el costo base es la suma de los componentes.
   const calc = useMemo(() => {
     const sumaAdic = adicionales.reduce((s, a) => s + (Number(a.monto) || 0), 0)
-    const costoNeto = (Number(costoBase) || 0) + sumaAdic
+    const base = esCombo ? costoComponentes : Number(costoBase) || 0
+    const costoNeto = base + sumaAdic
     const costoConIva = costoNeto * (1 + (Number(ivaCompra) || 0) / 100)
     // El Monotributista pricea sobre el costo CON IVA (no recupera crédito fiscal).
     const costoParaMotor =
@@ -320,7 +504,7 @@ export function DrawerProducto({
       // Lo que se guarda como precio_venta: el precio comercial redondeado.
       precioVenta: desglose?.precioRedondeado ?? 0,
     }
-  }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, pricing])
+  }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, pricing, esCombo, costoComponentes])
 
   function simularEscaneo() {
     const codigo = generarCodigoBarrasSimulado()
@@ -344,8 +528,45 @@ export function DrawerProducto({
     setAdicionales((prev) => prev.filter((_, i) => i !== idx))
   }
 
+  function agregarComponente(p: ProductoConRelaciones) {
+    setComponentesSel((prev) => [
+      ...prev,
+      {
+        componente_id: p.id,
+        nombre: p.nombre,
+        unidad: p.unidad,
+        cantidad: '1',
+        precio_costo: p.precio_costo ?? 0,
+        stock_actual: p.stock_actual,
+        controlar_stock: p.controlar_stock,
+      },
+    ])
+  }
+  function cambiarCantidadComponente(id: number, valor: string) {
+    setComponentesSel((prev) =>
+      prev.map((c) => (c.componente_id === id ? { ...c, cantidad: valor } : c))
+    )
+  }
+  function quitarComponente(id: number) {
+    setComponentesSel((prev) => prev.filter((c) => c.componente_id !== id))
+  }
+
   async function onSubmit(datos: EntradaFormulario) {
     const validado = esquemaProducto.parse(datos)
+    const esComboFinal = validado.tipo === 'combo'
+    const componentesLimpios = componentesSel
+      .map((c) => ({
+        componente_id: c.componente_id,
+        cantidad: Number(c.cantidad) || 0,
+      }))
+      .filter((c) => c.cantidad > 0)
+    if (esComboFinal && componentesLimpios.length === 0) {
+      toast.error(
+        'Un combo necesita al menos un componente con cantidad mayor a 0.'
+      )
+      return
+    }
+
     const costosAdicionales: CostoAdicional[] = adicionales
       .filter((a) => a.descripcion.trim() !== '' || Number(a.monto) > 0)
       .map((a) => ({
@@ -370,13 +591,17 @@ export function DrawerProducto({
       iva_venta: Number(ivaVenta) || 0,
       margen: Number(margen) || 0,
       costos_adicionales: costosAdicionales,
-      stock_actual: validado.stock_actual,
-      stock_minimo: validado.stock_minimo,
-      dias_vencimiento_minimo: validado.dias_vencimiento_minimo,
+      // Un combo no maneja stock propio: el stock sale de los componentes
+      // (el "stock" que se ve es el virtual, calculado en las queries).
+      stock_actual: esComboFinal ? 0 : validado.stock_actual,
+      stock_minimo: esComboFinal ? 0 : validado.stock_minimo,
+      dias_vencimiento_minimo: esComboFinal
+        ? null
+        : validado.dias_vencimiento_minimo,
       tipo: validado.tipo,
       unidad: validado.unidad,
       activo: validado.activo,
-      venta_por_peso: validado.venta_por_peso,
+      venta_por_peso: esComboFinal ? false : validado.venta_por_peso,
       visible_tienda: validado.visible_tienda,
       controlar_stock: validado.controlar_stock,
       no_ofrecer_ventas: validado.no_ofrecer_ventas,
@@ -391,8 +616,21 @@ export function DrawerProducto({
     try {
       if (esEdicion && producto) {
         await actualizar.mutateAsync({ id: producto.id, datos: payload })
+        // Guarda la composición si es combo, o la limpia si dejó de serlo.
+        if (esComboFinal || producto.tipo === 'combo') {
+          await guardarComponentes.mutateAsync({
+            productoId: producto.id,
+            componentes: esComboFinal ? componentesLimpios : [],
+          })
+        }
       } else {
         const creado = await crear.mutateAsync(payload)
+        if (esComboFinal) {
+          await guardarComponentes.mutateAsync({
+            productoId: creado.id,
+            componentes: componentesLimpios,
+          })
+        }
         onCreado?.(creado)
       }
       onCambioAbierto(false)
@@ -661,6 +899,107 @@ export function DrawerProducto({
 
             {/* ══ Columna 2: costos y precio de venta ══ */}
             <section className="space-y-5">
+              {/* ── Componentes del combo ── */}
+              {esCombo && (
+                <div className="rounded-xl border-2 border-[#f9b44c]/50 bg-[#fdfaf6] p-4 space-y-3">
+                  <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                    <Gift className="h-4 w-4 text-[#e4a42a]" />
+                    Componentes del combo
+                    {componentesSel.length > 0 && (
+                      <span className="text-xs font-semibold text-[#6f3a2a]">
+                        ({componentesSel.length})
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-[#6f3a2a]">
+                    Al vender el combo, el stock se descuenta de estos
+                    productos (no del combo).
+                  </p>
+
+                  <BuscadorComponente
+                    excluidos={componentesSel.map((c) => c.componente_id)}
+                    productoId={producto?.id ?? null}
+                    disabled={guardando}
+                    onSeleccionar={agregarComponente}
+                  />
+
+                  {componentesSel.length === 0 ? (
+                    <p className="text-xs text-[#c8a58a]">
+                      Buscá y agregá los productos que van adentro del combo.
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-[#e4c9b0]/40">
+                      {componentesSel.map((c) => {
+                        const cant = Number(c.cantidad) || 0
+                        return (
+                          <li
+                            key={c.componente_id}
+                            className="flex items-center gap-2 py-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-[#391511] truncate">
+                                {c.nombre}
+                              </div>
+                              <div className="text-[11px] text-[#c8a58a]">
+                                Stock {c.stock_actual} {c.unidad}
+                                {c.precio_costo > 0 && (
+                                  <>
+                                    {' · '}
+                                    <MontoARS monto={c.precio_costo} /> c/u
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="any"
+                              value={c.cantidad}
+                              onChange={(e) =>
+                                cambiarCantidadComponente(
+                                  c.componente_id,
+                                  e.target.value
+                                )
+                              }
+                              disabled={guardando}
+                              aria-label={`Cantidad de ${c.nombre}`}
+                              className="w-20 h-8 text-right tabular-nums bg-white border-[#e4c9b0]"
+                            />
+                            {c.precio_costo > 0 && (
+                              <div className="w-24 text-right text-sm font-semibold text-[#391511] tabular-nums shrink-0">
+                                <MontoARS monto={cant * c.precio_costo} />
+                              </div>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => quitarComponente(c.componente_id)}
+                              disabled={guardando}
+                              className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c]"
+                              aria-label="Quitar componente"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  )}
+
+                  {componentesSel.length > 0 && (
+                    <div className="flex items-center justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
+                      <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Costo total de componentes
+                      </span>
+                      <span className="font-bold text-[#391511] tabular-nums">
+                        <MontoARS monto={costoComponentes} />
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* ── Costo de compra ── */}
               <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
                 <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
@@ -690,12 +1029,17 @@ export function DrawerProducto({
                       type="number"
                       min="0"
                       step="0.01"
-                      value={costoBase}
+                      value={esCombo ? String(r2(costoComponentes)) : costoBase}
                       onChange={(e) => setCostoBase(e.target.value)}
                       placeholder="0.00"
-                      disabled={guardando}
+                      disabled={guardando || esCombo}
                       className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                     />
+                    {esCombo && (
+                      <p className="text-[10px] text-[#c8a58a]">
+                        Se calcula solo, sumando los componentes.
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -923,13 +1267,18 @@ export function DrawerProducto({
                       className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
                     >
                       <option value="reventa">Reventa (compra-venta)</option>
+                      <option value="combo">Combo / Pack (agrupa productos)</option>
                       <option value="insumo">Insumo (ingrediente)</option>
                       <option value="semi_elaborado">Semi-elaborado</option>
                       <option value="elaborado">Elaborado (se vende hecho)</option>
                       {producto?.tipo &&
-                        !['reventa', 'insumo', 'semi_elaborado', 'elaborado'].includes(
-                          producto.tipo
-                        ) && (
+                        ![
+                          'reventa',
+                          'combo',
+                          'insumo',
+                          'semi_elaborado',
+                          'elaborado',
+                        ].includes(producto.tipo) && (
                           <option value={producto.tipo}>{producto.tipo} (actual)</option>
                         )}
                     </select>
@@ -964,78 +1313,99 @@ export function DrawerProducto({
                   </div>
                 </div>
 
-                {/* Stock */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="stock_actual" className="text-[#391511] font-medium">
-                      Stock actual
-                    </Label>
-                    <Input
-                      id="stock_actual"
-                      type="number"
-                      min="0"
-                      step="1"
-                      {...register('stock_actual')}
-                      disabled={guardando}
-                      className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                    />
-                    {errors.stock_actual && (
-                      <p className="text-[#c43e2c] text-xs mt-1">
-                        {errors.stock_actual.message}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="stock_minimo" className="text-[#391511] font-medium">
-                      Stock mínimo
-                    </Label>
-                    <Input
-                      id="stock_minimo"
-                      type="number"
-                      min="0"
-                      step="1"
-                      {...register('stock_minimo')}
-                      disabled={guardando}
-                      className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                    />
-                    {errors.stock_minimo && (
-                      <p className="text-[#c43e2c] text-xs mt-1">
-                        {errors.stock_minimo.message}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Vencimiento mínimo al recibir */}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="dias_vencimiento_minimo"
-                    className="text-[#391511] font-medium"
-                  >
-                    Vencimiento mínimo al recibir (días)
-                  </Label>
-                  <Input
-                    id="dias_vencimiento_minimo"
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Sin mínimo"
-                    {...register('dias_vencimiento_minimo')}
-                    disabled={guardando}
-                    className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                  />
-                  <p className="text-[11px] text-[#c8a58a]">
-                    Si lo definís, al recibir el producto se alerta cuando la fecha
-                    de vencimiento esté por debajo de este margen. Dejalo en blanco
-                    para no validar.
-                  </p>
-                  {errors.dias_vencimiento_minimo && (
-                    <p className="text-[#c43e2c] text-xs">
-                      {errors.dias_vencimiento_minimo.message}
+                {esCombo ? (
+                  /* Un combo no maneja stock propio: muestra cuántos se
+                     pueden armar con el stock actual de los componentes. */
+                  <div className="rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Stock armable hoy
+                      </span>
+                      <span className="font-extrabold text-[#391511] tabular-nums">
+                        {componentesSel.length > 0 ? stockArmable : '—'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-[#c8a58a]">
+                      El combo no tiene stock propio: se calcula desde los
+                      componentes y al vender se descuentan ellos.
                     </p>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Stock */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="stock_actual" className="text-[#391511] font-medium">
+                          Stock actual
+                        </Label>
+                        <Input
+                          id="stock_actual"
+                          type="number"
+                          min="0"
+                          step="1"
+                          {...register('stock_actual')}
+                          disabled={guardando}
+                          className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                        {errors.stock_actual && (
+                          <p className="text-[#c43e2c] text-xs mt-1">
+                            {errors.stock_actual.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="stock_minimo" className="text-[#391511] font-medium">
+                          Stock mínimo
+                        </Label>
+                        <Input
+                          id="stock_minimo"
+                          type="number"
+                          min="0"
+                          step="1"
+                          {...register('stock_minimo')}
+                          disabled={guardando}
+                          className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                        {errors.stock_minimo && (
+                          <p className="text-[#c43e2c] text-xs mt-1">
+                            {errors.stock_minimo.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Vencimiento mínimo al recibir */}
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="dias_vencimiento_minimo"
+                        className="text-[#391511] font-medium"
+                      >
+                        Vencimiento mínimo al recibir (días)
+                      </Label>
+                      <Input
+                        id="dias_vencimiento_minimo"
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="Sin mínimo"
+                        {...register('dias_vencimiento_minimo')}
+                        disabled={guardando}
+                        className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      />
+                      <p className="text-[11px] text-[#c8a58a]">
+                        Si lo definís, al recibir el producto se alerta cuando la fecha
+                        de vencimiento esté por debajo de este margen. Dejalo en blanco
+                        para no validar.
+                      </p>
+                      {errors.dias_vencimiento_minimo && (
+                        <p className="text-[#c43e2c] text-xs">
+                          {errors.dias_vencimiento_minimo.message}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* ── Opciones de venta (toggles compactos) ── */}
@@ -1045,7 +1415,9 @@ export function DrawerProducto({
                   Opciones de venta
                 </h3>
                 <div className="divide-y divide-[#e4c9b0]/40">
-                  {OPCIONES_VENTA.map((op) => (
+                  {OPCIONES_VENTA.filter(
+                    (op) => !esCombo || op.campo !== 'venta_por_peso'
+                  ).map((op) => (
                     <div
                       key={op.campo}
                       className="flex items-center justify-between gap-3 py-2.5"
