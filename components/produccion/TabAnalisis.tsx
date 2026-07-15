@@ -164,7 +164,7 @@ export function TabAnalisis() {
                         {p.nombre}
                         {p.tipo === 'semi_elaborado' && (
                           <span className="ml-1.5 text-[10px] text-[#c8a58a]">
-                            (semi)
+                            (intermedia)
                           </span>
                         )}
                       </TableCell>

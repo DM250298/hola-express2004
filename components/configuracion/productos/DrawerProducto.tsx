@@ -54,6 +54,7 @@ import { useProveedores } from '@/lib/hooks/useProveedores'
 import { usePricing } from '@/lib/hooks/usePricing'
 import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
 import { stockVirtualCombo } from '@/lib/queries/productos'
+import { TIPOS_PRODUCTO, etiquetaTipo } from '@/lib/tipos-producto'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CostoAdicional, ProductoRow } from '@/types/database'
 
@@ -1297,20 +1298,16 @@ export function DrawerProducto({
                       disabled={guardando}
                       className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c] disabled:opacity-50"
                     >
-                      <option value="reventa">Reventa (compra-venta)</option>
-                      <option value="combo">Combo / Pack (agrupa productos)</option>
-                      <option value="insumo">Insumo (ingrediente)</option>
-                      <option value="semi_elaborado">Semi-elaborado</option>
-                      <option value="elaborado">Elaborado (se vende hecho)</option>
+                      {TIPOS_PRODUCTO.map((t) => (
+                        <option key={t.valor} value={t.valor}>
+                          {t.etiqueta} ({t.ayuda})
+                        </option>
+                      ))}
                       {producto?.tipo &&
-                        ![
-                          'reventa',
-                          'combo',
-                          'insumo',
-                          'semi_elaborado',
-                          'elaborado',
-                        ].includes(producto.tipo) && (
-                          <option value={producto.tipo}>{producto.tipo} (actual)</option>
+                        !TIPOS_PRODUCTO.some((t) => t.valor === producto.tipo) && (
+                          <option value={producto.tipo}>
+                            {etiquetaTipo(producto.tipo)} (actual)
+                          </option>
                         )}
                     </select>
                     {errors.tipo && (

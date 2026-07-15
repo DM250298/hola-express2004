@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { etiquetaTipo } from '@/lib/tipos-producto'
 import { DrawerProducto } from './DrawerProducto'
 import { ModalVencimientoMinimoMasivo } from './ModalVencimientoMinimoMasivo'
 import { BotonesImportExport } from '@/components/import/BotonesImportExport'
@@ -199,7 +200,7 @@ export function TablaProductos() {
                 <SelectItem value={TODAS}>Todos</SelectItem>
                 {(opcionesTU?.tipos ?? ['simple', 'combo', 'variante']).map((t) => (
                   <SelectItem key={t} value={t}>
-                    {t}
+                    {etiquetaTipo(t)}
                   </SelectItem>
                 ))}
               </SelectContent>

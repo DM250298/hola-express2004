@@ -27,7 +27,7 @@ export function TabRecetas() {
       <div className="flex items-center justify-between">
         <p className="text-sm text-[#6f3a2a]">
           Recetas activas. El costo se calcula recursivamente (incluye
-          semi-elaborados).
+          preparaciones intermedias).
         </p>
         <Button
           onClick={() => setEditor({ open: true, productoId: undefined })}

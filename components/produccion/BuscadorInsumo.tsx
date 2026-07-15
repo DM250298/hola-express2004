@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Loader2, Package, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useProductosProduccion } from '@/lib/hooks/useProduccion'
+import { etiquetaTipo } from '@/lib/tipos-producto'
 import type { ProductoProduccion } from '@/lib/queries/produccion'
 import { cn } from '@/lib/utils'
 
@@ -45,7 +46,7 @@ export function BuscadorInsumo({ tipos, excluidos = [], onSeleccionar }: Props) 
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Buscar insumo o semi-elaborado…"
+          placeholder="Buscar ingrediente (uso interno o prep. intermedia)…"
           className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
           autoComplete="off"
         />
@@ -61,8 +62,8 @@ export function BuscadorInsumo({ tipos, excluidos = [], onSeleccionar }: Props) 
           ) : resultados.length === 0 ? (
             <div className="p-4 text-center text-[#6f3a2a] text-sm">
               <Package className="h-5 w-5 mx-auto mb-1 text-[#c8a58a]" />
-              Sin resultados. Marcá el producto como insumo o semi-elaborado en
-              Configuración.
+              Sin resultados. Marcá el producto como “Uso interno” o
+              “Preparación intermedia” en Configuración.
             </div>
           ) : (
             <ul className="divide-y divide-[#e4c9b0]/40">
@@ -86,7 +87,8 @@ export function BuscadorInsumo({ tipos, excluidos = [], onSeleccionar }: Props) 
                           {p.nombre}
                         </div>
                         <div className="text-xs text-[#c8a58a] mt-0.5">
-                          {p.tipo} · stock {p.stock_actual} {p.unidad}
+                          {etiquetaTipo(p.tipo)} · stock {p.stock_actual}{' '}
+                          {p.unidad}
                         </div>
                       </div>
                       {yaUsado && (

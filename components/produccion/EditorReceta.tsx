@@ -20,6 +20,7 @@ import {
   useRecetaDeProducto,
 } from '@/lib/hooks/useProduccion'
 import { DIMENSION_POR_UNIDAD, UNIDADES, type UnidadCanonica } from '@/lib/utils/unidades'
+import { etiquetaTipo } from '@/lib/tipos-producto'
 import type { ProductoProduccion } from '@/lib/queries/produccion'
 
 interface IngEdit {
@@ -148,8 +149,8 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
             {esNueva ? 'Nueva receta' : `Receta · ${nombreProducto}`}
           </DialogTitle>
           <DialogDescription>
-            Definí el producto elaborado, cuánto rinde y sus ingredientes
-            (insumos o semi-elaborados).
+            Definí el producto a elaborar, cuánto rinde y sus ingredientes
+            (uso interno o preparaciones intermedias).
           </DialogDescription>
         </DialogHeader>
 
@@ -166,10 +167,12 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
                 }}
                 className="w-full h-9 rounded-lg border border-[#e4c9b0] bg-white px-3 text-sm text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c]"
               >
-                <option value="">Elegí un semi-elaborado o elaborado…</option>
+                <option value="">
+                  Elegí una preparación intermedia o elaboración propia…
+                </option>
                 {(elaborables ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.nombre} ({p.tipo} · {p.unidad})
+                    {p.nombre} ({etiquetaTipo(p.tipo)} · {p.unidad})
                   </option>
                 ))}
               </select>
@@ -180,9 +183,10 @@ export function EditorReceta({ open, onOpenChange, productoIdInicial }: Props) {
             )}
             {esNueva && (elaborables?.length ?? 0) === 0 && (
               <p className="text-xs text-[#c45e14] leading-snug">
-                No tenés productos marcados como “elaborado” o “semi-elaborado”.
-                Marcá el producto que vas a hacer en Configuración › Productos
-                (campo <span className="font-medium">Tipo</span>) y volvé acá.
+                No tenés productos marcados como “Elaboración propia” o
+                “Preparación intermedia”. Marcá el producto que vas a hacer en
+                Configuración › Productos (campo{' '}
+                <span className="font-medium">Tipo</span>) y volvé acá.
               </p>
             )}
           </div>
