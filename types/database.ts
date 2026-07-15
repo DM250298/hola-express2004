@@ -3763,6 +3763,19 @@ export interface Database {
           }[]
         }
       }
+      fn_productos_a_reponer: {
+        Args: { p_proveedor_id: number | null }
+        Returns: {
+          id: number
+          nombre: string
+          codigo_barras: string | null
+          precio_costo: number
+          stock_actual: number
+          stock_minimo: number
+          proveedor_id: number | null
+          proveedor_nombre: string | null
+        }[]
+      }
       fn_costo_receta: {
         Args: {
           p_producto_id: number

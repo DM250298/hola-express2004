@@ -1,6 +1,5 @@
-import * as XLSX from 'xlsx'
-import jsPDF from 'jspdf'
-import { agregarTabla } from './pdf'
+// xlsx y jspdf pesan ~1 MB parseado cada una: se importan dinámicamente al
+// momento de exportar para no engordar el chunk inicial de /compras.
 
 export interface ItemCotizacion {
   codigo: string
@@ -26,10 +25,11 @@ function nombreArchivo(proveedor: string, ext: string): string {
 }
 
 /** Genera y descarga la cotización en Excel (el proveedor completa precios). */
-export function generarCotizacionExcel(
+export async function generarCotizacionExcel(
   proveedor: string,
   items: ItemCotizacion[]
-): void {
+): Promise<void> {
+  const XLSX = await import('xlsx')
   const fecha = new Date().toLocaleDateString('es-AR')
   const aoa: (string | number)[][] = [
     ['Solicitud de cotización — ¡Hola! Express'],
@@ -53,11 +53,15 @@ export function generarCotizacionExcel(
 }
 
 /** Genera y descarga la cotización en PDF (documento formal imprimible). */
-export function generarCotizacionPDF(
+export async function generarCotizacionPDF(
   proveedor: string,
   items: ItemCotizacion[]
-): void {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+): Promise<void> {
+  const [{ default: JsPDF }, { agregarTabla }] = await Promise.all([
+    import('jspdf'),
+    import('./pdf'),
+  ])
+  const doc = new JsPDF({ unit: 'mm', format: 'a4' })
 
   // Banda de marca
   doc.setFillColor(57, 21, 17)

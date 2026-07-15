@@ -392,6 +392,13 @@ RLS combina policies permissive con **OR**. Si dejás la vieja `using(true)`
 y agregás una restrictiva, todos pasan igual por la vieja. Hay que
 **dropear todas las policies** de la tabla antes de crear la gateada.
 
+### RLS: fn_tiene_permiso siempre envuelta en (select ...)
+Postgres no inlinea plpgsql: `using (fn_tiene_permiso('x'))` se evalúa
+**por fila** (y adentro hace 2 selects). En policies nuevas escribir
+siempre `using ((select public.fn_tiene_permiso('x')))` → InitPlan, una
+evaluación por query. La migración 111 reescribió todas las existentes;
+no crear policies nuevas con la llamada desnuda.
+
 ### Auditar funciones duplicadas (chequeo T1)
 Después de reissuear RPCs, correr:
 `select proname, count(*) from pg_proc p join pg_namespace n on

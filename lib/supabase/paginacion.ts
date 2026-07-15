@@ -11,7 +11,10 @@ interface QueryConRange {
   range(
     desde: number,
     hasta: number
-  ): PromiseLike<{ data: unknown; error: { message: string } | null }>
+  ): PromiseLike<{
+    data: unknown
+    error: { message: string; code?: string } | null
+  }>
 }
 
 /**
@@ -33,7 +36,13 @@ export async function traerTodo<T>(
   while (true) {
     const hasta = desde + porPagina - 1
     const { data, error } = await construirQuery().range(desde, hasta)
-    if (error) throw new Error(error.message)
+    if (error) {
+      // Preservar el code de PostgREST (ej. PGRST202 = función inexistente)
+      // para que el llamador pueda decidir un fallback.
+      const e = new Error(error.message) as Error & { code?: string }
+      e.code = error.code
+      throw e
+    }
     const lote = (data ?? []) as T[]
     acumulado.push(...lote)
     if (lote.length < porPagina) break
