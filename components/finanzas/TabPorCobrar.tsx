@@ -65,6 +65,24 @@ export function TabPorCobrar() {
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
   const [confirmarCobro, setConfirmarCobro] = useState(false)
 
+  // Selección EFECTIVA: intersección con las pendientes visibles. Un refetch
+  // en background puede sacar filas ya acreditadas (conciliación MP, otro
+  // usuario, anulación): esos ids quedan fantasma en `seleccion` y no deben
+  // contarse ni viajar a acreditarLote (cortaría el lote a mitad de camino).
+  const idsPendientes = useMemo(
+    () =>
+      new Set(
+        (acreditaciones ?? [])
+          .filter((a) => a.estado === 'pendiente')
+          .map((a) => a.id)
+      ),
+    [acreditaciones]
+  )
+  const seleccionEfectiva = useMemo(
+    () => new Set(Array.from(seleccion).filter((id) => idsPendientes.has(id))),
+    [seleccion, idsPendientes]
+  )
+
   const nombreMedio = useMemo(() => {
     const m = new Map<string, string>()
     for (const x of medios ?? []) m.set(x.codigo, x.nombre)
@@ -74,9 +92,9 @@ export function TabPorCobrar() {
   const totalSel = useMemo(() => {
     if (!acreditaciones) return 0
     return acreditaciones
-      .filter((a) => seleccion.has(a.id))
+      .filter((a) => seleccionEfectiva.has(a.id))
       .reduce((acc, a) => acc + Number(a.monto_neto), 0)
-  }, [acreditaciones, seleccion])
+  }, [acreditaciones, seleccionEfectiva])
 
   function toggle(id: number) {
     setSeleccion((prev) => {
@@ -88,22 +106,20 @@ export function TabPorCobrar() {
   }
 
   function toggleTodos() {
-    const pendientes = (acreditaciones ?? []).filter(
-      (a) => a.estado === 'pendiente'
-    )
-    if (!pendientes.length) return
-    setSeleccion((prev) =>
-      prev.size === pendientes.length
-        ? new Set()
-        : new Set(pendientes.map((a) => a.id))
-    )
+    if (idsPendientes.size === 0) return
+    setSeleccion((prev) => {
+      const efectivos = Array.from(prev).filter((id) => idsPendientes.has(id))
+      return efectivos.length === idsPendientes.size
+        ? new Set<number>()
+        : new Set(idsPendientes)
+    })
   }
 
   function acreditar() {
-    if (!usuario || seleccion.size === 0) return
+    if (!usuario || seleccionEfectiva.size === 0) return
     acreditarLote.mutate(
       {
-        ids: Array.from(seleccion),
+        ids: Array.from(seleccionEfectiva),
         usuarioId: usuario.id,
         fecha: null,
       },
@@ -199,7 +215,12 @@ export function TabPorCobrar() {
           <div className="flex items-center gap-2">
             <Select
               value={filtroEstado}
-              onValueChange={(v) => setFiltroEstado(v ?? 'pendiente')}
+              onValueChange={(v) => {
+                setFiltroEstado(v ?? 'pendiente')
+                // Al cambiar el filtro, las filas seleccionadas pueden quedar
+                // ocultas: limpiar para no acreditar filas que no se ven.
+                setSeleccion(new Set())
+              }}
             >
               <SelectTrigger className="h-9 w-[180px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
                 <SelectValue />
@@ -211,10 +232,10 @@ export function TabPorCobrar() {
                 <SelectItem value={TODAS}>Todas</SelectItem>
               </SelectContent>
             </Select>
-            {seleccion.size > 0 && (
+            {seleccionEfectiva.size > 0 && (
               <span className="text-xs text-[#6f3a2a]">
                 <span className="font-bold text-[#391511]">
-                  {seleccion.size}
+                  {seleccionEfectiva.size}
                 </span>{' '}
                 seleccionada(s) ·{' '}
                 <span className="font-bold text-[#391511]">
@@ -226,7 +247,7 @@ export function TabPorCobrar() {
           <Button
             size="sm"
             onClick={() => setConfirmarCobro(true)}
-            disabled={seleccion.size === 0 || acreditarLote.isPending}
+            disabled={seleccionEfectiva.size === 0 || acreditarLote.isPending}
             className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5 disabled:opacity-40"
           >
             {acreditarLote.isPending ? (
@@ -234,7 +255,7 @@ export function TabPorCobrar() {
             ) : (
               <CheckCircle2 className="h-3.5 w-3.5" />
             )}
-            Marcar como cobradas ({seleccion.size})
+            Marcar como cobradas ({seleccionEfectiva.size})
           </Button>
         </div>
 
@@ -264,11 +285,8 @@ export function TabPorCobrar() {
                     <input
                       type="checkbox"
                       checked={
-                        seleccion.size > 0 &&
-                        seleccion.size ===
-                          acreditaciones.filter(
-                            (a) => a.estado === 'pendiente'
-                          ).length
+                        seleccionEfectiva.size > 0 &&
+                        seleccionEfectiva.size === idsPendientes.size
                       }
                       onChange={toggleTodos}
                       className="accent-[#f9b44c] h-4 w-4"
@@ -320,7 +338,7 @@ export function TabPorCobrar() {
                         {a.estado === 'pendiente' ? (
                           <input
                             type="checkbox"
-                            checked={seleccion.has(a.id)}
+                            checked={seleccionEfectiva.has(a.id)}
                             onChange={() => toggle(a.id)}
                             className="accent-[#f9b44c] h-4 w-4"
                           />
@@ -393,7 +411,9 @@ export function TabPorCobrar() {
         onConfirmar={acreditar}
       >
         <div className="rounded-lg bg-[#f9b44c]/10 px-3 py-2">
-          <span className="font-bold text-[#391511]">{seleccion.size}</span>{' '}
+          <span className="font-bold text-[#391511]">
+            {seleccionEfectiva.size}
+          </span>{' '}
           venta(s) por{' '}
           <span className="font-bold text-[#391511]">
             <MontoARS monto={totalSel} />

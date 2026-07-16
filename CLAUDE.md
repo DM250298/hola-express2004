@@ -235,10 +235,11 @@ Generación e impresión de etiquetas de precio masivo.
 ### 8. **Finanzas y Tesorería (`/finanzas`) — unificado**
 Tabs:
 - **Tablero (directivo)**: centro de mando solo-lectura — resultado del
-  período, posición de caja, capital inmovilizado en inventario (a costo),
-  por cobrar, flujo del período, deudas corto plazo (7/15/30 días),
+  período (ventas − CMV − mermas − egresos − comisiones − IIBB; las
+  comisiones y el IIBB salen de `movimientos_cuenta`, no de `egresos`),
+  posición de caja, capital inmovilizado en inventario (a costo), por
+  cobrar, flujo del período, deudas corto plazo (7/15/30 días),
   comisiones, diferencias de arqueo
-- **Resumen**: P&L del período
 - **Caja fuerte**: KPIs (en buzón, en caja fuerte, arqueado, remesado),
   arqueo con nota de ajuste obligatoria si hay diferencia, generación de
   remesas que ingresan a la cuenta bancaria
@@ -358,6 +359,19 @@ de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
   un cajero el embed viene null → costo 0. Las escrituras (`createProducto`,
   `updateProducto`, importación) hacen upsert en `costos_producto`, no en
   productos. En los RPCs se usa `fn_costo()` / `fn_set_costo()`.
+- **Posición de caja ("cuánta plata hay")**: usar SIEMPRE `getPosicionCaja()`
+  / `getTotalRemesado()` de `lib/queries/posicionCaja.ts` (los consumen
+  Tablero, Cuentas, Caja fuerte y Flujo proyectado). La cuenta "Caja
+  Efectivo" es un acumulado histórico — las remesas no la bajan — así que
+  todo cálculo de disponible debe restar lo remesado vía ese helper, no
+  re-derivarlo a mano. Cuando `fn_generar_remesa` descuente de Caja
+  Efectivo (fix de fondo pendiente), la resta se elimina solo ahí.
+- **Columnas `date` vs. rango del período**: `egresos.fecha`,
+  `movimientos_cuenta.fecha` y `arqueos_tesoreria.fecha` son `date`.
+  Filtrarlas contra el ISO del período (o su `.slice(0,10)`) usa la fecha
+  UTC y arrastra un día de más al final del rango: usar `fechaLocal()` de
+  `lib/utils/periodos.ts`. Las columnas timestamptz (`ventas.fecha`) van
+  con el ISO completo.
 - **Combos / packs (migración 112)**: un producto `tipo='combo'` tiene sus
   componentes en `producto_componentes` (sin anidamiento, trigger lo valida).
   Al vender, `fn_crear_venta` descuenta stock/lotes/CMV de los COMPONENTES
@@ -452,7 +466,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-59 migraciones corridas, ~320 archivos fuente, deploy en Vercel:
+Migraciones numeradas hasta la 113, ~320 archivos fuente, deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

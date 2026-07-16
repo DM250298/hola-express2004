@@ -14,6 +14,7 @@ import {
   type ValidarArqueoPayload,
   type GenerarRemesaPayload,
 } from '@/lib/queries/cajaFuerte'
+import { getTotalRemesado } from '@/lib/queries/posicionCaja'
 
 export const CAJA_FUERTE_KEY = ['caja-fuerte'] as const
 
@@ -29,6 +30,18 @@ export function useSaldoCajaFuerte() {
   return useQuery({
     queryKey: [...CAJA_FUERTE_KEY, 'saldo'],
     queryFn: getSaldoCajaFuerte,
+    staleTime: 30 * 1000,
+  })
+}
+
+/**
+ * Total histórico remesado. Bajo la key de caja fuerte para que las mutaciones
+ * del circuito (sangría/arqueo/remesa) lo invaliden solas.
+ */
+export function useTotalRemesado() {
+  return useQuery({
+    queryKey: [...CAJA_FUERTE_KEY, 'remesado-total'],
+    queryFn: getTotalRemesado,
     staleTime: 30 * 1000,
   })
 }
@@ -109,6 +122,10 @@ export function useGenerarRemesa() {
       invalidarTodo(qc)
       qc.invalidateQueries({ queryKey: ['cuentas'] })
       qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+      // La posición de caja del Tablero y el saldo inicial del flujo dependen
+      // de cuentas + remesado: refrescarlos para que no diverjan hasta 60s.
+      qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+      qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
       toast.success('Remesa generada · ingresada al banco')
     },
     onError: (e: Error) => toast.error(`No se pudo generar la remesa: ${e.message}`),

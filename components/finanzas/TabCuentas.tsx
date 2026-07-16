@@ -20,6 +20,7 @@ import { DrawerCuenta } from './DrawerCuenta'
 import { ModalNuevoMovimiento } from './ModalNuevoMovimiento'
 import { ConfiguracionCobros } from './ConfiguracionCobros'
 import { useCuentas } from '@/lib/hooks/useCuentas'
+import { useTotalRemesado } from '@/lib/hooks/useCajaFuerte'
 import { cn } from '@/lib/utils'
 import type { CuentaRow, TipoCuenta } from '@/types/database'
 
@@ -42,6 +43,11 @@ interface Props {
 
 export function TabCuentas({ onVerMovimientos }: Props) {
   const { data: cuentas, isLoading, isError } = useCuentas(false)
+  const {
+    data: remesadoTotal,
+    isPending: cargandoRemesado,
+    isError: errorRemesado,
+  } = useTotalRemesado()
   const [drawerAbierto, setDrawerAbierto] = useState(false)
   const [cuentaEditar, setCuentaEditar] = useState<CuentaRow | null>(null)
 
@@ -73,10 +79,12 @@ export function TabCuentas({ onVerMovimientos }: Props) {
   const cuentasActivas = (cuentas ?? []).filter((c) => c.activo)
   const cuentasInactivas = (cuentas ?? []).filter((c) => !c.activo)
 
-  const saldoTotal = cuentasActivas.reduce(
-    (acc, c) => acc + Number(c.saldo_actual),
-    0
-  )
+  // Mismo criterio que el Tablero: al total se le resta lo ya remesado, porque
+  // "Caja Efectivo" es acumulado histórico y lo depositado ya figura en Bancos.
+  const remesado = remesadoTotal ?? 0
+  const saldoTotal =
+    cuentasActivas.reduce((acc, c) => acc + Number(c.saldo_actual), 0) -
+    remesado
 
   return (
     <div className="space-y-5">
@@ -110,16 +118,35 @@ export function TabCuentas({ onVerMovimientos }: Props) {
         </div>
       </div>
 
-      {/* Total general */}
-      {!isLoading && cuentasActivas.length > 0 && (
+      {/* Total general — espera también el remesado para no flashear el total
+          inflado (sin la resta del doble conteo) */}
+      {!isLoading && !cargandoRemesado && cuentasActivas.length > 0 && (
         <div className="rounded-2xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/10 p-5 flex items-center justify-between">
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1">
               Saldo total del negocio
+              {remesado > 0 && (
+                <AyudaContextual titulo="Por qué no coincide con la suma de abajo">
+                  Al total se le descuenta lo ya depositado al banco (
+                  <MontoARS monto={remesado} />
+                  ): la cuenta &quot;Caja Efectivo&quot; acumula las ventas y no
+                  baja al depositar, así que esa plata ya figura en Bancos. Es
+                  el mismo número que muestra el Tablero.
+                </AyudaContextual>
+              )}
             </div>
-            <div className="text-xs text-[#6f3a2a]">
-              Suma de {cuentasActivas.length} cuentas activas
-            </div>
+            {errorRemesado ? (
+              <div className="text-xs text-[#c43e2c] font-medium">
+                No se pudo calcular lo ya depositado al banco: este total puede
+                estar inflado.
+              </div>
+            ) : (
+              <div className="text-xs text-[#6f3a2a]">
+                {remesado > 0
+                  ? `Suma de ${cuentasActivas.length} cuentas activas, menos lo ya depositado`
+                  : `Suma de ${cuentasActivas.length} cuentas activas`}
+              </div>
+            )}
           </div>
           <div
             className={cn(

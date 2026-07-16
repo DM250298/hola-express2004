@@ -38,6 +38,10 @@ export function useMovimientos(filtros: FiltrosMovimientos = {}) {
 function invalidar(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: CUENTAS_KEY })
   qc.invalidateQueries({ queryKey: MOVIMIENTOS_KEY })
+  // Los saldos alimentan la posición de caja del Tablero y el saldo inicial
+  // del flujo proyectado: refrescarlos para que no muestren totales viejos.
+  qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+  qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
 }
 
 export function useCrearCuenta() {

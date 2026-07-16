@@ -4,6 +4,7 @@ import { getCuentas } from '@/lib/queries/cuentas'
 import { getCuentasAPagar } from '@/lib/queries/finanzas'
 import { getAcreditaciones } from '@/lib/queries/acreditaciones'
 import { getConfigFiscal, getResumenFiscal } from '@/lib/queries/fiscal'
+import { getTotalRemesado } from '@/lib/queries/posicionCaja'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -100,15 +101,20 @@ export async function getFlujoProyectado(
   const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
   const primerDiaMesSig = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1)
 
-  const [cuentas, cuentasPagar, acreditaciones, cfg] = await Promise.all([
-    getCuentas(true),
-    getCuentasAPagar('abiertas'),
-    getAcreditaciones({ estado: 'pendiente' }),
-    getConfigFiscal().catch(() => null),
-  ])
+  const [cuentas, cuentasPagar, acreditaciones, cfg, remesado] =
+    await Promise.all([
+      getCuentas(true),
+      getCuentasAPagar('abiertas'),
+      getAcreditaciones({ estado: 'pendiente' }),
+      getConfigFiscal().catch(() => null),
+      getTotalRemesado(),
+    ])
 
-  // Saldo inicial = liquidez disponible en todas las cuentas activas
-  const saldoInicial = cuentas.reduce((s, c) => s + Number(c.saldo_actual), 0)
+  // Saldo inicial = liquidez disponible en todas las cuentas activas, menos lo
+  // ya remesado (misma resta que el Tablero: "Caja Efectivo" es acumulado
+  // histórico y lo depositado ya figura en el banco).
+  const saldoInicial =
+    cuentas.reduce((s, c) => s + Number(c.saldo_actual), 0) - remesado
 
   // Ventas de las últimas 8 semanas → promedio semanal
   const desdeVentas = isoLocal(sumarDias(hoy, -56))
@@ -164,12 +170,20 @@ export async function getFlujoProyectado(
     }
   })
 
-  // Cobranzas (acreditaciones pendientes) por fecha estimada
+  // Cobranzas (acreditaciones pendientes) por fecha estimada. El monto_neto es
+  // bruto − comisión, pero al acreditarse fn_acreditar_pago retiene además el
+  // IIBB de la cuenta destino: se proyecta esa retención para no sobreestimar
+  // (mismo redondeo que el RPC: round(bruto × pct) / 100).
+  const iibbPorCuenta = new Map(
+    cuentas.map((c) => [c.id, Number(c.retencion_iibb_porcentaje ?? 0)])
+  )
   for (const a of acreditaciones) {
     if (!a.fecha_estimada) continue
     const b = bucket(parseIso(a.fecha_estimada))
     if (b === null) continue
-    semanas[b].ingresos_cobranzas += Number(a.monto_neto)
+    const pct = a.cuenta_id !== null ? (iibbPorCuenta.get(a.cuenta_id) ?? 0) : 0
+    const iibbRetenido = Math.round(Number(a.monto_bruto) * pct) / 100
+    semanas[b].ingresos_cobranzas += Number(a.monto_neto) - iibbRetenido
   }
 
   // Cuentas a pagar pendientes por vencimiento

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { fechaLocal } from '@/lib/utils/periodos'
 import type {
   CuentaInsert,
   CuentaRow,
@@ -87,8 +88,10 @@ export async function getMovimientos(
     if (filtros.cuenta_id != null) q = q.eq('cuenta_id', filtros.cuenta_id)
     if (filtros.tipo) q = q.eq('tipo', filtros.tipo)
     if (filtros.categoria) q = q.eq('categoria', filtros.categoria)
-    if (filtros.desde) q = q.gte('fecha', filtros.desde.slice(0, 10))
-    if (filtros.hasta) q = q.lte('fecha', filtros.hasta.slice(0, 10))
+    // `fecha` es DATE: usar la fecha LOCAL del rango. slice(0,10) del ISO toma
+    // la fecha UTC y el fin del rango (23:59 local) cae en el día siguiente.
+    if (filtros.desde) q = q.gte('fecha', fechaLocal(filtros.desde))
+    if (filtros.hasta) q = q.lte('fecha', fechaLocal(filtros.hasta))
     return q
   })
 

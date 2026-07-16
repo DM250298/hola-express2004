@@ -10,6 +10,7 @@ import {
   CreditCard,
   Landmark,
   ListChecks,
+  Percent,
   Receipt,
   Scale,
   Ticket,
@@ -116,7 +117,7 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
           icono={resultado >= 0 ? TrendingUp : TrendingDown}
           etiqueta="Resultado del período"
           monto={resultado}
-          detalle="Ventas − costos − egresos"
+          detalle="Ventas − costos − egresos − comisiones e IIBB"
           tono={resultado >= 0 ? 'verde' : 'rojo'}
           destacado
         />
@@ -214,8 +215,14 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
         <Kpi
           icono={TrendingDown}
           etiqueta="Comisiones del período"
-          monto={t?.comisiones_periodo ?? 0}
-          detalle="Costo de tarjetas / MP"
+          monto={resumen?.comisiones ?? 0}
+          detalle="Costo de tarjetas / MP (ya restado del resultado)"
+        />
+        <Kpi
+          icono={Percent}
+          etiqueta="IIBB retenido"
+          monto={resumen?.iibb ?? 0}
+          detalle="Retención sobre cobros (ya restada del resultado)"
         />
         <Kpi
           icono={Calculator}

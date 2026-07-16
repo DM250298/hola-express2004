@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { traerTodo } from '@/lib/supabase/paginacion'
-import { claveSemana, semanasEnRango } from '@/lib/utils/periodos'
+import { claveSemana, fechaLocal, semanasEnRango } from '@/lib/utils/periodos'
 import type { CuentaAPagarUpdate, EgresoRow } from '@/types/database'
 
 export interface PuntoSemana {
@@ -16,6 +16,10 @@ export interface ResumenFinanciero {
   margen_bruto: number
   mermas: number
   egresos: number
+  /** Comisiones de tarjeta/MP del período (movimientos_cuenta, categoría 'comisiones'). */
+  comisiones: number
+  /** Retención IIBB sufrida en el período (movimientos_cuenta, categoría 'iibb'). */
+  iibb: number
   resultado_neto: number
   cantidad_ventas: number
   ticket_promedio: number
@@ -23,29 +27,19 @@ export interface ResumenFinanciero {
 }
 
 /**
- * P&L del período. Nota técnica importante: el costo de mercadería vendida (CMV)
- * se calcula como `items_venta.cantidad × productos.precio_costo` con el precio
- * costo ACTUAL del producto. Si el costo cambió desde la venta, el cálculo es
- * aproximado. Para precisión histórica habría que agregar `costo_unitario` a
- * items_venta (cambio de schema fuera de este alcance).
+ * P&L del período. Notas técnicas:
+ * - El CMV se calcula con el costo ACTUAL del producto (costos_producto). Si el
+ *   costo cambió desde la venta, es aproximado; precisión histórica requeriría
+ *   `costo_unitario` en items_venta (cambio de schema fuera de este alcance).
+ * - Las comisiones de tarjeta/MP y la retención de IIBB NO están en la tabla
+ *   `egresos`: se registran como movimientos_cuenta (categorías 'comisiones' e
+ *   'iibb'). Se descuentan acá para que el resultado no quede sobreestimado.
  */
 export async function getResumenFinanciero(
   desde: string,
   hasta: string
 ): Promise<ResumenFinanciero> {
   const supabase = createClient()
-
-  // 1. Ventas brutas + items con precio costo de producto (gateado por RLS)
-  const { data: ventasData, error: errVentas } = await supabase
-    .from('ventas')
-    .select(
-      `id, total, fecha, items_venta(cantidad, productos(costos_producto(precio_costo)))`
-    )
-    .eq('estado', 'completada')
-    .gte('fecha', desde)
-    .lte('fecha', hasta)
-
-  if (errVentas) throw errVentas
 
   type VentaCruda = {
     id: number
@@ -57,7 +51,19 @@ export async function getResumenFinanciero(
     }>
   }
 
-  const ventas = (ventasData ?? []) as unknown as VentaCruda[]
+  // 1. Ventas brutas + items con precio costo de producto (gateado por RLS).
+  // Paginado: >1000 ventas en el período truncarían el P&L en silencio.
+  const ventas = await traerTodo<VentaCruda>(() =>
+    supabase
+      .from('ventas')
+      .select(
+        `id, total, fecha, items_venta(cantidad, productos(costos_producto(precio_costo)))`
+      )
+      .eq('estado', 'completada')
+      .gte('fecha', desde)
+      .lte('fecha', hasta)
+      .order('id')
+  )
   const ventas_brutas = ventas.reduce((acc, v) => acc + Number(v.total), 0)
   const cantidad_ventas = ventas.length
   const cmv = ventas.reduce(
@@ -71,39 +77,68 @@ export async function getResumenFinanciero(
     0
   )
 
-  // 2. Mermas del período
-  const { data: mermasData, error: errMermas } = await supabase
-    .from('movimientos_stock')
-    .select('cantidad, productos(costos_producto(precio_costo))')
-    .eq('tipo', 'merma')
-    .gte('created_at', desde)
-    .lte('created_at', hasta)
-
-  if (errMermas) throw errMermas
-
+  // 2. Mermas del período (paginado)
   type MermaCruda = {
     cantidad: number
     productos: { costos_producto: CostoEmbed } | null
   }
+  const mermasData = await traerTodo<MermaCruda>(() =>
+    supabase
+      .from('movimientos_stock')
+      .select('cantidad, productos(costos_producto(precio_costo))')
+      .eq('tipo', 'merma')
+      .gte('created_at', desde)
+      .lte('created_at', hasta)
+      .order('id')
+  )
 
-  const mermas = ((mermasData ?? []) as unknown as MermaCruda[]).reduce(
+  const mermas = mermasData.reduce(
     (acc, m) => acc + m.cantidad * costoDesdeEmbed(m.productos?.costos_producto ?? null),
     0
   )
 
-  // 3. Egresos del período
-  const { data: egresosData, error: errEgresos } = await supabase
-    .from('egresos')
-    .select('monto, fecha')
-    .gte('fecha', desde)
-    .lte('fecha', hasta)
+  // 3. Egresos del período (paginado). `egresos.fecha` es DATE → comparar
+  // contra fecha local, no contra el ISO (arrastra un día de más al final).
+  const egresosData = await traerTodo<{ monto: number; fecha: string }>(() =>
+    supabase
+      .from('egresos')
+      .select('monto, fecha')
+      .gte('fecha', fechaLocal(desde))
+      .lte('fecha', fechaLocal(hasta))
+      .order('id')
+  )
 
-  if (errEgresos) throw errEgresos
-
-  const egresos = (egresosData ?? []).reduce(
+  const egresos = egresosData.reduce(
     (acc, e) => acc + Number(e.monto),
     0
   )
+
+  // 3b. Comisiones de tarjeta/MP + retención IIBB del período. Viven en
+  // movimientos_cuenta (no en egresos) y son costo real de vender: sin esto el
+  // resultado queda sobreestimado. `fecha` también es DATE. Se traen ambos
+  // tipos y se netea con signo: los reversos por anulación (ingresos con la
+  // misma categoría, desde mig 114) descuentan lo que la venta anulada sumó.
+  const movsCosto = await traerTodo<{
+    monto: number
+    categoria: string
+    tipo: string
+  }>(() =>
+    supabase
+      .from('movimientos_cuenta')
+      .select('monto, categoria, tipo')
+      .in('tipo', ['ingreso', 'egreso'])
+      .in('categoria', ['comisiones', 'iibb'])
+      .gte('fecha', fechaLocal(desde))
+      .lte('fecha', fechaLocal(hasta))
+      .order('id')
+  )
+  let comisiones = 0
+  let iibb = 0
+  for (const m of movsCosto) {
+    const monto = (Number(m.monto) || 0) * (m.tipo === 'egreso' ? 1 : -1)
+    if (m.categoria === 'comisiones') comisiones += monto
+    else iibb += monto
+  }
 
   // 4. Series semanales: agregar ventas y egresos por semana
   const claves = semanasEnRango(desde, hasta)
@@ -117,14 +152,16 @@ export async function getResumenFinanciero(
     const punto = serieMap.get(k)
     if (punto) punto.ventas += Number(v.total)
   }
-  for (const e of egresosData ?? []) {
-    const k = claveSemana(new Date(e.fecha))
+  for (const e of egresosData) {
+    // e.fecha es date-only: parsearla local (new Date('yyyy-MM-dd') es UTC y
+    // corre el egreso al día local anterior → semana equivocada los lunes).
+    const k = claveSemana(new Date(`${e.fecha}T00:00:00`))
     const punto = serieMap.get(k)
     if (punto) punto.egresos += Number(e.monto)
   }
 
   const margen_bruto = ventas_brutas - cmv
-  const resultado_neto = margen_bruto - mermas - egresos
+  const resultado_neto = margen_bruto - mermas - egresos - comisiones - iibb
   const ticket_promedio =
     cantidad_ventas > 0 ? ventas_brutas / cantidad_ventas : 0
 
@@ -134,6 +171,8 @@ export async function getResumenFinanciero(
     margen_bruto,
     mermas,
     egresos,
+    comisiones,
+    iibb,
     resultado_neto,
     cantidad_ventas,
     ticket_promedio,
@@ -457,8 +496,9 @@ export async function getEgresos(
   let query = supabase
     .from('egresos')
     .select('*, usuarios(nombre)')
-    .gte('fecha', desde)
-    .lte('fecha', hasta)
+    // `fecha` es DATE: comparar contra fecha local (el ISO arrastra un día de más)
+    .gte('fecha', fechaLocal(desde))
+    .lte('fecha', fechaLocal(hasta))
     .order('fecha', { ascending: false })
 
   if (categoria) {

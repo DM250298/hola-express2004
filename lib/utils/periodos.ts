@@ -59,10 +59,25 @@ export function rangoDesdeFechas(
   desde: string,
   hasta: string
 ): RangoFechas {
+  // Los inputs type=date entregan 'yyyy-MM-dd'. new Date('yyyy-MM-dd') parsea
+  // en UTC (spec) → en AR (UTC-3) sería el día ANTERIOR a las 21:00 y el rango
+  // quedaría corrido un día. Con T00:00:00 (sin zona) parsea como fecha local.
   return {
-    desde: inicioDia(new Date(desde)).toISOString(),
-    hasta: finDia(new Date(hasta)).toISOString(),
+    desde: inicioDia(new Date(`${desde}T00:00:00`)).toISOString(),
+    hasta: finDia(new Date(`${hasta}T00:00:00`)).toISOString(),
   }
+}
+
+/**
+ * Fecha LOCAL (yyyy-MM-dd) de un instante ISO del rango. Para filtrar columnas
+ * de tipo `date` (egresos.fecha, movimientos_cuenta.fecha, arqueos_tesoreria.fecha):
+ * compararlas contra el ISO completo (o su slice) usa la fecha UTC, y el fin del
+ * rango local (23:59) cae en el día siguiente en UTC → el filtro arrastra un
+ * día de más. Las columnas timestamptz (ventas.fecha) NO necesitan esto.
+ */
+export function fechaLocal(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** Lunes de la semana que contiene la fecha dada (locale es-AR: semana empieza lunes). */

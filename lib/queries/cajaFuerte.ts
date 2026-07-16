@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
+import { traerTodo } from '@/lib/supabase/paginacion'
+import { getTotalRemesado } from '@/lib/queries/posicionCaja'
 import type {
   ArqueoTesoreriaRow,
   RemesaRow,
@@ -149,28 +151,23 @@ export interface SaldoCajaFuerte {
 export async function getSaldoCajaFuerte(): Promise<SaldoCajaFuerte> {
   const supabase = createClient()
 
-  const [buzonRes, arqueosRes, remesasRes] = await Promise.all([
+  // Arqueos y remesas son históricos completos: paginados para esquivar el
+  // Max Rows (~1000 filas) que truncaría las sumas en silencio.
+  const [buzonRes, arqueosData, remesado] = await Promise.all([
     supabase.from('sangrias').select('monto').eq('estado', 'en_buzon'),
-    supabase.from('arqueos_tesoreria').select('monto_fisico'),
-    supabase.from('remesas').select('monto'),
+    traerTodo<{ monto_fisico: number }>(() =>
+      supabase.from('arqueos_tesoreria').select('monto_fisico').order('id')
+    ),
+    getTotalRemesado(),
   ])
 
   if (buzonRes.error) throw buzonRes.error
-  if (arqueosRes.error) throw arqueosRes.error
-  if (remesasRes.error) throw remesasRes.error
 
   const en_buzon = (buzonRes.data ?? []).reduce(
     (a, s) => a + Number(s.monto),
     0
   )
-  const arqueado = (arqueosRes.data ?? []).reduce(
-    (a, s) => a + Number(s.monto_fisico),
-    0
-  )
-  const remesado = (remesasRes.data ?? []).reduce(
-    (a, s) => a + Number(s.monto),
-    0
-  )
+  const arqueado = arqueosData.reduce((a, s) => a + Number(s.monto_fisico), 0)
 
   return { en_buzon, arqueado, remesado, saldo: arqueado - remesado }
 }

@@ -2,15 +2,10 @@ import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { getResumenPorCobrar } from '@/lib/queries/acreditaciones'
 import { costoDesdeEmbed } from '@/lib/queries/productos'
+import { getPosicionCaja, type PosicionCaja } from '@/lib/queries/posicionCaja'
+import { fechaLocal } from '@/lib/utils/periodos'
 
-export interface PosicionCaja {
-  efectivo: number
-  banco: number
-  billetera: number
-  /** Total ya depositado al banco (remesado). Se resta del total para no contar doble. */
-  remesado: number
-  total: number
-}
+export type { PosicionCaja }
 
 export interface DeudaCortoPlazo {
   total_pendiente: number
@@ -32,7 +27,6 @@ export interface TableroDirectivo {
   por_pagar: DeudaCortoPlazo
   por_cobrar_neto: number
   por_cobrar_pendientes: number
-  comisiones_periodo: number
   arqueos: ArqueosResumen
 }
 
@@ -64,59 +58,28 @@ export async function getTableroDirectivo(
     0
   )
 
-  const [
-    cuentasRes,
-    pagarRes,
-    comisionesRes,
-    arqueosRes,
-    remesasRes,
-    porCobrar,
-  ] = await Promise.all([
-    supabase.from('cuentas').select('tipo, saldo_actual').eq('activo', true),
-    supabase
-      .from('cuentas_a_pagar')
-      .select('monto, fecha_vencimiento')
-      .eq('estado', 'pendiente'),
-    supabase
-      .from('movimientos_cuenta')
-      .select('monto')
-      .eq('categoria', 'comisiones')
-      .eq('tipo', 'egreso')
-      .gte('fecha', desde)
-      .lte('fecha', hasta),
-    supabase
-      .from('arqueos_tesoreria')
-      .select('diferencia, estado')
-      .gte('fecha', desde)
-      .lte('fecha', hasta),
-    supabase.from('remesas').select('monto'),
+  const [posicion_caja, pagarData, arqueosData, porCobrar] = await Promise.all([
+    // Cálculo canónico (cuentas activas − remesado), compartido con Cuentas,
+    // Caja fuerte y Flujo proyectado.
+    getPosicionCaja(),
+    traerTodo<{ monto: number; fecha_vencimiento: string | null }>(() =>
+      supabase
+        .from('cuentas_a_pagar')
+        .select('monto, fecha_vencimiento')
+        .eq('estado', 'pendiente')
+        .order('id')
+    ),
+    // arqueos_tesoreria.fecha es DATE → comparar contra fecha local
+    traerTodo<{ diferencia: number | null; estado: string }>(() =>
+      supabase
+        .from('arqueos_tesoreria')
+        .select('diferencia, estado')
+        .gte('fecha', fechaLocal(desde))
+        .lte('fecha', fechaLocal(hasta))
+        .order('id')
+    ),
     getResumenPorCobrar(),
   ])
-
-  // Posición de caja
-  const posicion_caja: PosicionCaja = {
-    efectivo: 0,
-    banco: 0,
-    billetera: 0,
-    remesado: 0,
-    total: 0,
-  }
-  for (const c of cuentasRes.data ?? []) {
-    const saldo = Number(c.saldo_actual) || 0
-    posicion_caja.total += saldo
-    if (c.tipo === 'caja') posicion_caja.efectivo += saldo
-    else if (c.tipo === 'banco') posicion_caja.banco += saldo
-    else if (c.tipo === 'billetera_virtual') posicion_caja.billetera += saldo
-  }
-  // El efectivo ya remesado (depositado) al banco quedó sumado en dos lados: en
-  // "Caja Efectivo" (que solo sube por ventas, nunca baja) y en la cuenta
-  // bancaria destino. Se resta una vez del total para no contarlo dos veces.
-  // NO modifica saldos persistidos: es solo el cálculo de presentación.
-  posicion_caja.remesado = (remesasRes.data ?? []).reduce(
-    (acc, r) => acc + (Number(r.monto) || 0),
-    0
-  )
-  posicion_caja.total -= posicion_caja.remesado
 
   // Deudas a corto plazo
   const por_pagar: DeudaCortoPlazo = {
@@ -126,7 +89,7 @@ export async function getTableroDirectivo(
     vence_30: 0,
     vencidas: 0,
   }
-  for (const d of pagarRes.data ?? []) {
+  for (const d of pagarData) {
     const monto = Number(d.monto) || 0
     por_pagar.total_pendiente += monto
     const dias = d.fecha_vencimiento ? diasHasta(d.fecha_vencimiento) : 999
@@ -136,17 +99,11 @@ export async function getTableroDirectivo(
     else if (dias <= 30) por_pagar.vence_30 += monto
   }
 
-  const comisiones_periodo = (comisionesRes.data ?? []).reduce(
-    (acc, m) => acc + (Number(m.monto) || 0),
-    0
-  )
-
   const arqueos: ArqueosResumen = {
-    cantidad: (arqueosRes.data ?? []).length,
-    con_diferencia: (arqueosRes.data ?? []).filter(
-      (a) => a.estado === 'con_diferencia'
-    ).length,
-    diferencia_total: (arqueosRes.data ?? []).reduce(
+    cantidad: arqueosData.length,
+    con_diferencia: arqueosData.filter((a) => a.estado === 'con_diferencia')
+      .length,
+    diferencia_total: arqueosData.reduce(
       (acc, a) => acc + (Number(a.diferencia) || 0),
       0
     ),
@@ -158,7 +115,6 @@ export async function getTableroDirectivo(
     por_pagar,
     por_cobrar_neto: porCobrar.monto_neto,
     por_cobrar_pendientes: porCobrar.pendientes,
-    comisiones_periodo,
     arqueos,
   }
 }

@@ -26,18 +26,25 @@ import { formatearFechaHora } from '@/lib/utils/formato'
 
 export function TabCajaFuerte() {
   const { data: usuario } = useUsuario()
-  const { data: saldo } = useSaldoCajaFuerte()
+  const {
+    data: saldo,
+    isPending: cargandoSaldo,
+    isError: errorSaldo,
+  } = useSaldoCajaFuerte()
   const { data: buzon, isLoading: cargandoBuzon } = useSangriasEnBuzon()
   const { data: arqueos } = useArqueos()
   const { data: remesas } = useRemesas()
-  const { data: cuentas } = useCuentas(false)
+  const { data: cuentas, isPending: cargandoCuentas } = useCuentas(false)
 
-  // Efectivo real: saldo de las cuentas tipo "caja" (Caja Efectivo). Es la
-  // plata que físicamente está en la caja fuerte, aunque no se haya usado el
-  // circuito formal de sangría/arqueo.
-  const efectivoCajas = (cuentas ?? [])
-    .filter((c) => c.activo && c.tipo === 'caja')
-    .reduce((acc, c) => acc + Number(c.saldo_actual), 0)
+  // Efectivo real: saldo de las cuentas tipo "caja" (Caja Efectivo) MENOS lo ya
+  // depositado al banco. La cuenta es un acumulado histórico (las remesas no la
+  // bajan), así que sin la resta se mostraría también plata que ya está en el
+  // banco. Mismo criterio que el Tablero y Cuentas.
+  const efectivoCajas =
+    (cuentas ?? [])
+      .filter((c) => c.activo && c.tipo === 'caja')
+      .reduce((acc, c) => acc + Number(c.saldo_actual), 0) -
+    (saldo?.remesado ?? 0)
 
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
   const [modalArqueo, setModalArqueo] = useState(false)
@@ -80,20 +87,28 @@ export function TabCajaFuerte() {
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1">
               Efectivo en caja fuerte
               <AyudaContextual titulo="Tu efectivo">
-                Es el saldo de la cuenta &quot;Caja Efectivo&quot;: todo el
-                efectivo que entró por ventas. Es la plata que tenés físicamente
-                en la caja fuerte. El circuito de abajo (contar y depositar) es
-                opcional, para llevar el control formal de los retiros de los
-                cajeros.
+                Es el efectivo que entró por ventas (cuenta &quot;Caja
+                Efectivo&quot;) menos lo que ya depositaste al banco. Es la
+                plata que tenés físicamente. El circuito de abajo (contar y
+                depositar) es opcional, para llevar el control formal de los
+                retiros de los cajeros.
               </AyudaContextual>
             </div>
             <div className="text-xs text-[#6f3a2a]">
-              Saldo de la cuenta Caja Efectivo
+              Ventas en efectivo, menos lo ya depositado
             </div>
           </div>
         </div>
         <div className="text-3xl font-extrabold text-[#391511] tabular-nums">
-          <MontoARS monto={efectivoCajas} />
+          {cargandoSaldo || cargandoCuentas ? (
+            <Loader2 className="h-7 w-7 animate-spin text-[#6f3a2a]" />
+          ) : errorSaldo ? (
+            <span className="text-sm font-medium text-[#c43e2c]">
+              No se pudo calcular lo ya depositado — recargá la página
+            </span>
+          ) : (
+            <MontoARS monto={efectivoCajas} />
+          )}
         </div>
       </div>
 
