@@ -254,11 +254,6 @@ Tabs:
   `DrawerCuenta`. La config de medios de pago vive al final de esta tab
   (`ConfiguracionCobros`) — ver "Medios de pago y comisiones MP" abajo
 - **Movimientos**: filtros por cuenta/tipo/categoría
-- **Conciliación**: importa el reporte/extracto de Mercado Pago (CSV/Excel,
-  parser con auto-detección de columnas), cruza contra acreditaciones
-  pendientes (las acredita) y movimientos no conciliados, marca anomalías.
-  RPC `fn_aplicar_conciliacion`. Tablas `extractos_bancarios`,
-  `lineas_extracto`
 - **Cuentas a pagar**: deudas a proveedores con `provisoria` /
   `tiene_factura`
 - **Egresos**: gastos categorizados
@@ -300,11 +295,20 @@ Ajustar tasas desde la UI, no por código.
 
 ### 9. Contabilidad (`/contabilidad`)
 Plan de cuentas jerárquico, libro diario (asientos automáticos + manuales),
-conciliación bancaria, activos fijos con depreciación, impuestos, y
+conciliaciones, activos fijos con depreciación, impuestos, y
 **Cierre y auditoría**: candar meses (`periodos_contables`) — con un mes
 cerrado `fn_anular_venta` y `fn_guardar_factura_compra` rechazan operar
 sobre ese período; + log de **auditoría** (anulaciones, arqueos, remesas,
 cierres) con usuario, fecha e IP. Solo admin cierra/reabre.
+
+Las dos conciliaciones viven acá (movidas de Finanzas en 2026-07):
+- **Conciliar Mercado Pago** (`TabConciliacionMP`): importa el
+  reporte/extracto de MP (CSV/Excel, parser con auto-detección de columnas),
+  cruza contra acreditaciones pendientes (las acredita) y movimientos no
+  conciliados, marca anomalías. RPC `fn_aplicar_conciliacion`. Tablas
+  `extractos_bancarios`, `lineas_extracto`
+- **Conciliar banco** (`TabConciliacion`): tilde manual de movimientos por
+  cuenta contra el saldo del extracto
 
 ### 10. RRHH (`/rrhh`)
 Empleados, novedades (horas extra, faltas, adelantos), liquidación de
@@ -455,8 +459,9 @@ Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,
 Inventario (con movimientos y ABC), Vencimientos, **Compras unificado**
 (3-way match, catálogo N:M, monitor de costos, escaneo, supervisor),
 Etiquetas, **Finanzas y Tesorería** (Tablero directivo, Caja Fuerte,
-Clearing Digital, Conciliación CSV de MP, P&L, cuentas, egresos),
-Contabilidad (asientos automáticos + **cierre de período y auditoría**),
+Clearing Digital, P&L, cuentas, egresos),
+Contabilidad (asientos automáticos + conciliaciones banco/MP + **cierre de
+período y auditoría**),
 RRHH, Reportes, Proyectos, Terminales MP, Configuración, Tienda online.
 
 Los 2 manuales operativos (Compras, Tesorería) están **implementados

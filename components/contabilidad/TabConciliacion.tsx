@@ -58,8 +58,8 @@ export function TabConciliacion() {
           del banco.
         </p>
         <p className="text-[#9b6b53] text-xs mt-1">
-          ¿Buscás cruzar el reporte de Mercado Pago? Andá a Finanzas → Conciliar
-          Mercado Pago.
+          ¿Buscás cruzar el reporte de Mercado Pago? Andá a la pestaña
+          Conciliar Mercado Pago.
         </p>
       </div>
 

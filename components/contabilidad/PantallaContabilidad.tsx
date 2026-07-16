@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TabPlanCuentas } from './TabPlanCuentas'
 import { TabLibroDiario } from './TabLibroDiario'
 import { TabConciliacion } from './TabConciliacion'
+import { TabConciliacionMP } from './TabConciliacionMP'
 import { TabActivos } from './TabActivos'
 import { TabCierreAuditoria } from './TabCierreAuditoria'
 
@@ -33,6 +34,12 @@ export function PantallaContabilidad() {
             Libro diario
           </TabsTrigger>
           <TabsTrigger
+            value="conciliacion_mp"
+            className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
+          >
+            Conciliar Mercado Pago
+          </TabsTrigger>
+          <TabsTrigger
             value="conciliacion"
             className="data-active:bg-[#f9b44c]/20 data-active:text-[#391511]"
           >
@@ -57,6 +64,9 @@ export function PantallaContabilidad() {
         </TabsContent>
         <TabsContent value="diario">
           <TabLibroDiario />
+        </TabsContent>
+        <TabsContent value="conciliacion_mp">
+          <TabConciliacionMP />
         </TabsContent>
         <TabsContent value="conciliacion">
           <TabConciliacion />

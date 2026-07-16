@@ -22,7 +22,6 @@ import { TabCuentas } from './TabCuentas'
 import { TabMovimientos } from './TabMovimientos'
 import { TabCajaFuerte } from './TabCajaFuerte'
 import { TabPorCobrar } from './TabPorCobrar'
-import { TabConciliacionBancaria } from './TabConciliacionBancaria'
 import {
   rangoDesdeFechas,
   rangoPredefinido,
@@ -38,7 +37,6 @@ const GRUPOS: { titulo: string; tabs: { value: string; label: string }[] }[] = [
       { value: 'por_cobrar', label: 'Por cobrar' },
       { value: 'cuentas_bancarias', label: 'Cuentas' },
       { value: 'movimientos', label: 'Movimientos' },
-      { value: 'conciliacion', label: 'Conciliar Mercado Pago' },
       { value: 'egresos', label: 'Egresos' },
     ],
   },
@@ -216,7 +214,6 @@ export function PantallaFinanzas() {
             cuentaInicial={cuentaMovs}
           />
         )}
-        {tab === 'conciliacion' && <TabConciliacionBancaria />}
         {tab === 'egresos' && (
           <TabEgresos desde={rango.desde} hasta={rango.hasta} />
         )}

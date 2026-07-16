@@ -15,7 +15,7 @@ import { useExtractos, useLineasExtracto } from '@/lib/hooks/useConciliacion'
 import { formatearFechaHora, formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
-export function TabConciliacionBancaria() {
+export function TabConciliacionMP() {
   const { data: extractos, isLoading } = useExtractos()
   const [modalAbierto, setModalAbierto] = useState(false)
   const [expandido, setExpandido] = useState<number | null>(null)
@@ -34,7 +34,7 @@ export function TabConciliacionBancaria() {
             liberadas, concilia los movimientos y marca en rojo lo que no cuadra.
           </p>
           <p className="text-[#9b6b53] text-xs mt-1">
-            ¿Buscás cruzar el extracto del banco? Andá a Contabilidad → Conciliar
+            ¿Buscás cruzar el extracto del banco? Andá a la pestaña Conciliar
             banco.
           </p>
         </div>
