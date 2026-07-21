@@ -71,7 +71,7 @@ export function PanelPendientes({ estadoFiltro, onCambiarFiltro }: Props) {
         activo={estadoFiltro === 'bajo'}
         destacar={bajo > 0}
         onClick={() => onCambiarFiltro(estadoFiltro === 'bajo' ? null : 'bajo')}
-        accionHref="/compras?tab=reposicion"
+        accionHref="/compras?tab=ordenes"
         accionIcono={ShoppingCart}
         accionLabel="Comprar"
       />
