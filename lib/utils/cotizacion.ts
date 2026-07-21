@@ -92,14 +92,14 @@ export async function generarCotizacionPDF(
   const y = agregarTabla(
     doc,
     58,
-    ['Código', 'Producto', 'Cantidad', 'Precio unit.', 'Subtotal'],
-    items.map((it) => [it.codigo, it.nombre, it.cantidad, '', ''])
+    ['Código', 'Producto', 'Cantidad'],
+    items.map((it) => [it.codigo, it.nombre, it.cantidad])
   )
 
   doc.setFontSize(9)
   doc.setTextColor(111, 58, 42)
   doc.text(
-    'Complete los precios unitarios y devuelva esta cotización. ¡Gracias!',
+    'Aguardamos su cotización con precios y disponibilidad. ¡Gracias!',
     14,
     y + 8
   )
