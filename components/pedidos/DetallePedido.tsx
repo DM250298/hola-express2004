@@ -9,12 +9,14 @@ import {
   ClipboardList,
   CreditCard,
   PackageCheck,
+  Pencil,
   Send,
   Truck,
   X,
 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -104,6 +106,18 @@ export function DetallePedido({ pedidoId }: Props) {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {(pedido.estado === 'borrador' || pedido.estado === 'enviado') && (
+              <Link
+                href={`/pedidos/${pedido.id}/editar`}
+                className={cn(
+                  buttonVariants({ variant: 'outline' }),
+                  'border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#fdfaf6] gap-1.5'
+                )}
+              >
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Link>
+            )}
             {pedido.estado === 'borrador' && (
               <Button
                 onClick={() =>
@@ -175,7 +189,11 @@ export function DetallePedido({ pedidoId }: Props) {
           <Stat
             icono={CreditCard}
             etiqueta="Condición pago"
-            valor={pedido.proveedor_completo?.condicion_pago ?? '—'}
+            valor={
+              pedido.terminos_pago ??
+              pedido.proveedor_completo?.condicion_pago ??
+              '—'
+            }
           />
           <Stat
             icono={Truck}

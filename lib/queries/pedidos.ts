@@ -191,6 +191,7 @@ export interface NuevoPedidoPayload {
   proveedor_id: number
   usuario_id: string
   fecha_entrega_esperada: string | null
+  terminos_pago: string | null
   estado: 'borrador' | 'enviado'
   items: ItemNuevoPedido[]
 }
@@ -211,6 +212,7 @@ export async function crearPedido(
       proveedor_id: payload.proveedor_id,
       usuario_id: payload.usuario_id,
       fecha_entrega_esperada: payload.fecha_entrega_esperada,
+      terminos_pago: payload.terminos_pago,
       estado: payload.estado,
       total,
     })
@@ -241,6 +243,46 @@ export async function crearPedido(
   }
 
   return pedido
+}
+
+export interface EditarPedidoPayload {
+  pedido_id: number
+  proveedor_id: number
+  fecha_entrega_esperada: string | null
+  terminos_pago: string | null
+  estado: 'borrador' | 'enviado'
+  items: ItemNuevoPedido[]
+}
+
+/**
+ * Reescribe una orden existente (edición de borrador/enviado que todavía no se
+ * recibió) de forma **atómica** vía `fn_actualizar_pedido`: actualiza la
+ * cabecera y reemplaza los items en una única transacción, tomando un lock y
+ * validando el estado en el server (una recepción concurrente no se pisa). El
+ * reemplazo de items es seguro porque una orden no recibida no tiene lotes ni
+ * cuentas a pagar colgando de sus items.
+ */
+export async function actualizarPedido(
+  payload: EditarPedidoPayload
+): Promise<PedidoRow> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase.rpc('fn_actualizar_pedido', {
+    p_pedido_id: payload.pedido_id,
+    p_proveedor_id: payload.proveedor_id,
+    p_fecha_entrega: payload.fecha_entrega_esperada,
+    p_terminos_pago: payload.terminos_pago,
+    p_estado: payload.estado,
+    p_items: payload.items.map((it) => ({
+      producto_id: it.producto_id,
+      cantidad_pedida: it.cantidad_pedida,
+      precio_costo: it.precio_costo,
+    })) as unknown as Json,
+  })
+
+  if (error) throw error
+  if (!data) throw new Error('No se pudo actualizar la orden.')
+  return data as PedidoRow
 }
 
 export async function actualizarEstadoPedido(

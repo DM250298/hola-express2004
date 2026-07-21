@@ -199,9 +199,11 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     [itemsEstado]
   )
 
-  const condicionDias = parsearDiasCondicionPago(
-    pedido.proveedor_completo?.condicion_pago
-  )
+  // Los términos de pago de la ORDEN mandan; si la orden no los tiene, cae a
+  // la condición de pago del proveedor (comportamiento previo).
+  const condicionPagoTexto =
+    pedido.terminos_pago ?? pedido.proveedor_completo?.condicion_pago ?? null
+  const condicionDias = parsearDiasCondicionPago(condicionPagoTexto)
   const fechaVencimientoCuenta = useMemo(() => {
     const d = new Date()
     d.setDate(d.getDate() + condicionDias)
@@ -400,7 +402,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                 Condición de pago
               </div>
               <div className="font-semibold text-[#391511]">
-                {pedido.proveedor_completo?.condicion_pago ?? 'Contado'}
+                {condicionPagoTexto ?? 'Contado'}
               </div>
             </div>
             <div>

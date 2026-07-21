@@ -1309,6 +1309,7 @@ export type PedidoRow = {
   usuario_id: string
   fecha_pedido: string
   fecha_entrega_esperada: string | null
+  terminos_pago: string | null
   estado: EstadoPedido
   total: number
   created_at: string
@@ -1321,6 +1322,7 @@ export type PedidoInsert = {
   usuario_id: string
   fecha_pedido?: string
   fecha_entrega_esperada?: string | null
+  terminos_pago?: string | null
   estado?: EstadoPedido
   total?: number
   created_at?: string
@@ -1328,7 +1330,9 @@ export type PedidoInsert = {
 }
 
 export type PedidoUpdate = {
+  proveedor_id?: number
   fecha_entrega_esperada?: string | null
+  terminos_pago?: string | null
   estado?: EstadoPedido
   total?: number
   updated_at?: string
@@ -3764,6 +3768,17 @@ export interface Database {
           p_usuario_id: string
         }
         Returns: undefined
+      }
+      fn_actualizar_pedido: {
+        Args: {
+          p_pedido_id: number
+          p_proveedor_id: number
+          p_fecha_entrega: string | null
+          p_terminos_pago: string | null
+          p_estado: string
+          p_items: Json
+        }
+        Returns: PedidoRow
       }
       fn_recibir_pedido: {
         Args: {

@@ -4,11 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   actualizarEstadoPedido,
+  actualizarPedido,
   crearPedido,
   getPedidoDetalle,
   getPedidos,
   getProductosSugeridos,
   recibirPedido,
+  type EditarPedidoPayload,
   type FiltrosPedidos,
   type NuevoPedidoPayload,
   type RecibirPedidoPayload,
@@ -59,6 +61,21 @@ export function useCrearPedido() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo crear el pedido: ${error.message}`)
+    },
+  })
+}
+
+export function useActualizarPedido() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: EditarPedidoPayload) => actualizarPedido(payload),
+    onSuccess: (_d, variables) => {
+      qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
+      qc.invalidateQueries({ queryKey: ['pedido-detalle', variables.pedido_id] })
+      toast.success('Orden actualizada')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo guardar la orden: ${error.message}`)
     },
   })
 }
