@@ -10,7 +10,6 @@ import {
   Loader2,
   Plus,
   ShieldCheck,
-  Vault,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
@@ -32,11 +31,7 @@ import { formatearFechaHora } from '@/lib/utils/formato'
 
 export function TabCajaFuerte() {
   const { data: usuario } = useUsuario()
-  const {
-    data: saldo,
-    isPending: cargandoSaldo,
-    isError: errorSaldo,
-  } = useSaldoCajaFuerte()
+  const { data: saldo } = useSaldoCajaFuerte()
   const { data: buzon, isLoading: cargandoBuzon } = useSangriasEnBuzon()
   const { data: arqueos } = useArqueos()
   const { data: remesas } = useRemesas()
@@ -74,43 +69,6 @@ export function TabCajaFuerte() {
 
   return (
     <div className="space-y-5">
-      {/* Caja fuerte = cuenta "Caja Efectivo" (saldo real, candado mig 118) */}
-      <div className="rounded-2xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/10 p-5 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-[#f9b44c]/30">
-            <Vault className="h-5 w-5 text-[#6f3a2a]" />
-          </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1">
-              Caja fuerte · cuenta Caja Efectivo
-              <AyudaContextual titulo="Cómo entra la plata acá">
-                El efectivo sigue esta secuencia: venta en la caja del POS →{' '}
-                <em>cierre de caja</em> (el cajero controla) → sobre al{' '}
-                <em>buzón</em> → <em>control administrativo</em> (contar y
-                validar) → recién ahí el monto verificado entra a la cuenta
-                Caja Efectivo. Nada entra directo desde la venta. El fondo de
-                cambio de los cajeros es plata aparte. Es el mismo número que
-                ves en el Tablero y en Cuentas.
-              </AyudaContextual>
-            </div>
-            <div className="text-xs text-[#6f3a2a]">
-              Efectivo verificado · entra solo con arqueo validado
-            </div>
-          </div>
-        </div>
-        <div className="text-3xl font-extrabold text-[#391511] tabular-nums">
-          {cargandoSaldo ? (
-            <Loader2 className="h-7 w-7 animate-spin text-[#6f3a2a]" />
-          ) : errorSaldo ? (
-            <span className="text-sm font-medium text-[#c43e2c]">
-              No se pudo calcular el saldo — recargá la página
-            </span>
-          ) : (
-            <MontoARS monto={saldo?.saldo ?? 0} />
-          )}
-        </div>
-      </div>
-
       {/* Semáforo de descuadre: la cuenta vs. el circuito de conteo */}
       {saldo && Math.abs(saldo.descuadre) >= 0.01 && (
         <div className="rounded-xl border border-[#c43e2c]/40 bg-[#c43e2c]/5 px-4 py-2.5 text-sm text-[#c43e2c] flex items-center justify-between gap-2 flex-wrap">
