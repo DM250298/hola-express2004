@@ -4,7 +4,6 @@ import { getCuentas } from '@/lib/queries/cuentas'
 import { getCuentasAPagar } from '@/lib/queries/finanzas'
 import { getAcreditaciones } from '@/lib/queries/acreditaciones'
 import { getConfigFiscal, getResumenFiscal } from '@/lib/queries/fiscal'
-import { getTotalRemesado } from '@/lib/queries/posicionCaja'
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
@@ -101,20 +100,17 @@ export async function getFlujoProyectado(
   const primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
   const primerDiaMesSig = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1)
 
-  const [cuentas, cuentasPagar, acreditaciones, cfg, remesado] =
-    await Promise.all([
-      getCuentas(true),
-      getCuentasAPagar('abiertas'),
-      getAcreditaciones({ estado: 'pendiente' }),
-      getConfigFiscal().catch(() => null),
-      getTotalRemesado(),
-    ])
+  const [cuentas, cuentasPagar, acreditaciones, cfg] = await Promise.all([
+    getCuentas(true),
+    getCuentasAPagar('abiertas'),
+    getAcreditaciones({ estado: 'pendiente' }),
+    getConfigFiscal().catch(() => null),
+  ])
 
-  // Saldo inicial = liquidez disponible en todas las cuentas activas, menos lo
-  // ya remesado (misma resta que el Tablero: "Caja Efectivo" es acumulado
-  // histórico y lo depositado ya figura en el banco).
-  const saldoInicial =
-    cuentas.reduce((s, c) => s + Number(c.saldo_actual), 0) - remesado
+  // Saldo inicial = liquidez disponible en todas las cuentas activas. Desde el
+  // candado (mig 118) "Caja Efectivo" es la caja fuerte con saldo real (las
+  // remesas la debitan de verdad) → no hay que restar lo remesado.
+  const saldoInicial = cuentas.reduce((s, c) => s + Number(c.saldo_actual), 0)
 
   // Ventas de las últimas 8 semanas → promedio semanal
   const desdeVentas = isoLocal(sumarDias(hoy, -56))

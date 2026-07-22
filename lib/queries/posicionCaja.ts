@@ -5,15 +5,13 @@ export interface PosicionCaja {
   efectivo: number
   banco: number
   billetera: number
-  /** Total ya depositado al banco (remesado). Se resta del total para no contar doble. */
-  remesado: number
   total: number
 }
 
 /**
  * Suma histórica de remesas, paginada. La tabla crece sin tope: un select plano
- * se trunca en Max Rows (~1000 filas) y el descuento quedaría corto en silencio,
- * inflando el "disponible".
+ * se trunca en Max Rows (~1000 filas) y la suma quedaría corta en silencio.
+ * Se usa solo como dato informativo del desglose de Caja fuerte.
  */
 export async function getTotalRemesado(): Promise<number> {
   const supabase = createClient()
@@ -25,38 +23,33 @@ export async function getTotalRemesado(): Promise<number> {
 
 /**
  * Cálculo canónico de "cuánta plata hay" — única fuente para el Tablero,
- * Cuentas, Caja fuerte y Flujo proyectado.
+ * Cuentas y Flujo proyectado.
  *
- * La cuenta "Caja Efectivo" es un acumulado histórico: las remesas acreditan la
- * cuenta bancaria destino pero no la bajan, así que lo ya depositado quedaría
- * contado dos veces (ahí y en el banco). Se resta una vez del total. NO modifica
- * saldos persistidos: es solo cálculo de presentación.
- *
- * Cuando fn_generar_remesa descuente de Caja Efectivo (fix de fondo pendiente),
- * la resta se elimina SOLO acá y todos los consumidores quedan bien.
+ * Desde el candado (migración 118) la cuenta "Caja Efectivo" ES la caja
+ * fuerte: se acredita SOLO al validar el arqueo (control administrativo),
+ * los movimientos manuales la mueven de verdad y las remesas la debitan.
+ * Su saldo es real → no hay que restar lo remesado ni compensar nada.
  */
 export async function getPosicionCaja(): Promise<PosicionCaja> {
   const supabase = createClient()
-  const [cuentasRes, remesado] = await Promise.all([
-    supabase.from('cuentas').select('tipo, saldo_actual').eq('activo', true),
-    getTotalRemesado(),
-  ])
-  if (cuentasRes.error) throw cuentasRes.error
+  const { data, error } = await supabase
+    .from('cuentas')
+    .select('tipo, saldo_actual')
+    .eq('activo', true)
+  if (error) throw error
 
   const posicion: PosicionCaja = {
     efectivo: 0,
     banco: 0,
     billetera: 0,
-    remesado,
     total: 0,
   }
-  for (const c of cuentasRes.data ?? []) {
+  for (const c of data ?? []) {
     const saldo = Number(c.saldo_actual) || 0
     posicion.total += saldo
     if (c.tipo === 'caja') posicion.efectivo += saldo
     else if (c.tipo === 'banco') posicion.banco += saldo
     else if (c.tipo === 'billetera_virtual') posicion.billetera += saldo
   }
-  posicion.total -= remesado
   return posicion
 }

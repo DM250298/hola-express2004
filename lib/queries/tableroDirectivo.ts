@@ -59,8 +59,8 @@ export async function getTableroDirectivo(
   )
 
   const [posicion_caja, pagarData, arqueosData, porCobrar] = await Promise.all([
-    // Cálculo canónico (cuentas activas − remesado), compartido con Cuentas,
-    // Caja fuerte y Flujo proyectado.
+    // Cálculo canónico (cuentas activas; la caja fuerte es saldo real desde
+    // el candado de la mig 118), compartido con Cuentas y Flujo proyectado.
     getPosicionCaja(),
     traerTodo<{ monto: number; fecha_vencimiento: string | null }>(() =>
       supabase

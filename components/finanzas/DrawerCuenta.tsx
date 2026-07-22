@@ -70,6 +70,10 @@ interface Props {
 
 export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
   const esEdicion = cuenta !== null
+  // La bóveda (candado, mig 118): su saldo lo mueve SOLO el circuito de la
+  // caja fuerte (arqueo validado / movimiento manual / remesa). Acá no se
+  // edita saldo, tipo ni activo para no romper el candado.
+  const esBoveda = esEdicion && (cuenta?.es_caja_fuerte ?? false)
   const crear = useCrearCuenta()
   const actualizar = useActualizarCuenta()
 
@@ -114,25 +118,38 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
 
   async function onSubmit(datos: DatosForm) {
     const validado = esquemaCuenta.parse(datos)
-    const payload = {
+    const base = {
       nombre: validado.nombre,
-      tipo: validado.tipo,
-      saldo_actual: validado.saldo_actual,
       banco: validado.banco?.trim() ? validado.banco : null,
       numero_cuenta: validado.numero_cuenta?.trim()
         ? validado.numero_cuenta
         : null,
       alias_cbu: validado.alias_cbu?.trim() ? validado.alias_cbu : null,
       notas: validado.notas?.trim() ? validado.notas : null,
-      activo: validado.activo,
       retencion_iibb_porcentaje: validado.retencion_iibb_porcentaje,
     }
+    // Para la bóveda NO se persisten saldo/tipo/activo: el saldo lo maneja el
+    // circuito del candado y la cuenta debe seguir siendo caja activa.
+    const payload = esBoveda
+      ? base
+      : {
+          ...base,
+          tipo: validado.tipo,
+          saldo_actual: validado.saldo_actual,
+          activo: validado.activo,
+        }
 
     try {
       if (esEdicion && cuenta) {
         await actualizar.mutateAsync({ id: cuenta.id, datos: payload })
       } else {
-        await crear.mutateAsync(payload)
+        await crear.mutateAsync({
+          ...base,
+          nombre: validado.nombre,
+          tipo: validado.tipo,
+          saldo_actual: validado.saldo_actual,
+          activo: validado.activo,
+        })
       }
       onCambioAbierto(false)
     } catch {
@@ -176,7 +193,7 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                         key={t.valor}
                         type="button"
                         onClick={() => field.onChange(t.valor)}
-                        disabled={guardando}
+                        disabled={guardando || esBoveda}
                         className={cn(
                           'flex flex-col items-center justify-center gap-1 py-3 rounded-xl border-2 transition-all',
                           activo
@@ -228,14 +245,16 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                 type="number"
                 step="0.01"
                 {...register('saldo_actual')}
-                disabled={guardando}
+                disabled={guardando || esBoveda}
                 className="pl-7 h-12 text-lg tabular-nums font-semibold border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
               />
             </div>
             <p className="text-[10px] text-[#6f3a2a]">
-              {esEdicion
-                ? '⚠️ Editar el saldo directamente NO crea un movimiento. Usá "Nuevo movimiento" o "Ajuste".'
-                : 'Si la cuenta ya tiene plata cuando la creás, ingresá ese saldo acá.'}
+              {esBoveda
+                ? '🔒 Esta cuenta es la caja fuerte: el saldo lo mueve solo el circuito (arqueo validado, movimientos manuales, depósitos). No se edita a mano.'
+                : esEdicion
+                  ? '⚠️ Editar el saldo directamente NO crea un movimiento. Usá "Nuevo movimiento" o "Ajuste".'
+                  : 'Si la cuenta ya tiene plata cuando la creás, ingresá ese saldo acá.'}
             </p>
           </div>
 
@@ -348,7 +367,7 @@ export function DrawerCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                     id="activo"
                     checked={field.value}
                     onCheckedChange={field.onChange}
-                    disabled={guardando}
+                    disabled={guardando || esBoveda}
                     className="data-[state=checked]:bg-[#f9b44c]"
                   />
                 )}

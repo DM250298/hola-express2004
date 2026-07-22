@@ -108,6 +108,19 @@ function invalidarTodo(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: CAJA_FUERTE_KEY })
 }
 
+/**
+ * Desde el candado (mig 118) el arqueo, el movimiento manual y la remesa
+ * mueven la cuenta "Caja Efectivo" de verdad → hay que refrescar también
+ * Cuentas, Movimientos, el Tablero y el Flujo proyectado.
+ */
+function invalidarBoveda(qc: ReturnType<typeof useQueryClient>) {
+  invalidarTodo(qc)
+  qc.invalidateQueries({ queryKey: ['cuentas'] })
+  qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+  qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+  qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
+}
+
 export function useRegistrarSangria() {
   const qc = useQueryClient()
   return useMutation({
@@ -131,7 +144,7 @@ export function useValidarArqueo() {
   return useMutation({
     mutationFn: (payload: ValidarArqueoPayload) => validarArqueo(payload),
     onSuccess: (data) => {
-      invalidarTodo(qc)
+      invalidarBoveda(qc)
       const dif = Number(
         (data as { diferencia?: number } | null)?.diferencia ?? 0
       )
@@ -152,14 +165,8 @@ export function useGenerarRemesa() {
   return useMutation({
     mutationFn: (payload: GenerarRemesaPayload) => generarRemesa(payload),
     onSuccess: () => {
-      invalidarTodo(qc)
-      qc.invalidateQueries({ queryKey: ['cuentas'] })
-      qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
-      // La posición de caja del Tablero y el saldo inicial del flujo dependen
-      // de cuentas + remesado: refrescarlos para que no diverjan hasta 60s.
-      qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
-      qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
-      toast.success('Remesa generada · ingresada al banco')
+      invalidarBoveda(qc)
+      toast.success('Remesa generada · caja fuerte → banco')
     },
     onError: (e: Error) => toast.error(`No se pudo generar la remesa: ${e.message}`),
   })
@@ -171,8 +178,8 @@ export function useRegistrarMovimientoCajaFuerte() {
     mutationFn: (payload: RegistrarMovimientoCajaFuertePayload) =>
       registrarMovimientoCajaFuerte(payload),
     onSuccess: (_data, vars) => {
-      // invalidarTodo cubre 'saldo' + 'movimientos' + 'dif-*' (misma key base).
-      invalidarTodo(qc)
+      // El movimiento manual mueve la cuenta bóveda → refrescar todo.
+      invalidarBoveda(qc)
       toast.success(
         vars.tipo === 'ingreso'
           ? 'Ingreso registrado en la caja fuerte'

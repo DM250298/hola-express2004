@@ -74,7 +74,7 @@ export function TabCajaFuerte() {
 
   return (
     <div className="space-y-5">
-      {/* Efectivo contado en la bóveda (saldo real del circuito de conteo) */}
+      {/* Caja fuerte = cuenta "Caja Efectivo" (saldo real, candado mig 118) */}
       <div className="rounded-2xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/10 p-5 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-[#f9b44c]/30">
@@ -82,19 +82,19 @@ export function TabCajaFuerte() {
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1">
-              Efectivo contado en bóveda
-              <AyudaContextual titulo="El efectivo de la bóveda">
-                Es el efectivo físico que ya contaste y validaste: los cierres de
-                caja que pasaron por el buzón, más los ingresos manuales, menos
-                los egresos manuales. Lo que todavía está en el buzón{' '}
-                <em>sin contar</em> se muestra aparte (&quot;Por contar&quot;) y no
-                suma hasta que lo validás. El fondo de cambio de los cajeros es
-                plata aparte, no entra acá. Puede diferir del &quot;Efectivo&quot;
-                del Tablero, que se calcula sobre el total histórico de ventas.
+              Caja fuerte · cuenta Caja Efectivo
+              <AyudaContextual titulo="Cómo entra la plata acá">
+                El efectivo sigue esta secuencia: venta en la caja del POS →{' '}
+                <em>cierre de caja</em> (el cajero controla) → sobre al{' '}
+                <em>buzón</em> → <em>control administrativo</em> (contar y
+                validar) → recién ahí el monto verificado entra a la cuenta
+                Caja Efectivo. Nada entra directo desde la venta. El fondo de
+                cambio de los cajeros es plata aparte. Es el mismo número que
+                ves en el Tablero y en Cuentas.
               </AyudaContextual>
             </div>
             <div className="text-xs text-[#6f3a2a]">
-              Lo contado y validado, más ajustes manuales
+              Efectivo verificado · entra solo con arqueo validado
             </div>
           </div>
         </div>
@@ -110,6 +110,21 @@ export function TabCajaFuerte() {
           )}
         </div>
       </div>
+
+      {/* Semáforo de descuadre: la cuenta vs. el circuito de conteo */}
+      {saldo && Math.abs(saldo.descuadre) >= 0.01 && (
+        <div className="rounded-xl border border-[#c43e2c]/40 bg-[#c43e2c]/5 px-4 py-2.5 text-sm text-[#c43e2c] flex items-center justify-between gap-2 flex-wrap">
+          <span>
+            La cuenta no cuadra con el circuito de conteo (arqueos + manuales −
+            depósitos). Puede ser una edición manual del saldo o una anulación
+            vieja — revisá los movimientos de la cuenta.
+          </span>
+          <span className="font-bold tabular-nums">
+            {saldo.descuadre > 0 ? '+' : '−'}
+            <MontoARS monto={Math.abs(saldo.descuadre)} />
+          </span>
+        </div>
+      )}
 
       {/* Acción: movimiento manual */}
       <div className="flex justify-end">
@@ -169,10 +184,10 @@ export function TabCajaFuerte() {
           <h3 className="text-[#391511] font-semibold text-sm flex items-center gap-2">
             <Inbox className="h-4 w-4 text-[#f9b44c]" />
             Retiros por contar
-            <AyudaContextual titulo="Cómo funciona la bóveda">
-              El efectivo sigue este camino: el cajero cierra la caja y el
-              efectivo va al buzón <em>(sobre)</em> → vos lo contás y validás{' '}
-              <em>(arqueo)</em> → recién ahí suma a la bóveda.
+            <AyudaContextual titulo="El control administrativo">
+              El cajero cierra la caja y el efectivo va al buzón{' '}
+              <em>(sobre)</em> → vos lo contás y validás <em>(arqueo)</em> →
+              recién ahí el monto verificado entra a la cuenta Caja Efectivo.
             </AyudaContextual>
           </h3>
           <div className="flex items-center gap-2">

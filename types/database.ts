@@ -1671,6 +1671,8 @@ export type CuentaRow = {
   activo: boolean
   /** Retención de IIBB que aplica el agente de retención sobre cada ingreso. */
   retencion_iibb_porcentaje: number
+  /** true = esta cuenta ES la caja fuerte (bóveda); a lo sumo una. El saldo lo mueve solo el circuito (arqueo/manual/remesa). */
+  es_caja_fuerte: boolean
   created_at: string
   updated_at: string
 }
@@ -1687,6 +1689,7 @@ export type CuentaInsert = {
   notas?: string | null
   activo?: boolean
   retencion_iibb_porcentaje?: number
+  es_caja_fuerte?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -1702,6 +1705,7 @@ export type CuentaUpdate = {
   notas?: string | null
   activo?: boolean
   retencion_iibb_porcentaje?: number
+  es_caja_fuerte?: boolean
   updated_at?: string
 }
 
@@ -2108,6 +2112,8 @@ export type MedioPagoRow = {
   comision_porcentaje: number
   dias_acreditacion: number
   cuenta_id: number | null
+  /** false = el medio NO acredita cuenta al vender (efectivo: entra a la bóveda recién con el arqueo). El trigger de DB lo fuerza para 'efectivo'. */
+  acredita_en_venta: boolean
   protegido: boolean
   created_at: string
   updated_at: string
@@ -2127,6 +2133,7 @@ export type MedioPagoInsert = {
   comision_porcentaje?: number
   dias_acreditacion?: number
   cuenta_id?: number | null
+  acredita_en_venta?: boolean
   protegido?: boolean
   created_at?: string
   updated_at?: string
@@ -2145,6 +2152,7 @@ export type MedioPagoUpdate = {
   comision_porcentaje?: number
   dias_acreditacion?: number
   cuenta_id?: number | null
+  acredita_en_venta?: boolean
   protegido?: boolean
   updated_at?: string
 }

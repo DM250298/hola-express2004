@@ -240,19 +240,22 @@ Tabs:
   posición de caja, capital inmovilizado en inventario (a costo), por
   cobrar, flujo del período, deudas corto plazo (7/15/30 días),
   comisiones, diferencias de arqueo
-- **Caja fuerte**: el número grande "Efectivo contado en bóveda" es el saldo
-  del **circuito de conteo**, no el acumulador de ventas: `saldo = Σ
-  arqueos.monto_fisico + Σ mov_manual(ingreso) − Σ mov_manual(egreso) − Σ
-  remesas` (`getSaldoCajaFuerte`). El buzón ("Por contar") queda aparte.
-  Movimientos manuales de efectivo (ingreso/egreso) vía
-  `fn_registrar_mov_caja_fuerte` (permiso adentro, nota obligatoria, bloquea
-  saldo negativo, audita) — tabla `movimientos_caja_fuerte` (mig 117).
-  Control de diferencias con período local: por empleado (cierres,
-  `caja_turnos.diferencia`) + control del buzón (arqueos). El circuito de
-  **remesas** (depósito al banco) está oculto tras el flag
-  `MOSTRAR_REMESAS` (`lib/config/tesoreria.ts`) — el código y
-  `fn_generar_remesa` quedan intactos. Arqueo con nota de ajuste obligatoria
-  si hay diferencia
+- **Caja fuerte (CANDADO, migs 118+119)**: la cuenta **"Caja Efectivo" ES la
+  caja fuerte** (`cuentas.es_caja_fuerte`, única, resuelta por
+  `fn_cuenta_caja_fuerte()`). Flujo duro: venta → caja POS → cierre (control
+  cajero) → buzón (`sangrias`) → **control administrativo** (`fn_validar_arqueo`
+  v3, que ACREDITA la cuenta con el monto físico verificado) → Caja Efectivo.
+  La venta en efectivo **NO acredita** ninguna cuenta:
+  `medios_pago('efectivo').cuenta_id = NULL`, blindado por el trigger
+  `trg_guard_medio_cuenta` (re-nulifica aunque la UI intente setearlo).
+  `fn_generar_remesa` v3 = transferencia real bóveda→banco;
+  `fn_registrar_mov_caja_fuerte` v2 mueve también la cuenta (guard de negativo
+  sobre el saldo real). `getSaldoCajaFuerte` LEE `saldo_actual` (fuente única)
+  y expone `descuadre` (cuenta vs. circuito; ≠0 = banner rojo). El buzón
+  ("Por contar") queda aparte. Control de diferencias con período local: por
+  empleado (cierres) + control del buzón (arqueos). Remesas ocultas tras
+  `MOSTRAR_REMESAS` (`lib/config/tesoreria.ts`). DrawerCuenta no permite
+  editar saldo/tipo/activo de la bóveda
 - **Por cobrar (Clearing digital)**: acreditaciones pendientes de ventas
   con tarjeta/MP. Cada medio de pago tiene `dias_acreditacion` y
   `comision_porcentaje`. Las ventas con plazo > 0 generan una
@@ -370,17 +373,15 @@ de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
   `updateProducto`, importación) hacen upsert en `costos_producto`, no en
   productos. En los RPCs se usa `fn_costo()` / `fn_set_costo()`.
 - **Posición de caja ("cuánta plata hay")**: usar SIEMPRE `getPosicionCaja()`
-  / `getTotalRemesado()` de `lib/queries/posicionCaja.ts` (los consumen
-  Tablero, Cuentas y Flujo proyectado). La cuenta "Caja Efectivo" es un
-  acumulado histórico — las remesas no la bajan — así que todo cálculo de
-  disponible debe restar lo remesado vía ese helper, no re-derivarlo a mano.
-  Cuando `fn_generar_remesa` descuente de Caja Efectivo (fix de fondo
-  pendiente), la resta se elimina solo ahí.
-  **Excepción — Caja fuerte**: el número grande de esa pestaña NO usa el
-  acumulador; usa `getSaldoCajaFuerte` (arqueos contados + manuales −
-  remesas), que refleja el efectivo físico real. Es una divergencia
-  deliberada con Tablero/Cuentas (que siguen con el acumulador) hasta que se
-  alinee el resto.
+  de `lib/queries/posicionCaja.ts` (la consumen Tablero, Cuentas y Flujo
+  proyectado). Desde el **candado** (mig 118) la cuenta "Caja Efectivo" es la
+  caja fuerte con saldo REAL: se acredita solo al validar arqueos, los
+  movimientos manuales la mueven y las remesas la debitan de verdad. **Ya NO
+  se resta lo remesado en ningún lado** (hacerlo lo contaría dos veces). El
+  saldo de la bóveda se lee de `cuentas.saldo_actual` (fuente única) — el
+  circuito (`Σ arqueos + Σ manuales − Σ remesas`) sirve solo de contraste vía
+  `descuadre` en `getSaldoCajaFuerte`. Nunca editar `saldo_actual` de la
+  bóveda a mano.
 - **Columnas `date` vs. rango del período**: `egresos.fecha`,
   `movimientos_cuenta.fecha` y `arqueos_tesoreria.fecha` son `date`.
   Filtrarlas contra el ISO del período (o su `.slice(0,10)`) usa la fecha

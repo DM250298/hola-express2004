@@ -56,6 +56,10 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
   const [mpPaymentMethodId, setMpPaymentMethodId] = useState<string>('')
 
   const esEdicion = medio !== null
+  // El medio 'efectivo' no acredita cuenta al vender (candado, mig 118): la
+  // plata entra a la caja fuerte recién con el arqueo validado. El trigger de
+  // DB lo fuerza igual; acá se oculta el selector para no confundir.
+  const esEfectivo = medio?.codigo === 'efectivo'
   const procesando = crear.isPending || actualizar.isPending
 
   useEffect(() => {
@@ -90,7 +94,9 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             icono,
             comision_porcentaje: comisionNum,
             dias_acreditacion: diasNum,
-            cuenta_id,
+            // El efectivo nunca lleva cuenta (candado): no se manda para que
+            // el trigger de DB no tenga ni que corregirlo.
+            ...(esEfectivo ? {} : { cuenta_id }),
             disponible_terminal: disponibleTerminal,
             mp_payment_type: mpType,
             mp_payment_method_id: mpMethod,
@@ -229,31 +235,39 @@ export function ModalMedioPago({ abierto, onCambioAbierto, medio }: Props) {
             &quot;Por cobrar&quot; hasta acreditarse.
           </p>
 
-          {/* Cuenta destino */}
-          <div className="space-y-1.5">
-            <Label className="text-[#391511] font-medium">Cuenta destino</Label>
-            <Select
-              value={cuentaId}
-              onValueChange={(v) => setCuentaId(v ?? SIN_CUENTA)}
-              disabled={procesando}
-            >
-              <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
-                <SelectValue placeholder="Sin cuenta asignada" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={SIN_CUENTA}>
-                  <span className="text-[#c8a58a] italic">
-                    Sin cuenta — no reflejar
-                  </span>
-                </SelectItem>
-                {cuentas?.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.nombre}
+          {/* Cuenta destino (el efectivo no lleva: va a la caja fuerte vía arqueo) */}
+          {esEfectivo ? (
+            <div className="rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] px-3 py-2.5 text-[11px] text-[#6f3a2a]">
+              🔒 El efectivo no acredita ninguna cuenta al vender: entra a la
+              caja fuerte (cuenta Caja Efectivo) recién cuando validás el
+              arqueo en Finanzas → Caja fuerte.
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium">Cuenta destino</Label>
+              <Select
+                value={cuentaId}
+                onValueChange={(v) => setCuentaId(v ?? SIN_CUENTA)}
+                disabled={procesando}
+              >
+                <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                  <SelectValue placeholder="Sin cuenta asignada" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_CUENTA}>
+                    <span className="text-[#c8a58a] italic">
+                      Sin cuenta — no reflejar
+                    </span>
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+                  {cuentas?.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Disponible en terminal */}
           <div className="flex items-start gap-3 rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] px-3 py-2.5">

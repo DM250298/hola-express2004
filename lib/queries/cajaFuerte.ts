@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { getTotalRemesado } from '@/lib/queries/posicionCaja'
+import { getCuentaCajaFuerte } from '@/lib/queries/cuentas'
 import { fechaLocal } from '@/lib/utils/periodos'
 import type {
   ArqueoTesoreriaRow,
@@ -146,36 +147,41 @@ export async function generarRemesa(payload: GenerarRemesaPayload) {
 
 export interface SaldoCajaFuerte {
   en_buzon: number // sangrías sin arquear — NO entra al saldo (se muestra aparte)
-  arqueado: number // total contado y validado en arqueos
-  ingresos_manuales: number // Σ movimientos manuales tipo 'ingreso'
-  egresos_manuales: number // Σ movimientos manuales tipo 'egreso'
-  remesado: number // total depositado al banco (circuito oculto hoy; suele ser 0)
-  saldo: number // arqueado + ingresos − egresos − remesado (efectivo físico en la bóveda)
+  arqueado: number // total contado y validado en arqueos (informativo)
+  ingresos_manuales: number // Σ movimientos manuales tipo 'ingreso' (informativo)
+  egresos_manuales: number // Σ movimientos manuales tipo 'egreso' (informativo)
+  remesado: number // total depositado al banco (informativo; suele ser 0)
+  saldo: number // saldo REAL de la cuenta bóveda ("Caja Efectivo")
+  /** saldo − (arqueado + ingresos − egresos − remesado). Debe ser 0; ≠0 = descuadre a revisar. */
+  descuadre: number
 }
 
 /**
- * Saldo de la caja fuerte = efectivo contado y validado, no el acumulador
- * histórico de ventas. Se calcula del circuito real de tesorería:
- *   saldo = Σ arqueos.monto_fisico + Σ ingresos manuales − Σ egresos manuales − Σ remesas
- * NO depende de la cuenta "Caja Efectivo" (que nunca baja). El buzón
- * (`en_buzon`) queda aparte: son sobres declarados por el cajero pero todavía
- * sin contar, así que no suman al saldo hasta validarlos.
+ * Saldo de la caja fuerte = `cuentas."Caja Efectivo".saldo_actual` — FUENTE
+ * ÚNICA desde el candado (migración 118): la cuenta se acredita SOLO al
+ * validar el arqueo (control administrativo), con los movimientos manuales y
+ * las remesas; la venta ya no la toca. Es el mismo número que ven el Tablero
+ * y Cuentas. El desglose (arqueado/manuales/remesado) es informativo, y
+ * `descuadre` compara la cuenta contra el circuito como semáforo de control.
+ * El buzón (`en_buzon`) queda aparte: sobres declarados sin contar todavía.
  */
 export async function getSaldoCajaFuerte(): Promise<SaldoCajaFuerte> {
   const supabase = createClient()
 
   // Arqueos, movimientos manuales y remesas son históricos completos: paginados
   // para esquivar el Max Rows (~1000 filas) que truncaría las sumas en silencio.
-  const [buzonRes, arqueosData, movManual, remesado] = await Promise.all([
-    supabase.from('sangrias').select('monto').eq('estado', 'en_buzon'),
-    traerTodo<{ monto_fisico: number }>(() =>
-      supabase.from('arqueos_tesoreria').select('monto_fisico').order('id')
-    ),
-    traerTodo<{ tipo: string; monto: number }>(() =>
-      supabase.from('movimientos_caja_fuerte').select('tipo, monto').order('id')
-    ),
-    getTotalRemesado(),
-  ])
+  const [buzonRes, arqueosData, movManual, remesado, cuentaBoveda] =
+    await Promise.all([
+      supabase.from('sangrias').select('monto').eq('estado', 'en_buzon'),
+      traerTodo<{ monto_fisico: number }>(() =>
+        supabase.from('arqueos_tesoreria').select('monto_fisico').order('id')
+      ),
+      traerTodo<{ tipo: string; monto: number }>(() =>
+        supabase.from('movimientos_caja_fuerte').select('tipo, monto').order('id')
+      ),
+      getTotalRemesado(),
+      getCuentaCajaFuerte(),
+    ])
 
   if (buzonRes.error) throw buzonRes.error
 
@@ -192,8 +198,19 @@ export async function getSaldoCajaFuerte(): Promise<SaldoCajaFuerte> {
     else if (m.tipo === 'egreso') egresos_manuales += Number(m.monto)
   }
 
-  const saldo = arqueado + ingresos_manuales - egresos_manuales - remesado
-  return { en_buzon, arqueado, ingresos_manuales, egresos_manuales, remesado, saldo }
+  const saldo = Number(cuentaBoveda.saldo_actual)
+  const circuito = arqueado + ingresos_manuales - egresos_manuales - remesado
+  const descuadre = Math.round((saldo - circuito) * 100) / 100
+
+  return {
+    en_buzon,
+    arqueado,
+    ingresos_manuales,
+    egresos_manuales,
+    remesado,
+    saldo,
+    descuadre,
+  }
 }
 
 // ─── Movimientos manuales de la caja fuerte ───────────────────────────────────

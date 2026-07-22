@@ -20,6 +20,27 @@ export async function getCuentas(soloActivas = true): Promise<CuentaRow[]> {
   return (data ?? []) as CuentaRow[]
 }
 
+/**
+ * La cuenta bóveda ("Caja Efectivo" = caja fuerte). Se resuelve por la flag
+ * `es_caja_fuerte` (migración 118) — hard-fail si no está marcada, para no
+ * enmascarar una migración sin correr con un fallback silencioso.
+ */
+export async function getCuentaCajaFuerte(): Promise<CuentaRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('cuentas')
+    .select('*')
+    .eq('es_caja_fuerte', true)
+    .maybeSingle<CuentaRow>()
+  if (error) throw error
+  if (!data) {
+    throw new Error(
+      'No hay cuenta marcada como Caja Fuerte (¿corriste la migración 118?).'
+    )
+  }
+  return data
+}
+
 export async function createCuenta(datos: CuentaInsert): Promise<CuentaRow> {
   const supabase = createClient()
   const { data, error } = await supabase
