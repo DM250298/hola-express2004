@@ -1150,6 +1150,34 @@ export type RemesaUpdate = {
   nota?: string | null
 }
 
+// ─── movimientos_caja_fuerte (ingresos/egresos manuales de la caja fuerte) ────
+
+export type TipoMovimientoCajaFuerte = 'ingreso' | 'egreso'
+
+export type MovimientoCajaFuerteRow = {
+  id: number
+  usuario_id: string | null
+  tipo: TipoMovimientoCajaFuerte
+  monto: number
+  nota: string
+  fecha: string
+  created_at: string
+}
+
+export type MovimientoCajaFuerteInsert = {
+  id?: number
+  usuario_id?: string | null
+  tipo: TipoMovimientoCajaFuerte
+  monto: number
+  nota: string
+  fecha?: string
+  created_at?: string
+}
+
+export type MovimientoCajaFuerteUpdate = {
+  nota?: string
+}
+
 // ─── ventas ──────────────────────────────────────────────────────────────────
 
 export type VentaRow = {
@@ -3304,6 +3332,12 @@ export interface Database {
         Update: RemesaUpdate
         Relationships: []
       }
+      movimientos_caja_fuerte: {
+        Row: MovimientoCajaFuerteRow
+        Insert: MovimientoCajaFuerteInsert
+        Update: MovimientoCajaFuerteUpdate
+        Relationships: []
+      }
       acreditaciones: {
         Row: AcreditacionRow
         Insert: AcreditacionInsert
@@ -4051,6 +4085,19 @@ export interface Database {
           remesa_id: number
           movimiento_id: number
           saldo_nuevo: number
+        }
+      }
+      fn_registrar_mov_caja_fuerte: {
+        Args: {
+          p_usuario_id: string
+          p_tipo: string
+          p_monto: number
+          p_nota: string
+        }
+        Returns: {
+          id: number
+          tipo: string
+          monto: number
         }
       }
       fn_acreditar_pago: {

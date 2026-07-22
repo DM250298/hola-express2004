@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Banknote,
   Calculator,
   Inbox,
   Loader2,
+  Plus,
   ShieldCheck,
   Vault,
 } from 'lucide-react'
@@ -14,14 +17,17 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { AyudaContextual } from '@/components/shared/AyudaContextual'
 import { ModalArqueo } from './ModalArqueo'
 import { ModalRemesa } from './ModalRemesa'
+import { ModalMovimientoCajaFuerte } from './ModalMovimientoCajaFuerte'
+import { PanelControlDiferencias } from './PanelControlDiferencias'
 import {
   useSangriasEnBuzon,
   useSaldoCajaFuerte,
   useArqueos,
   useRemesas,
+  useMovimientosCajaFuerte,
 } from '@/lib/hooks/useCajaFuerte'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { useCuentas } from '@/lib/hooks/useCuentas'
+import { MOSTRAR_REMESAS } from '@/lib/config/tesoreria'
 import { formatearFechaHora } from '@/lib/utils/formato'
 
 export function TabCajaFuerte() {
@@ -34,21 +40,12 @@ export function TabCajaFuerte() {
   const { data: buzon, isLoading: cargandoBuzon } = useSangriasEnBuzon()
   const { data: arqueos } = useArqueos()
   const { data: remesas } = useRemesas()
-  const { data: cuentas, isPending: cargandoCuentas } = useCuentas(false)
-
-  // Efectivo real: saldo de las cuentas tipo "caja" (Caja Efectivo) MENOS lo ya
-  // depositado al banco. La cuenta es un acumulado histórico (las remesas no la
-  // bajan), así que sin la resta se mostraría también plata que ya está en el
-  // banco. Mismo criterio que el Tablero y Cuentas.
-  const efectivoCajas =
-    (cuentas ?? [])
-      .filter((c) => c.activo && c.tipo === 'caja')
-      .reduce((acc, c) => acc + Number(c.saldo_actual), 0) -
-    (saldo?.remesado ?? 0)
+  const { data: movimientos } = useMovimientosCajaFuerte()
 
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
   const [modalArqueo, setModalArqueo] = useState(false)
   const [modalRemesa, setModalRemesa] = useState(false)
+  const [modalMovimiento, setModalMovimiento] = useState(false)
 
   const idsSeleccionados = useMemo(() => Array.from(seleccion), [seleccion])
   const montoSeleccionado = useMemo(
@@ -77,7 +74,7 @@ export function TabCajaFuerte() {
 
   return (
     <div className="space-y-5">
-      {/* Efectivo real (saldo de la cuenta Caja Efectivo) */}
+      {/* Efectivo contado en la bóveda (saldo real del circuito de conteo) */}
       <div className="rounded-2xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/10 p-5 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-[#f9b44c]/30">
@@ -85,62 +82,85 @@ export function TabCajaFuerte() {
           </div>
           <div>
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1">
-              Efectivo en caja fuerte
-              <AyudaContextual titulo="Tu efectivo">
-                Es el efectivo que entró por ventas (cuenta &quot;Caja
-                Efectivo&quot;) menos lo que ya depositaste al banco. Es la
-                plata que tenés físicamente. El circuito de abajo (contar y
-                depositar) es opcional, para llevar el control formal de los
-                retiros de los cajeros.
+              Efectivo contado en bóveda
+              <AyudaContextual titulo="El efectivo de la bóveda">
+                Es el efectivo físico que ya contaste y validaste: los cierres de
+                caja que pasaron por el buzón, más los ingresos manuales, menos
+                los egresos manuales. Lo que todavía está en el buzón{' '}
+                <em>sin contar</em> se muestra aparte (&quot;Por contar&quot;) y no
+                suma hasta que lo validás. El fondo de cambio de los cajeros es
+                plata aparte, no entra acá. Puede diferir del &quot;Efectivo&quot;
+                del Tablero, que se calcula sobre el total histórico de ventas.
               </AyudaContextual>
             </div>
             <div className="text-xs text-[#6f3a2a]">
-              Ventas en efectivo, menos lo ya depositado
+              Lo contado y validado, más ajustes manuales
             </div>
           </div>
         </div>
         <div className="text-3xl font-extrabold text-[#391511] tabular-nums">
-          {cargandoSaldo || cargandoCuentas ? (
+          {cargandoSaldo ? (
             <Loader2 className="h-7 w-7 animate-spin text-[#6f3a2a]" />
           ) : errorSaldo ? (
             <span className="text-sm font-medium text-[#c43e2c]">
-              No se pudo calcular lo ya depositado — recargá la página
+              No se pudo calcular el saldo — recargá la página
             </span>
           ) : (
-            <MontoARS monto={efectivoCajas} />
+            <MontoARS monto={saldo?.saldo ?? 0} />
           )}
         </div>
       </div>
 
-      <div className="px-1 text-[10px] uppercase tracking-wider text-[#c8a58a] font-semibold">
-        Circuito de conteo y depósito (opcional)
+      {/* Acción: movimiento manual */}
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          onClick={() => setModalMovimiento(true)}
+          disabled={!usuario}
+          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Ingreso / Egreso manual
+        </Button>
       </div>
-      {/* KPIs de la caja fuerte */}
+
+      <div className="px-1 text-[10px] uppercase tracking-wider text-[#c8a58a] font-semibold">
+        De qué se compone
+      </div>
+      {/* KPIs: composición del saldo */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCaja
           icono={Inbox}
           etiqueta="Por contar"
           monto={saldo?.en_buzon ?? 0}
-          detalle="Retiros de cajeros sin contar"
-        />
-        <KpiCaja
-          icono={Vault}
-          etiqueta="Contado sin depositar"
-          monto={saldo?.saldo ?? 0}
-          detalle="Listo para depositar al banco"
+          detalle="Sobres en el buzón sin validar"
         />
         <KpiCaja
           icono={ShieldCheck}
-          etiqueta="Ya contado"
+          etiqueta="Contado y validado"
           monto={saldo?.arqueado ?? 0}
-          detalle="Total validado (histórico)"
+          detalle="Arqueos (histórico)"
         />
         <KpiCaja
-          icono={Banknote}
-          etiqueta="Depositado en el banco"
-          monto={saldo?.remesado ?? 0}
-          detalle="Total enviado (histórico)"
+          icono={ArrowDownToLine}
+          etiqueta="Ingresos manuales"
+          monto={saldo?.ingresos_manuales ?? 0}
+          detalle="Cargados a mano"
         />
+        <KpiCaja
+          icono={ArrowUpFromLine}
+          etiqueta="Egresos manuales"
+          monto={saldo?.egresos_manuales ?? 0}
+          detalle="Sacados a mano"
+        />
+        {MOSTRAR_REMESAS && (
+          <KpiCaja
+            icono={Banknote}
+            etiqueta="Depositado en el banco"
+            monto={saldo?.remesado ?? 0}
+            detalle="Total enviado (histórico)"
+          />
+        )}
       </div>
 
       {/* Buzón: sobres pendientes de arqueo */}
@@ -149,23 +169,24 @@ export function TabCajaFuerte() {
           <h3 className="text-[#391511] font-semibold text-sm flex items-center gap-2">
             <Inbox className="h-4 w-4 text-[#f9b44c]" />
             Retiros por contar
-            <AyudaContextual titulo="Cómo funciona la caja fuerte">
-              El efectivo sigue este camino: el cajero retira plata de la caja y
-              la deja en el buzón <em>(sangría)</em> → vos la contás y validás{' '}
-              <em>(arqueo)</em> → queda en la caja fuerte → la depositás en el
-              banco <em>(remesa)</em>.
+            <AyudaContextual titulo="Cómo funciona la bóveda">
+              El efectivo sigue este camino: el cajero cierra la caja y el
+              efectivo va al buzón <em>(sobre)</em> → vos lo contás y validás{' '}
+              <em>(arqueo)</em> → recién ahí suma a la bóveda.
             </AyudaContextual>
           </h3>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setModalRemesa(true)}
-              className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
-            >
-              <Banknote className="h-3.5 w-3.5" />
-              Depositar en el banco
-            </Button>
+            {MOSTRAR_REMESAS && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setModalRemesa(true)}
+                className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+              >
+                <Banknote className="h-3.5 w-3.5" />
+                Depositar en el banco
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={() => setModalArqueo(true)}
@@ -184,8 +205,8 @@ export function TabCajaFuerte() {
           </div>
         ) : !buzon || buzon.length === 0 ? (
           <div className="p-10 text-center text-[#6f3a2a] text-sm">
-            No hay sobres pendientes en el buzón. Las sangrías que hagan los
-            cajeros desde el POS van a aparecer acá.
+            No hay sobres pendientes en el buzón. Los cierres de caja de los
+            cajeros van a aparecer acá para que los cuentes.
           </div>
         ) : (
           <div className="divide-y divide-[#e4c9b0]/40">
@@ -233,8 +254,46 @@ export function TabCajaFuerte() {
         )}
       </div>
 
-      {/* Historial: arqueos y remesas */}
+      {/* Historial: movimientos manuales + arqueos (+ remesas si están activas) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <HistorialCard titulo="Movimientos manuales recientes" icono={Plus}>
+          {!movimientos || movimientos.length === 0 ? (
+            <Vacio texto="Sin movimientos manuales todavía." />
+          ) : (
+            <ul className="divide-y divide-[#e4c9b0]/40">
+              {movimientos.map((m) => {
+                const ingreso = m.tipo === 'ingreso'
+                return (
+                  <li
+                    key={m.id}
+                    className="px-4 py-2.5 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[#391511] truncate">
+                        {m.nota}
+                      </div>
+                      <div className="text-xs text-[#6f3a2a]">
+                        {formatearFechaHora(m.created_at)}
+                        {m.usuario_nombre ? ` · ${m.usuario_nombre}` : ''}
+                      </div>
+                    </div>
+                    <span
+                      className={
+                        ingreso
+                          ? 'text-sm font-bold text-[#2f7d4f] tabular-nums shrink-0'
+                          : 'text-sm font-bold text-[#c43e2c] tabular-nums shrink-0'
+                      }
+                    >
+                      {ingreso ? '+' : '−'}
+                      <MontoARS monto={m.monto} />
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </HistorialCard>
+
         <HistorialCard titulo="Arqueos recientes" icono={Calculator}>
           {!arqueos || arqueos.length === 0 ? (
             <Vacio texto="Sin arqueos todavía." />
@@ -270,34 +329,39 @@ export function TabCajaFuerte() {
           )}
         </HistorialCard>
 
-        <HistorialCard titulo="Remesas recientes" icono={Banknote}>
-          {!remesas || remesas.length === 0 ? (
-            <Vacio texto="Sin remesas todavía." />
-          ) : (
-            <ul className="divide-y divide-[#e4c9b0]/40">
-              {remesas.map((r) => (
-                <li
-                  key={r.id}
-                  className="px-4 py-2.5 flex items-center justify-between gap-2"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-[#391511]">
-                      {r.cuenta_nombre ?? 'Banco'}
-                      {r.comprobante ? ` · ${r.comprobante}` : ''}
+        {MOSTRAR_REMESAS && (
+          <HistorialCard titulo="Remesas recientes" icono={Banknote}>
+            {!remesas || remesas.length === 0 ? (
+              <Vacio texto="Sin remesas todavía." />
+            ) : (
+              <ul className="divide-y divide-[#e4c9b0]/40">
+                {remesas.map((r) => (
+                  <li
+                    key={r.id}
+                    className="px-4 py-2.5 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[#391511]">
+                        {r.cuenta_nombre ?? 'Banco'}
+                        {r.comprobante ? ` · ${r.comprobante}` : ''}
+                      </div>
+                      <div className="text-xs text-[#6f3a2a]">
+                        {formatearFechaHora(r.created_at)}
+                      </div>
                     </div>
-                    <div className="text-xs text-[#6f3a2a]">
-                      {formatearFechaHora(r.created_at)}
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-[#391511] tabular-nums shrink-0">
-                    <MontoARS monto={r.monto} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </HistorialCard>
+                    <span className="text-sm font-bold text-[#391511] tabular-nums shrink-0">
+                      <MontoARS monto={r.monto} />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </HistorialCard>
+        )}
       </div>
+
+      {/* Control de diferencias por empleado + buzón */}
+      <PanelControlDiferencias />
 
       {usuario && (
         <>
@@ -311,12 +375,20 @@ export function TabCajaFuerte() {
             sangriaIds={idsSeleccionados}
             montoEsperado={montoSeleccionado}
           />
-          <ModalRemesa
-            abierto={modalRemesa}
-            onCambioAbierto={setModalRemesa}
+          <ModalMovimientoCajaFuerte
+            abierto={modalMovimiento}
+            onCambioAbierto={setModalMovimiento}
             usuarioId={usuario.id}
-            saldoDisponible={saldo?.saldo ?? 0}
+            saldoActual={saldo?.saldo ?? 0}
           />
+          {MOSTRAR_REMESAS && (
+            <ModalRemesa
+              abierto={modalRemesa}
+              onCambioAbierto={setModalRemesa}
+              usuarioId={usuario.id}
+              saldoDisponible={saldo?.saldo ?? 0}
+            />
+          )}
         </>
       )}
     </div>

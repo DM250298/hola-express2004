@@ -11,10 +11,16 @@ import {
   getRemesas,
   generarRemesa,
   getSaldoCajaFuerte,
+  getMovimientosCajaFuerte,
+  registrarMovimientoCajaFuerte,
+  getDiferenciasCierrePorEmpleado,
+  getArqueosPeriodo,
   type ValidarArqueoPayload,
   type GenerarRemesaPayload,
+  type RegistrarMovimientoCajaFuertePayload,
 } from '@/lib/queries/cajaFuerte'
 import { getTotalRemesado } from '@/lib/queries/posicionCaja'
+import { MOSTRAR_REMESAS } from '@/lib/config/tesoreria'
 
 export const CAJA_FUERTE_KEY = ['caja-fuerte'] as const
 
@@ -58,7 +64,34 @@ export function useRemesas() {
   return useQuery({
     queryKey: [...CAJA_FUERTE_KEY, 'remesas'],
     queryFn: () => getRemesas(),
+    // El circuito de remesas está oculto por ahora: no dispares la query si no
+    // se muestra (se reactiva junto con la UI vía MOSTRAR_REMESAS).
+    enabled: MOSTRAR_REMESAS,
     staleTime: 30 * 1000,
+  })
+}
+
+export function useMovimientosCajaFuerte() {
+  return useQuery({
+    queryKey: [...CAJA_FUERTE_KEY, 'movimientos'],
+    queryFn: () => getMovimientosCajaFuerte(),
+    staleTime: 30 * 1000,
+  })
+}
+
+export function useDiferenciasCierrePorEmpleado(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: [...CAJA_FUERTE_KEY, 'dif-cierre', desde, hasta],
+    queryFn: () => getDiferenciasCierrePorEmpleado(desde, hasta),
+    staleTime: 60 * 1000,
+  })
+}
+
+export function useArqueosPeriodo(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: [...CAJA_FUERTE_KEY, 'arqueos-periodo', desde, hasta],
+    queryFn: () => getArqueosPeriodo(desde, hasta),
+    staleTime: 60 * 1000,
   })
 }
 
@@ -129,5 +162,24 @@ export function useGenerarRemesa() {
       toast.success('Remesa generada · ingresada al banco')
     },
     onError: (e: Error) => toast.error(`No se pudo generar la remesa: ${e.message}`),
+  })
+}
+
+export function useRegistrarMovimientoCajaFuerte() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: RegistrarMovimientoCajaFuertePayload) =>
+      registrarMovimientoCajaFuerte(payload),
+    onSuccess: (_data, vars) => {
+      // invalidarTodo cubre 'saldo' + 'movimientos' + 'dif-*' (misma key base).
+      invalidarTodo(qc)
+      toast.success(
+        vars.tipo === 'ingreso'
+          ? 'Ingreso registrado en la caja fuerte'
+          : 'Egreso registrado en la caja fuerte'
+      )
+    },
+    onError: (e: Error) =>
+      toast.error(`No se pudo registrar el movimiento: ${e.message}`),
   })
 }
