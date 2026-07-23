@@ -27,7 +27,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { leerArchivo } from '@/lib/import/motor'
-import { descargarPlantilla } from '@/lib/import/exportar'
+import {
+  descargarErroresResultado,
+  descargarFilasConError,
+  descargarPlantilla,
+} from '@/lib/import/exportar'
 import { useEjecutarImport, useResumenImport } from '@/lib/hooks/useImportador'
 import type {
   DefinicionEntidad,
@@ -45,6 +49,9 @@ interface Props {
 
 type Etapa = 'subir' | 'preview' | 'completado'
 
+/** Tope de filas con error que se pintan en la tabla; el resto va al Excel. */
+const MAX_FILAS_ERROR_VISIBLES = 200
+
 export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
   const [etapa, setEtapa] = useState<Etapa>('subir')
   const [archivo, setArchivo] = useState<File | null>(null)
@@ -54,6 +61,7 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
   const [resultado, setResultado] = useState<ResultadoImport | null>(null)
   const [arrastrando, setArrastrando] = useState(false)
   const [leyendo, setLeyendo] = useState(false)
+  const [soloErrores, setSoloErrores] = useState(false)
   const refInput = useRef<HTMLInputElement | null>(null)
 
   const calcular = useResumenImport()
@@ -72,6 +80,7 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
       setResultado(null)
       setArrastrando(false)
       setLeyendo(false)
+      setSoloErrores(false)
     }
   }, [abierto])
 
@@ -121,6 +130,14 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
   }
 
   const procesando = ejecutar.isPending
+
+  // Filas que el preview rechazó (por validación de celda o faltante de alta).
+  const filasConError = filas.filter((f) => f.errores.length > 0)
+  // Qué se pinta en la tabla: en modo "solo errores" mostramos todas (topeadas),
+  // si no, el preview clásico de las primeras 15.
+  const filasVisibles = soloErrores
+    ? filasConError.slice(0, MAX_FILAS_ERROR_VISIBLES)
+    : filas.slice(0, 15)
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !procesando && onCambioAbierto(v)}>
@@ -234,6 +251,10 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
                   etiqueta="Con errores"
                   valor={resumen.con_errores}
                   color={resumen.con_errores > 0 ? '#c43e2c' : '#6f3a2a'}
+                  onClick={
+                    resumen.con_errores > 0 ? () => setSoloErrores((v) => !v) : undefined
+                  }
+                  activo={soloErrores}
                 />
               </div>
               {resumen.duplicados_archivo.length > 0 && (
@@ -246,9 +267,40 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              <h3 className="text-[#391511] font-semibold text-sm mb-2">
-                Vista previa (primeras 15 filas)
-              </h3>
+              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                <h3 className="text-[#391511] font-semibold text-sm">
+                  {soloErrores
+                    ? `Filas con errores (${filasConError.length})`
+                    : 'Vista previa (primeras 15 filas)'}
+                </h3>
+                {filasConError.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSoloErrores((v) => !v)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors',
+                        soloErrores
+                          ? 'border-[#c43e2c] bg-[#c43e2c]/10 text-[#9e2f25]'
+                          : 'border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#fdfaf6]'
+                      )}
+                    >
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      {soloErrores
+                        ? 'Ver todo'
+                        : `Ver solo errores (${filasConError.length})`}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => descargarFilasConError(def, filasConError)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#e4c9b0] px-2.5 py-1 text-xs font-semibold text-[#c43e2c] hover:bg-[#fdfaf6] transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Descargar errores
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="rounded-xl border border-[#e4c9b0]/60 overflow-hidden">
                 <Table>
                   <TableHeader>
@@ -261,12 +313,12 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
                         {campoNombre}
                       </TableHead>
                       <TableHead className="text-center text-[#391511] font-semibold text-xs">
-                        Estado
+                        {soloErrores ? 'Motivo del error' : 'Estado'}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filas.slice(0, 15).map((f) => (
+                    {filasVisibles.map((f) => (
                       <TableRow
                         key={f.fila_origen}
                         className={cn(
@@ -274,33 +326,57 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
                           f.errores.length > 0 && 'bg-[#c43e2c]/5'
                         )}
                       >
-                        <TableCell className="text-[#c8a58a] font-mono">{f.fila_origen}</TableCell>
-                        <TableCell className="text-[#391511] font-mono">
+                        <TableCell className="text-[#c8a58a] font-mono align-top">
+                          {f.fila_origen}
+                        </TableCell>
+                        <TableCell className="text-[#391511] font-mono align-top">
                           {String(f.datos[campoClave] ?? '—')}
                         </TableCell>
-                        <TableCell className="text-[#391511]">
+                        <TableCell className="text-[#391511] align-top">
                           {String(f.datos[campoNombre] ?? '—')}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell
+                          className={cn(
+                            'align-top',
+                            f.errores.length > 0 ? 'text-left' : 'text-center'
+                          )}
+                        >
                           {f.errores.length > 0 ? (
-                            <span
-                              className="text-[#c43e2c] text-xs"
-                              title={f.errores.join('; ')}
-                            >
-                              {f.errores[0]}
-                            </span>
+                            <div className="flex flex-col gap-0.5">
+                              {f.errores.map((msg, i) => (
+                                <span key={i} className="text-[#c43e2c] leading-snug">
+                                  {msg}
+                                </span>
+                              ))}
+                            </div>
                           ) : (
                             <span className="text-[#6f3a2a]">OK</span>
                           )}
                         </TableCell>
                       </TableRow>
                     ))}
+                    {soloErrores && filasConError.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-center text-[#6f3a2a] text-xs py-6"
+                        >
+                          No hay filas con errores. 🎉
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </div>
-              {filas.length > 15 && (
+              {!soloErrores && filas.length > 15 && (
                 <p className="text-[#6f3a2a] text-xs mt-2 text-center">
                   + {filas.length - 15} filas más
+                </p>
+              )}
+              {soloErrores && filasConError.length > MAX_FILAS_ERROR_VISIBLES && (
+                <p className="text-[#6f3a2a] text-xs mt-2 text-center">
+                  Mostrando {MAX_FILAS_ERROR_VISIBLES} de {filasConError.length}. Descargá el
+                  Excel para verlas todas.
                 </p>
               )}
             </div>
@@ -313,6 +389,7 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
                   setArchivo(null)
                   setFilas([])
                   setResumen(null)
+                  setSoloErrores(false)
                 }}
                 disabled={procesando}
                 className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
@@ -359,14 +436,24 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
 
             {resultado.errores.length > 0 && (
               <div className="rounded-xl bg-[#c43e2c]/5 border border-[#c43e2c]/30 p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <X className="h-4 w-4 text-[#c43e2c]" />
-                  <span className="text-[#9e2f25] font-semibold text-sm">
-                    {resultado.errores.length} filas con errores
-                  </span>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <X className="h-4 w-4 text-[#c43e2c]" />
+                    <span className="text-[#9e2f25] font-semibold text-sm">
+                      {resultado.errores.length} filas con errores
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => descargarErroresResultado(def, resultado.errores)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-[#c43e2c]/40 px-2.5 py-1 text-xs font-semibold text-[#c43e2c] hover:bg-[#c43e2c]/10 transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Descargar
+                  </button>
                 </div>
                 <ul className="text-xs text-[#6f3a2a] space-y-1 max-h-40 overflow-y-auto">
-                  {resultado.errores.slice(0, 10).map((e, i) => (
+                  {resultado.errores.map((e, i) => (
                     <li key={i}>
                       Fila {e.fila} ({e.codigo}): {e.mensaje}
                     </li>
@@ -388,15 +475,46 @@ export function ModalImportar({ abierto, onCambioAbierto, def }: Props) {
   )
 }
 
-function Stat({ etiqueta, valor, color }: { etiqueta: string; valor: number; color: string }) {
+function Stat({
+  etiqueta,
+  valor,
+  color,
+  onClick,
+  activo,
+}: {
+  etiqueta: string
+  valor: number
+  color: string
+  onClick?: () => void
+  activo?: boolean
+}) {
+  const clickable = typeof onClick === 'function'
   return (
-    <div className="rounded-xl border-2 p-3 bg-white" style={{ borderColor: `${color}55` }}>
-      <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-        {etiqueta}
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-xl border-2 p-3 bg-white text-left w-full transition-all',
+        clickable ? 'cursor-pointer hover:shadow-sm' : 'cursor-default'
+      )}
+      style={{
+        borderColor: `${color}55`,
+        ...(activo ? { boxShadow: `0 0 0 2px ${color}`, backgroundColor: `${color}0d` } : {}),
+      }}
+    >
+      <div className="flex items-center justify-between gap-1">
+        <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+          {etiqueta}
+        </div>
+        {clickable && (
+          <span className="text-[9px] font-semibold" style={{ color }}>
+            {activo ? 'ver todo' : 'ver'}
+          </span>
+        )}
       </div>
       <div className="text-2xl font-extrabold tabular-nums mt-1" style={{ color }}>
         {valor}
       </div>
-    </div>
+    </button>
   )
 }

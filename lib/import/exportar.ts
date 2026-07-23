@@ -4,7 +4,12 @@
 // lib/utils/cotizacion.ts.
 
 import * as XLSX from 'xlsx'
-import type { ColumnaDef, DefinicionEntidad } from './tipos'
+import type {
+  ColumnaDef,
+  DefinicionEntidad,
+  FilaProcesadaGen,
+  ResultadoImport,
+} from './tipos'
 import type { FilaExport } from '@/lib/queries/exportar-maestros'
 import { ENTIDAD_CATEGORIAS } from './entidades/categorias'
 import { ENTIDAD_PROVEEDORES } from './entidades/proveedores'
@@ -132,4 +137,53 @@ export function descargarPlantilla(def: DefinicionEntidad): void {
   XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones')
   XLSX.utils.book_append_sheet(wb, wsDatos, def.clave)
   XLSX.writeFile(wb, `plantilla-${def.nombreArchivo}.xlsx`)
+}
+
+/**
+ * Descarga un Excel con SOLO las filas del preview que dieron error, agregando
+ * la fila de origen y una columna con el/los motivo(s). Mantiene los mismos
+ * encabezados que la plantilla/export para que, una vez corregidas, se puedan
+ * volver a importar sin retocar el resto del archivo.
+ */
+export function descargarFilasConError(
+  def: DefinicionEntidad,
+  filas: FilaProcesadaGen[]
+): void {
+  const cols = columnasOrdenadas(def)
+  const header = ['Fila', ...cols.map((c) => c.etiqueta), 'Motivo del error']
+  const cuerpo = filas.map((f) => [
+    f.fila_origen,
+    ...cols.map((c) => {
+      const v = f.datos[c.campo]
+      if (c.exportar) return c.exportar(v)
+      if (v === null || v === undefined) return ''
+      return v as string | number
+    }),
+    f.errores.join(' · '),
+  ])
+  const ws = XLSX.utils.aoa_to_sheet([header, ...cuerpo])
+  ws['!cols'] = [{ wch: 6 }, ...anchosDesde(cols), { wch: 55 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'errores')
+  const fecha = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `${def.nombreArchivo}-errores-${fecha}.xlsx`)
+}
+
+/**
+ * Descarga un Excel con los errores que devolvió el RPC al ejecutar la
+ * importación (fila, clave y mensaje). Se usa en la pantalla de resultado,
+ * cuando el error no lo detectó el preview sino la base al escribir.
+ */
+export function descargarErroresResultado(
+  def: DefinicionEntidad,
+  errores: ResultadoImport['errores']
+): void {
+  const header = ['Fila', def.claveUnica.campo, 'Motivo del error']
+  const cuerpo = errores.map((e) => [e.fila, e.codigo, e.mensaje])
+  const ws = XLSX.utils.aoa_to_sheet([header, ...cuerpo])
+  ws['!cols'] = [{ wch: 6 }, { wch: 22 }, { wch: 60 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'errores')
+  const fecha = new Date().toISOString().slice(0, 10)
+  XLSX.writeFile(wb, `${def.nombreArchivo}-errores-${fecha}.xlsx`)
 }
