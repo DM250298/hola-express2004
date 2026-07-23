@@ -99,6 +99,7 @@ export interface FacturaCompraCompleta {
 }
 
 export interface ComprobanteCargado {
+  id: number
   cuenta_id: number | null
   pedido_id: number | null
   proveedor_id: number | null
@@ -110,6 +111,11 @@ export interface ComprobanteCargado {
   neto: number
   iva_total: number
   total: number
+  /** Compra directa (sin orden). */
+  es_directa: boolean
+  /** Compra directa ya revisada por el administrativo. */
+  controlada: boolean
+  cuit_proveedor: string | null
 }
 
 /**
@@ -123,12 +129,13 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
   const { data, error } = await supabase
     .from('facturas_compra')
     .select(
-      'cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total'
+      'id, cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, cuit_proveedor'
     )
     .order('fecha', { ascending: false })
   if (error) throw error
 
   return ((data ?? []) as unknown as ComprobanteCargado[]).map((f) => ({
+    id: f.id,
     cuenta_id: f.cuenta_id,
     pedido_id: f.pedido_id,
     proveedor_id: f.proveedor_id,
@@ -140,7 +147,33 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
     neto: Number(f.neto),
     iva_total: Number(f.iva_total),
     total: Number(f.total),
+    es_directa: !!f.es_directa,
+    controlada: !!f.controlada,
+    cuit_proveedor: f.cuit_proveedor,
   }))
+}
+
+/** Edita los datos formales de una compra directa y/o la marca controlada. */
+export async function controlarCompraDirecta(payload: {
+  factura_id: number
+  usuario_id: string
+  tipo: string | null
+  punto: string | null
+  numero: string | null
+  cuit: string | null
+  controlada: boolean
+}): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_controlar_compra_directa', {
+    p_factura_id: payload.factura_id,
+    p_usuario_id: payload.usuario_id,
+    p_tipo: payload.tipo,
+    p_punto: payload.punto,
+    p_numero: payload.numero,
+    p_cuit: payload.cuit,
+    p_controlada: payload.controlada,
+  })
+  if (error) throw error
 }
 
 /** Devuelve la factura guardada para una cuenta a pagar (o null). */

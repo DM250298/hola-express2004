@@ -6,6 +6,7 @@ import {
   FileText,
   FilePlus2,
   Inbox,
+  Package,
   Search,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -28,8 +29,11 @@ import {
 } from '@/lib/hooks/useFinanzas'
 import { useComprobantesCargados } from '@/lib/hooks/useFacturasCompra'
 import { useProveedores } from '@/lib/hooks/useProveedores'
+import { useUsuario } from '@/lib/hooks/useUsuario'
 import { ModalEditarFactura } from './ModalEditarFactura'
+import { ModalControlarCompra } from '@/components/compras/ModalControlarCompra'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
+import type { ComprobanteCargado } from '@/lib/queries/facturasCompra'
 
 function nroComprobante(
   tipo: string | null,
@@ -58,9 +62,12 @@ export function TabComprobantes({ desde, hasta }: Props) {
   const { data: comprobantes, isLoading: cargandoComp } =
     useComprobantesCargados()
   const { data: proveedores } = useProveedores()
+  const { data: usuario } = useUsuario()
   const buscarCuenta = useBuscarCuentaAPagar()
   const [cuentaEditar, setCuentaEditar] =
     useState<CuentaAPagarConProveedor | null>(null)
+  const [compraControlar, setCompraControlar] =
+    useState<ComprobanteCargado | null>(null)
   const [busqueda, setBusqueda] = useState('')
 
   // Mapa cuenta_id → cuenta (para abrir el modal desde un comprobante)
@@ -124,6 +131,12 @@ export function TabComprobantes({ desde, hasta }: Props) {
         (c) => c.estado !== 'pagada' && !cuentasConFactura.has(c.id)
       ),
     [cuentas, cuentasConFactura]
+  )
+
+  // Compras directas del POS todavía sin controlar por el administrativo.
+  const comprasAControlar = useMemo(
+    () => (comprobantes ?? []).filter((c) => c.es_directa && !c.controlada),
+    [comprobantes]
   )
 
   const q = busqueda.trim().toLowerCase()
@@ -222,6 +235,60 @@ export function TabComprobantes({ desde, hasta }: Props) {
           </div>
         )}
       </section>
+
+      {/* Compras del POS a controlar */}
+      {comprasAControlar.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-[#9e6b15]" />
+            <h3 className="text-[#391511] font-semibold text-sm">
+              Compras del POS a controlar
+            </h3>
+            <span className="text-[10px] font-bold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-2 py-0.5">
+              {comprasAControlar.length}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {comprasAControlar.map((c) => {
+              const nro = nroComprobante(
+                c.tipo_comprobante,
+                c.punto_venta,
+                c.numero_comprobante
+              )
+              return (
+                <div
+                  key={c.id}
+                  className="rounded-2xl border border-[#f9b44c]/50 bg-[#f9b44c]/5 p-4 flex flex-col gap-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-[#391511] truncate">
+                        {nombreProveedor(c) ?? 'Sin proveedor'}
+                      </div>
+                      <div className="text-xs text-[#6f3a2a]">
+                        {nro ?? (
+                          <span className="text-[#c43e2c]">sin comprobante</span>
+                        )}{' '}
+                        · {formatearFechaCorta(c.fecha)}
+                      </div>
+                    </div>
+                    <div className="font-bold text-[#391511] tabular-nums shrink-0">
+                      <MontoARS monto={c.total} />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => setCompraControlar(c)}
+                    className="w-full bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold"
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Revisar
+                  </Button>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Cargados */}
       <section className="space-y-2">
@@ -326,10 +393,12 @@ export function TabComprobantes({ desde, hasta }: Props) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={c.cuenta_id == null}
-                          onClick={() =>
-                            c.cuenta_id != null && abrirComprobante(c.cuenta_id)
-                          }
+                          disabled={c.cuenta_id == null && !c.es_directa}
+                          onClick={() => {
+                            if (c.es_directa) setCompraControlar(c)
+                            else if (c.cuenta_id != null)
+                              abrirComprobante(c.cuenta_id)
+                          }}
                           className="h-8 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] text-xs"
                         >
                           Ver
@@ -349,6 +418,18 @@ export function TabComprobantes({ desde, hasta }: Props) {
         onCambioAbierto={(v) => !v && setCuentaEditar(null)}
         cuenta={cuentaEditar}
       />
+
+      {usuario && (
+        <ModalControlarCompra
+          abierto={compraControlar !== null}
+          onCambioAbierto={(v) => !v && setCompraControlar(null)}
+          compra={compraControlar}
+          proveedorNombre={
+            compraControlar ? nombreProveedor(compraControlar) : null
+          }
+          usuarioId={usuario.id}
+        />
+      )}
     </div>
   )
 }

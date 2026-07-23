@@ -3,11 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  controlarCompraDirecta,
   getComprobantesCargados,
   getFacturaCompra,
   guardarFacturaCompra,
   type GuardarFacturaPayload,
 } from '@/lib/queries/facturasCompra'
+import { anularCompraDirecta } from '@/lib/queries/comprasDirectas'
 
 export function useComprobantesCargados() {
   return useQuery({
@@ -26,6 +28,45 @@ export function useFacturaCompra(cuentaId: number | null) {
     },
     enabled: cuentaId !== null,
     staleTime: 10 * 1000,
+  })
+}
+
+function invalidarComprasDirectas(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['comprobantes-cargados'] })
+  qc.invalidateQueries({ queryKey: ['resumen-fiscal'] })
+  qc.invalidateQueries({ queryKey: ['resumen-financiero'] })
+  qc.invalidateQueries({ queryKey: ['productos'] })
+  qc.invalidateQueries({ queryKey: ['inventario'] })
+  qc.invalidateQueries({ queryKey: ['egresos'] })
+  qc.invalidateQueries({ queryKey: ['cuentas'] })
+  qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+  qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
+  qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+}
+
+export function useControlarCompraDirecta() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: Parameters<typeof controlarCompraDirecta>[0]) =>
+      controlarCompraDirecta(payload),
+    onSuccess: () => {
+      invalidarComprasDirectas(qc)
+      toast.success('Compra actualizada')
+    },
+    onError: (e: Error) => toast.error(`No se pudo controlar: ${e.message}`),
+  })
+}
+
+export function useAnularCompraDirecta() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ facturaId, usuarioId }: { facturaId: number; usuarioId: string }) =>
+      anularCompraDirecta(facturaId, usuarioId),
+    onSuccess: () => {
+      invalidarComprasDirectas(qc)
+      toast.success('Compra anulada')
+    },
+    onError: (e: Error) => toast.error(`No se pudo anular: ${e.message}`),
   })
 }
 

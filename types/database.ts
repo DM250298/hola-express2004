@@ -2581,6 +2581,8 @@ export type FacturaCompraRow = {
   es_directa: boolean
   /** Egreso del pago (para poder anular). */
   egreso_id: number | null
+  /** Compra directa ya revisada por el administrativo. */
+  controlada: boolean
   created_at: string
   updated_at: string
 }
@@ -2607,6 +2609,7 @@ export type FacturaCompraInsert = {
   gastos_no_debitables?: number
   es_directa?: boolean
   egreso_id?: number | null
+  controlada?: boolean
   created_at?: string
   updated_at?: string
 }
@@ -4094,6 +4097,18 @@ export interface Database {
         Args: {
           p_factura_id: number
           p_usuario_id: string
+        }
+        Returns: undefined
+      }
+      fn_controlar_compra_directa: {
+        Args: {
+          p_factura_id: number
+          p_usuario_id: string
+          p_tipo: string | null
+          p_punto: string | null
+          p_numero: string | null
+          p_cuit: string | null
+          p_controlada: boolean
         }
         Returns: undefined
       }
