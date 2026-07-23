@@ -7,6 +7,7 @@ import {
   Lightbulb,
   Loader2,
   LockKeyhole,
+  Package,
   Plus,
   Receipt,
   RotateCcw,
@@ -32,6 +33,7 @@ import { CarritoVenta } from './CarritoVenta'
 import { ModalCobro } from './ModalCobro'
 import { ModalVentasTurno } from './ModalVentasTurno'
 import { ModalGastoPOS } from './ModalGastoPOS'
+import { ModalCompraFactura } from '@/components/compras/ModalCompraFactura'
 import { ModalSangria } from './ModalSangria'
 import { ModalSugerirProducto } from './ModalSugerirProducto'
 import { ModalDevolucion } from './ModalDevolucion'
@@ -89,6 +91,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   // Si la config permite vender sin stock, el POS no clampea al stock disponible.
   const permitirSinStock = configVentas?.permitir_venta_sin_stock ?? false
   const puedeGasto = tienePermiso(usuario?.permisos, 'pos_gasto')
+  const puedeCompra = tienePermiso(usuario?.permisos, 'compras')
   const puedeDevolver = tienePermiso(usuario?.permisos, 'devoluciones')
   const hayTerminalActiva = (terminales ?? []).some(
     (t) => t.activo && !!t.device_id
@@ -104,6 +107,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [modalCierreAbierto, setModalCierreAbierto] = useState(false)
   const [modalVentasTurnoAbierto, setModalVentasTurnoAbierto] = useState(false)
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false)
+  const [modalCompraAbierto, setModalCompraAbierto] = useState(false)
   const [modalSangriaAbierto, setModalSangriaAbierto] = useState(false)
   const [modalSugerirAbierto, setModalSugerirAbierto] = useState(false)
   const [modalDevolucionAbierto, setModalDevolucionAbierto] = useState(false)
@@ -205,6 +209,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     modalCierreAbierto ||
     modalVentasTurnoAbierto ||
     modalGastoAbierto ||
+    modalCompraAbierto ||
     modalSangriaAbierto ||
     modalDevolucionAbierto ||
     ticketAbierto ||
@@ -530,6 +535,18 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
               </kbd>
             </Button>
           )}
+          {puedeCompra && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setModalCompraAbierto(true)}
+              title="Registrar compra al proveedor con factura"
+              className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5"
+            >
+              <Package className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Compra</span>
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -730,6 +747,14 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         onCambioAbierto={setModalGastoAbierto}
         turnoId={turno.id}
         usuarioId={usuarioId}
+      />
+
+      <ModalCompraFactura
+        abierto={modalCompraAbierto}
+        onCambioAbierto={setModalCompraAbierto}
+        contexto="pos"
+        usuarioId={usuarioId}
+        turnoId={turno.id}
       />
 
       <ModalSangria

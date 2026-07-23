@@ -99,10 +99,13 @@ export async function getResumenFinanciero(
 
   // 3. Egresos del período (paginado). `egresos.fecha` es DATE → comparar
   // contra fecha local, no contra el ISO (arrastra un día de más al final).
+  // Se excluye `compra_mercaderia` (compra directa con stock): esa plata ya
+  // impacta el resultado como CMV al vender; contarla acá la restaría dos veces.
   const egresosData = await traerTodo<{ monto: number; fecha: string }>(() =>
     supabase
       .from('egresos')
       .select('monto, fecha')
+      .neq('categoria', 'compra_mercaderia')
       .gte('fecha', fechaLocal(desde))
       .lte('fecha', fechaLocal(hasta))
       .order('id')
@@ -184,7 +187,7 @@ export type EstadoCuentaDerivado = 'pendiente' | 'pagada' | 'vencida'
 
 export interface CuentaAPagarConProveedor {
   id: number
-  pedido_id: number
+  pedido_id: number | null
   proveedor_id: number
   monto: number
   monto_pagado: number
@@ -235,7 +238,7 @@ const SELECT_CUENTAS =
 
 type FilaCuentaCruda = {
   id: number
-  pedido_id: number
+  pedido_id: number | null
   proveedor_id: number
   monto: number
   monto_pagado: number | null

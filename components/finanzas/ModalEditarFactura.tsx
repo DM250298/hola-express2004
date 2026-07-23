@@ -168,7 +168,7 @@ function CampoNumero({
 export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) {
   const { data: usuario } = useUsuario()
   const { data: pedido, isLoading: cargandoPedido } = usePedidoDetalle(
-    cuenta?.pedido_id
+    cuenta?.pedido_id ?? undefined
   )
   const { data: facturaGuardada, isLoading: cargandoFactura } =
     useFacturaCompra(cuenta?.id ?? null)
@@ -236,8 +236,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (!abierto || cargando) return
     let nuevas: LineaFactura[]
     if (facturaGuardada && facturaGuardada.items.length > 0) {
-      nuevas = facturaGuardada.items.map((g) => {
-        const it = items.find((i) => i.producto_id === g.producto_id)
+      // Las facturas de este flujo siempre tienen producto (las líneas sin
+      // producto son solo de la compra directa, que no se edita acá).
+      nuevas = facturaGuardada.items
+        .filter(
+          (g): g is typeof g & { producto_id: number } => g.producto_id != null
+        )
+        .map((g) => {
+          const it = items.find((i) => i.producto_id === g.producto_id)
         return {
           key: `prod-${g.producto_id}`,
           item_pedido_id: it?.id ?? null,
@@ -522,7 +528,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
 
           {/* Comprobante escaneado en la recepción (se puede agregar más acá) */}
           <GaleriaComprobantes
-            pedidoId={cuenta?.pedido_id}
+            pedidoId={cuenta?.pedido_id ?? undefined}
             usuarioId={usuario?.id ?? null}
           />
 

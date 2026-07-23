@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ExternalLink, FileText } from 'lucide-react'
+import { CheckCircle2, ExternalLink, FileText, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ModalCompraFactura } from '@/components/compras/ModalCompraFactura'
+import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
   Table,
   TableBody,
@@ -42,16 +44,27 @@ export function BadgePendientesFactura() {
 
 export function TabFacturas() {
   const { pendientes, isLoading, isError } = usarPendientesFactura()
+  const { data: usuario } = useUsuario()
   const [cuentaFactura, setCuentaFactura] =
     useState<CuentaAPagarConProveedor | null>(null)
+  const [modalCompra, setModalCompra] = useState(false)
 
   return (
     <div className="space-y-5">
-      <p className="text-[#6f3a2a] text-sm">
-        Al recibir mercadería se crea una <strong>deuda provisoria</strong> con
-        el monto estimado. Cargá acá la factura real del proveedor para cerrar
-        el circuito: se ajusta el monto a pagar y se actualizan costos y precios.
-      </p>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <p className="text-[#6f3a2a] text-sm max-w-xl">
+          Al recibir mercadería se crea una <strong>deuda provisoria</strong> con
+          el monto estimado. Cargá acá la factura real del proveedor para cerrar
+          el circuito: se ajusta el monto a pagar y se actualizan costos y precios.
+        </p>
+        <Button
+          onClick={() => setModalCompra(true)}
+          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5 shrink-0"
+        >
+          <Package className="h-4 w-4" />
+          Compra directa (sin orden)
+        </Button>
+      </div>
 
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
         {isLoading ? (
@@ -159,6 +172,15 @@ export function TabFacturas() {
         onCambioAbierto={(v) => !v && setCuentaFactura(null)}
         cuenta={cuentaFactura}
       />
+
+      {usuario && (
+        <ModalCompraFactura
+          abierto={modalCompra}
+          onCambioAbierto={setModalCompra}
+          contexto="finanzas"
+          usuarioId={usuario.id}
+        />
+      )}
     </div>
   )
 }

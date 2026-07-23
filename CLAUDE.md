@@ -229,6 +229,19 @@ factura, la deuda queda registrada con el monto estimado de la recepción.
 **Catálogo N:M proveedor↔producto** (`proveedor_producto`): un producto
 puede comprarse a varios proveedores con costos y códigos distintos.
 
+**Compra directa (sin orden, pagada al instante)** — migs 121+122,
+`fn_registrar_compra_directa`. Botón "Compra directa" en el POS
+(`ModalCompraFactura` contexto pos, pago con el efectivo del turno) y en
+Compras › Facturas (contexto finanzas, pago desde una cuenta). Toggle
+"¿mueve stock?": con stock crea `items_factura_compra` con producto +
+entrada de stock/costo/precio (como recepción); sin stock, una línea
+`producto_id NULL` + `descripcion` (para el Libro IVA). NO crea cuenta a
+pagar (se paga en el acto). Categoría del egreso `compra_mercaderia`
+(excluida del P&L: va a Mercadería/CMV). Gateada por permiso `compras`.
+Anulación `fn_anular_compra_directa` (repone stock, revierte pago y asiento).
+Requisito: `cuentas_a_pagar.pedido_id` y `items_factura_compra.producto_id`
+pasaron a nullable (mig 121).
+
 ### 7. Etiquetas (`/etiquetas`)
 Generación e impresión de etiquetas de precio masivo.
 
@@ -270,7 +283,15 @@ Tabs:
 - **Movimientos**: filtros por cuenta/tipo/categoría
 - **Cuentas a pagar**: deudas a proveedores con `provisoria` /
   `tiene_factura`
-- **Egresos**: gastos categorizados
+- **Egresos**: gastos categorizados. El egreso de Finanzas **debita una
+  cuenta de pago** elegida (`fn_crear_egreso` v2, mig 120): baja
+  `cuentas.saldo_actual` + `movimientos_cuenta` + Haber por tipo; guard de
+  negativo solo para la bóveda. **Regla de oro:** un egreso con `turno_id`
+  (gasto del POS) NUNCA debita cuenta (ya se descuenta en el cierre →
+  doble conteo). Anulación por `fn_anular_egreso` (repone saldo + revierte
+  asiento). Los pagos desde la bóveda entran al circuito de
+  `getSaldoCajaFuerte` (referencia_tipo egreso/cuenta_a_pagar) para no
+  disparar descuadre falso
 
 Sidebar: sección **"Finanzas y Tesorería"** agrupa Finanzas + Contabilidad.
 

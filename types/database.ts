@@ -1760,7 +1760,7 @@ export type MovimientoCuentaUpdate = {
 
 export type CuentaAPagarRow = {
   id: number
-  pedido_id: number
+  pedido_id: number | null
   proveedor_id: number
   monto: number
   monto_pagado: number
@@ -2577,6 +2577,10 @@ export type FacturaCompraRow = {
   percepcion_iibb: number
   percepcion_otros: number
   gastos_no_debitables: number
+  /** Compra directa (pagada al instante, sin orden de compra). */
+  es_directa: boolean
+  /** Egreso del pago (para poder anular). */
+  egreso_id: number | null
   created_at: string
   updated_at: string
 }
@@ -2601,6 +2605,8 @@ export type FacturaCompraInsert = {
   percepcion_iibb?: number
   percepcion_otros?: number
   gastos_no_debitables?: number
+  es_directa?: boolean
+  egreso_id?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -2610,7 +2616,9 @@ export type FacturaCompraUpdate = Partial<FacturaCompraInsert>
 export type ItemFacturaCompraRow = {
   id: number
   factura_id: number
-  producto_id: number
+  producto_id: number | null
+  /** Descripción libre para líneas sin producto (gasto sin stock). */
+  descripcion: string | null
   cantidad: number
   costo_sin_iva: number
   descuento_porcentaje: number
@@ -2625,7 +2633,8 @@ export type ItemFacturaCompraRow = {
 export type ItemFacturaCompraInsert = {
   id?: number
   factura_id: number
-  producto_id: number
+  producto_id?: number | null
+  descripcion?: string | null
   cantidad?: number
   costo_sin_iva?: number
   descuento_porcentaje?: number
@@ -4063,6 +4072,27 @@ export interface Database {
       fn_anular_egreso: {
         Args: {
           p_egreso_id: number
+          p_usuario_id: string
+        }
+        Returns: undefined
+      }
+      fn_registrar_compra_directa: {
+        Args: {
+          p_usuario_id: string
+          p_proveedor_id: number
+          p_fecha: string | null
+          p_fiscal: Json
+          p_lineas: Json
+          p_gasto: Json
+          p_mueve_stock: boolean
+          p_afecta_precio_venta: boolean
+          p_pago: Json
+        }
+        Returns: Json
+      }
+      fn_anular_compra_directa: {
+        Args: {
+          p_factura_id: number
           p_usuario_id: string
         }
         Returns: undefined
