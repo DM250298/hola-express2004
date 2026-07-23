@@ -158,17 +158,14 @@ export function DetalleProducto({ productoId }: Props) {
   const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const puedeEditar = tienePermiso(usuario?.permisos, 'configuracion')
 
-  // Margen / ganancia: el precio de venta es con IVA; lo bajamos a neto para
-  // compararlo contra el costo (neto) y sacar el % de ganancia sobre costo.
-  const precioSinIva =
-    producto.iva_venta > 0
-      ? producto.precio_venta / (1 + producto.iva_venta / 100)
-      : producto.precio_venta
-  const gananciaUnidad = precioSinIva - producto.precio_costo
-  const margenPct =
-    producto.precio_costo > 0
-      ? (gananciaUnidad / producto.precio_costo) * 100
-      : null
+  // Ganancia = MARGEN NETO ASEGURADO: el mismo `producto.margen` que muestra y
+  // con el que pricea el Drawer (la ganancia LIMPIA sobre el costo, ya
+  // descontadas IIBB + imp. créd/déb + comisión MP). Antes se mostraba el
+  // markup bruto (neto/costo − 1), que ignora las cargas y daba un número más
+  // alto y engañoso (ej. 78% cuando el margen real asegurado es 50%). Ahora los
+  // dos lados muestran la misma cifra.
+  const margenPct = producto.precio_costo > 0 ? producto.margen : null
+  const gananciaUnidad = producto.precio_costo * (producto.margen / 100)
 
   const totalPaginas = Math.ceil((historial?.total ?? 0) / POR_PAGINA)
   const hayPaginaAnterior = pagina > 0
