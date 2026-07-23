@@ -37,6 +37,18 @@ function boolTriestado(valor: unknown): boolean | null {
   return parsearBooleano(valor)
 }
 
+/**
+ * Margen de ganancia en PORCENTAJE: "30", "30%", "30,5" → 30. Vacío → null
+ * (el RPC entonces usa el precio de venta manual, o conserva el actual). Es un
+ * porcentaje directo sobre el costo (30 = 30%), no una fracción — a diferencia
+ * del IVA, un margen chico tipo 0,3 es rarísimo, así que no se auto-escala.
+ */
+function parsearMargen(valor: unknown): number | null {
+  if (valor === null || valor === undefined || String(valor).trim() === '') return null
+  const n = parsearPrecio(String(valor).replace('%', '').trim())
+  return Number.isFinite(n) ? n : null
+}
+
 const columnas: ColumnaDef[] = [
   // ── Identificadores (específicos primero para la DETECCIÓN) ──
   {
@@ -145,8 +157,23 @@ const columnas: ColumnaDef[] = [
     etiqueta: 'precio_costo',
     aliases: [/precio.*costo/i, /^costo$/i],
     parser: (v) => (v == null || String(v).trim() === '' ? null : parsearPrecio(v)),
+    orden: 3,
+    ayuda: 'Costo neto SIN IVA. Es la base para calcular el precio con el margen. No se muestra a cajeros.',
+  },
+  {
+    campo: 'margen',
+    etiqueta: 'margen',
+    aliases: [/^margen/i, /ganancia/i, /markup/i],
+    parser: parsearMargen,
     orden: 4,
-    ayuda: 'Costo neto sin IVA. No se muestra a cajeros. Opcional.',
+    validar: (v) =>
+      v == null
+        ? null
+        : typeof v === 'number' && v >= 0
+          ? null
+          : 'El margen debe ser un número ≥ 0 (ej. 30 para 30%)',
+    ayuda:
+      'Margen de ganancia deseado, en %. Poné 30 para 30%: es la ganancia LIMPIA sobre el costo, ya descontadas IIBB, imp. créd/déb y comisión Mercado Pago. Con costo + margen el sistema calcula el precio de venta solo. Dejá vacío si vas a cargar el precio a mano.',
   },
   {
     campo: 'iva',
@@ -168,20 +195,27 @@ const columnas: ColumnaDef[] = [
     // Vacío → null (NO 0): en una actualización el RPC hace coalesce(precio, actual),
     // así un precio en blanco conserva el vigente en vez de pisarlo con 0.
     parser: (v) => (v == null || String(v).trim() === '' ? null : parsearPrecio(v)),
-    requerida: true,
-    // El FALTANTE solo se exige al CREAR: si el producto ya existe (misma SKU),
-    // el precio puede venir vacío y el RPC conserva el actual (coalesce). Pero un
-    // precio PRESENTE inválido (≤ 0) se rechaza siempre, para no pisar el precio
-    // vigente con 0 y dejar el producto vendible a $0.
+    // El precio dejó de ser obligatorio: el modelo nuevo es costo + margen y el
+    // sistema lo calcula (fn_precio_venta). Solo se exige al CREAR cuando NO hay
+    // con qué calcularlo (ni margen ni costo). Un precio PRESENTE inválido (≤ 0)
+    // se rechaza siempre, para no dejar el producto vendible a $0.
     soloRequeridaEnAlta: true,
-    validar: (v) =>
-      v == null
-        ? 'Falta el precio de venta (obligatorio)'
-        : typeof v === 'number' && v > 0
+    validar: (v, datos) => {
+      if (v != null) {
+        return typeof v === 'number' && v > 0
           ? null
-          : 'El precio de venta debe ser mayor a 0',
-    orden: 3,
-    ayuda: 'Precio final de venta, mayor a 0. Obligatorio solo para productos NUEVOS; si el producto ya existe, podés dejarlo vacío y se conserva el precio actual.',
+          : 'El precio de venta debe ser mayor a 0'
+      }
+      // Precio vacío en un alta: se acepta si hay con qué calcularlo.
+      const tieneMargen = datos.margen != null
+      const tieneCosto = datos.precio_costo != null
+      if (tieneMargen && tieneCosto) return null
+      if (tieneMargen && !tieneCosto)
+        return 'Hay margen pero falta el costo: sin costo no puedo calcular el precio.'
+      return 'Falta el precio de venta, o cargá costo + margen para que el sistema lo calcule.'
+    },
+    orden: 5.5,
+    ayuda: 'Precio final de venta. OPCIONAL si cargás costo + margen (el sistema lo calcula). Si lo ponés a mano, manda el precio manual. Al actualizar, vacío conserva el precio actual.',
   },
   {
     campo: 'stock_actual',
@@ -250,7 +284,7 @@ export const ENTIDAD_PRODUCTOS: DefinicionEntidad = {
   clave: 'productos',
   etiqueta: 'Productos',
   descripcion:
-    'Maestro de productos. La columna SKU es el código único; si falta, se genera uno (HEX-…).',
+    'Maestro de productos. La columna SKU es el código único; si falta, se genera uno (HEX-…). Cargá costo (sin IVA) + margen y el sistema calcula el precio de venta con el motor de márgenes; o poné el precio a mano.',
   columnas,
   // Solo 'nombre' es header obligatorio: un archivo que únicamente ACTUALIZA
   // productos existentes puede no traer la columna de precio. El precio se sigue
@@ -267,6 +301,7 @@ export const ENTIDAD_PRODUCTOS: DefinicionEntidad = {
   },
   ejemplos: [
     {
+      // Modelo recomendado: costo + margen → el sistema calcula el precio.
       codigo_barras: '7790895000123',
       nombre: 'Coca-Cola 500ml',
       marca: 'Coca-Cola',
@@ -275,8 +310,8 @@ export const ENTIDAD_PRODUCTOS: DefinicionEntidad = {
       unidad: 'unidad',
       venta_por_peso: 'false',
       precio_costo: 800,
+      margen: 35,
       iva: 0.21,
-      precio_venta: 1200,
       stock_actual: 48,
       stock_minimo: 12,
       es_perecedero: 'false',
@@ -290,8 +325,8 @@ export const ENTIDAD_PRODUCTOS: DefinicionEntidad = {
       unidad: 'kg',
       venta_por_peso: 'true',
       precio_costo: 4500,
+      margen: 40,
       iva: 0.21,
-      precio_venta: 7900,
       stock_actual: 8,
       stock_minimo: 3,
       ubicacion: 'Heladera 2',
@@ -300,6 +335,7 @@ export const ENTIDAD_PRODUCTOS: DefinicionEntidad = {
       activo: 'true',
     },
     {
+      // Precio a mano (sin margen): el sistema respeta el precio cargado.
       nombre: 'Combo Mate (yerba + termo)',
       categoria: 'Almacén',
       precio_venta: 5500,

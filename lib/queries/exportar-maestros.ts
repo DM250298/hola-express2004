@@ -24,6 +24,7 @@ type ProductoExportRaw = {
   ubicacion: string | null
   dias_vencimiento_minimo: number | null
   activo: boolean
+  margen: number | null
   categorias: { nombre: string } | null
   proveedores: { nombre: string } | null
   costos_producto: CostoEmbed
@@ -31,7 +32,7 @@ type ProductoExportRaw = {
 }
 
 const SELECT_EXPORT =
-  'codigo_barras, codigo_barras_2, codigo_interno, nombre, marca, subcategoria, unidad, venta_por_peso, iva_venta, precio_venta, stock_actual, stock_minimo, ubicacion, dias_vencimiento_minimo, activo, categorias(nombre), proveedores(nombre), costos_producto(precio_costo), proveedor_producto(codigo_proveedor, es_principal)'
+  'codigo_barras, codigo_barras_2, codigo_interno, nombre, marca, subcategoria, unidad, venta_por_peso, iva_venta, precio_venta, margen, stock_actual, stock_minimo, ubicacion, dias_vencimiento_minimo, activo, categorias(nombre), proveedores(nombre), costos_producto(precio_costo), proveedor_producto(codigo_proveedor, es_principal)'
 
 export async function getProductosExport(incluirCosto: boolean): Promise<FilaExport[]> {
   const supabase = createClient()
@@ -56,6 +57,7 @@ export async function getProductosExport(incluirCosto: boolean): Promise<FilaExp
       precio_costo: incluirCosto ? costoDesdeEmbed(f.costos_producto) : '',
       iva: f.iva_venta,
       precio_venta: f.precio_venta,
+      margen: f.margen,
       stock_actual: f.stock_actual,
       stock_minimo: f.stock_minimo,
       ubicacion: f.ubicacion,

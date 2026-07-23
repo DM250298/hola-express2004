@@ -8,6 +8,8 @@
 // ║  Uso (Node 24 corre TS nativo):                                        ║
 // ║    node scripts/reporte-precios.ts              → DRY RUN (default)     ║
 // ║    node scripts/reporte-precios.ts --margen=40  → objetivo plano 40%    ║
+// ║    node scripts/reporte-precios.ts --piso=30    → respeta el margen del ║
+// ║      archivo, pero nunca por debajo del 30% (eleva solo los más finos)  ║
 // ║    node scripts/reporte-precios.ts --aplicar    → ESCRIBE los precios   ║
 // ║    --excluir-menores=100 → no toca productos con precio actual < $100  ║
 // ║      (ítems baratos tipo golosinas sueltas, donde el techo a $50 los   ║
@@ -172,6 +174,15 @@ async function main() {
     throw new Error(`--margen debe ser > 0 (recibido: ${argMargen})`)
   }
 
+  // Piso mínimo de margen: respeta el markup inferido de cada producto, pero
+  // eleva al piso a los que quedaron por debajo. Reconcilia "cada uno su margen
+  // habitual" con "que ninguno rinda menos de X%". No aplica a --margen (plano).
+  const argPiso = process.argv.find((a) => a.startsWith('--piso='))
+  const piso = argPiso ? Number(argPiso.split('=')[1]) : null
+  if (piso != null && !(piso > 0)) {
+    throw new Error(`--piso debe ser > 0 (recibido: ${argPiso})`)
+  }
+
   const comEf = config.tasaMp * (1 + config.iva)
   const cargas = config.iibb + config.debcred + comEf
 
@@ -202,6 +213,7 @@ async function main() {
   const filas: Fila[] = []
   const saltados: { id: number; nombre: string; motivo: string }[] = []
   let bajoAgua = 0 // productos cuyo precio actual da margen neto < 0 (pérdida)
+  let pisados = 0 // productos cuyo margen del archivo se elevó al piso mínimo
 
   for (const p of productos) {
     const costoNeto = costoDe(p)
@@ -226,7 +238,7 @@ async function main() {
     const neto = margenNetoActual(precioViejo, costo)
     if (neto.margenPct < 0) bajoAgua++
 
-    const objetivo = margenFlat != null ? margenFlat : margenBruto
+    let objetivo = margenFlat != null ? margenFlat : margenBruto
     if (!(objetivo > 0)) {
       saltados.push({
         id: p.id,
@@ -234,6 +246,12 @@ async function main() {
         motivo: 'margen implícito ≤ 0 (precio actual ≤ costo)',
       })
       continue
+    }
+    // Piso: si el margen del archivo es más fino que el mínimo, se eleva al piso.
+    // Los que ya rinden más, se respetan. No toca los de markup ≤ 0 (van a mano).
+    if (piso != null && objetivo < piso) {
+      objetivo = piso
+      pisados++
     }
 
     try {
@@ -304,6 +322,9 @@ async function main() {
 
   console.log('── Resumen ──')
   console.log(`  base del margen objetivo: ${margenFlat != null ? `plano ${margenFlat}%` : 'inferido del precio actual'}`)
+  if (piso != null) {
+    console.log(`  piso mínimo de margen:    ${piso}% (${pisados} productos elevados al piso)`)
+  }
   console.log(`  productos recalculados:   ${filas.length}`)
   console.log(`  saltados:                 ${saltados.length}`)
   console.log(`    · sin costo:            ${saltados.filter((s) => s.motivo === 'sin costo').length}`)
