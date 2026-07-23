@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   actualizarEgreso,
+  anularEgreso,
   crearEgreso,
   editarCuentaAPagar,
-  eliminarEgreso,
   getCuentaAPagarPorId,
   getCuentasAPagar,
   getCuentasSinFactura,
@@ -133,6 +133,14 @@ function invalidarEgresos(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: RESUMEN_FIN_KEY })
   // El cierre de caja descuenta los gastos del turno.
   qc.invalidateQueries({ queryKey: ['resumen-turno'] })
+  // Un egreso de Finanzas ahora debita una cuenta (movimiento + saldo + asiento);
+  // refrescar posición de caja, bóveda, tablero, flujo y asientos.
+  qc.invalidateQueries({ queryKey: ['cuentas'] })
+  qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+  qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
+  qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+  qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
+  qc.invalidateQueries({ queryKey: ['asientos'] })
 }
 
 export function useCrearEgreso() {
@@ -169,16 +177,17 @@ export function useActualizarEgreso() {
   })
 }
 
-export function useEliminarEgreso() {
+export function useAnularEgreso() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) => eliminarEgreso(id),
+    mutationFn: ({ id, usuarioId }: { id: number; usuarioId: string }) =>
+      anularEgreso(id, usuarioId),
     onSuccess: () => {
       invalidarEgresos(qc)
-      toast.success('Gasto eliminado')
+      toast.success('Gasto anulado')
     },
     onError: (error: Error) => {
-      toast.error(`No se pudo eliminar el gasto: ${error.message}`)
+      toast.error(`No se pudo anular el gasto: ${error.message}`)
     },
   })
 }

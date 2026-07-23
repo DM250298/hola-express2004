@@ -168,9 +168,12 @@ export interface SaldoCajaFuerte {
 export async function getSaldoCajaFuerte(): Promise<SaldoCajaFuerte> {
   const supabase = createClient()
 
+  // La bóveda primero: necesito su id para netear sus egresos de tesorería.
+  const cuentaBoveda = await getCuentaCajaFuerte()
+
   // Arqueos, movimientos manuales y remesas son históricos completos: paginados
   // para esquivar el Max Rows (~1000 filas) que truncaría las sumas en silencio.
-  const [buzonRes, arqueosData, movManual, remesado, cuentaBoveda] =
+  const [buzonRes, arqueosData, movManual, remesado, movTesoreria] =
     await Promise.all([
       supabase.from('sangrias').select('monto').eq('estado', 'en_buzon'),
       traerTodo<{ monto_fisico: number }>(() =>
@@ -180,7 +183,17 @@ export async function getSaldoCajaFuerte(): Promise<SaldoCajaFuerte> {
         supabase.from('movimientos_caja_fuerte').select('tipo, monto').order('id')
       ),
       getTotalRemesado(),
-      getCuentaCajaFuerte(),
+      // Pagos hechos DESDE la bóveda (egresos de Finanzas / pagos de cuentas a
+      // pagar): bajan saldo_actual pero no están en arqueos/manuales/remesas.
+      // Sin netearlos, `descuadre` daría ≠0 y dispararía un banner falso.
+      traerTodo<{ tipo: string; monto: number }>(() =>
+        supabase
+          .from('movimientos_cuenta')
+          .select('tipo, monto')
+          .eq('cuenta_id', cuentaBoveda.id)
+          .in('referencia_tipo', ['egreso', 'cuenta_a_pagar'])
+          .order('id')
+      ),
     ])
 
   if (buzonRes.error) throw buzonRes.error
@@ -198,8 +211,16 @@ export async function getSaldoCajaFuerte(): Promise<SaldoCajaFuerte> {
     else if (m.tipo === 'egreso') egresos_manuales += Number(m.monto)
   }
 
+  // Neto de pagos desde la bóveda (egreso resta; su anulación es un ingreso).
+  let egresos_tesoreria = 0
+  for (const m of movTesoreria) {
+    if (m.tipo === 'egreso') egresos_tesoreria += Number(m.monto)
+    else if (m.tipo === 'ingreso') egresos_tesoreria -= Number(m.monto)
+  }
+
   const saldo = Number(cuentaBoveda.saldo_actual)
-  const circuito = arqueado + ingresos_manuales - egresos_manuales - remesado
+  const circuito =
+    arqueado + ingresos_manuales - egresos_manuales - remesado - egresos_tesoreria
   const descuadre = Math.round((saldo - circuito) * 100) / 100
 
   return {

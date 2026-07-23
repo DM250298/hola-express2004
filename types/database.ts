@@ -4056,15 +4056,27 @@ export interface Database {
           p_fecha: string | null
           p_usuario_id: string
           p_turno_id: number | null
+          p_cuenta_origen_id?: number | null
         }
         Returns: EgresoRow
+      }
+      fn_anular_egreso: {
+        Args: {
+          p_egreso_id: number
+          p_usuario_id: string
+        }
+        Returns: undefined
       }
       fn_pagar_cuenta: {
         Args: {
           p_cuenta_id: number
           p_usuario_id: string
+          p_cuenta_origen_id: number
+          p_monto: number
+          p_fecha?: string | null
+          p_nota?: string | null
         }
-        Returns: undefined
+        Returns: Json
       }
       fn_validar_arqueo: {
         Args: {

@@ -485,6 +485,7 @@ export async function editarCuentaAPagar(
 
 export interface EgresoConUsuario extends EgresoRow {
   usuario_nombre: string | null
+  cuenta_nombre: string | null
 }
 
 export async function getEgresos(
@@ -495,7 +496,7 @@ export async function getEgresos(
   const supabase = createClient()
   let query = supabase
     .from('egresos')
-    .select('*, usuarios(nombre)')
+    .select('*, usuarios(nombre), cuentas(nombre)')
     // `fecha` es DATE: comparar contra fecha local (el ISO arrastra un día de más)
     .gte('fecha', fechaLocal(desde))
     .lte('fecha', fechaLocal(hasta))
@@ -508,12 +509,16 @@ export async function getEgresos(
   const { data, error } = await query
   if (error) throw error
 
-  type FilaCruda = EgresoRow & { usuarios: { nombre: string } | null }
+  type FilaCruda = EgresoRow & {
+    usuarios: { nombre: string } | null
+    cuentas: { nombre: string } | null
+  }
 
   return ((data ?? []) as unknown as FilaCruda[]).map(
-    ({ usuarios, ...resto }) => ({
+    ({ usuarios, cuentas, ...resto }) => ({
       ...resto,
       usuario_nombre: usuarios?.nombre ?? null,
+      cuenta_nombre: cuentas?.nombre ?? null,
     })
   )
 }
@@ -524,8 +529,10 @@ export interface NuevoEgresoPayload {
   categoria: string
   fecha: string // ISO yyyy-MM-dd
   usuario_id: string
-  /** Si el gasto sale de la caja de un turno, se vincula acá. */
+  /** Si el gasto sale de la caja de un turno, se vincula acá (efectivo del turno). */
   turno_id?: number | null
+  /** Cuenta de tesorería de la que sale el gasto (egreso de Finanzas). Debita el saldo. */
+  cuenta_origen_id?: number | null
 }
 
 export async function crearEgreso(payload: NuevoEgresoPayload): Promise<EgresoRow> {
@@ -537,6 +544,7 @@ export async function crearEgreso(payload: NuevoEgresoPayload): Promise<EgresoRo
     p_fecha: payload.fecha,
     p_usuario_id: payload.usuario_id,
     p_turno_id: payload.turno_id ?? null,
+    p_cuenta_origen_id: payload.cuenta_origen_id ?? null,
   })
   if (error) throw error
   if (!data) throw new Error('No se pudo registrar el egreso.')
@@ -544,10 +552,9 @@ export async function crearEgreso(payload: NuevoEgresoPayload): Promise<EgresoRo
 }
 
 export interface ActualizarEgresoPayload {
+  /** Solo se edita la descripción: el monto/categoría/cuenta mueven saldos, así
+   *  que para cambiarlos hay que anular y volver a crear el egreso. */
   descripcion: string
-  monto: number
-  categoria: string
-  fecha: string
 }
 
 export async function actualizarEgreso(
@@ -557,7 +564,7 @@ export async function actualizarEgreso(
   const supabase = createClient()
   const { data, error } = await supabase
     .from('egresos')
-    .update(datos)
+    .update({ descripcion: datos.descripcion })
     .eq('id', id)
     .select()
     .single<EgresoRow>()
@@ -565,9 +572,16 @@ export async function actualizarEgreso(
   return data
 }
 
-export async function eliminarEgreso(id: number): Promise<void> {
+/**
+ * Anula un egreso vía RPC: repone el saldo de la cuenta (si debitó una),
+ * inserta el movimiento inverso y revierte el asiento. Reemplaza el delete plano.
+ */
+export async function anularEgreso(id: number, usuarioId: string): Promise<void> {
   const supabase = createClient()
-  const { error } = await supabase.from('egresos').delete().eq('id', id)
+  const { error } = await supabase.rpc('fn_anular_egreso', {
+    p_egreso_id: id,
+    p_usuario_id: usuarioId,
+  })
   if (error) throw error
 }
 

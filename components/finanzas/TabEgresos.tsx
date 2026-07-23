@@ -23,7 +23,8 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { ModalNuevoEgreso } from './ModalNuevoEgreso'
-import { useEgresos, useEliminarEgreso } from '@/lib/hooks/useFinanzas'
+import { useEgresos, useAnularEgreso } from '@/lib/hooks/useFinanzas'
+import { useUsuario } from '@/lib/hooks/useUsuario'
 import { CATEGORIAS_EGRESO } from '@/lib/queries/finanzas'
 import type { EgresoRow } from '@/types/database'
 
@@ -53,7 +54,8 @@ export function TabEgresos({ desde, hasta }: Props) {
     isLoading,
     isError,
   } = useEgresos(desde, hasta, categoria === TODAS ? null : categoria)
-  const eliminar = useEliminarEgreso()
+  const anular = useAnularEgreso()
+  const { data: usuario } = useUsuario()
 
   const total = (egresos ?? []).reduce((acc, e) => acc + Number(e.monto), 0)
 
@@ -215,8 +217,8 @@ export function TabEgresos({ desde, hasta }: Props) {
                         variant="ghost"
                         size="sm"
                         onClick={() => setEgresoBorrar(e)}
-                        disabled={eliminar.isPending}
-                        title="Eliminar gasto"
+                        disabled={anular.isPending}
+                        title="Anular gasto"
                         className="h-7 w-7 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -242,17 +244,18 @@ export function TabEgresos({ desde, hasta }: Props) {
           if (!v) setEgresoBorrar(null)
         }}
         titulo={
-          egresoBorrar ? `Eliminar el gasto "${egresoBorrar.descripcion}"` : ''
+          egresoBorrar ? `Anular el gasto "${egresoBorrar.descripcion}"` : ''
         }
-        descripcion="El gasto se borra del período y deja de sumar al total de egresos. No se puede deshacer."
-        textoConfirmar="Sí, eliminar"
+        descripcion="Se revierte el asiento y, si el gasto salió de una cuenta, se repone su saldo. El gasto deja de sumar al total de egresos."
+        textoConfirmar="Sí, anular"
         destructiva
-        procesando={eliminar.isPending}
+        procesando={anular.isPending}
         onConfirmar={() => {
-          if (egresoBorrar)
-            eliminar.mutate(egresoBorrar.id, {
-              onSuccess: () => setEgresoBorrar(null),
-            })
+          if (egresoBorrar && usuario)
+            anular.mutate(
+              { id: egresoBorrar.id, usuarioId: usuario.id },
+              { onSuccess: () => setEgresoBorrar(null) }
+            )
         }}
       />
     </div>

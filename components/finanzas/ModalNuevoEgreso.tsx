@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Loader2, Receipt } from 'lucide-react'
@@ -23,10 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { MontoARS } from '@/components/shared/MontoARS'
 import {
   useActualizarEgreso,
   useCrearEgreso,
 } from '@/lib/hooks/useFinanzas'
+import { useCuentas } from '@/lib/hooks/useCuentas'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { CATEGORIAS_EGRESO } from '@/lib/queries/finanzas'
 import type { EgresoRow } from '@/types/database'
@@ -51,6 +53,8 @@ const esquema = z.object({
     'otros',
   ]),
   fecha: z.string().min(1, 'Fecha requerida'),
+  // Cuenta de la que sale el gasto. Obligatoria al crear (se valida abajo).
+  cuenta_origen_id: z.string().optional(),
 })
 
 type DatosForm = z.input<typeof esquema>
@@ -58,7 +62,7 @@ type DatosForm = z.input<typeof esquema>
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
-  /** Si se pasa un egreso, el modal funciona en modo edición. */
+  /** Si se pasa un egreso, el modal funciona en modo edición (solo descripción). */
   egreso?: EgresoRow | null
 }
 
@@ -73,6 +77,7 @@ const CATEGORIAS_VALIDAS = new Set<string>(
 
 export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
   const { data: usuario } = useUsuario()
+  const { data: cuentas } = useCuentas(true)
   const crear = useCrearEgreso()
   const actualizar = useActualizarEgreso()
 
@@ -92,6 +97,7 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
       monto: '',
       categoria: 'otros',
       fecha: hoyIso(),
+      cuenta_origen_id: '',
     },
   })
 
@@ -106,45 +112,57 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
                 ? egreso.categoria
                 : 'otros') as DatosForm['categoria'],
               fecha: egreso.fecha.slice(0, 10),
+              cuenta_origen_id: egreso.cuenta_id ? String(egreso.cuenta_id) : '',
             }
           : {
               descripcion: '',
               monto: '',
               categoria: 'otros',
               fecha: hoyIso(),
+              cuenta_origen_id: '',
             }
       )
     }
   }, [abierto, egreso, reset])
 
+  // Preview del saldo resultante de la cuenta elegida.
+  const cuentaId = useWatch({ control, name: 'cuenta_origen_id' })
+  const montoRaw = useWatch({ control, name: 'monto' })
+  const montoNum = Number(montoRaw) || 0
+  const cuentaSel = (cuentas ?? []).find((c) => String(c.id) === cuentaId)
+  const saldoResultante =
+    cuentaSel && montoNum > 0 ? Number(cuentaSel.saldo_actual) - montoNum : null
+  // La bóveda no puede quedar negativa (bloquea); un banco sí (solo avisa).
+  const bloqueoBoveda =
+    !!cuentaSel?.es_caja_fuerte && saldoResultante !== null && saldoResultante < 0
+  const avisoNegativo =
+    !cuentaSel?.es_caja_fuerte && saldoResultante !== null && saldoResultante < 0
+
+  const faltaCuenta = !esEdicion && !cuentaId
+
   function onSubmit(datos: DatosForm) {
     const validado = esquema.parse(datos)
     if (esEdicion && egreso) {
+      // Solo la descripción es editable; monto/categoría/cuenta mueven saldos.
       actualizar.mutate(
-        {
-          id: egreso.id,
-          datos: {
-            descripcion: validado.descripcion,
-            monto: validado.monto,
-            categoria: validado.categoria,
-            fecha: validado.fecha,
-          },
-        },
+        { id: egreso.id, datos: { descripcion: validado.descripcion } },
         { onSuccess: () => onCambioAbierto(false) }
       )
-    } else {
-      if (!usuario) return
-      crear.mutate(
-        {
-          descripcion: validado.descripcion,
-          monto: validado.monto,
-          categoria: validado.categoria,
-          fecha: validado.fecha,
-          usuario_id: usuario.id,
-        },
-        { onSuccess: () => onCambioAbierto(false) }
-      )
+      return
     }
+    if (!usuario) return
+    if (!validado.cuenta_origen_id || bloqueoBoveda) return
+    crear.mutate(
+      {
+        descripcion: validado.descripcion,
+        monto: validado.monto,
+        categoria: validado.categoria,
+        fecha: validado.fecha,
+        usuario_id: usuario.id,
+        cuenta_origen_id: Number(validado.cuenta_origen_id),
+      },
+      { onSuccess: () => onCambioAbierto(false) }
+    )
   }
 
   return (
@@ -160,8 +178,8 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
             {esEdicion
-              ? 'Modificá los datos del gasto registrado.'
-              : 'Registrá un gasto operativo.'}
+              ? 'Solo se puede editar la descripción. Para cambiar el monto o la cuenta, anulá y volvé a cargar.'
+              : 'Registrá un gasto operativo y elegí de qué cuenta sale.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -207,8 +225,8 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
                   step="0.01"
                   {...register('monto')}
                   placeholder="0,00"
-                  disabled={procesando}
-                  className="pl-7 h-11 text-lg font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                  disabled={procesando || esEdicion}
+                  className="pl-7 h-11 text-lg font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c] disabled:opacity-60"
                 />
               </div>
               {errors.monto && (
@@ -227,8 +245,8 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
                 id="fecha"
                 type="date"
                 {...register('fecha')}
-                disabled={procesando}
-                className="h-11 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                disabled={procesando || esEdicion}
+                className="h-11 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c] disabled:opacity-60"
               />
               {errors.fecha && (
                 <p className="text-[#c43e2c] text-xs">{errors.fecha.message}</p>
@@ -247,9 +265,9 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
                 <Select
                   value={field.value}
                   onValueChange={field.onChange}
-                  disabled={procesando}
+                  disabled={procesando || esEdicion}
                 >
-                  <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
+                  <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] disabled:opacity-60">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -263,6 +281,64 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
               )}
             />
           </div>
+
+          {/* Cuenta de pago — solo al crear (mueve el saldo). */}
+          {!esEdicion && (
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium text-sm">
+                Pagar desde <span className="text-[#c43e2c]">*</span>
+              </Label>
+              <Controller
+                control={control}
+                name="cuenta_origen_id"
+                render={({ field }) => (
+                  <Select
+                    value={field.value || ''}
+                    onValueChange={field.onChange}
+                    disabled={procesando}
+                  >
+                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
+                      <SelectValue placeholder="Elegí la cuenta…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(cuentas ?? []).map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.nombre} ·{' '}
+                          <span className="font-mono tabular-nums">
+                            ${Number(c.saldo_actual).toFixed(2)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {saldoResultante !== null && (
+                <div
+                  className={
+                    bloqueoBoveda || avisoNegativo
+                      ? 'rounded-lg px-3 py-2 text-xs flex items-center justify-between bg-[#c43e2c]/10 text-[#c43e2c]'
+                      : 'rounded-lg px-3 py-2 text-xs flex items-center justify-between bg-[#fdfaf6] text-[#6f3a2a]'
+                  }
+                >
+                  <span>Saldo de {cuentaSel?.nombre} después</span>
+                  <span className="font-bold tabular-nums">
+                    <MontoARS monto={saldoResultante} />
+                  </span>
+                </div>
+              )}
+              {bloqueoBoveda && (
+                <p className="text-[#c43e2c] text-xs">
+                  La caja fuerte no puede quedar en negativo.
+                </p>
+              )}
+              {avisoNegativo && (
+                <p className="text-[#b8791a] text-xs">
+                  Esta cuenta va a quedar en negativo. Se registra igual.
+                </p>
+              )}
+            </div>
+          )}
         </form>
 
         <DialogFooter className="px-6 py-4 border-t border-[#e4c9b0]/60 bg-[#fdfaf6] flex-row gap-2 sm:gap-2">
@@ -278,8 +354,8 @@ export function ModalNuevoEgreso({ abierto, onCambioAbierto, egreso }: Props) {
           <Button
             type="submit"
             onClick={handleSubmit(onSubmit)}
-            disabled={procesando}
-            className="flex-1 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+            disabled={procesando || bloqueoBoveda || faltaCuenta}
+            className="flex-1 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold disabled:opacity-40"
           >
             {procesando ? (
               <>
