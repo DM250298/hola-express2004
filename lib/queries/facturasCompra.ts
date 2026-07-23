@@ -116,6 +116,8 @@ export interface ComprobanteCargado {
   /** Compra directa ya revisada por el administrativo. */
   controlada: boolean
   cuit_proveedor: string | null
+  /** Quién cargó la factura (el vendedor, en las compras del POS). */
+  usuario_nombre: string | null
 }
 
 /**
@@ -129,12 +131,15 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
   const { data, error } = await supabase
     .from('facturas_compra')
     .select(
-      'id, cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, cuit_proveedor'
+      'id, cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, cuit_proveedor, usuarios(nombre)'
     )
     .order('fecha', { ascending: false })
   if (error) throw error
 
-  return ((data ?? []) as unknown as ComprobanteCargado[]).map((f) => ({
+  type Fila = Omit<ComprobanteCargado, 'usuario_nombre'> & {
+    usuarios: { nombre: string } | null
+  }
+  return ((data ?? []) as unknown as Fila[]).map((f) => ({
     id: f.id,
     cuenta_id: f.cuenta_id,
     pedido_id: f.pedido_id,
@@ -150,6 +155,7 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
     es_directa: !!f.es_directa,
     controlada: !!f.controlada,
     cuit_proveedor: f.cuit_proveedor,
+    usuario_nombre: f.usuarios?.nombre ?? null,
   }))
 }
 

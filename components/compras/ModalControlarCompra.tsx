@@ -125,6 +125,12 @@ export function ModalControlarCompra({
                     {formatearFechaCorta(compra.fecha)}
                   </span>
                 </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#6f3a2a]">Cargó</span>
+                  <span className="text-[#391511]">
+                    {compra.usuario_nombre ?? '—'}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between text-sm pt-1 border-t border-[#e4c9b0]/40">
                   <span className="text-[#6f3a2a]">
                     Neto <MontoARS monto={compra.neto} /> · IVA{' '}
