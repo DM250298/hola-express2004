@@ -20,12 +20,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import {
   useControlarCompraDirecta,
   useAnularCompraDirecta,
+  useItemsFacturaCompra,
 } from '@/lib/hooks/useFacturasCompra'
 import type { ComprobanteCargado } from '@/lib/queries/facturasCompra'
 
@@ -48,6 +57,9 @@ export function ModalControlarCompra({
 }: Props) {
   const controlar = useControlarCompraDirecta()
   const anular = useAnularCompraDirecta()
+  const { data: items, isLoading: cargandoItems } = useItemsFacturaCompra(
+    abierto && compra ? compra.id : null
+  )
 
   const [tipo, setTipo] = useState('A')
   const [punto, setPunto] = useState('')
@@ -85,7 +97,7 @@ export function ModalControlarCompra({
   return (
     <>
       <Dialog open={abierto} onOpenChange={(v) => !procesando && onCambioAbierto(v)}>
-        <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
+        <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col">
           <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
             <DialogTitle className="text-[#391511] text-lg flex items-center gap-2">
               <Package className="h-5 w-5 text-[#f9b44c]" />
@@ -98,7 +110,7 @@ export function ModalControlarCompra({
           </DialogHeader>
 
           {compra && (
-            <div className="px-6 py-5 space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {/* Resumen (no editable: para cambiar montos o productos, anulá y recargá) */}
               <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3 space-y-1">
                 <div className="flex items-center justify-between text-sm">
@@ -122,6 +134,68 @@ export function ModalControlarCompra({
                     <MontoARS monto={compra.total} />
                   </span>
                 </div>
+              </div>
+
+              {/* Detalle: qué se compró */}
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-1">
+                  Detalle
+                </div>
+                {cargandoItems ? (
+                  <div className="flex items-center justify-center py-4 text-[#6f3a2a]">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : !items || items.length === 0 ? (
+                  <p className="text-xs text-[#6f3a2a] py-2">Sin detalle.</p>
+                ) : (
+                  <div className="rounded-xl border border-[#e4c9b0]/60 overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-b-[#e4c9b0]/60 bg-[#fdfaf6] hover:bg-[#fdfaf6]">
+                          <TableHead className="text-[#391511] font-semibold text-xs h-8">
+                            Ítem
+                          </TableHead>
+                          <TableHead className="text-right text-[#391511] font-semibold text-xs h-8">
+                            Cant.
+                          </TableHead>
+                          <TableHead className="text-right text-[#391511] font-semibold text-xs h-8">
+                            Costo s/IVA
+                          </TableHead>
+                          <TableHead className="text-right text-[#391511] font-semibold text-xs h-8">
+                            IVA
+                          </TableHead>
+                          <TableHead className="text-right text-[#391511] font-semibold text-xs h-8">
+                            Subtotal
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {items.map((it, i) => (
+                          <TableRow
+                            key={i}
+                            className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
+                          >
+                            <TableCell className="text-sm text-[#391511] py-1.5">
+                              {it.producto_nombre ?? it.descripcion ?? 'Ítem'}
+                            </TableCell>
+                            <TableCell className="text-right text-sm text-[#6f3a2a] tabular-nums py-1.5">
+                              {it.cantidad}
+                            </TableCell>
+                            <TableCell className="text-right text-sm text-[#6f3a2a] tabular-nums py-1.5">
+                              <MontoARS monto={it.costo_sin_iva} />
+                            </TableCell>
+                            <TableCell className="text-right text-xs text-[#c8a58a] tabular-nums py-1.5">
+                              {it.iva_compra_porcentaje}%
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-semibold text-[#391511] tabular-nums py-1.5">
+                              <MontoARS monto={it.cantidad * it.costo_sin_iva} />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
               </div>
 
               {/* Datos del comprobante (editables) */}

@@ -6,6 +6,7 @@ import {
   controlarCompraDirecta,
   getComprobantesCargados,
   getFacturaCompra,
+  getItemsFacturaCompra,
   guardarFacturaCompra,
   type GuardarFacturaPayload,
 } from '@/lib/queries/facturasCompra'
@@ -42,6 +43,16 @@ function invalidarComprasDirectas(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
   qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
   qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+}
+
+export function useItemsFacturaCompra(facturaId: number | null) {
+  return useQuery({
+    queryKey: ['items-factura-compra', facturaId],
+    queryFn: () =>
+      facturaId === null ? [] : getItemsFacturaCompra(facturaId),
+    enabled: facturaId !== null,
+    staleTime: 10 * 1000,
+  })
 }
 
 export function useControlarCompraDirecta() {

@@ -153,6 +153,50 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
   }))
 }
 
+export interface ItemCompraDetalle {
+  producto_id: number | null
+  producto_nombre: string | null
+  descripcion: string | null
+  cantidad: number
+  costo_sin_iva: number
+  iva_compra_porcentaje: number
+  costo_con_iva: number
+}
+
+/** Detalle (líneas) de una factura de compra, con el nombre del producto. */
+export async function getItemsFacturaCompra(
+  facturaId: number
+): Promise<ItemCompraDetalle[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('items_factura_compra')
+    .select(
+      'producto_id, descripcion, cantidad, costo_sin_iva, iva_compra_porcentaje, costo_con_iva, productos(nombre)'
+    )
+    .eq('factura_id', facturaId)
+    .order('id')
+  if (error) throw error
+
+  type Fila = {
+    producto_id: number | null
+    descripcion: string | null
+    cantidad: number
+    costo_sin_iva: number
+    iva_compra_porcentaje: number
+    costo_con_iva: number
+    productos: { nombre: string } | null
+  }
+  return ((data ?? []) as unknown as Fila[]).map((it) => ({
+    producto_id: it.producto_id,
+    producto_nombre: it.productos?.nombre ?? null,
+    descripcion: it.descripcion,
+    cantidad: Number(it.cantidad),
+    costo_sin_iva: Number(it.costo_sin_iva),
+    iva_compra_porcentaje: Number(it.iva_compra_porcentaje),
+    costo_con_iva: Number(it.costo_con_iva),
+  }))
+}
+
 /** Edita los datos formales de una compra directa y/o la marca controlada. */
 export async function controlarCompraDirecta(payload: {
   factura_id: number
