@@ -320,6 +320,10 @@ export function DrawerProducto({
   const [adicionales, setAdicionales] = useState<AdicionalState[]>([])
   const [ivaVenta, setIvaVenta] = useState('21')
   const [margen, setMargen] = useState('0')
+  // Modo del cálculo de precio: 'margen' (costo+margen → precio, el clásico) o
+  // 'precio' (precio a mano → el motor DEDUCE el margen neto y los gastos).
+  const [modoPrecio, setModoPrecio] = useState<'margen' | 'precio'>('margen')
+  const [precioManual, setPrecioManual] = useState('')
   const [imagenUrl, setImagenUrl] = useState<string | null>(null)
 
   // ── Combo: componentes elegidos ──
@@ -438,6 +442,8 @@ export function DrawerProducto({
     setIvaCompra(String(producto?.iva_compra ?? 21))
     setIvaVenta(String(producto?.iva_venta ?? 21))
     setMargen(String(producto?.margen ?? 0))
+    setModoPrecio('margen')
+    setPrecioManual(String(producto?.precio_venta ?? ''))
     setImagenUrl(producto?.imagen_url ?? null)
     const adic = (producto?.costos_adicionales ?? []) as CostoAdicional[]
     setAdicionales(
@@ -491,21 +497,47 @@ export function DrawerProducto({
     // El Monotributista pricea sobre el costo CON IVA (no recupera crédito fiscal).
     const costoParaMotor =
       pricing.regimen === 'monotributista' ? costoConIva : costoNeto
+
+    if (modoPrecio === 'precio') {
+      // INVERSO: el precio se fija a mano y el motor DEDUCE el margen + gastos.
+      const precio = Number(precioManual) || 0
+      const { desglose, error } = pricing.calcularDesdePrecio(
+        precio,
+        costoParaMotor,
+        Number(ivaVenta) || 0
+      )
+      return {
+        modo: 'precio' as const,
+        sumaAdic,
+        costoNeto,
+        costoConIva,
+        desglose: null,
+        desglosePrecio: desglose,
+        error,
+        precioVenta: precio, // se guarda el precio ingresado, tal cual
+        margenFinal: desglose ? desglose.margen * 100 : 0,
+      }
+    }
+
+    // DIRECTO: costo + margen → precio (comportamiento clásico).
     const { desglose, error } = pricing.calcular(
       costoParaMotor,
       Number(margen) || 0,
       Number(ivaVenta) || 0
     )
     return {
+      modo: 'margen' as const,
       sumaAdic,
       costoNeto,
       costoConIva,
       desglose,
+      desglosePrecio: null,
       error,
       // Lo que se guarda como precio_venta: el precio comercial redondeado.
       precioVenta: desglose?.precioRedondeado ?? 0,
+      margenFinal: Number(margen) || 0,
     }
-  }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, pricing, esCombo, costoComponentes])
+  }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, precioManual, modoPrecio, pricing, esCombo, costoComponentes])
 
   function simularEscaneo() {
     const codigo = generarCodigoBarrasSimulado()
@@ -590,7 +622,9 @@ export function DrawerProducto({
       precio_venta: r2(calc.precioVenta),
       iva_compra: Number(ivaCompra) || 0,
       iva_venta: Number(ivaVenta) || 0,
-      margen: Number(margen) || 0,
+      // En modo "por precio" el margen es el DEDUCIDO del precio; en modo
+      // "por margen" es el que se tipeó. calc.margenFinal unifica ambos.
+      margen: r2(calc.margenFinal),
       costos_adicionales: costosAdicionales,
       // Un combo no maneja stock propio: el stock sale de los componentes
       // (el "stock" que se ve es el virtual, calculado en las queries).
@@ -1166,10 +1200,49 @@ export function DrawerProducto({
 
               {/* ── Precio de venta (motor con margen asegurado) ── */}
               <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
-                <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
-                  <TrendingUp className="h-4 w-4 text-[#e4a42a]" />
-                  Precio de venta
-                </h3>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                    <TrendingUp className="h-4 w-4 text-[#e4a42a]" />
+                    Precio de venta
+                  </h3>
+                  {/* Toggle modo: por margen (→ precio) o por precio (→ margen) */}
+                  <div className="flex gap-0.5 rounded-lg bg-[#f1e2d0] p-0.5 text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      disabled={guardando}
+                      onClick={() => {
+                        // Al pasar a "por precio", arrancá del precio actual.
+                        if (calc.precioVenta > 0) setPrecioManual(String(calc.precioVenta))
+                        setModoPrecio('precio')
+                      }}
+                      className={
+                        'rounded-md px-2.5 py-1 transition ' +
+                        (modoPrecio === 'precio'
+                          ? 'bg-white text-[#391511] shadow-sm'
+                          : 'text-[#6f3a2a] hover:text-[#391511]')
+                      }
+                    >
+                      Por precio
+                    </button>
+                    <button
+                      type="button"
+                      disabled={guardando}
+                      onClick={() => {
+                        // Al pasar a "por margen", arrancá del margen que deja el precio actual.
+                        if (calc.margenFinal) setMargen(String(r2(calc.margenFinal)))
+                        setModoPrecio('margen')
+                      }}
+                      className={
+                        'rounded-md px-2.5 py-1 transition ' +
+                        (modoPrecio === 'margen'
+                          ? 'bg-white text-[#391511] shadow-sm'
+                          : 'text-[#6f3a2a] hover:text-[#391511]')
+                      }
+                    >
+                      Por margen
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
@@ -1185,19 +1258,36 @@ export function DrawerProducto({
                       className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                      Margen ganancia %
-                    </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={margen}
-                      onChange={(e) => setMargen(e.target.value)}
-                      disabled={guardando}
-                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                    />
-                  </div>
+                  {modoPrecio === 'margen' ? (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Margen ganancia %
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={margen}
+                        onChange={(e) => setMargen(e.target.value)}
+                        disabled={guardando}
+                        className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Precio de venta $
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={precioManual}
+                        onChange={(e) => setPrecioManual(e.target.value)}
+                        disabled={guardando}
+                        className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Resultado del motor: precio que asegura el margen tras las cargas */}
@@ -1215,6 +1305,85 @@ export function DrawerProducto({
                       <p className="text-[#391511] mt-0.5">{calc.error}</p>
                     </div>
                   </div>
+                ) : calc.modo === 'precio' ? (
+                  calc.desglosePrecio && calc.precioVenta > 0 ? (
+                    <>
+                      <div className="flex items-end justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                            Margen neto real
+                          </span>
+                          <div
+                            className={
+                              'font-extrabold text-xl tabular-nums ' +
+                              (calc.desglosePrecio.margen >= 0
+                                ? 'text-[#2f8f4e]'
+                                : 'text-[#c43e2c]')
+                            }
+                          >
+                            {calc.desglosePrecio.margen >= 0 ? '+' : ''}
+                            {(calc.desglosePrecio.margen * 100).toFixed(1)}%
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                            Ganancia neta
+                          </span>
+                          <div
+                            className={
+                              'text-sm tabular-nums ' +
+                              (calc.desglosePrecio.ganancia >= 0
+                                ? 'text-[#2f8f4e]'
+                                : 'text-[#c43e2c]')
+                            }
+                          >
+                            <MontoARS monto={calc.desglosePrecio.ganancia} />
+                          </div>
+                        </div>
+                      </div>
+
+                      <ul className="text-xs text-[#6f3a2a] space-y-1">
+                        <li className="flex justify-between">
+                          <span>Precio de venta</span>
+                          <MontoARS monto={calc.desglosePrecio.precioFinal} />
+                        </li>
+                        <li className="flex justify-between">
+                          <span>Costo</span>
+                          <MontoARS monto={calc.desglosePrecio.costo} />
+                        </li>
+                        <li className="flex justify-between">
+                          <span>IIBB</span>
+                          <MontoARS monto={calc.desglosePrecio.iibbMonto} />
+                        </li>
+                        <li className="flex justify-between">
+                          <span>Imp. créd/déb</span>
+                          <MontoARS monto={calc.desglosePrecio.debcredMonto} />
+                        </li>
+                        <li className="flex justify-between">
+                          <span>Comisión MP (peor caso)</span>
+                          <MontoARS monto={calc.desglosePrecio.comisionMonto} />
+                        </li>
+                      </ul>
+                      {calc.desglosePrecio.margen < 0 && (
+                        <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-2.5">
+                          <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
+                          <p className="text-xs text-[#391511]">
+                            A este precio <strong>perdés plata</strong>: no cubre
+                            el costo más las cargas.
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-[#c8a58a] leading-relaxed">
+                        Ponés el precio y el sistema deduce el margen NETO que te
+                        queda tras IIBB, impuesto a los créditos/débitos y la
+                        comisión de Mercado Pago (peor caso). Se guarda ese margen.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-[#c8a58a]">
+                      Cargá el costo y el precio para ver el margen.
+                    </p>
+                  )
                 ) : calc.desglose && calc.precioVenta > 0 ? (
                   <>
                     <div className="flex items-end justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">

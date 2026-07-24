@@ -99,3 +99,30 @@ export interface DesglosePrecio {
    */
   margenExtraRedondeo: number
 }
+
+/**
+ * Desglose del cálculo INVERSO (precio → margen). Espejo de DesglosePrecio
+ * para un precio fijado a mano: dado el precio final y el costo, reconstruye
+ * el margen NETO que ese precio deja tras las cargas. El margen puede ser
+ * negativo si el precio no cubre costo + cargas.
+ */
+export interface DesglosePorPrecio {
+  regimen: RegimenFiscal
+  costo: number
+  /** Precio final (con IVA) que se ingresó. */
+  precioFinal: number
+  /** Precio neto (sin IVA) — para el Monotributista coincide con el final. */
+  precioNeto: number
+  /** Margen neto sobre el costo como fracción (0.40 = 40%). Puede ser < 0. */
+  margen: number
+  /** Ganancia neta en pesos = margen × costo. */
+  ganancia: number
+  /** Tasa efectiva de MP usada = tasaMp × (1 + iva). */
+  comisionEfectiva: number
+  /** IIBB en pesos (sobre el precio final). */
+  iibbMonto: number
+  /** Impuesto créd/déb en pesos (sobre el precio final). */
+  debcredMonto: number
+  /** Comisión MP en pesos, con IVA (sobre el precio final). */
+  comisionMonto: number
+}

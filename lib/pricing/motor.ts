@@ -7,7 +7,12 @@
 // ║  ni una alícuota escrita a mano.                                       ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
-import type { ConfigPricing, DesglosePrecio, InputPrecio } from './tipos'
+import type {
+  ConfigPricing,
+  DesglosePorPrecio,
+  DesglosePrecio,
+  InputPrecio,
+} from './tipos'
 
 /** Error de dominio del motor (divisor inválido, tasas vacías, etc.). */
 export class ErrorPricing extends Error {
@@ -162,6 +167,50 @@ export function calcularPrecio(
     gananciaReal: gananciaAlPrecioFinal(precioFinalExacto, input, config),
     margenExtraRedondeo:
       gananciaAlPrecioFinal(precioRedondeado, input, config) - ganancia,
+  }
+}
+
+/**
+ * Cálculo INVERSO: dado un precio final ya decidido y el costo, reconstruye el
+ * margen NETO que ese precio deja tras las cargas, con el desglose. Es el
+ * espejo de calcularPrecio, para cuando el precio se fija a mano (número
+ * redondo, precio de la competencia) y se quiere saber cuánto se gana de
+ * verdad. El margen puede ser negativo si el precio no cubre costo + cargas.
+ *
+ * @throws {ErrorPricing} si el precio o el costo son negativos.
+ */
+export function calcularDesdePrecio(
+  precioFinal: number,
+  input: Pick<InputPrecio, 'regimen' | 'costo' | 'ivaVenta'>,
+  config: ConfigPricing
+): DesglosePorPrecio {
+  if (!(precioFinal >= 0)) {
+    throw new ErrorPricing(`El precio debe ser ≥ 0 (recibido: ${precioFinal}).`)
+  }
+  if (!(input.costo >= 0)) {
+    throw new ErrorPricing(`El costo debe ser ≥ 0 (recibido: ${input.costo}).`)
+  }
+  // gananciaAlPrecioFinal ignora el margen; pasamos 0 para reusar el helper.
+  const entrada: InputPrecio = { ...input, margen: 0 }
+  const comEf = comisionEfectiva(config)
+  const ivaVenta = ivaVentaDe(entrada, config)
+  const ganancia = gananciaAlPrecioFinal(precioFinal, entrada, config)
+  const margen = input.costo > 0 ? ganancia / input.costo : 0
+  const precioNeto =
+    input.regimen === 'responsable_inscripto'
+      ? precioFinal / (1 + ivaVenta)
+      : precioFinal
+  return {
+    regimen: input.regimen,
+    costo: input.costo,
+    precioFinal,
+    precioNeto,
+    margen,
+    ganancia,
+    comisionEfectiva: comEf,
+    iibbMonto: precioFinal * config.iibb,
+    debcredMonto: precioFinal * config.debcred,
+    comisionMonto: precioFinal * comEf,
   }
 }
 

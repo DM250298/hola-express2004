@@ -4,9 +4,14 @@ import { useCallback, useMemo } from 'react'
 import { useConfigFiscal } from '@/lib/hooks/useFiscal'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { armarConfigPricing, regimenDesdeConfig } from '@/lib/pricing/config'
-import { calcularPrecio, ErrorPricing } from '@/lib/pricing/motor'
+import {
+  calcularDesdePrecio as calcularDesdePrecioMotor,
+  calcularPrecio,
+  ErrorPricing,
+} from '@/lib/pricing/motor'
 import type {
   ConfigPricing,
+  DesglosePorPrecio,
   DesglosePrecio,
   RegimenFiscal,
 } from '@/lib/pricing/tipos'
@@ -28,6 +33,15 @@ export interface PricingListo {
     margenPorcentaje: number,
     ivaVentaPorcentaje?: number
   ) => { desglose: DesglosePrecio | null; error: string | null }
+  /**
+   * Cálculo INVERSO: dado un precio final y el costo, deduce el margen neto que
+   * ese precio deja tras las cargas + el desglose. Espejo de `calcular`.
+   */
+  calcularDesdePrecio: (
+    precioFinal: number,
+    costo: number,
+    ivaVentaPorcentaje?: number
+  ) => { desglose: DesglosePorPrecio | null; error: string | null }
 }
 
 /**
@@ -76,10 +90,37 @@ export function usePricing(): PricingListo {
     [config, regimen]
   )
 
+  const calcularDesdePrecio = useCallback(
+    (precioFinal: number, costo: number, ivaVentaPorcentaje?: number) => {
+      if (!config || !regimen) return { desglose: null, error: null }
+      try {
+        const desglose = calcularDesdePrecioMotor(
+          precioFinal,
+          {
+            regimen,
+            costo,
+            ivaVenta:
+              ivaVentaPorcentaje != null ? ivaVentaPorcentaje / 100 : undefined,
+          },
+          config
+        )
+        return { desglose, error: null }
+      } catch (e) {
+        const error =
+          e instanceof ErrorPricing
+            ? e.message
+            : 'No se pudo calcular el margen.'
+        return { desglose: null, error }
+      }
+    },
+    [config, regimen]
+  )
+
   return {
     config,
     regimen,
     cargando: cargandoFiscal || cargandoMedios,
     calcular,
+    calcularDesdePrecio,
   }
 }

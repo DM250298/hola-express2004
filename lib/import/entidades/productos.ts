@@ -215,7 +215,7 @@ const columnas: ColumnaDef[] = [
       return 'Falta el precio de venta, o cargá costo + margen para que el sistema lo calcule.'
     },
     orden: 5.5,
-    ayuda: 'Precio final de venta. OPCIONAL si cargás costo + margen (el sistema lo calcula). Si lo ponés a mano, manda el precio manual. Al actualizar, vacío conserva el precio actual.',
+    ayuda: 'Precio final de venta. OPCIONAL si cargás costo + margen (el sistema lo calcula). Si ponés precio + costo SIN margen, el sistema deduce el margen neto y lo guarda. Al actualizar, vacío conserva el precio actual.',
   },
   {
     campo: 'stock_actual',
