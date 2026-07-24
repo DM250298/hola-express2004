@@ -1,11 +1,15 @@
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║  Auditoría de precios — SOLO LECTURA                                   ║
 // ║                                                                        ║
-// ║  Verifica que el precio_venta GUARDADO de cada producto coincida con   ║
-// ║  lo que el motor calcula para su (costo, margen, iva). Es un cross-    ║
-// ║  check independiente: el import guardó los precios con fn_precio_venta ║
-// ║  (SQL); acá los recalculamos con el motor TS (lib/pricing) y           ║
-// ║  comparamos. Si algo no coincide, lo lista.                            ║
+// ║  Verifica que cada producto sea CONSISTENTE con el motor de pricing,   ║
+// ║  contemplando los DOS modos de carga:                                  ║
+// ║    · directo (costo+margen → precio): el precio guardado debe ser el   ║
+// ║      redondeado que calcula el motor para ese (costo, margen).         ║
+// ║    · inverso (precio → margen): el margen guardado debe ser el que el  ║
+// ║      motor DEDUCE del precio guardado (el precio queda tal cual se     ║
+// ║      cargó, sin redondear a la grilla de $50).                         ║
+// ║  Un producto está OK si cumple CUALQUIERA de los dos (así lo dejó su   ║
+// ║  forma de carga). Solo se listan los que fallan LOS DOS.               ║
 // ║                                                                        ║
 // ║  Uso:  node scripts/auditoria-precios.ts                               ║
 // ║  Lee credenciales de .env.local (service role para ver costos).        ║
@@ -13,7 +17,7 @@
 
 import { readFileSync } from 'node:fs'
 import { createClient } from '@supabase/supabase-js'
-import { calcularPrecio, seleccionarPeorTasa } from '../lib/pricing/motor.ts'
+import { calcularDesdePrecio, calcularPrecio, seleccionarPeorTasa } from '../lib/pricing/motor.ts'
 import type { RegimenFiscal } from '../lib/pricing/tipos.ts'
 
 function cargarEnv(ruta: string): Record<string, string> {
@@ -40,9 +44,9 @@ if (!url || !serviceKey) {
   process.exit(1)
 }
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+const r2 = (n: number) => Math.round(n * 100) / 100
 
 async function main() {
-  // 1. Config del motor (igual que el import y el Drawer).
   const { data: fiscal, error: eF } = await supabase.from('config_fiscal').select('*').eq('id', 1).single()
   if (eF || !fiscal) throw eF ?? new Error('No hay config_fiscal.')
   const { data: medios, error: eM } = await supabase
@@ -65,7 +69,6 @@ async function main() {
   const regimen: RegimenFiscal =
     fiscal.condicion_iva === 'monotributista' ? 'monotributista' : 'responsable_inscripto'
 
-  // 2. Todos los productos activos con costo, margen, iva y precio guardado.
   type Prod = {
     id: number; nombre: string; precio_venta: number; margen: number; iva_venta: number
     iva_compra: number; pendiente_precio: boolean
@@ -92,15 +95,16 @@ async function main() {
     return Number(f?.precio_costo ?? 0)
   }
 
-  // 3. Chequear: los que tienen margen>0 y costo>0 deben coincidir con el motor.
-  const mismatches: { id: number; nombre: string; costo: number; margen: number; guardado: number; esperado: number; dif: number }[] = []
-  let coinciden = 0
-  let sinMargen = 0   // margen 0 → precio manual (no se prizó por motor)
+  const inconsistentes: {
+    id: number; nombre: string; costo: number; margen: number; precio: number
+    precioDirecto: number; margenInverso: number
+  }[] = []
+  let porDirecto = 0
+  let porInverso = 0
+  let sinMargen = 0
   let sinCosto = 0
-  let pendientes = 0
 
   for (const p of productos) {
-    if (p.pendiente_precio) pendientes++
     const costoNeto = costoDe(p)
     if (!(costoNeto > 0)) { sinCosto++; continue }
     if (!(p.margen > 0)) { sinMargen++; continue }
@@ -108,46 +112,56 @@ async function main() {
     const costo = regimen === 'monotributista'
       ? costoNeto * (1 + Number(p.iva_compra ?? 21) / 100)
       : costoNeto
-    let esperado: number
+    const ivaVenta = Number(p.iva_venta) / 100
+    const precio = Number(p.precio_venta)
+
+    let precioDirecto = NaN
+    let margenInverso = NaN
     try {
-      esperado = calcularPrecio(
-        { regimen, costo, margen: p.margen / 100, ivaVenta: Number(p.iva_venta) / 100 },
-        config
-      ).precioRedondeado
+      // Modo DIRECTO: el precio debe ser el redondeado del motor para (costo, margen).
+      precioDirecto = calcularPrecio({ regimen, costo, margen: p.margen / 100, ivaVenta }, config).precioRedondeado
+      // Modo INVERSO: el margen debe ser el que el motor deduce del precio guardado.
+      margenInverso = r2(calcularDesdePrecio(precio, { regimen, costo, ivaVenta }, config).margen * 100)
     } catch {
-      continue // divisor inválido u otro; no debería pasar con config normal
+      continue
     }
-    const dif = Math.round((Number(p.precio_venta) - esperado) * 100) / 100
-    if (Math.abs(dif) < 0.01) coinciden++
-    else mismatches.push({
-      id: p.id, nombre: p.nombre, costo: costoNeto, margen: p.margen,
-      guardado: Number(p.precio_venta), esperado, dif,
-    })
+
+    const okDirecto = Math.abs(precio - precioDirecto) < 0.5
+    const okInverso = Math.abs(margenInverso - p.margen) < 0.02
+
+    if (okDirecto) porDirecto++
+    else if (okInverso) porInverso++
+    else
+      inconsistentes.push({
+        id: p.id, nombre: p.nombre, costo: costoNeto, margen: p.margen, precio,
+        precioDirecto, margenInverso,
+      })
   }
 
-  // 4. Reporte.
-  console.log('── Auditoría de precios (motor TS vs. precio guardado) ──')
-  console.log(`  productos activos:        ${productos.length}`)
-  console.log(`  ✔ coinciden con el motor:  ${coinciden}`)
-  console.log(`  ✗ NO coinciden:            ${mismatches.length}`)
+  const consistentes = porDirecto + porInverso
+  console.log('── Auditoría de precios (motor · directo o inverso) ──')
+  console.log(`  productos activos:         ${productos.length}`)
+  console.log(`  ✔ consistentes:            ${consistentes}`)
+  console.log(`      · por modo directo (costo+margen→precio):  ${porDirecto}`)
+  console.log(`      · por modo inverso (precio→margen):        ${porInverso}`)
+  console.log(`  ✗ INCONSISTENTES (fallan los dos): ${inconsistentes.length}`)
   console.log(`  · saltados (margen 0 = precio manual): ${sinMargen}`)
   console.log(`  · saltados (sin costo):    ${sinCosto}`)
-  console.log(`  · marcados pendiente_precio: ${pendientes}`)
   console.log('')
 
-  if (mismatches.length === 0) {
-    console.log('✅ Todos los productos con costo+margen tienen el precio que calcula el motor.')
+  if (inconsistentes.length === 0) {
+    console.log('✅ Todo el catálogo con costo+margen es consistente con el motor (por directo o inverso).')
   } else {
-    console.log('⚠️ Diferencias (guardado ≠ esperado):')
-    console.log('  id      costo     margen   guardado →  esperado    dif      producto')
-    for (const m of mismatches.slice(0, 40)) {
+    console.log('⚠️ Inconsistentes (ni el precio sale del margen, ni el margen del precio):')
+    console.log('  id      costo      margen   precio guard.   precio directo   margen inverso   producto')
+    for (const m of inconsistentes.slice(0, 50)) {
       console.log(
-        `  ${String(m.id).padEnd(6)} $${String(m.costo).padStart(8)}  ${String(m.margen).padStart(4)}%   ` +
-        `$${String(m.guardado).padStart(8)} → $${String(m.esperado).padStart(8)}  ` +
-        `${(m.dif >= 0 ? '+' : '') + m.dif}`.padStart(9) + `  ${m.nombre.slice(0, 34)}`
+        `  ${String(m.id).padEnd(6)} $${String(r2(m.costo)).padStart(9)}  ${String(m.margen).padStart(6)}%  ` +
+        `$${String(r2(m.precio)).padStart(10)}   $${String(r2(m.precioDirecto)).padStart(10)}   ${String(r2(m.margenInverso)).padStart(7)}%   ` +
+        `${m.nombre.slice(0, 30)}`
       )
     }
-    if (mismatches.length > 40) console.log(`  … y ${mismatches.length - 40} más`)
+    if (inconsistentes.length > 50) console.log(`  … y ${inconsistentes.length - 50} más`)
   }
 }
 
