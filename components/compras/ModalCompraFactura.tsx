@@ -33,6 +33,10 @@ interface LineaStock {
   nombre: string
   cantidad: string
   costo_sin_iva: string
+  /** Margen % del producto (editable si se actualiza el precio de venta). */
+  margen: string
+  /** IVA de venta % del producto (para el recálculo del precio). */
+  iva_venta: string
 }
 
 interface Props {
@@ -105,19 +109,39 @@ export function ModalCompraFactura({
     setCuentaId('')
   }
 
-  function agregarLinea(prod: { id: number; nombre: string }) {
+  function agregarLinea(prod: {
+    id: number
+    nombre: string
+    margen?: number | null
+    iva_venta?: number | null
+  }) {
+    // El margen viene del producto: antes se mandaba 0 hardcodeado y, con
+    // "actualizar precio de venta" tildado, el RPC repriceaba el producto SIN
+    // ganancia (precio = costo + cargas) y le pisaba el margen a 0.
+    const margenProd = prod.margen ?? 0
     setLineas((prev) =>
       prev.some((l) => l.producto_id === prod.id)
         ? prev
         : [
             ...prev,
-            { producto_id: prod.id, nombre: prod.nombre, cantidad: '1', costo_sin_iva: '' },
+            {
+              producto_id: prod.id,
+              nombre: prod.nombre,
+              cantidad: '1',
+              costo_sin_iva: '',
+              margen: String(margenProd > 0 ? margenProd : 30),
+              iva_venta: String(prod.iva_venta ?? 21),
+            },
           ]
     )
     setBusqueda('')
   }
 
-  function editarLinea(id: number, campo: 'cantidad' | 'costo_sin_iva', valor: string) {
+  function editarLinea(
+    id: number,
+    campo: 'cantidad' | 'costo_sin_iva' | 'margen',
+    valor: string
+  ) {
     setLineas((prev) =>
       prev.map((l) => (l.producto_id === id ? { ...l, [campo]: valor } : l))
     )
@@ -182,8 +206,8 @@ export function ModalCompraFactura({
               cantidad: Number(l.cantidad),
               costo_sin_iva: Number(l.costo_sin_iva),
               iva_compra_porcentaje: Number(ivaPct) || 0,
-              margen_porcentaje: 0,
-              iva_venta_porcentaje: 21,
+              margen_porcentaje: Number(l.margen) || 0,
+              iva_venta_porcentaje: Number(l.iva_venta) || 21,
             }))
           : [],
         gasto: mueveStock
@@ -286,7 +310,14 @@ export function ModalCompraFactura({
                       <button
                         key={p.id}
                         type="button"
-                        onClick={() => agregarLinea({ id: p.id, nombre: p.nombre })}
+                        onClick={() =>
+                          agregarLinea({
+                            id: p.id,
+                            nombre: p.nombre,
+                            margen: p.margen,
+                            iva_venta: p.iva_venta,
+                          })
+                        }
                         className="w-full text-left px-3 py-2 text-sm text-[#391511] hover:bg-[#fdfaf6]"
                       >
                         {p.nombre}
@@ -331,6 +362,19 @@ export function ModalCompraFactura({
                           className="w-24 h-8 pl-5 text-sm tabular-nums border-[#e4c9b0]"
                         />
                       </div>
+                      {afectaPrecio && (
+                        <div className="relative" title="Margen % para recalcular el precio de venta">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={l.margen}
+                            onChange={(e) => editarLinea(l.producto_id, 'margen', e.target.value)}
+                            placeholder="Marg"
+                            className="w-16 h-8 pr-5 text-sm tabular-nums border-[#e4c9b0]"
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">%</span>
+                        </div>
+                      )}
                       <button
                         type="button"
                         onClick={() =>

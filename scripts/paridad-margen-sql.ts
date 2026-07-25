@@ -116,9 +116,9 @@ async function main() {
       }
       const sql = Number(r.data)
       const ts = r2(
-        calcularDesdePrecio(
+        (calcularDesdePrecio(
           c.precio, { regimen, costo: c.costo, ivaVenta: c.ivaPct / 100 }, config
-        ).margen * 100
+        ).margen ?? 0) * 100
       )
       const dif = Math.abs(sql - ts)
       peor = Math.max(peor, dif)

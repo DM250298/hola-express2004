@@ -324,6 +324,13 @@ export function DrawerProducto({
   // 'precio' (precio a mano → el motor DEDUCE el margen neto y los gastos).
   const [modoPrecio, setModoPrecio] = useState<'margen' | 'precio'>('margen')
   const [precioManual, setPrecioManual] = useState('')
+  // ¿El usuario tocó el bloque de precio (costo, margen, precio, IVA,
+  // adicionales, componentes)? Si NO lo tocó, al guardar se conservan el
+  // precio_venta y el margen vigentes: editar nombre/stock/categoría no debe
+  // repricear el producto en silencio con las tasas del día.
+  const [precioTocado, setPrecioTocado] = useState(false)
+  // Detección del modo inicial (una vez por apertura, cuando carga la config).
+  const refModoDetectado = useRef(false)
   const [imagenUrl, setImagenUrl] = useState<string | null>(null)
 
   // ── Combo: componentes elegidos ──
@@ -444,6 +451,8 @@ export function DrawerProducto({
     setMargen(String(producto?.margen ?? 0))
     setModoPrecio('margen')
     setPrecioManual(String(producto?.precio_venta ?? ''))
+    setPrecioTocado(false)
+    refModoDetectado.current = false
     setImagenUrl(producto?.imagen_url ?? null)
     const adic = (producto?.costos_adicionales ?? []) as CostoAdicional[]
     setAdicionales(
@@ -454,6 +463,35 @@ export function DrawerProducto({
     const base = (producto?.precio_costo ?? 0) - sumaAdic
     setCostoBase(producto ? String(r2(base)) : '')
   }, [abierto, producto, reset, nombreInicial, proveedorIdInicial])
+
+  // ── Modo inicial inteligente (una vez por apertura, con la config cargada) ──
+  // Si el precio guardado NO es el que el motor reproduce desde el margen
+  // guardado (precio fijado a mano — típico de la importación por precio), el
+  // drawer abre en "Por precio" sembrado con el precio VIGENTE: lo que se ve
+  // es lo que rige, y el margen mostrado es el real de ese precio. Si el par
+  // es coherente con el motor, abre en "Por margen" clásico.
+  useEffect(() => {
+    if (!abierto || refModoDetectado.current || pricing.cargando) return
+    refModoDetectado.current = true
+    if (!esEdicion || !producto) return
+    const precioGuardado = producto.precio_venta ?? 0
+    if (precioGuardado <= 0) return
+    const costoNeto = producto.precio_costo ?? 0
+    const costoParaMotor =
+      pricing.regimen === 'monotributista'
+        ? costoNeto * (1 + (producto.iva_compra ?? 21) / 100)
+        : costoNeto
+    const { desglose } = pricing.calcular(
+      costoParaMotor,
+      producto.margen ?? 0,
+      producto.iva_venta ?? 21
+    )
+    const recalculado = desglose?.precioRedondeado ?? 0
+    if (Math.abs(recalculado - precioGuardado) > 0.5) {
+      setModoPrecio('precio')
+      setPrecioManual(String(precioGuardado))
+    }
+  }, [abierto, esEdicion, producto, pricing])
 
   const guardando =
     crear.isPending || actualizar.isPending || guardarComponentes.isPending
@@ -515,7 +553,8 @@ export function DrawerProducto({
         desglosePrecio: desglose,
         error,
         precioVenta: precio, // se guarda el precio ingresado, tal cual
-        margenFinal: desglose ? desglose.margen * 100 : 0,
+        margenFinal:
+          desglose && desglose.margen != null ? desglose.margen * 100 : 0,
       }
     }
 
@@ -553,15 +592,18 @@ export function DrawerProducto({
     campo: keyof AdicionalState,
     valor: string
   ) {
+    setPrecioTocado(true)
     setAdicionales((prev) =>
       prev.map((a, i) => (i === idx ? { ...a, [campo]: valor } : a))
     )
   }
   function quitarAdicional(idx: number) {
+    setPrecioTocado(true)
     setAdicionales((prev) => prev.filter((_, i) => i !== idx))
   }
 
   function agregarComponente(p: ProductoConRelaciones) {
+    setPrecioTocado(true)
     setComponentesSel((prev) => [
       ...prev,
       {
@@ -576,11 +618,13 @@ export function DrawerProducto({
     ])
   }
   function cambiarCantidadComponente(id: number, valor: string) {
+    setPrecioTocado(true)
     setComponentesSel((prev) =>
       prev.map((c) => (c.componente_id === id ? { ...c, cantidad: valor } : c))
     )
   }
   function quitarComponente(id: number) {
+    setPrecioTocado(true)
     setComponentesSel((prev) => prev.filter((c) => c.componente_id !== id))
   }
 
@@ -608,6 +652,14 @@ export function DrawerProducto({
       }))
 
     const limpiar = (v: string | undefined) => (v?.trim() ? v.trim() : null)
+    // Si el usuario NO tocó el bloque de precio, se conservan los valores
+    // vigentes tal cual: recalcular acá repricearía el producto en silencio
+    // (el redondeo comercial y las tasas del día pueden mover el precio aunque
+    // solo se haya editado el nombre o el stock).
+    const conservarPrecio = esEdicion && producto != null && !precioTocado
+    const precioAGuardar = conservarPrecio
+      ? (producto.precio_venta ?? 0)
+      : r2(calc.precioVenta)
     const payload = {
       codigo_barras: limpiar(validado.codigo_barras),
       codigo_barras_2: limpiar(validado.codigo_barras_2),
@@ -618,13 +670,15 @@ export function DrawerProducto({
       nombre: validado.nombre,
       categoria_id: validado.categoria_id,
       proveedor_id: validado.proveedor_id,
-      precio_costo: r2(calc.costoNeto),
-      precio_venta: r2(calc.precioVenta),
+      precio_costo: conservarPrecio
+        ? (producto.precio_costo ?? 0)
+        : r2(calc.costoNeto),
+      precio_venta: precioAGuardar,
       iva_compra: Number(ivaCompra) || 0,
       iva_venta: Number(ivaVenta) || 0,
       // En modo "por precio" el margen es el DEDUCIDO del precio; en modo
       // "por margen" es el que se tipeó. calc.margenFinal unifica ambos.
-      margen: r2(calc.margenFinal),
+      margen: conservarPrecio ? (producto.margen ?? 0) : r2(calc.margenFinal),
       costos_adicionales: costosAdicionales,
       // Un combo no maneja stock propio: el stock sale de los componentes
       // (el "stock" que se ve es el virtual, calculado en las queries).
@@ -643,7 +697,7 @@ export function DrawerProducto({
       // Sin precio de venta cargado → queda "pendiente de precio": visible en
       // el POS pero bloqueado para vender hasta que se complete (factura o
       // carga manual). Con precio > 0 se habilita.
-      pendiente_precio: r2(calc.precioVenta) <= 0,
+      pendiente_precio: precioAGuardar <= 0,
       notas: validado.notas?.trim() ? validado.notas.trim() : null,
       imagen_url: imagenUrl,
     }
@@ -1082,7 +1136,10 @@ export function DrawerProducto({
                       min="0"
                       step="0.5"
                       value={ivaCompra}
-                      onChange={(e) => setIvaCompra(e.target.value)}
+                      onChange={(e) => {
+                        setPrecioTocado(true)
+                        setIvaCompra(e.target.value)
+                      }}
                       disabled={guardando}
                       className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                     />
@@ -1096,7 +1153,10 @@ export function DrawerProducto({
                       min="0"
                       step="0.01"
                       value={esCombo ? String(r2(costoComponentes)) : costoBase}
-                      onChange={(e) => setCostoBase(e.target.value)}
+                      onChange={(e) => {
+                        setPrecioTocado(true)
+                        setCostoBase(e.target.value)
+                      }}
                       placeholder="0.00"
                       disabled={guardando || esCombo}
                       className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
@@ -1211,8 +1271,14 @@ export function DrawerProducto({
                       type="button"
                       disabled={guardando}
                       onClick={() => {
-                        // Al pasar a "por precio", arrancá del precio actual.
-                        if (calc.precioVenta > 0) setPrecioManual(String(calc.precioVenta))
+                        // Sin ediciones, arrancá del precio GUARDADO (no del
+                        // recalculado): togglear ida y vuelta no debe convertir
+                        // el redondeo en un cambio de precio (trinquete).
+                        if (esEdicion && !precioTocado && (producto?.precio_venta ?? 0) > 0) {
+                          setPrecioManual(String(producto?.precio_venta ?? ''))
+                        } else if (calc.precioVenta > 0) {
+                          setPrecioManual(String(calc.precioVenta))
+                        }
                         setModoPrecio('precio')
                       }}
                       className={
@@ -1228,8 +1294,13 @@ export function DrawerProducto({
                       type="button"
                       disabled={guardando}
                       onClick={() => {
-                        // Al pasar a "por margen", arrancá del margen que deja el precio actual.
-                        if (calc.margenFinal) setMargen(String(r2(calc.margenFinal)))
+                        // Sin ediciones, arrancá del margen GUARDADO; con
+                        // ediciones, del margen que deja el precio actual.
+                        if (esEdicion && !precioTocado && producto) {
+                          setMargen(String(producto.margen ?? 0))
+                        } else if (calc.margenFinal) {
+                          setMargen(String(r2(calc.margenFinal)))
+                        }
                         setModoPrecio('margen')
                       }}
                       className={
@@ -1253,7 +1324,10 @@ export function DrawerProducto({
                       min="0"
                       step="0.5"
                       value={ivaVenta}
-                      onChange={(e) => setIvaVenta(e.target.value)}
+                      onChange={(e) => {
+                        setPrecioTocado(true)
+                        setIvaVenta(e.target.value)
+                      }}
                       disabled={guardando}
                       className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                     />
@@ -1267,7 +1341,10 @@ export function DrawerProducto({
                         type="number"
                         step="0.01"
                         value={margen}
-                        onChange={(e) => setMargen(e.target.value)}
+                        onChange={(e) => {
+                          setPrecioTocado(true)
+                          setMargen(e.target.value)
+                        }}
                         disabled={guardando}
                         className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
@@ -1282,13 +1359,47 @@ export function DrawerProducto({
                         min="0"
                         step="0.01"
                         value={precioManual}
-                        onChange={(e) => setPrecioManual(e.target.value)}
+                        onChange={(e) => {
+                          setPrecioTocado(true)
+                          setPrecioManual(e.target.value)
+                        }}
                         disabled={guardando}
                         className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
                     </div>
                   )}
                 </div>
+
+                {/* Aviso cuando el recálculo difiere del precio vigente: el
+                    reprice tiene que ser visible y deliberado, nunca silencioso. */}
+                {esEdicion &&
+                  producto &&
+                  (producto.precio_venta ?? 0) > 0 &&
+                  calc.precioVenta > 0 &&
+                  Math.abs(r2(calc.precioVenta) - (producto.precio_venta ?? 0)) >
+                    0.009 && (
+                    <div className="flex items-start gap-2 rounded-lg border border-[#e4a42a]/50 bg-[#f9b44c]/10 p-2.5 text-xs text-[#391511]">
+                      <AlertTriangle className="h-3.5 w-3.5 text-[#e4a42a] shrink-0 mt-0.5" />
+                      <span>
+                        Precio vigente:{' '}
+                        <strong>
+                          <MontoARS monto={producto.precio_venta ?? 0} />
+                        </strong>
+                        .{' '}
+                        {precioTocado ? (
+                          <>
+                            Al guardar pasa a{' '}
+                            <strong>
+                              <MontoARS monto={r2(calc.precioVenta)} />
+                            </strong>
+                            .
+                          </>
+                        ) : (
+                          'Se conserva al guardar: solo cambia si tocás costo, margen o precio.'
+                        )}
+                      </span>
+                    </div>
+                  )}
 
                 {/* Resultado del motor: precio que asegura el margen tras las cargas */}
                 {pricing.cargando ? (
@@ -1313,17 +1424,26 @@ export function DrawerProducto({
                           <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                             Margen neto real
                           </span>
-                          <div
-                            className={
-                              'font-extrabold text-xl tabular-nums ' +
-                              (calc.desglosePrecio.margen >= 0
-                                ? 'text-[#2f8f4e]'
-                                : 'text-[#c43e2c]')
-                            }
-                          >
-                            {calc.desglosePrecio.margen >= 0 ? '+' : ''}
-                            {(calc.desglosePrecio.margen * 100).toFixed(1)}%
-                          </div>
+                          {calc.desglosePrecio.margen == null ? (
+                            <div
+                              className="font-extrabold text-xl tabular-nums text-[#c8a58a]"
+                              title="Sin costo cargado: no se puede medir el margen"
+                            >
+                              —
+                            </div>
+                          ) : (
+                            <div
+                              className={
+                                'font-extrabold text-xl tabular-nums ' +
+                                (calc.desglosePrecio.margen >= 0
+                                  ? 'text-[#2f8f4e]'
+                                  : 'text-[#c43e2c]')
+                              }
+                            >
+                              {calc.desglosePrecio.margen >= 0 ? '+' : ''}
+                              {(calc.desglosePrecio.margen * 100).toFixed(1)}%
+                            </div>
+                          )}
                         </div>
                         <div className="text-right">
                           <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
@@ -1364,15 +1484,16 @@ export function DrawerProducto({
                           <MontoARS monto={calc.desglosePrecio.comisionMonto} />
                         </li>
                       </ul>
-                      {calc.desglosePrecio.margen < 0 && (
-                        <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-2.5">
-                          <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
-                          <p className="text-xs text-[#391511]">
-                            A este precio <strong>perdés plata</strong>: no cubre
-                            el costo más las cargas.
-                          </p>
-                        </div>
-                      )}
+                      {calc.desglosePrecio.margen != null &&
+                        calc.desglosePrecio.margen < 0 && (
+                          <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-2.5">
+                            <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
+                            <p className="text-xs text-[#391511]">
+                              A este precio <strong>perdés plata</strong>: no cubre
+                              el costo más las cargas.
+                            </p>
+                          </div>
+                        )}
                       <p className="text-[10px] text-[#c8a58a] leading-relaxed">
                         Ponés el precio y el sistema deduce el margen NETO que te
                         queda tras IIBB, impuesto a los créditos/débitos y la
@@ -1405,6 +1526,9 @@ export function DrawerProducto({
                       </div>
                     </div>
 
+                    {/* Cargas sobre el precio REDONDEADO (el que se cobra): así
+                        el desglose coincide con el del modo "Por precio" al
+                        mismo precio final. */}
                     <ul className="text-xs text-[#6f3a2a] space-y-1">
                       <li className="flex justify-between">
                         <span>Costo</span>
@@ -1416,19 +1540,23 @@ export function DrawerProducto({
                       </li>
                       <li className="flex justify-between">
                         <span>IIBB</span>
-                        <MontoARS monto={calc.desglose.iibbMonto} />
+                        <MontoARS monto={calc.desglose.iibbMontoCobrado} />
                       </li>
                       <li className="flex justify-between">
                         <span>Imp. créd/déb</span>
-                        <MontoARS monto={calc.desglose.debcredMonto} />
+                        <MontoARS monto={calc.desglose.debcredMontoCobrado} />
                       </li>
                       <li className="flex justify-between">
                         <span>Comisión MP (peor caso)</span>
-                        <MontoARS monto={calc.desglose.comisionMonto} />
+                        <MontoARS monto={calc.desglose.comisionMontoCobrado} />
                       </li>
                       <li className="flex justify-between text-[#c8a58a]">
                         <span>Margen extra por redondeo</span>
                         <MontoARS monto={calc.desglose.margenExtraRedondeo} />
+                      </li>
+                      <li className="flex justify-between font-semibold text-[#2f8f4e]">
+                        <span>Ganancia real al precio cobrado</span>
+                        <MontoARS monto={calc.desglose.gananciaCobrada} />
                       </li>
                     </ul>
                     <p className="text-[10px] text-[#c8a58a] leading-relaxed">

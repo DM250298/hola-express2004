@@ -89,6 +89,18 @@ export interface DesglosePrecio {
   comisionMonto: number
 
   /**
+   * Cargas sobre el precio REDONDEADO — el que efectivamente se cobra y se
+   * guarda. Son las que la UI debe mostrar: las del precio exacto describen
+   * un precio que no existe en la góndola (y no cruzan con el modo inverso,
+   * que desglosa el precio ingresado tal cual).
+   */
+  iibbMontoCobrado: number
+  debcredMontoCobrado: number
+  comisionMontoCobrado: number
+  /** Ganancia real al precio redondeado = ganancia + margenExtraRedondeo. */
+  gananciaCobrada: number
+
+  /**
    * Ganancia reconstruida desde el desglose sobre el precio exacto. Debe
    * igualar a `ganancia` con tolerancia de centavos (invariante).
    */
@@ -113,8 +125,12 @@ export interface DesglosePorPrecio {
   precioFinal: number
   /** Precio neto (sin IVA) — para el Monotributista coincide con el final. */
   precioNeto: number
-  /** Margen neto sobre el costo como fracción (0.40 = 40%). Puede ser < 0. */
-  margen: number
+  /**
+   * Margen neto sobre el costo como fracción (0.40 = 40%). Puede ser < 0.
+   * `null` cuando el costo es 0: sin costo no hay margen que medir (antes
+   * devolvía 0, que se mostraba como "+0%" junto a una ganancia positiva).
+   */
+  margen: number | null
   /** Ganancia neta en pesos = margen × costo. */
   ganancia: number
   /** Tasa efectiva de MP usada = tasaMp × (1 + iva). */

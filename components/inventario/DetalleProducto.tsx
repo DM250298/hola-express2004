@@ -268,7 +268,10 @@ export function DetalleProducto({ productoId }: Props) {
                     }
                   >
                     {margenPct >= 0 ? '+' : ''}
-                    {margenPct.toFixed(0)}%
+                    {/* 1 decimal, igual que el Drawer: 17,67 se ve "+17,7%",
+                        no "+18%" (mismo margen con formatos distintos parecía
+                        un número diferente en cada pantalla). */}
+                    {margenPct.toFixed(1)}%
                   </span>
                 ) : (
                   '—'

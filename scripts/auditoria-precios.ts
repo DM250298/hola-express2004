@@ -121,7 +121,8 @@ async function main() {
       // Modo DIRECTO: el precio debe ser el redondeado del motor para (costo, margen).
       precioDirecto = calcularPrecio({ regimen, costo, margen: p.margen / 100, ivaVenta }, config).precioRedondeado
       // Modo INVERSO: el margen debe ser el que el motor deduce del precio guardado.
-      margenInverso = r2(calcularDesdePrecio(precio, { regimen, costo, ivaVenta }, config).margen * 100)
+      // margen viene null solo con costo 0, y acá costo > 0 (guard de arriba).
+      margenInverso = r2((calcularDesdePrecio(precio, { regimen, costo, ivaVenta }, config).margen ?? 0) * 100)
     } catch {
       continue
     }

@@ -151,6 +151,8 @@ export function calcularPrecio(
     precioFinalExacto,
     config.redondeoMultiplo
   )
+  // Ganancia real al precio que efectivamente se cobra (el redondeado).
+  const gananciaCobrada = gananciaAlPrecioFinal(precioRedondeado, input, config)
 
   return {
     regimen: input.regimen,
@@ -164,9 +166,14 @@ export function calcularPrecio(
     iibbMonto: precioFinalExacto * config.iibb,
     debcredMonto: precioFinalExacto * config.debcred,
     comisionMonto: precioFinalExacto * comEf,
+    // Cargas sobre el precio COBRADO (redondeado): son las que muestra la UI,
+    // para que el desglose cruce con el modo inverso al mismo precio final.
+    iibbMontoCobrado: precioRedondeado * config.iibb,
+    debcredMontoCobrado: precioRedondeado * config.debcred,
+    comisionMontoCobrado: precioRedondeado * comEf,
+    gananciaCobrada,
     gananciaReal: gananciaAlPrecioFinal(precioFinalExacto, input, config),
-    margenExtraRedondeo:
-      gananciaAlPrecioFinal(precioRedondeado, input, config) - ganancia,
+    margenExtraRedondeo: gananciaCobrada - ganancia,
   }
 }
 
@@ -195,7 +202,9 @@ export function calcularDesdePrecio(
   const comEf = comisionEfectiva(config)
   const ivaVenta = ivaVentaDe(entrada, config)
   const ganancia = gananciaAlPrecioFinal(precioFinal, entrada, config)
-  const margen = input.costo > 0 ? ganancia / input.costo : 0
+  // Sin costo no hay margen que medir: null (no 0, que la UI mostraría como
+  // "+0%" junto a una ganancia positiva — dos números que no cierran).
+  const margen = input.costo > 0 ? ganancia / input.costo : null
   const precioNeto =
     input.regimen === 'responsable_inscripto'
       ? precioFinal / (1 + ivaVenta)
