@@ -13,7 +13,10 @@
  * No toca las llamadas a Supabase — esas las maneja la cola offline de la app.
  */
 
-const CACHE = 'hola-express-v2'
+// Subir esta versión en cada deploy que deba invalidar el caché del shell:
+// al cambiar el nombre, el SW nuevo borra el caché viejo en `activate` y toma
+// control de las pestañas (skipWaiting + clients.claim), sirviendo código fresco.
+const CACHE = 'hola-express-v3'
 
 // Documentos del "app shell" que se precachean al activar el SW.
 const PRECACHE_DOCS = ['/', '/pos']
