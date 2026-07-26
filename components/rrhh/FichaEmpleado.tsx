@@ -48,7 +48,7 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
 
   if (isLoading) {
     return (
-      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
         <Skeleton className="h-8 w-40 bg-[#f9d2a2]/40" />
         <Skeleton className="h-28 w-full rounded-2xl bg-[#f9d2a2]/30" />
         <Skeleton className="h-64 w-full rounded-2xl bg-[#f9d2a2]/20" />
@@ -58,7 +58,7 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
 
   if (isError || !empleado) {
     return (
-      <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-4">
+      <div className="p-4 sm:p-6 space-y-4">
         <Link
           href="/rrhh"
           className={cn(
@@ -77,7 +77,7 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <Link
         href="/rrhh"
         className={cn(

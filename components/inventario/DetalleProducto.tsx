@@ -132,7 +132,7 @@ export function DetalleProducto({ productoId }: Props) {
 
   if (cargandoProd) {
     return (
-      <div className="p-6 max-w-5xl mx-auto space-y-4">
+      <div className="p-6 space-y-4">
         <Skeleton className="h-6 w-40 bg-[#f9d2a2]/30" />
         <Skeleton className="h-40 rounded-2xl bg-[#f9d2a2]/30" />
         <Skeleton className="h-64 rounded-2xl bg-[#f9d2a2]/30" />
@@ -179,7 +179,7 @@ export function DetalleProducto({ productoId }: Props) {
   const hayPaginaSiguiente = pagina < totalPaginas - 1
 
   return (
-    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       {/* Breadcrumb */}
       <div>
         <Link

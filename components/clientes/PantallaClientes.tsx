@@ -57,7 +57,7 @@ export function PantallaClientes() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">Clientes</h1>

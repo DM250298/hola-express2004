@@ -52,7 +52,7 @@ export const metadata = {
 
 export default function PaginaConfiguracion() {
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6">
       <header className="mb-6">
         <h1 className="text-[#391511] text-2xl font-bold">Configuración</h1>
         <p className="text-[#6f3a2a] text-sm mt-1">

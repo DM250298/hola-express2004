@@ -297,7 +297,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   // — Estados de carga —
   if (isLoading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto space-y-4">
+      <div className="p-6 space-y-4">
         <Skeleton className="h-10 w-64 bg-[#f9d2a2]/30" />
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4">
           <Skeleton className="h-[500px] rounded-2xl bg-[#f9d2a2]/30" />

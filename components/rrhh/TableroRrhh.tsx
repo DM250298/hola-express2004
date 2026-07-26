@@ -46,7 +46,7 @@ export function TableroRrhh() {
 
   if (isLoading) {
     return (
-      <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-4">
+      <div className="p-4 sm:p-6 space-y-4">
         <Skeleton className="h-8 w-64 rounded-lg bg-[#f9d2a2]/30" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -60,7 +60,7 @@ export function TableroRrhh() {
 
   if (isError || !data) {
     return (
-      <div className="p-6 max-w-6xl mx-auto">
+      <div className="p-6">
         <div className="bg-white border border-[#c43e2c]/30 rounded-2xl p-8 text-center text-[#c43e2c]">
           No se pudo cargar el tablero de RRHH.
         </div>
@@ -78,7 +78,7 @@ export function TableroRrhh() {
   const vencidasTotal = data.tareas_vencidas.reduce((s, t) => s + t.cantidad, 0)
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">Tablero RRHH</h1>

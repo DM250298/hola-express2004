@@ -118,7 +118,7 @@ export function PantallaRevision({ sesionId }: Props) {
 
   if (cargandoUsuario) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className="px-4 py-6">
         <SkeletonTabla filas={6} columnas={6} />
       </div>
     )
@@ -182,7 +182,7 @@ export function PantallaRevision({ sesionId }: Props) {
   const sesionCerrada = sesion?.estado === 'cerrada'
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6">
+    <div className="space-y-4 px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link

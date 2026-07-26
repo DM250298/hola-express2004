@@ -122,7 +122,7 @@ export function PantallaVentas() {
   )
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <header>
         <h1 className="text-[#391511] text-2xl font-bold">Ventas</h1>
         <p className="text-[#6f3a2a] text-sm mt-1">

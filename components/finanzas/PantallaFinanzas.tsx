@@ -91,7 +91,7 @@ export function PantallaFinanzas() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">Finanzas</h1>

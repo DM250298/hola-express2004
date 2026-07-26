@@ -8,7 +8,7 @@ export const metadata = {
 
 export default function PaginaCategorias() {
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6">
       <div className="mb-5">
         <Link
           href="/configuracion"

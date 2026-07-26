@@ -49,7 +49,7 @@ export function PantallaVencimientos() {
   }, [lotes, busqueda])
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       {/* Header */}
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>

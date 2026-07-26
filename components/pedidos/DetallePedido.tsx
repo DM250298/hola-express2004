@@ -45,7 +45,7 @@ export function DetallePedido({ pedidoId }: Props) {
 
   if (isLoading) {
     return (
-      <div className="p-6 max-w-4xl mx-auto space-y-4">
+      <div className="p-6 space-y-4">
         <Skeleton className="h-6 w-32 bg-[#f9d2a2]/30" />
         <Skeleton className="h-32 rounded-2xl bg-[#f9d2a2]/30" />
         <Skeleton className="h-48 rounded-2xl bg-[#f9d2a2]/30" />
@@ -78,7 +78,7 @@ export function DetallePedido({ pedidoId }: Props) {
     pedido.estado === 'recibido' || pedido.estado === 'recepcion_parcial'
 
   return (
-    <div className="p-4 sm:p-6 max-w-4xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       {/* Breadcrumb */}
       <div>
         <Link
