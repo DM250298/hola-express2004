@@ -20,6 +20,10 @@ export interface ProductoConStock {
   categoria_id: number | null
   proveedor_id: number | null
   precio_venta: number
+  /** Precio de costo. 0 si el usuario no tiene permiso `costos` (RLS lo oculta). */
+  precio_costo: number
+  /** Margen neto asegurado (%), tal como lo guarda el motor de pricing. */
+  margen: number
   stock_actual: number
   stock_minimo: number
   activo: boolean
@@ -112,12 +116,14 @@ export async function getProductosConStock(
     categoria_id: number | null
     proveedor_id: number | null
     precio_venta: number
+    margen: number
     stock_actual: number
     stock_minimo: number
     activo: boolean
     pendiente_precio: boolean
     categorias: { nombre: string } | null
     proveedores: { nombre: string } | null
+    costos_producto: CostoEmbed
   }
 
   // Paginamos productos y traemos cobertura en paralelo
@@ -126,7 +132,7 @@ export async function getProductosConStock(
       let q = supabase
         .from('productos')
         .select(
-          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, stock_actual, stock_minimo, activo, pendiente_precio, categorias(nombre), proveedores(nombre)'
+          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, margen, stock_actual, stock_minimo, activo, pendiente_precio, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
         )
       if (filtros.solo_activos !== false) q = q.eq('activo', true)
       if (patron) q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
@@ -148,6 +154,10 @@ export async function getProductosConStock(
       categoria_id: p.categoria_id,
       proveedor_id: p.proveedor_id,
       precio_venta: p.precio_venta,
+      // El costo vive en costos_producto (gateado por RLS). Para un cajero el
+      // embed viene null → 0 (no ve el costo).
+      precio_costo: costoDesdeEmbed(p.costos_producto),
+      margen: p.margen,
       stock_actual: p.stock_actual,
       stock_minimo: p.stock_minimo,
       activo: p.activo,

@@ -83,6 +83,8 @@ export function TabStockInventario() {
     () => new Set(idsPorVencerArr ?? []),
     [idsPorVencerArr]
   )
+  // Costo y margen solo para quien tiene el permiso (cajero/fiambrero no ven costo).
+  const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
 
   const itemsUbicacion = useMemo(() => {
     const r: Record<string, string> = { [TODAS_UBIC]: 'Todas las ubicaciones' }
@@ -228,6 +230,7 @@ export function TabStockInventario() {
         onCambiarOrden={setOrden}
         hayFiltros={hayFiltros}
         idsPorVencer={idsPorVencer}
+        puedeVerCosto={puedeVerCosto}
       />
 
       {productos && productos.length > 0 && (

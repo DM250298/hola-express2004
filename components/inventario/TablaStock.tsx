@@ -12,36 +12,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
-import { BadgeEstadoStock } from '@/components/shared/BadgeEstadoStock'
-import { Sparkline } from './Sparkline'
+import { MontoARS } from '@/components/shared/MontoARS'
 import type {
   FiltrosInventario,
   ProductoConStock,
 } from '@/lib/queries/inventario'
 import { cn } from '@/lib/utils'
-
-type NivelCobertura = 'sin_datos' | 'critico' | 'bajo' | 'normal'
-
-function nivelCobertura(dias: number | null): NivelCobertura {
-  if (dias == null) return 'sin_datos'
-  if (dias < 3) return 'critico'
-  if (dias < 7) return 'bajo'
-  return 'normal'
-}
-
-const COLOR_COBERTURA: Record<NivelCobertura, string> = {
-  sin_datos: '#c8a58a',
-  critico: '#c43e2c',
-  bajo: '#e4a42a',
-  normal: '#2f8f4e',
-}
-
-function formatearDias(dias: number | null): string {
-  if (dias == null) return 'Sin ventas'
-  if (dias >= 999) return '>999 d'
-  if (dias < 1) return `${dias.toFixed(1)} d`
-  return `${Math.round(dias)} d`
-}
 
 interface Props {
   productos: ProductoConStock[] | undefined
@@ -52,6 +28,8 @@ interface Props {
   hayFiltros: boolean
   /** IDs de productos con lotes por vencer (<7 días), para marcar la fila. */
   idsPorVencer?: Set<number>
+  /** Si el usuario puede ver precios de costo y margen (permiso `costos`). */
+  puedeVerCosto: boolean
 }
 
 export function TablaStock({
@@ -62,12 +40,13 @@ export function TablaStock({
   onCambiarOrden,
   hayFiltros,
   idsPorVencer,
+  puedeVerCosto,
 }: Props) {
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
       {isLoading ? (
         <div className="p-6">
-          <SkeletonTabla filas={8} columnas={6} />
+          <SkeletonTabla filas={8} columnas={puedeVerCosto ? 8 : 6} />
         </div>
       ) : isError ? (
         <div className="p-10 text-center text-[#c43e2c] text-sm">
@@ -104,9 +83,6 @@ export function TablaStock({
                   ordenes={['categoria']}
                   onClick={() => onCambiarOrden('categoria')}
                 />
-                <TableHead className="text-[#391511] font-semibold">
-                  Ubicación
-                </TableHead>
                 <ColumnaOrdenable
                   etiqueta="Stock actual"
                   align="right"
@@ -118,21 +94,23 @@ export function TablaStock({
                     )
                   }
                 />
-                <TableHead className="text-[#391511] font-semibold">
-                  <span className="inline-flex flex-col">
-                    Días de stock
-                    <span className="text-[10px] font-normal text-[#c8a58a]">
-                      te dura · 14d
-                    </span>
-                  </span>
-                </TableHead>
                 <TableHead className="text-right text-[#391511] font-semibold">
                   Stock mín.
                 </TableHead>
-                <TableHead className="text-center text-[#391511] font-semibold">
-                  Estado
+                {puedeVerCosto && (
+                  <TableHead className="text-right text-[#391511] font-semibold">
+                    Precio costo
+                  </TableHead>
+                )}
+                <TableHead className="text-right text-[#391511] font-semibold">
+                  Precio de venta
                 </TableHead>
-                <TableHead className="text-right w-36 text-[#391511] font-semibold">
+                {puedeVerCosto && (
+                  <TableHead className="text-right text-[#391511] font-semibold">
+                    Margen de ganancia
+                  </TableHead>
+                )}
+                <TableHead className="text-right w-24 text-[#391511] font-semibold">
                   Acciones
                 </TableHead>
               </TableRow>
@@ -141,6 +119,9 @@ export function TablaStock({
               {productos.map((p) => {
                 const destacar =
                   p.estado_stock === 'bajo' || p.estado_stock === 'critico'
+                // Mismo criterio que el detalle del producto: sin costo cargado
+                // no hay margen que mostrar.
+                const margen = p.precio_costo > 0 ? p.margen : null
                 return (
                   <TableRow
                     key={p.id}
@@ -194,27 +175,44 @@ export function TablaStock({
                         <span className="text-[#c8a58a] italic">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-[#6f3a2a] text-sm">
-                      {p.ubicacion ?? (
-                        <span className="text-[#c8a58a] italic">—</span>
-                      )}
-                    </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-[#391511] text-base">
                       {p.stock_actual}
-                    </TableCell>
-                    <TableCell>
-                      <CeldaCobertura
-                        dias={p.dias_cobertura}
-                        serie={p.serie_14d}
-                        promedio={p.promedio_diario}
-                      />
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#6f3a2a]">
                       {p.stock_minimo}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <BadgeEstadoStock estado={p.estado_stock} />
+                    {puedeVerCosto && (
+                      <TableCell className="text-right tabular-nums text-[#6f3a2a]">
+                        {p.precio_costo > 0 ? (
+                          <MontoARS monto={p.precio_costo} />
+                        ) : (
+                          <span className="text-[#c8a58a] italic">—</span>
+                        )}
+                      </TableCell>
+                    )}
+                    <TableCell className="text-right tabular-nums font-medium text-[#391511]">
+                      {p.precio_venta > 0 ? (
+                        <MontoARS monto={p.precio_venta} />
+                      ) : (
+                        <span className="text-[#c8a58a] italic">—</span>
+                      )}
                     </TableCell>
+                    {puedeVerCosto && (
+                      <TableCell className="text-right tabular-nums font-semibold">
+                        {margen != null ? (
+                          <span
+                            className={
+                              margen >= 0 ? 'text-[#2f8f4e]' : 'text-[#c43e2c]'
+                            }
+                          >
+                            {margen >= 0 ? '+' : ''}
+                            {margen.toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="text-[#c8a58a] italic">—</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Link
@@ -236,52 +234,6 @@ export function TablaStock({
           </Table>
         </div>
       )}
-    </div>
-  )
-}
-
-function CeldaCobertura({
-  dias,
-  serie,
-  promedio,
-}: {
-  dias: number | null
-  serie: number[]
-  promedio: number
-}) {
-  const nivel = nivelCobertura(dias)
-  const color = COLOR_COBERTURA[nivel]
-  const sinVentas = nivel === 'sin_datos'
-  return (
-    <div className="flex items-center gap-2.5">
-      <div className="flex flex-col leading-tight min-w-[58px]">
-        <span
-          className={cn(
-            'font-bold tabular-nums text-sm',
-            sinVentas && 'text-[#c8a58a] italic font-medium text-xs'
-          )}
-          style={!sinVentas ? { color } : undefined}
-          title={
-            sinVentas
-              ? 'Sin ventas en los últimos 14 días'
-              : `${promedio.toFixed(1)} unid/día promedio`
-          }
-        >
-          {formatearDias(dias)}
-        </span>
-        {!sinVentas && (
-          <span className="text-[10px] text-[#c8a58a] tabular-nums">
-            {promedio.toFixed(1)}/día
-          </span>
-        )}
-      </div>
-      <Sparkline
-        datos={serie}
-        ancho={70}
-        alto={18}
-        color={sinVentas ? '#c8a58a' : color}
-        ariaLabel={`Ventas de los últimos 14 días`}
-      />
     </div>
   )
 }
