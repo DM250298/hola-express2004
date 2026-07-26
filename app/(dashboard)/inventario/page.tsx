@@ -14,7 +14,7 @@ export default async function PaginaInventario({
   const { tab } = await searchParams
   return (
     <>
-      <div className="mx-auto max-w-7xl px-4 pt-4 sm:px-6 sm:pt-6">
+      <div className="px-4 pt-4 sm:px-6 sm:pt-6">
         <NovedadesStock />
         <BannerConteoActivo />
       </div>
