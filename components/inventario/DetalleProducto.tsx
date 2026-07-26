@@ -9,11 +9,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Eye,
+  EyeOff,
   Package,
   Pencil,
   RefreshCcw,
   ShoppingCart,
   Tag,
+  Trash2,
   TrendingUp,
   Truck,
 } from 'lucide-react'
@@ -41,6 +44,8 @@ import { calcularEstadoStock } from '@/lib/queries/inventario'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { ModalAjusteStock } from './ModalAjusteStock'
+import { ModalEliminarProducto } from './ModalEliminarProducto'
+import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
 import { Sparkline } from './Sparkline'
@@ -116,6 +121,8 @@ export function DetalleProducto({ productoId }: Props) {
   const [pagina, setPagina] = useState(0)
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState(false)
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
+  const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
+  const toggleActivo = useToggleProductoActivo()
 
   const { data: historial, isLoading: cargandoHist } = useHistorialMovimientos(
     productoId,
@@ -223,6 +230,41 @@ export function DetalleProducto({ productoId }: Props) {
               >
                 <Pencil className="h-4 w-4" />
                 Editar producto
+              </Button>
+            )}
+            {puedeEditar && (
+              <Button
+                variant="outline"
+                onClick={() =>
+                  toggleActivo.mutate({
+                    id: producto.id,
+                    activo: !producto.activo,
+                  })
+                }
+                disabled={toggleActivo.isPending}
+                className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40 gap-1.5"
+              >
+                {producto.activo ? (
+                  <>
+                    <EyeOff className="h-4 w-4" />
+                    Desactivar
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    Activar
+                  </>
+                )}
+              </Button>
+            )}
+            {puedeEditar && (
+              <Button
+                variant="outline"
+                onClick={() => setModalEliminarAbierto(true)}
+                className="border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 gap-1.5"
+              >
+                <Trash2 className="h-4 w-4" />
+                Eliminar
               </Button>
             )}
             <Button
@@ -465,6 +507,18 @@ export function DetalleProducto({ productoId }: Props) {
           stock_actual: producto.stock_actual,
         }}
       />
+
+      {puedeEditar && (
+        <ModalEliminarProducto
+          abierto={modalEliminarAbierto}
+          onCambioAbierto={setModalEliminarAbierto}
+          producto={{
+            id: producto.id,
+            nombre: producto.nombre,
+            activo: producto.activo,
+          }}
+        />
+      )}
 
       {puedeEditar && (
         <DrawerProducto

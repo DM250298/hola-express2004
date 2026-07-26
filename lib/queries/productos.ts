@@ -412,3 +412,34 @@ export async function toggleProductoActivo(
   if (error) throw error
   return data
 }
+
+/** Marcador que devuelve el RPC cuando el producto tiene historial vinculado. */
+export const PRODUCTO_CON_HISTORIAL = 'PRODUCTO_CON_HISTORIAL'
+
+/**
+ * Borra un producto de forma definitiva (RPC `fn_eliminar_producto`). Los
+ * satélites de cartilla (costo, catálogo de proveedores, historial de costos,
+ * combos donde es cabecera, etiquetas, receta) se van por CASCADE. Si el
+ * producto tiene historial operativo (ventas, movimientos, lotes, pedidos,
+ * facturas, conteos, producción, o es componente de un combo) el RPC lanza un
+ * error con el mensaje `PRODUCTO_CON_HISTORIAL`: en ese caso hay que
+ * desactivarlo, no borrarlo.
+ */
+export async function eliminarProducto(id: number): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_eliminar_producto', { p_id: id })
+  if (error) throw error
+}
+
+/**
+ * ¿El producto se puede borrar? (RPC `fn_producto_eliminable`). `false` cuando
+ * tiene historial vinculado → la UI ofrece desactivarlo en lugar de borrarlo.
+ */
+export async function productoEliminable(id: number): Promise<boolean> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_producto_eliminable', {
+    p_id: id,
+  })
+  if (error) throw error
+  return data ?? false
+}

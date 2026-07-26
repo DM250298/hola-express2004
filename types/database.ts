@@ -4028,6 +4028,14 @@ export interface Database {
         }
         Returns: AjusteStockRow
       }
+      fn_eliminar_producto: {
+        Args: { p_id: number }
+        Returns: undefined
+      }
+      fn_producto_eliminable: {
+        Args: { p_id: number }
+        Returns: boolean
+      }
       fn_crear_movimiento: {
         Args: {
           p_cuenta_id: number

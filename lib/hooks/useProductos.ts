@@ -8,6 +8,8 @@ import {
   createProducto,
   updateProducto,
   toggleProductoActivo,
+  eliminarProducto,
+  productoEliminable,
   getComponentesCombo,
   guardarComponentesCombo,
   type FiltrosProducto,
@@ -123,12 +125,47 @@ export function useToggleProductoActivo() {
       toggleProductoActivo(id, activo),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({
+        queryKey: ['producto-detalle', data.id],
+      })
       toast.success(
         data.activo ? 'Producto activado' : 'Producto desactivado'
       )
     },
     onError: (error: Error) => {
       toast.error(`No se pudo cambiar el estado: ${error.message}`)
+    },
+  })
+}
+
+/**
+ * ¿El producto se puede borrar? Se usa para decidir, en el diálogo de borrado,
+ * si ofrecer "Eliminar" o directamente "Desactivar" (cuando tiene historial).
+ */
+export function useProductoEliminable(id: number, habilitado: boolean) {
+  return useQuery({
+    queryKey: [...PRODUCTOS_KEY, 'eliminable', id],
+    queryFn: () => productoEliminable(id),
+    enabled: habilitado,
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
+/**
+ * Borra un producto definitivamente. El manejo del caso "tiene historial"
+ * (mensaje PRODUCTO_CON_HISTORIAL) queda en el componente, que ofrece
+ * desactivarlo; por eso acá no toasteamos el error.
+ */
+export function useEliminarProducto() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: number) => eliminarProducto(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
     },
   })
 }
