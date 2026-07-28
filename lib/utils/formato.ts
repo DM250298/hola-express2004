@@ -38,3 +38,18 @@ export function formatearMontoEntero(monto: number): string {
 export function formatearNumero(numero: number): string {
   return new Intl.NumberFormat('es-AR').format(numero)
 }
+
+const formateadorKg = new Intl.NumberFormat('es-AR', {
+  maximumFractionDigits: 3,
+})
+
+/**
+ * Formatea una cantidad de producto según su unidad de medida.
+ * Por peso: hasta 3 decimales con sufijo "kg" (ej: 4,7 kg). Por unidad:
+ * entero con "u." (ej: 3 u.). Se usa para que la recepción, el pedido y las
+ * diferencias muestren la unidad correcta de cada producto.
+ */
+export function formatearCantidad(cantidad: number, porPeso: boolean): string {
+  if (porPeso) return `${formateadorKg.format(cantidad)} kg`
+  return `${formatearNumero(cantidad)} u.`
+}

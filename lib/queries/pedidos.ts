@@ -19,6 +19,8 @@ export interface ItemPedidoConProducto extends ItemPedidoRow {
     codigo_barras: string | null
     stock_actual: number
     dias_vencimiento_minimo: number | null
+    /** true = se recibe por peso (kg); la cantidad recibida es un peso, no unidades. */
+    venta_por_peso: boolean
   } | null
 }
 
@@ -103,7 +105,7 @@ export async function getPedidoDetalle(
   const { data: items, error: errItems } = await supabase
     .from('items_pedido')
     .select(
-      '*, productos(id, nombre, codigo_barras, stock_actual, dias_vencimiento_minimo)'
+      '*, productos(id, nombre, codigo_barras, stock_actual, dias_vencimiento_minimo, venta_por_peso)'
     )
     .eq('pedido_id', id)
     .order('id', { ascending: true })
@@ -117,6 +119,7 @@ export async function getPedidoDetalle(
       codigo_barras: string | null
       stock_actual: number
       dias_vencimiento_minimo: number | null
+      venta_por_peso: boolean
     } | null
   }
 

@@ -33,7 +33,12 @@ import { tienePermiso } from '@/lib/permisos'
 import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
 import type { PedidoCompleto } from '@/lib/queries/pedidos'
 import type { ProductoRow } from '@/types/database'
-import { formatearFechaCorta, formatearMonto } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaCorta,
+  formatearMonto,
+  formatearNumero,
+} from '@/lib/utils/formato'
 import {
   ModalImprimirEtiquetas,
   type ItemParaEtiqueta,
@@ -50,6 +55,8 @@ interface ItemEstado {
   precio_costo: number
   /** Lo que se recibe en ESTA entrega (se suma a `ya_recibido`). */
   cantidad_recibida: string
+  /** true = se recibe por peso (kg): la cantidad es un peso decimal, no unidades. */
+  venta_por_peso: boolean
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
   /** Producto agregado al vuelo (no estaba en la orden): se exime del control
@@ -107,6 +114,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             // Arranca vacío: el operador ingresa o escanea lo que realmente
             // bajó del camión (evita confirmar de más por inercia).
             cantidad_recibida: '',
+            venta_por_peso: it.producto?.venta_por_peso ?? false,
             fecha_vencimiento: '',
             dias_vencimiento_minimo:
               it.producto?.dias_vencimiento_minimo ?? null,
@@ -129,6 +137,12 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     refScan.current?.focus()
     if (!item) {
       toast.error('Ese código no pertenece a este pedido.')
+      return
+    }
+    // Los productos por peso no se cuentan de a 1: se pesa la mercadería y se
+    // carga el total en kg a mano (sumar 1 kg por escaneo no tendría sentido).
+    if (item.venta_por_peso) {
+      toast.info(`${item.nombre} se recibe por peso: cargá los kg a mano.`)
       return
     }
     const actual = Number(item.cantidad_recibida) || 0
@@ -175,6 +189,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           ya_recibido: 0,
           precio_costo: prod.precio_costo ?? 0,
           cantidad_recibida: '',
+          venta_por_peso: prod.venta_por_peso ?? false,
           fecha_vencimiento: '',
           dias_vencimiento_minimo: prod.dias_vencimiento_minimo ?? null,
           no_pedido: true,
@@ -502,6 +517,11 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-[#391511] flex items-center gap-2 flex-wrap">
                         {it.nombre}
+                        {it.venta_por_peso && (
+                          <span className="text-[9px] uppercase tracking-wider font-semibold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
+                            Por kg
+                          </span>
+                        )}
                         {it.no_pedido && (
                           <span className="text-[9px] uppercase tracking-wider font-semibold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
                             Extra (no pedido)
@@ -515,7 +535,10 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                           <>
                             Pedido:{' '}
                             <span className="font-semibold text-[#391511] tabular-nums">
-                              {it.cantidad_pedida}
+                              {formatearCantidad(
+                                it.cantidad_pedida,
+                                it.venta_por_peso
+                              )}
                             </span>
                             {puedeVerCosto && (
                               <>
@@ -534,11 +557,14 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         <div className="text-[11px] text-[#9e6b15] mt-0.5">
                           Ya recibido:{' '}
                           <span className="font-semibold tabular-nums">
-                            {it.ya_recibido}
+                            {formatearCantidad(it.ya_recibido, it.venta_por_peso)}
                           </span>{' '}
                           · Falta:{' '}
                           <span className="font-semibold tabular-nums">
-                            {Math.max(0, it.cantidad_pedida - it.ya_recibido)}
+                            {formatearCantidad(
+                              Math.max(0, it.cantidad_pedida - it.ya_recibido),
+                              it.venta_por_peso
+                            )}
                           </span>
                         </div>
                       )}
@@ -558,12 +584,17 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-                        Cantidad recibida
+                        Cantidad recibida{' '}
+                        {it.venta_por_peso && (
+                          <span className="text-[#9e6b15]">(kg)</span>
+                        )}
                       </Label>
                       <Input
                         type="number"
                         min="0"
-                        step="1"
+                        step={it.venta_por_peso ? '0.001' : '1'}
+                        inputMode={it.venta_por_peso ? 'decimal' : 'numeric'}
+                        placeholder={it.venta_por_peso ? '0,000' : '0'}
                         value={it.cantidad_recibida}
                         onChange={(e) =>
                           actualizarItem(it.item_id, {
@@ -573,6 +604,11 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         disabled={recibir.isPending}
                         className="h-10 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
+                      {it.venta_por_peso && cantNum > 0 && (
+                        <p className="text-[10px] text-[#6f3a2a]">
+                          = {formatearNumero(Math.round(cantNum * 1000))} g
+                        </p>
+                      )}
                       {!it.no_pedido &&
                         diferencia !== 0 &&
                         !Number.isNaN(diferencia) && (
@@ -583,8 +619,12 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                                 : 'text-[10px] text-[#c43e2c]'
                             }
                           >
-                            {diferencia > 0 ? '+' : ''}
-                            {diferencia} vs. lo pedido
+                            {diferencia > 0 ? '+' : '−'}
+                            {formatearCantidad(
+                              Math.abs(diferencia),
+                              it.venta_por_peso
+                            )}{' '}
+                            vs. lo pedido
                           </p>
                         )}
                     </div>

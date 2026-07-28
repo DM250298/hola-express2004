@@ -43,7 +43,11 @@ import {
   getProductos,
   toggleProductoActivo,
 } from '@/lib/queries/productos'
-import { formatearFechaCorta } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaCorta,
+  formatearNumero,
+} from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
 interface ItemEstado {
@@ -58,6 +62,8 @@ interface ItemEstado {
   precio_costo: number
   /** Lo que se recibe en ESTA entrega (input controlado). */
   cantidad_recibida: string
+  /** true = se recibe por peso (kg): la cantidad es un peso decimal, no unidades. */
+  venta_por_peso: boolean
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
   /** Factura de esta entrega a la que se imputa el renglón (ref local). */
@@ -77,6 +83,7 @@ interface ProdParaAgregar {
   codigo_barras: string | null
   activo: boolean
   dias_vencimiento_minimo: number | null
+  venta_por_peso: boolean
 }
 
 /** Reduce un producto del catálogo (Row/ConRelaciones) a lo que necesita la recepción. */
@@ -86,6 +93,7 @@ function aProdParaAgregar(p: {
   codigo_barras: string | null
   activo: boolean
   dias_vencimiento_minimo: number | null
+  venta_por_peso?: boolean
 }): ProdParaAgregar {
   return {
     id: p.id,
@@ -93,6 +101,7 @@ function aProdParaAgregar(p: {
     codigo_barras: p.codigo_barras,
     activo: p.activo,
     dias_vencimiento_minimo: p.dias_vencimiento_minimo,
+    venta_por_peso: p.venta_por_peso ?? false,
   }
 }
 
@@ -162,6 +171,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         ya_recibido: it.cantidad_recibida ?? 0,
         precio_costo: it.precio_costo,
         cantidad_recibida: '',
+        venta_por_peso: it.producto?.venta_por_peso ?? false,
         fecha_vencimiento: '',
         dias_vencimiento_minimo: it.producto?.dias_vencimiento_minimo ?? null,
         factura_ref: 'f1',
@@ -476,6 +486,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         ya_recibido: 0,
         precio_costo: 0,
         cantidad_recibida: String(cant),
+        venta_por_peso: prod.venta_por_peso,
         fecha_vencimiento: venc,
         dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
         factura_ref: facturaActivaRef,
@@ -753,18 +764,25 @@ export function RecepcionMovil({ pedidoId }: Props) {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="font-medium text-[#391511]">{it.nombre}</p>
+                  <p className="font-medium text-[#391511]">
+                    {it.nombre}
+                    {it.venta_por_peso && (
+                      <span className="ml-1.5 rounded bg-[#f9b44c]/20 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                        Por kg
+                      </span>
+                    )}
+                  </p>
                   <p className="text-xs text-[#6f3a2a]">
                     Pedido:{' '}
                     <span className="font-semibold tabular-nums">
-                      {it.cantidad_pedida}
+                      {formatearCantidad(it.cantidad_pedida, it.venta_por_peso)}
                     </span>
                     {it.ya_recibido > 0 && (
                       <>
                         {' '}
                         · ya recibido{' '}
                         <span className="font-semibold tabular-nums">
-                          {it.ya_recibido}
+                          {formatearCantidad(it.ya_recibido, it.venta_por_peso)}
                         </span>
                       </>
                     )}
@@ -790,7 +808,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-                    Recibido
+                    Recibido {it.venta_por_peso && <span className="text-[#9e6b15]">(kg)</span>}
                   </Label>
                   <div className="flex items-center gap-1.5">
                     <Input
@@ -799,26 +817,37 @@ export function RecepcionMovil({ pedidoId }: Props) {
                       }}
                       type="number"
                       min="0"
-                      step="1"
-                      inputMode="numeric"
+                      step={it.venta_por_peso ? '0.001' : '1'}
+                      inputMode={it.venta_por_peso ? 'decimal' : 'numeric'}
                       value={it.cantidad_recibida}
                       onChange={(e) =>
                         actualizarItem(it.item_id, {
                           cantidad_recibida: e.target.value,
                         })
                       }
-                      placeholder="0"
+                      placeholder={it.venta_por_peso ? '0,000' : '0'}
                       className="h-12 flex-1 border-[#e4c9b0] text-lg tabular-nums focus-visible:ring-[#f9b44c]"
                     />
-                    <button
-                      type="button"
-                      onClick={() => sumarUno(it.item_id)}
-                      className="h-12 w-11 shrink-0 rounded-md border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15] active:scale-95"
-                      aria-label="Sumar 1"
-                    >
-                      +1
-                    </button>
+                    {it.venta_por_peso ? (
+                      <span className="flex h-12 w-11 shrink-0 items-center justify-center rounded-md border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15]">
+                        kg
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => sumarUno(it.item_id)}
+                        className="h-12 w-11 shrink-0 rounded-md border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15] active:scale-95"
+                        aria-label="Sumar 1"
+                      >
+                        +1
+                      </button>
+                    )}
                   </div>
+                  {it.venta_por_peso && cantNum > 0 && (
+                    <p className="mt-0.5 text-[10px] text-[#6f3a2a]">
+                      = {formatearNumero(Math.round(cantNum * 1000))} g
+                    </p>
+                  )}
                   {diferencia !== 0 && !Number.isNaN(diferencia) && cantNum > 0 && (
                     <p
                       className={
@@ -827,8 +856,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
                           : 'mt-0.5 text-[10px] text-[#c43e2c]'
                       }
                     >
-                      {diferencia > 0 ? '+' : ''}
-                      {diferencia} vs. pedido
+                      {diferencia > 0 ? '+' : '−'}
+                      {formatearCantidad(Math.abs(diferencia), it.venta_por_peso)} vs.
+                      pedido
                     </p>
                   )}
                 </div>
@@ -896,7 +926,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
                 : 'A recibir'}
             </div>
             <div className="text-xl font-extrabold tabular-nums text-[#391511]">
-              {totalUnidades} u.
+              {formatearNumero(Math.round(totalUnidades * 1000) / 1000)} u.
             </div>
           </div>
           {esParcial && totalUnidades > 0 ? (
@@ -1118,15 +1148,21 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-[#6f3a2a]">Unidades que llegaron</Label>
+                <Label className="text-xs text-[#6f3a2a]">
+                  {productoSeleccionado?.venta_por_peso
+                    ? 'Peso que llegó (kg)'
+                    : 'Unidades que llegaron'}
+                </Label>
                 <Input
                   type="number"
-                  min="1"
-                  step="1"
-                  inputMode="numeric"
+                  min={productoSeleccionado?.venta_por_peso ? '0' : '1'}
+                  step={productoSeleccionado?.venta_por_peso ? '0.001' : '1'}
+                  inputMode={
+                    productoSeleccionado?.venta_por_peso ? 'decimal' : 'numeric'
+                  }
                   value={nuevoCantidad}
                   onChange={(e) => setNuevoCantidad(e.target.value)}
-                  placeholder="0"
+                  placeholder={productoSeleccionado?.venta_por_peso ? '0,000' : '0'}
                   className="h-11 border-[#e4c9b0] tabular-nums focus-visible:ring-[#f9b44c]"
                 />
               </div>
