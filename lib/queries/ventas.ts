@@ -33,6 +33,14 @@ export interface CrearVentaPayload {
   items: ItemVentaPayload[]
   /** Cliente del CRM (FASE 3). Opcional — null = venta al mostrador. */
   cliente_id?: number | null
+  /**
+   * UUID de idempotencia de la venta. Si viene, se usa como `cliente_uuid` en
+   * `fn_crear_venta` (que ya deduplica por ese campo). Lo aprovecha el cobro con
+   * terminal: el POS y el webhook usan el MISMO uuid (el id del intento de
+   * cobro) para que, gane quien gane, la venta se registre una sola vez. Si no
+   * viene, se genera uno como siempre.
+   */
+  cliente_uuid?: string
 }
 
 export interface VentaCompleta {
@@ -117,7 +125,7 @@ export async function crearVenta(
     throw new Error('La venta debe tener al menos un pago.')
   }
 
-  const clienteUuid = nuevoUuid()
+  const clienteUuid = payload.cliente_uuid ?? nuevoUuid()
 
   // Sin conexión: encolar directamente, sin intentar la red.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {

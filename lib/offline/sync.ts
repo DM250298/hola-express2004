@@ -42,6 +42,12 @@ async function enviarVenta(v: VentaPendiente): Promise<void> {
     p_pagos: v.pagos.map((p) => ({
       medio_pago: p.medio_pago,
       monto: p.monto,
+      // Preservar los overrides reales (cobro con terminal MP) y el vale, igual
+      // que crearVenta: si no se mapean, la venta sincronizada cae a la comisión
+      // estimada de la tabla en vez de la real que MP ya había informado.
+      nc_codigo: p.nc_codigo ?? null,
+      comision_monto: p.comision_monto ?? null,
+      iibb_monto: p.iibb_monto ?? null,
     })) as unknown as Json,
     p_items: v.items.map((it) => ({
       producto_id: it.producto_id,

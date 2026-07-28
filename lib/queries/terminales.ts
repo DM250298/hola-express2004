@@ -4,6 +4,7 @@ import type {
   TerminalRow,
   TerminalUpdate,
 } from '@/types/database'
+import type { PagoPayload } from '@/lib/queries/ventas'
 
 // ─── Terminales registradas (tabla local) ───────────────────────────────────
 
@@ -114,12 +115,38 @@ export interface OrdenPagoCliente {
   }
 }
 
-/** Crea una orden de cobro en una terminal. */
-export async function crearCobroTerminal(args: {
+/** Item del carrito que se guarda en el intento de cobro (para el webhook). */
+export interface ItemCobroPayload {
+  producto_id: number
+  cantidad: number
+  precio_unitario: number
+}
+
+/** Argumentos para crear un cobro con terminal. Los campos de contexto de la
+ *  venta (items, pagos previos, turno, etc.) se guardan en el intento de cobro
+ *  para que el webhook pueda registrar la venta aunque la pestaña del POS muera. */
+export interface CrearCobroTerminalArgs {
   deviceId: string
   monto: number
   referencia?: string
-}): Promise<OrdenPagoCliente> {
+  items?: ItemCobroPayload[]
+  pagosPrevios?: PagoPayload[]
+  turnoId?: number
+  usuarioId?: string
+  clienteId?: number | null
+}
+
+/** Resultado de crear un cobro: la orden MP + el id del intento (cobros_terminal). */
+export interface ResultadoCobroTerminal {
+  orden: OrdenPagoCliente
+  /** id del intento de cobro; se usa como `cliente_uuid` de la venta. */
+  cobroId: string | null
+}
+
+/** Crea una orden de cobro en una terminal (+ el intento de cobro en el server). */
+export async function crearCobroTerminal(
+  args: CrearCobroTerminalArgs
+): Promise<ResultadoCobroTerminal> {
   const res = await fetch('/api/terminales/cobro', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -127,13 +154,21 @@ export async function crearCobroTerminal(args: {
       device_id: args.deviceId,
       monto: args.monto,
       referencia: args.referencia ?? '',
+      items: args.items ?? [],
+      pagos_previos: args.pagosPrevios ?? [],
+      turno_id: args.turnoId ?? null,
+      usuario_id: args.usuarioId ?? null,
+      cliente_id: args.clienteId ?? null,
     }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(data?.error ?? 'No se pudo enviar el cobro a la terminal.')
   }
-  return data.orden as OrdenPagoCliente
+  return {
+    orden: data.orden as OrdenPagoCliente,
+    cobroId: (data.cobro_id ?? null) as string | null,
+  }
 }
 
 /** Consulta el estado actual de una orden de cobro. */
@@ -222,15 +257,13 @@ export function obtenerOrdenPendiente(deviceId: string): string | null {
  * Crea un cobro en la terminal, con limpieza automática si quedó una orden
  * vieja encolada de un intento previo.
  */
-export async function crearCobroTerminalSeguro(args: {
-  deviceId: string
-  monto: number
-  referencia?: string
-}): Promise<OrdenPagoCliente> {
+export async function crearCobroTerminalSeguro(
+  args: CrearCobroTerminalArgs
+): Promise<ResultadoCobroTerminal> {
   try {
-    const orden = await crearCobroTerminal(args)
-    guardarOrdenPendiente(args.deviceId, orden.id)
-    return orden
+    const resultado = await crearCobroTerminal(args)
+    guardarOrdenPendiente(args.deviceId, resultado.orden.id)
+    return resultado
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
     if (!/already_queued/i.test(msg)) {
@@ -247,8 +280,8 @@ export async function crearCobroTerminalSeguro(args: {
       olvidarOrdenPendiente(args.deviceId)
     }
     // Reintento limpio.
-    const orden = await crearCobroTerminal(args)
-    guardarOrdenPendiente(args.deviceId, orden.id)
-    return orden
+    const resultado = await crearCobroTerminal(args)
+    guardarOrdenPendiente(args.deviceId, resultado.orden.id)
+    return resultado
   }
 }

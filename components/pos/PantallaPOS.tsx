@@ -406,7 +406,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   /** Llamado por ModalCobroTerminal cuando la maquinita aprobó el pago. */
   function confirmarVentaTerminal(
     medioPago: string,
-    cobroReal?: { comision: number; iibb: number } | null
+    cobroReal?: { comision: number; iibb: number } | null,
+    cobroId?: string | null
   ) {
     if (carrito.length === 0 || !turno) return
     if (enviandoVentaRef.current) return
@@ -437,6 +438,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         turno_id: turno.id,
         usuario_id: usuarioId,
         cliente_id: ordenActiva?.clienteId ?? null,
+        // Mismo uuid que usaría el webhook (id del intento de cobro) → si el
+        // webhook ya registró la venta, esto la devuelve sin duplicar.
+        cliente_uuid: cobroId ?? undefined,
         pagos,
         items,
       },
@@ -803,6 +807,15 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         }}
         total={montoMaquinita > 0 ? montoMaquinita : totalCarrito}
         totalVenta={totalCarrito}
+        itemsVenta={carrito.map((it) => ({
+          producto_id: it.producto_id,
+          cantidad: it.cantidad,
+          precio_unitario: it.precio_unitario,
+        }))}
+        pagosPrevios={pagosPrevios}
+        turnoId={turno.id}
+        usuarioId={usuarioId}
+        clienteId={ordenActiva?.clienteId ?? null}
         onAprobado={confirmarVentaTerminal}
         procesandoVenta={crearVenta.isPending}
       />

@@ -61,8 +61,8 @@ export function ModalProbarCobro({
         monto: Number(monto),
         referencia: `test_${Date.now()}`,
       }),
-    onSuccess: (orden) => {
-      setOrdenId(orden.id)
+    onSuccess: (resultado) => {
+      setOrdenId(resultado.orden.id)
       setErrorEnvio(null)
     },
     onError: (e: Error) => {

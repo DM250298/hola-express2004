@@ -5,7 +5,15 @@ import { PERMISOS_POR_ROL_LEGACY, rutaInicial } from '@/lib/permisos'
 // `/api/cron` se autoprotege con el header Authorization Bearer CRON_SECRET
 // dentro del handler; debe ser público en el middleware porque Vercel Cron lo
 // invoca SIN cookie de sesión (si no, el guard de auth lo redirige a /login).
-const RUTAS_PUBLICAS = ['/login', '/tienda', '/api/tienda', '/api/cron']
+// `/api/terminales/webhook` es el webhook de Mercado Pago: MP lo llama
+// server-to-server SIN cookie y se autoprotege validando la firma HMAC.
+const RUTAS_PUBLICAS = [
+  '/login',
+  '/tienda',
+  '/api/tienda',
+  '/api/cron',
+  '/api/terminales/webhook',
+]
 /** Rutas que solo deben ver usuarios NO logueados (ej: login). */
 const RUTAS_SOLO_ANON = ['/login']
 

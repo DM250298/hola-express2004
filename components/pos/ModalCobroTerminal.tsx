@@ -35,7 +35,9 @@ import {
   crearCobroTerminalSeguro,
   ESTADOS_FINALES_ORDEN,
   olvidarOrdenPendiente,
+  type ItemCobroPayload,
 } from '@/lib/queries/terminales'
+import type { PagoPayload } from '@/lib/queries/ventas'
 import { formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
@@ -46,14 +48,25 @@ interface Props {
   total: number
   /** Total de la venta completa. Si difiere de `total`, indica cobro parcial. */
   totalVenta?: number
+  /** Items del carrito completo — se guardan en el intento de cobro (blindaje). */
+  itemsVenta: ItemCobroPayload[]
+  /** Pagos no-maquinita (cobro mixto). Se guardan en el intento. */
+  pagosPrevios: PagoPayload[]
+  /** Contexto de la venta para poder registrarla desde el webhook. */
+  turnoId: number
+  usuarioId: string
+  clienteId: number | null
   /**
    * Llamado cuando el pago en la terminal fue aprobado. `cobroReal` trae la
    * comisión + IIBB exactos que cobró MP (si los pudo leer); la venta los usa
-   * en vez de la estimación de la tabla.
+   * en vez de la estimación de la tabla. `cobroId` es el id del intento de
+   * cobro: se usa como `cliente_uuid` de la venta para que coincida con lo que
+   * haría el webhook y nunca se duplique.
    */
   onAprobado: (
     medioPago: string,
-    cobroReal?: { comision: number; iibb: number } | null
+    cobroReal?: { comision: number; iibb: number } | null,
+    cobroId?: string | null
   ) => void
   /** true si la venta se está registrando luego de la aprobación. */
   procesandoVenta?: boolean
@@ -77,6 +90,11 @@ export function ModalCobroTerminal({
   onCambioAbierto,
   total,
   totalVenta,
+  itemsVenta,
+  pagosPrevios,
+  turnoId,
+  usuarioId,
+  clienteId,
   onAprobado,
   procesandoVenta,
 }: Props) {
@@ -93,18 +111,27 @@ export function ModalCobroTerminal({
 
   const [terminalId, setTerminalId] = useState<string>('')
   const [ordenId, setOrdenId] = useState<string | null>(null)
+  const [cobroId, setCobroId] = useState<string | null>(null)
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null)
   const [yaAvisoExito, setYaAvisoExito] = useState(false)
 
-  // Defaults al abrir.
+  // Reset del cobro SOLO en la transición cerrado→abierto. NO se acopla a
+  // terminalesUsables: un refresh de la lista de terminales no debe abortar un
+  // cobro en curso ni descartar el cobroId de blindaje.
   useEffect(() => {
     if (abierto) {
-      setTerminalId((prev) =>
-        prev || (terminalesUsables[0]?.id.toString() ?? '')
-      )
       setOrdenId(null)
+      setCobroId(null)
       setErrorEnvio(null)
       setYaAvisoExito(false)
+    }
+  }, [abierto])
+
+  // Terminal por defecto: puede recalcularse si cambia la lista, pero solo
+  // completa si todavía no hay una elegida (no pisa una selección en curso).
+  useEffect(() => {
+    if (abierto) {
+      setTerminalId((prev) => prev || (terminalesUsables[0]?.id.toString() ?? ''))
     }
   }, [abierto, terminalesUsables])
 
@@ -118,14 +145,21 @@ export function ModalCobroTerminal({
         deviceId: terminalElegida!.device_id as string,
         monto: total,
         referencia: `venta_pos_${Date.now()}`,
+        items: itemsVenta,
+        pagosPrevios,
+        turnoId,
+        usuarioId,
+        clienteId,
       }),
-    onSuccess: (orden) => {
-      setOrdenId(orden.id)
+    onSuccess: (resultado) => {
+      setOrdenId(resultado.orden.id)
+      setCobroId(resultado.cobroId)
       setErrorEnvio(null)
     },
     onError: (e: Error) => {
       setErrorEnvio(e.message)
       setOrdenId(null)
+      setCobroId(null)
     },
   })
 
@@ -167,9 +201,16 @@ export function ModalCobroTerminal({
     if (aprobado && !yaAvisoExito) {
       setYaAvisoExito(true)
       const codigoFinal = medioAutoDetectado?.codigo ?? MEDIO_TERMINAL_CATCHALL
-      onAprobado(codigoFinal, orden?.cobro_real ?? null)
+      onAprobado(codigoFinal, orden?.cobro_real ?? null, cobroId)
     }
-  }, [aprobado, yaAvisoExito, medioAutoDetectado, orden?.cobro_real, onAprobado])
+  }, [
+    aprobado,
+    yaAvisoExito,
+    medioAutoDetectado,
+    orden?.cobro_real,
+    cobroId,
+    onAprobado,
+  ])
 
   // Cuando la orden llega a un estado final, dejar de seguirla localmente.
   useEffect(() => {
@@ -200,6 +241,7 @@ export function ModalCobroTerminal({
 
   function reiniciar() {
     setOrdenId(null)
+    setCobroId(null)
     setErrorEnvio(null)
     setYaAvisoExito(false)
     enviar.reset()

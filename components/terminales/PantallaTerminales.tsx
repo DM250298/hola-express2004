@@ -23,14 +23,18 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { ModalTerminal } from './ModalTerminal'
 import { ModalProbarCobro } from './ModalProbarCobro'
+import { TabConciliacionCobros } from './TabConciliacionCobros'
 import {
   useActivarModoPdv,
   useDeleteTerminal,
   useTerminales,
 } from '@/lib/hooks/useTerminales'
+import { useCobrosSinConciliar } from '@/lib/hooks/useCobrosTerminal'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import { cn } from '@/lib/utils'
 import type { TerminalRow } from '@/types/database'
+
+type TabTerminales = 'terminales' | 'conciliacion'
 
 export function PantallaTerminales() {
   const { data: terminales, isLoading, isError } = useTerminales()
@@ -41,6 +45,13 @@ export function PantallaTerminales() {
   const [editar, setEditar] = useState<TerminalRow | null>(null)
   const [cobroAbierto, setCobroAbierto] = useState(false)
   const [terminalCobro, setTerminalCobro] = useState<TerminalRow | null>(null)
+  const [tab, setTab] = useState<TabTerminales>('terminales')
+
+  // Badge de la tab de conciliación: cobros con plata que entró pero sin venta.
+  const { data: cobros } = useCobrosSinConciliar()
+  const cobrosUrgentes = (cobros ?? []).filter(
+    (c) => c.estado === 'aprobado' || c.estado === 'fallida'
+  ).length
 
   function nombreCuenta(id: number | null): string {
     if (id == null) return '—'
@@ -73,15 +84,54 @@ export function PantallaTerminales() {
             Terminales Mercado Pago Point conectadas al sistema.
           </p>
         </div>
-        <Button
-          onClick={abrirNuevo}
-          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-        >
-          <Plus className="h-4 w-4" />
-          Conectar terminal
-        </Button>
+        {tab === 'terminales' && (
+          <Button
+            onClick={abrirNuevo}
+            className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Conectar terminal
+          </Button>
+        )}
       </header>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-[#e4c9b0]/60">
+        <button
+          type="button"
+          onClick={() => setTab('terminales')}
+          className={cn(
+            'px-3 py-2 text-sm font-semibold rounded-t-lg -mb-px border-b-2 transition-colors',
+            tab === 'terminales'
+              ? 'border-[#f9b44c] text-[#391511]'
+              : 'border-transparent text-[#6f3a2a] hover:bg-[#f9d2a2]/40'
+          )}
+        >
+          Terminales
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('conciliacion')}
+          className={cn(
+            'px-3 py-2 text-sm font-semibold rounded-t-lg -mb-px border-b-2 transition-colors flex items-center gap-1.5',
+            tab === 'conciliacion'
+              ? 'border-[#f9b44c] text-[#391511]'
+              : 'border-transparent text-[#6f3a2a] hover:bg-[#f9d2a2]/40'
+          )}
+        >
+          Conciliación de cobros
+          {cobrosUrgentes > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#c43e2c] text-white text-[10px] font-bold">
+              {cobrosUrgentes}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === 'conciliacion' && <TabConciliacionCobros />}
+
+      {tab === 'terminales' && (
+        <>
       {/* Aviso de configuración */}
       <div className="rounded-2xl border border-[#e4c9b0]/60 bg-[#f9b44c]/10 p-4 flex gap-3">
         <Info className="h-4 w-4 text-[#6f3a2a] shrink-0 mt-0.5" />
@@ -223,6 +273,8 @@ export function PantallaTerminales() {
           </div>
         )}
       </div>
+        </>
+      )}
 
       <ModalTerminal
         abierto={modalAbierto}

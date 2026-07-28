@@ -9,6 +9,8 @@
  *   - Orders (cobros)                    https://api.mercadopago.com/v1/orders
  */
 
+import crypto from 'node:crypto'
+
 const MP_BASE = 'https://api.mercadopago.com'
 
 function accessToken(): string {
@@ -157,33 +159,41 @@ export const ESTADOS_FINALES_ORDEN = new Set([
 /**
  * Crea una orden de cobro en una terminal Point.
  * El monto se envía en pesos (string con 2 decimales, como pide la API).
+ *
+ * `notificationUrl` (opcional): si se pasa, MP avisa a esa URL cuando la orden
+ * cambia de estado (webhook por orden). El webhook a nivel app (configurado en
+ * el panel de MP) es la vía principal; esto es un refuerzo por si el de la app
+ * no llegara. Solo se manda si viene con valor.
  */
 export async function crearOrdenPago(
   deviceId: string,
   montoPesos: number,
-  referencia: string
+  referencia: string,
+  notificationUrl?: string
 ): Promise<OrdenPago> {
   const referenciaSegura = referencia.slice(0, 64) || 'cobro_hola_express'
+  const body: Record<string, unknown> = {
+    type: 'point',
+    external_reference: referenciaSegura,
+    // Vence rápido (2 min): si la cancel API devuelve 404 sobre órdenes
+    // huérfanas, MP libera la cola sola y la maquinita queda usable.
+    expiration_time: 'PT2M',
+    transactions: {
+      payments: [{ amount: montoPesos.toFixed(2) }],
+    },
+    config: {
+      point: {
+        terminal_id: deviceId,
+        print_on_terminal: 'no_ticket',
+      },
+    },
+    description: 'Cobro Hola Express',
+  }
+  if (notificationUrl) body.notification_url = notificationUrl
   return mpFetch<OrdenPago>('/v1/orders', {
     method: 'POST',
     headers: { 'X-Idempotency-Key': nuevaIdempotencyKey() },
-    body: JSON.stringify({
-      type: 'point',
-      external_reference: referenciaSegura,
-      // Vence rápido (2 min): si la cancel API devuelve 404 sobre órdenes
-      // huérfanas, MP libera la cola sola y la maquinita queda usable.
-      expiration_time: 'PT2M',
-      transactions: {
-        payments: [{ amount: montoPesos.toFixed(2) }],
-      },
-      config: {
-        point: {
-          terminal_id: deviceId,
-          print_on_terminal: 'no_ticket',
-        },
-      },
-      description: 'Cobro Hola Express',
-    }),
+    body: JSON.stringify(body),
   })
 }
 
@@ -359,4 +369,68 @@ export async function liberarOrdenesPendientes(
     // cancelar manualmente desde la maquinita.
   }
   return canceladas
+}
+
+// ─── Validación de firma del webhook ─────────────────────────────────────────
+
+/**
+ * Valida la firma HMAC de una notificación de webhook de Mercado Pago.
+ *
+ * MP manda dos headers: `x-signature` (formato `ts=<epoch>,v1=<hmac_hex>`) y
+ * `x-request-id`. El manifest a firmar es:
+ *     id:<data.id>;request-id:<x-request-id>;ts:<ts>;
+ * y se compara el HMAC-SHA256 (clave = MP_WEBHOOK_SECRET) contra `v1`.
+ *
+ * `data.id` viene en el query param `data.id` de la URL del webhook. MP a veces
+ * espera el id en minúsculas si es alfanumérico (órdenes/pagos con ULID); por
+ * las dudas probamos tal cual y en minúsculas.
+ *
+ * Sin `MP_WEBHOOK_SECRET` configurado devuelve false (no validar = rechazar).
+ */
+export function validarFirmaWebhook(args: {
+  xSignature: string | null
+  xRequestId: string | null
+  dataId: string | null
+}): boolean {
+  const secret = process.env.MP_WEBHOOK_SECRET
+  if (!secret) return false
+  const { xSignature, xRequestId, dataId } = args
+  if (!xSignature || !xRequestId) return false
+
+  // Parseo de "ts=...,v1=..."
+  const partes: Record<string, string> = {}
+  for (const seg of xSignature.split(',')) {
+    const idx = seg.indexOf('=')
+    if (idx === -1) continue
+    const k = seg.slice(0, idx).trim()
+    const v = seg.slice(idx + 1).trim()
+    if (k) partes[k] = v
+  }
+  const ts = partes['ts']
+  const v1 = partes['v1']
+  if (!ts || !v1) return false
+
+  const candidatos = new Set<string>()
+  if (dataId) {
+    candidatos.add(dataId)
+    candidatos.add(dataId.toLowerCase())
+  } else {
+    candidatos.add('')
+  }
+
+  for (const id of candidatos) {
+    const manifest = `id:${id};request-id:${xRequestId};ts:${ts};`
+    const hmac = crypto.createHmac('sha256', secret).update(manifest).digest('hex')
+    try {
+      if (
+        hmac.length === v1.length &&
+        crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(v1))
+      ) {
+        return true
+      }
+    } catch {
+      // longitudes distintas u otro problema → sigue con el próximo candidato
+    }
+  }
+  return false
 }

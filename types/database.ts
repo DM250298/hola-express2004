@@ -902,6 +902,56 @@ export type TerminalUpdate = Partial<TerminalInsert> & {
   updated_at?: string
 }
 
+// ─── cobros con terminal (intento) — blindaje MP Point (mig 128) ─────────────
+
+export type CobroTerminalRow = {
+  id: string
+  orden_mp_id: string | null
+  external_reference: string | null
+  device_id: string | null
+  turno_id: number | null
+  usuario_id: string | null
+  cliente_id: number | null
+  monto: number
+  items: Json
+  pagos_previos: Json
+  estado: string
+  venta_id: number | null
+  medio_pago: string | null
+  comision_real: number | null
+  iibb_real: number | null
+  mp_payment_type: string | null
+  mp_payment_method_id: string | null
+  error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CobroTerminalInsert = {
+  id?: string
+  orden_mp_id?: string | null
+  external_reference?: string | null
+  device_id?: string | null
+  turno_id?: number | null
+  usuario_id?: string | null
+  cliente_id?: number | null
+  monto: number
+  items?: Json
+  pagos_previos?: Json
+  estado?: string
+  venta_id?: number | null
+  medio_pago?: string | null
+  comision_real?: number | null
+  iibb_real?: number | null
+  mp_payment_type?: string | null
+  mp_payment_method_id?: string | null
+  error?: string | null
+}
+
+export type CobroTerminalUpdate = Partial<CobroTerminalInsert> & {
+  updated_at?: string
+}
+
 // ─── productos ───────────────────────────────────────────────────────────────
 
 /** Costo adicional de un producto (flete, embalaje, etc.). */
@@ -3315,6 +3365,25 @@ export interface Database {
         Update: TerminalUpdate
         Relationships: []
       }
+      cobros_terminal: {
+        Row: CobroTerminalRow
+        Insert: CobroTerminalInsert
+        Update: CobroTerminalUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'cobros_terminal_turno_id_fkey'
+            columns: ['turno_id']
+            referencedRelation: 'caja_turnos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cobros_terminal_venta_id_fkey'
+            columns: ['venta_id']
+            referencedRelation: 'ventas'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       productos: {
         Row: ProductoRow
         Insert: ProductoInsert
@@ -3770,8 +3839,21 @@ export interface Database {
           p_items: Json
           p_cliente_uuid?: string | null
           p_cliente_id?: number | null
+          p_forzar_turno?: boolean
         }
         Returns: VentaRow
+      }
+      fn_registrar_venta_cobro_terminal: {
+        Args: {
+          p_cobro_id: string
+        }
+        Returns: VentaRow
+      }
+      fn_tiene_permiso: {
+        Args: {
+          p_clave: string
+        }
+        Returns: boolean
       }
       fn_generar_liquidacion: {
         Args: {
