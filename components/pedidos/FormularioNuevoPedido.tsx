@@ -32,7 +32,11 @@ import {
 } from '@/components/ui/select'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
-import { formatearMonto } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearMonto,
+  formatearNumero,
+} from '@/lib/utils/formato'
 import {
   generarCotizacionExcel,
   generarCotizacionPDF,
@@ -70,6 +74,8 @@ interface ItemFormulario {
   codigo_barras: string | null
   cantidad_pedida: number
   precio_costo: number
+  /** true = se pide por peso (kg): la cantidad es un peso decimal, no unidades. */
+  venta_por_peso: boolean
 }
 
 interface Props {
@@ -110,17 +116,24 @@ function terminoDesdeCondicion(condicion: string | null | undefined): string {
 /**
  * Input de cantidad que SÍ se puede vaciar mientras se edita (el número no
  * vuelve a "1" solo). Mantiene su propio texto local: sólo confirma al padre
- * un entero válido ≥ 1, y al perder el foco vacío clampea a 1. Además
+ * un valor válido, y al perder el foco vacío clampea al mínimo. Además
  * selecciona todo al enfocarse, así con un click se reemplaza el valor.
+ *
+ * `porPeso`: si el producto se pide por kg, admite decimales (ej. 4,7 kg) y no
+ * redondea; si no, sólo enteros ≥ 1 (unidades).
  */
 function CantidadInput({
   value,
+  porPeso,
   onCommit,
 }: {
   value: number
+  porPeso: boolean
   onCommit: (n: number) => void
 }) {
   const [raw, setRaw] = useState(String(value))
+  // Mínimo válido: 1 unidad, o 1 g (0,001 kg) para peso — la DB exige > 0.
+  const minimo = porPeso ? 0.001 : 1
 
   // Sincroniza cuando el valor cambia DESDE AFUERA (ej. sumar el mismo
   // sugerido). Sólo pisa el texto si difiere de lo tipeado, para no saltar a la
@@ -134,21 +147,24 @@ function CantidadInput({
   return (
     <Input
       type="number"
-      inputMode="numeric"
-      min="1"
-      step="1"
+      inputMode={porPeso ? 'decimal' : 'numeric'}
+      min={porPeso ? '0.001' : '1'}
+      step={porPeso ? '0.001' : '1'}
       value={raw}
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => {
         const v = e.target.value
         setRaw(v)
         const n = Number(v)
-        if (v !== '' && Number.isFinite(n) && n >= 1) {
-          onCommit(Math.floor(n))
+        if (v !== '' && Number.isFinite(n) && n >= minimo) {
+          onCommit(porPeso ? n : Math.floor(n))
         }
       }}
       onBlur={() => {
-        const n = Math.max(1, Math.floor(Number(raw) || 0))
+        const parsed = Number(raw) || 0
+        const n = porPeso
+          ? Math.max(minimo, parsed)
+          : Math.max(1, Math.floor(parsed))
         setRaw(String(n))
         onCommit(n)
       }}
@@ -203,7 +219,13 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
     const handoff = tomarHandoffReposicion()
     if (!handoff) return
     setProveedorIdStr(String(handoff.proveedor_id))
-    setItems(handoff.items)
+    // Default defensivo: un handoff viejo (pre-deploy) puede no traer el flag.
+    setItems(
+      handoff.items.map((it) => ({
+        ...it,
+        venta_por_peso: it.venta_por_peso ?? false,
+      }))
+    )
     autoFillProveedor.current = true
   }, [esEdicion])
 
@@ -233,6 +255,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
         codigo_barras: it.producto?.codigo_barras ?? null,
         cantidad_pedida: it.cantidad_pedida,
         precio_costo: it.precio_costo,
+        venta_por_peso: it.producto?.venta_por_peso ?? false,
       }))
     )
   }, [esEdicion, pedidoEdicion])
@@ -278,6 +301,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
       nombre: string
       codigo_barras: string | null
       precio_costo: number
+      venta_por_peso?: boolean
     },
     cantidad = 1
   ) {
@@ -298,6 +322,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
           codigo_barras: producto.codigo_barras,
           cantidad_pedida: cantidad,
           precio_costo: producto.precio_costo,
+          venta_por_peso: producto.venta_por_peso ?? false,
         },
       ]
     })
@@ -316,6 +341,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
           codigo_barras: s.codigo_barras,
           cantidad_pedida: s.cantidad_sugerida,
           precio_costo: s.precio_costo,
+          venta_por_peso: s.venta_por_peso,
         }))
       return [...prev, ...nuevos]
     })
@@ -343,7 +369,10 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
 
     const itemsPayload = items.map((it) => ({
       producto_id: it.producto_id,
-      cantidad_pedida: Math.max(1, Math.floor(it.cantidad_pedida) || 1),
+      // Por peso se manda el kg tal cual (decimal); por unidad, entero ≥ 1.
+      cantidad_pedida: it.venta_por_peso
+        ? Math.max(0.001, it.cantidad_pedida || 0)
+        : Math.max(1, Math.floor(it.cantidad_pedida) || 1),
       precio_costo: it.precio_costo,
     }))
 
@@ -646,8 +675,13 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
                     className="py-3 grid grid-cols-12 gap-2 items-center"
                   >
                     <div className="col-span-12 sm:col-span-5">
-                      <div className="font-medium text-[#391511] text-sm">
+                      <div className="font-medium text-[#391511] text-sm flex items-center gap-1.5 flex-wrap">
                         {it.nombre}
+                        {it.venta_por_peso && (
+                          <span className="text-[9px] uppercase tracking-wider font-semibold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
+                            Por kg
+                          </span>
+                        )}
                       </div>
                       {it.codigo_barras && (
                         <div className="text-xs text-[#c8a58a] font-mono mt-0.5">
@@ -657,14 +691,23 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
                     </div>
                     <div className="col-span-4 sm:col-span-2">
                       <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-                        Cantidad
+                        Cantidad{' '}
+                        {it.venta_por_peso && (
+                          <span className="text-[#9e6b15]">(kg)</span>
+                        )}
                       </Label>
                       <CantidadInput
                         value={it.cantidad_pedida}
+                        porPeso={it.venta_por_peso}
                         onCommit={(n) =>
                           actualizarItem(it.producto_id, { cantidad_pedida: n })
                         }
                       />
+                      {it.venta_por_peso && it.cantidad_pedida > 0 && (
+                        <p className="text-[10px] text-[#6f3a2a] mt-0.5">
+                          = {formatearNumero(Math.round(it.cantidad_pedida * 1000))} g
+                        </p>
+                      )}
                     </div>
                     <div className="col-span-4 sm:col-span-2">
                       <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
@@ -784,7 +827,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
                       {yaEnPedido ? 'En el pedido' : 'Sugerido'}
                     </div>
                     <div className="font-bold text-[#391511] tabular-nums">
-                      {s.cantidad_sugerida}
+                      {formatearCantidad(s.cantidad_sugerida, s.venta_por_peso)}
                     </div>
                   </div>
                 </button>
@@ -904,6 +947,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
             nombre: prod.nombre,
             codigo_barras: prod.codigo_barras,
             precio_costo: prod.precio_costo ?? 0,
+            venta_por_peso: prod.venta_por_peso ?? false,
           })
           setNuevoProductoAbierto(false)
         }}

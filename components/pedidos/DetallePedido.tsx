@@ -31,7 +31,7 @@ import {
   usePedidoDetalle,
   useActualizarEstadoPedido,
 } from '@/lib/hooks/usePedidos'
-import { formatearFechaCorta } from '@/lib/utils/formato'
+import { formatearCantidad, formatearFechaCorta } from '@/lib/utils/formato'
 import { ModalRecepcion } from './ModalRecepcion'
 
 interface Props {
@@ -242,6 +242,7 @@ export function DetallePedido({ pedidoId }: Props) {
               <TableBody>
                 {pedido.items.map((it) => {
                   const cantUsada = it.cantidad_recibida ?? it.cantidad_pedida
+                  const porPeso = it.producto?.venta_por_peso ?? false
                   return (
                     <TableRow
                       key={it.id}
@@ -258,7 +259,7 @@ export function DetallePedido({ pedidoId }: Props) {
                         )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                        {it.cantidad_pedida}
+                        {formatearCantidad(it.cantidad_pedida, porPeso)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {it.cantidad_recibida != null ? (
@@ -269,7 +270,7 @@ export function DetallePedido({ pedidoId }: Props) {
                                 : 'text-[#c43e2c] font-semibold'
                             }
                           >
-                            {it.cantidad_recibida}
+                            {formatearCantidad(it.cantidad_recibida, porPeso)}
                           </span>
                         ) : (
                           <span className="text-[#c8a58a]">—</span>

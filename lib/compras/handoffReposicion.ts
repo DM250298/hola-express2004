@@ -16,6 +16,9 @@ export interface ItemHandoffReposicion {
   codigo_barras: string | null
   cantidad_pedida: number
   precio_costo: number
+  /** Opcional: Reposición lo provee; el insumo de Producción (otro modelo de
+   *  unidad) lo omite. El editor lo resuelve con `?? false`. */
+  venta_por_peso?: boolean
 }
 
 export interface HandoffReposicion {

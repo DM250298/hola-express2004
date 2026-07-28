@@ -273,6 +273,7 @@ export function TabReposicion() {
         codigo_barras: p.codigo_barras,
         cantidad_pedida: cantidad,
         precio_costo: p.precio_costo,
+        venta_por_peso: p.venta_por_peso,
       })),
     })
     router.push('/pedidos/nuevo')

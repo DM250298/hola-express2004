@@ -148,6 +148,7 @@ export interface ProductoSugerido {
   stock_actual: number
   stock_minimo: number
   cantidad_sugerida: number
+  venta_por_peso: boolean
 }
 
 /** Productos del proveedor con stock < mínimo. Sugiere cantidad para llegar al mínimo (×2 para colchón). */
@@ -158,7 +159,7 @@ export async function getProductosSugeridos(
   const { data, error } = await supabase
     .from('productos')
     .select(
-      'id, nombre, codigo_barras, stock_actual, stock_minimo, costos_producto(precio_costo)'
+      'id, nombre, codigo_barras, stock_actual, stock_minimo, venta_por_peso, costos_producto(precio_costo)'
     )
     .eq('proveedor_id', proveedor_id)
     .eq('activo', true)
@@ -171,6 +172,7 @@ export async function getProductosSugeridos(
     codigo_barras: string | null
     stock_actual: number
     stock_minimo: number
+    venta_por_peso: boolean
     costos_producto: CostoEmbed
   }
 

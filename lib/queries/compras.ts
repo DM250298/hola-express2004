@@ -11,6 +11,8 @@ export interface ProductoAReponer {
   stock_minimo: number
   proveedor_id: number | null
   proveedor_nombre: string | null
+  /** true = se repone/pide por peso (kg): la cantidad es un peso decimal. */
+  venta_por_peso: boolean
   /** Cantidad sugerida para reponer: lleva al doble del mínimo (mín. 1). */
   cantidad_sugerida: number
 }
@@ -62,13 +64,14 @@ export async function getProductosAReponer(
     stock_minimo: number
     proveedor_id: number | null
     proveedores: { nombre: string } | null
+    venta_por_peso: boolean
   }
 
   const filas = await traerTodo<Fila>(() => {
     let q = supabase
       .from('productos')
       .select(
-        'id, nombre, codigo_barras, stock_actual, stock_minimo, proveedor_id, proveedores(nombre), costos_producto(precio_costo)'
+        'id, nombre, codigo_barras, stock_actual, stock_minimo, proveedor_id, venta_por_peso, proveedores(nombre), costos_producto(precio_costo)'
       )
       .eq('activo', true)
     if (proveedorId != null) q = q.eq('proveedor_id', proveedorId)
@@ -88,6 +91,7 @@ export async function getProductosAReponer(
         stock_minimo: p.stock_minimo,
         proveedor_id: p.proveedor_id,
         proveedor_nombre: p.proveedores?.nombre ?? null,
+        venta_por_peso: p.venta_por_peso,
       })
     )
     .sort((a, b) => collator.compare(a.nombre, b.nombre))
