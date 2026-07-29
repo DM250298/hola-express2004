@@ -10,6 +10,7 @@ import {
   getPedidos,
   getProductosSugeridos,
   recibirPedido,
+  revertirRecepcion,
   type EditarPedidoPayload,
   type FiltrosPedidos,
   type NuevoPedidoPayload,
@@ -121,6 +122,27 @@ export function useRecibirPedido() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo registrar la recepción: ${error.message}`)
+    },
+  })
+}
+
+export function useRevertirRecepcion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (pedido_id: number) => revertirRecepcion(pedido_id),
+    onSuccess: (_d, pedido_id) => {
+      qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
+      qc.invalidateQueries({ queryKey: ['pedido-detalle', pedido_id] })
+      qc.invalidateQueries({ queryKey: ['productos'] })
+      qc.invalidateQueries({ queryKey: ['inventario'] })
+      qc.invalidateQueries({ queryKey: ['alertas-stock'] })
+      qc.invalidateQueries({ queryKey: ['lotes-activos'] })
+      qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
+      qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      toast.success('Recepción revertida · el pedido volvió a "Por recibir"')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo revertir: ${error.message}`)
     },
   })
 }

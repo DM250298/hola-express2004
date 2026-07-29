@@ -404,6 +404,34 @@ export async function recibirPedido(
   return data as ResultadoRecepcion
 }
 
+export interface ResultadoReversion {
+  pedido_id: number
+  estado: EstadoPedido
+  items_revertidos: number
+}
+
+/**
+ * Revierte una recepción y devuelve el pedido a "enviado" (Por recibir), de
+ * forma atómica (`fn_revertir_recepcion`): descuenta el stock ingresado y deja
+ * el movimiento de salida, borra los lotes creados, el historial de costos de
+ * la recepción y las deudas provisorias, y limpia lo recibido de cada renglón.
+ *
+ * Falla (y no toca nada) si la mercadería ya se movió o la deuda ya está
+ * comprometida: factura cargada, pagos hechos, lotes consumidos/dados de baja,
+ * o stock actual menor a lo recibido.
+ */
+export async function revertirRecepcion(
+  pedido_id: number
+): Promise<ResultadoReversion> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_revertir_recepcion', {
+    p_pedido_id: pedido_id,
+  })
+  if (error) throw error
+  if (!data) throw new Error('No se pudo revertir la recepción.')
+  return data as unknown as ResultadoReversion
+}
+
 // ─── Lotes del pedido (para reimprimir etiquetas) ─────────────────────
 
 export interface LoteDePedido {

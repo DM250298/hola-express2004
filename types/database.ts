@@ -3941,6 +3941,14 @@ export interface Database {
           }[]
         }
       }
+      fn_revertir_recepcion: {
+        Args: { p_pedido_id: number }
+        Returns: {
+          pedido_id: number
+          estado: string
+          items_revertidos: number
+        }
+      }
       fn_productos_a_reponer: {
         Args: { p_proveedor_id: number | null }
         Returns: {

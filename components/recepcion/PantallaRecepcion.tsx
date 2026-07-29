@@ -2,17 +2,27 @@
 
 import { useState } from 'react'
 import {
+  AlertTriangle,
   Calendar,
   CheckCircle2,
   History,
   Loader2,
   PackageCheck,
   Printer,
+  RotateCcw,
   Truck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
 import {
   PaginadorTabla,
@@ -24,8 +34,13 @@ import {
   ModalImprimirEtiquetas,
   type ItemParaEtiqueta,
 } from './ModalImprimirEtiquetas'
-import { usePedidos, usePedidoDetalle } from '@/lib/hooks/usePedidos'
+import {
+  usePedidos,
+  usePedidoDetalle,
+  useRevertirRecepcion,
+} from '@/lib/hooks/usePedidos'
 import { getLotesPorPedido } from '@/lib/queries/pedidos'
+import type { PedidoConProveedor } from '@/lib/queries/pedidos'
 import { formatearFechaCorta, formatearFechaHora } from '@/lib/utils/formato'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -78,6 +93,18 @@ export function PantallaRecepcion() {
   const [reimprimiendo, setReimprimiendo] = useState<number | null>(null)
   const [itemsReimprimir, setItemsReimprimir] = useState<ItemParaEtiqueta[]>([])
   const [modalReimprimirAbierto, setModalReimprimirAbierto] = useState(false)
+
+  // Reversión: volver un pedido recibido a "Por recibir" (deshace la recepción)
+  const revertir = useRevertirRecepcion()
+  const [pedidoARevertir, setPedidoARevertir] =
+    useState<PedidoConProveedor | null>(null)
+
+  function confirmarReversion() {
+    if (!pedidoARevertir) return
+    revertir.mutate(pedidoARevertir.id, {
+      onSuccess: () => setPedidoARevertir(null),
+    })
+  }
 
   async function reimprimirEtiquetas(pedido_id: number) {
     setReimprimiendo(pedido_id)
@@ -311,20 +338,38 @@ export function PantallaRecepcion() {
                     </div>
                   </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => reimprimirEtiquetas(p.id)}
-                    disabled={reimprimiendo === p.id}
-                    className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#fdfaf6] gap-1.5 shrink-0"
-                  >
-                    {reimprimiendo === p.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Printer className="h-3.5 w-3.5" />
-                    )}
-                    Reimprimir etiquetas
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => reimprimirEtiquetas(p.id)}
+                      disabled={reimprimiendo === p.id}
+                      className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#fdfaf6] gap-1.5"
+                    >
+                      {reimprimiendo === p.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Printer className="h-3.5 w-3.5" />
+                      )}
+                      Reimprimir etiquetas
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPedidoARevertir(p)}
+                      disabled={
+                        revertir.isPending && pedidoARevertir?.id === p.id
+                      }
+                      className="border-[#e0b4aa] text-[#c43e2c] hover:bg-[#c43e2c]/10 gap-1.5"
+                    >
+                      {revertir.isPending && pedidoARevertir?.id === p.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      )}
+                      Volver a por recibir
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -364,6 +409,67 @@ export function PantallaRecepcion() {
         onCambioAbierto={setModalReimprimirAbierto}
         items={itemsReimprimir}
       />
+
+      {/* Confirmación de reversión */}
+      <Dialog
+        open={pedidoARevertir !== null}
+        onOpenChange={(v) => {
+          if (!v && !revertir.isPending) setPedidoARevertir(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#391511]">
+              <AlertTriangle className="h-5 w-5 text-[#c43e2c]" />
+              Volver a “Por recibir”
+            </DialogTitle>
+            <DialogDescription className="text-[#6f3a2a]">
+              Vas a deshacer la recepción del pedido{' '}
+              <span className="font-semibold">
+                #{pedidoARevertir?.id} · {pedidoARevertir?.proveedor?.nombre ?? '—'}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-xl bg-[#f9b44c]/10 border border-[#f9b44c]/30 p-3 text-sm text-[#6f3a2a] space-y-2">
+            <p>Al revertir se deshace todo lo que hizo la recepción:</p>
+            <ul className="list-disc pl-5 space-y-0.5 text-xs">
+              <li>Se descuenta del stock lo que se había ingresado.</li>
+              <li>Se borran los lotes de vencimiento creados.</li>
+              <li>Se elimina la deuda provisoria al proveedor.</li>
+              <li>El pedido vuelve a la lista de “Por recibir”.</li>
+            </ul>
+            <p className="text-xs">
+              No se puede revertir si ya se vendió mercadería del pedido o si la
+              deuda ya tiene una factura o pagos cargados.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPedidoARevertir(null)}
+              disabled={revertir.isPending}
+              className="border-[#e4c9b0] text-[#6f3a2a]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarReversion}
+              disabled={revertir.isPending}
+              className="bg-[#c43e2c] hover:bg-[#a83322] text-white gap-2"
+            >
+              {revertir.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              Sí, volver a por recibir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
