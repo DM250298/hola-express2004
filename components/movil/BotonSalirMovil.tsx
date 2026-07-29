@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+import { purgarShellSW } from '@/lib/offline/shell'
 
 export function BotonSalirMovil() {
   const router = useRouter()
@@ -17,6 +18,7 @@ export function BotonSalirMovil() {
       const supabase = createClient()
       const { error } = await supabase.auth.signOut()
       if (error) throw error
+      await purgarShellSW()
       router.push('/login')
       router.refresh()
     } catch {

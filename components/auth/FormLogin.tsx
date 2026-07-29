@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
+import { purgarShellSW } from '@/lib/offline/shell'
 
 export function FormLogin() {
   const router = useRouter()
@@ -37,6 +38,10 @@ export function FormLogin() {
         toast.error(mensajes[error.message] ?? 'No se pudo iniciar sesión. Intentá de nuevo.')
         return
       }
+
+      // Borrar la copia offline del usuario anterior antes de entrar, para no
+      // arrastrar la pantalla de otra persona si se corta internet.
+      await purgarShellSW()
 
       router.push('/')
       router.refresh()

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/sheet'
 import { Sidebar } from '@/components/shared/Sidebar'
 import { createClient } from '@/lib/supabase/client'
+import { purgarShellSW } from '@/lib/offline/shell'
 import type { Rol } from '@/types/database'
 
 const ETIQUETAS_ROL: Record<string, { texto: string; clase: string }> = {
@@ -56,6 +57,7 @@ export function Header({ nombre, rol, permisos }: HeaderProps) {
       const supabase = createClient()
       const { error } = await supabase.auth.signOut()
       if (error) throw error
+      await purgarShellSW()
       router.push('/login')
       router.refresh()
     } catch {

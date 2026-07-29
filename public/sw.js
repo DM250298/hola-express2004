@@ -16,7 +16,7 @@
 // Subir esta versión en cada deploy que deba invalidar el caché del shell:
 // al cambiar el nombre, el SW nuevo borra el caché viejo en `activate` y toma
 // control de las pestañas (skipWaiting + clients.claim), sirviendo código fresco.
-const CACHE = 'hola-express-v4'
+const CACHE = 'hola-express-v5'
 
 // Documentos del "app shell" que se precachean al activar el SW.
 const PRECACHE_DOCS = ['/', '/pos']
@@ -76,6 +76,36 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(staleWhileRevalidate(req))
 })
+
+/*
+ * Purga del shell autenticado.
+ *
+ * La app manda { tipo: 'purgar-shell' } al iniciar y cerrar sesión. Borra las
+ * copias guardadas de `/` y `/pos` para que, si se corta internet justo
+ * después de un cambio de usuario, el SW NUNCA sirva la pantalla (con el
+ * usuario horneado en el HTML) de otra persona.
+ */
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.tipo !== 'purgar-shell') return
+  event.waitUntil(purgarShell())
+})
+
+async function purgarShell() {
+  const cache = await caches.open(CACHE)
+  const keys = await cache.keys()
+  await Promise.all(
+    keys.map(async (req) => {
+      try {
+        const { pathname } = new URL(req.url)
+        if (pathname === '/' || pathname === '/pos') {
+          await cache.delete(req)
+        }
+      } catch {
+        // ignore
+      }
+    })
+  )
+}
 
 /**
  * Documentos: red primero (para tener siempre la versión fresca online).

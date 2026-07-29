@@ -161,12 +161,30 @@ export async function crearCobroTerminal(
       cliente_id: args.clienteId ?? null,
     }),
   })
+  // Si la sesión venció, el middleware redirige el POST a /login y el navegador
+  // sigue la redirección: llega el HTML del login, no el JSON de la orden. Lo
+  // detectamos acá para avisar claro en vez de crashear al leer .orden.id.
+  if (res.redirected && /\/login/.test(res.url)) {
+    throw new Error('Se cerró la sesión. Volvé a iniciar sesión para cobrar.')
+  }
+
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(data?.error ?? 'No se pudo enviar el cobro a la terminal.')
   }
+  const orden = data.orden as OrdenPagoCliente | undefined
+  if (!orden?.id) {
+    // Respuesta 200 sin una orden válida (respuesta inesperada, o HTML por
+    // sesión vencida). Evita el críptico "Cannot read properties of undefined
+    // (reading 'id')" y muestra algo accionable.
+    throw new Error(
+      typeof data?.error === 'string'
+        ? data.error
+        : 'No se pudo iniciar el cobro (respuesta inesperada). Cerrá y volvé a iniciar sesión, y probá de nuevo.'
+    )
+  }
   return {
-    orden: data.orden as OrdenPagoCliente,
+    orden,
     cobroId: (data.cobro_id ?? null) as string | null,
   }
 }
