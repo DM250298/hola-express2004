@@ -88,7 +88,7 @@ export function ModalImprimirEtiquetas({
             Imprimir etiquetas de vencimiento
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            Impresora térmica de 58mm. Una etiqueta por unidad para pegar en
+            Impresora térmica de 80mm. Una etiqueta por unidad para pegar en
             cada producto.
           </DialogDescription>
         </DialogHeader>
@@ -165,8 +165,10 @@ export function ModalImprimirEtiquetas({
                   <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-2">
                     Vista previa (primera etiqueta)
                   </div>
-                  <div className="flex justify-center bg-[#fdfaf6] rounded-xl p-4">
-                    <EtiquetaVencimiento datos={etiquetasExpandidas[0]} />
+                  <div className="overflow-x-auto bg-[#fdfaf6] rounded-xl p-4">
+                    <div className="w-max mx-auto">
+                      <EtiquetaVencimiento datos={etiquetasExpandidas[0]} />
+                    </div>
                   </div>
                 </div>
               )}

@@ -15,9 +15,10 @@ interface Props {
 }
 
 /**
- * Una etiqueta individual de 58mm de ancho.
- * El layout está calibrado para impresoras térmicas comunes (Xprinter,
- * Epson TM-T20, Sat-thermal de 58mm). El alto se ajusta al contenido.
+ * Una etiqueta individual de 80mm de ancho (rollo continuo).
+ * El layout está calibrado para impresoras térmicas de tickets de 80mm
+ * (Xprinter, Epson TM-T20, etc.). El alto se ajusta al contenido y la fecha
+ * de vencimiento va grande para leerse de un vistazo en góndola.
  *
  * Importante: el render es siempre en HTML estructurado para que en el
  * @media print el navegador imprima cada etiqueta con un corte de papel

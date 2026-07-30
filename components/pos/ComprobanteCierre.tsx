@@ -30,7 +30,7 @@ interface Props {
 }
 
 /**
- * Comprobante de cierre de turno para impresora térmica de 58mm.
+ * Comprobante de cierre de turno para impresora térmica de 80mm.
  * Incluye desglose por medio de pago, arqueo de caja y líneas de firma.
  */
 export function ComprobanteCierre({ datos }: Props) {
