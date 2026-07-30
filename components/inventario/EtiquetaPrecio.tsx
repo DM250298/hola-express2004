@@ -13,30 +13,36 @@ interface Props {
 }
 
 /**
- * Tamaño de fuente del nombre según su largo, para que entre en la etiqueta
- * de 58×35mm sin desbordar (más caracteres → fuente más chica).
+ * Tamaño de fuente del nombre según su largo, para que entre a lo ancho de la
+ * etiqueta de 80mm (rollo continuo) sin desbordar. El alto es libre, así que
+ * un nombre largo puede envolver a 2 líneas; sólo achicamos para que no se
+ * pase de los ~72mm útiles por línea (más caracteres → fuente más chica).
  */
 function tamanoNombrePt(nombre: string): number {
   const n = nombre.trim().length
-  if (n <= 16) return 15
-  if (n <= 26) return 13
-  if (n <= 38) return 11
-  if (n <= 52) return 9.5
-  return 8
-}
-
-/** Tamaño de fuente del precio según su largo (precios largos se achican). */
-function tamanoPrecioPt(texto: string): number {
-  const n = texto.length
-  if (n <= 8) return 30
-  if (n <= 10) return 26
-  if (n <= 12) return 22
-  return 18
+  if (n <= 20) return 22
+  if (n <= 34) return 18
+  if (n <= 50) return 15
+  return 12.5
 }
 
 /**
- * Etiqueta de precio de góndola para impresora térmica de 58mm.
- * Tamaño fijo 58×35mm; nombre y precio se autoajustan para no desbordar.
+ * Tamaño de fuente del precio según su largo (precios largos se achican).
+ * Calibrado para los ~72mm útiles de la etiqueta de 80mm en fuente monospace.
+ */
+function tamanoPrecioPt(texto: string): number {
+  const n = texto.length
+  if (n <= 7) return 46
+  if (n <= 8) return 40
+  if (n <= 10) return 32
+  if (n <= 12) return 26
+  return 22
+}
+
+/**
+ * Etiqueta de precio de góndola para impresora térmica de 80mm.
+ * Ancho fijo 80mm y alto automático (rollo continuo, corte entre etiquetas);
+ * nombre y precio se autoajustan para no desbordar el ancho.
  */
 export function EtiquetaPrecio({ datos }: Props) {
   const precioTexto = formatearMontoEntero(datos.precio_venta)

@@ -60,15 +60,18 @@ export function ModalImprimirEtiquetaPrecio({
             Etiqueta de precio
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            Impresora térmica de 58mm. Etiqueta para pegar en góndola.
+            Impresora térmica de 80mm. Etiqueta para pegar en góndola.
           </DialogDescription>
         </DialogHeader>
 
         {producto && (
           <div className="px-6 py-5 space-y-4">
-            {/* Vista previa */}
-            <div className="flex justify-center bg-[#fdfaf6] rounded-xl p-4 border border-[#e4c9b0]/60">
-              <EtiquetaPrecio datos={datosEtiqueta} />
+            {/* Vista previa — a escala real (80mm). En pantallas angostas el
+                contenedor permite scroll horizontal sin recortar ni romper el modal. */}
+            <div className="overflow-x-auto bg-[#fdfaf6] rounded-xl p-4 border border-[#e4c9b0]/60">
+              <div className="w-max mx-auto">
+                <EtiquetaPrecio datos={datosEtiqueta} />
+              </div>
             </div>
 
             {/* Editar lo que se imprime */}
