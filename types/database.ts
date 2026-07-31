@@ -1427,6 +1427,8 @@ export type ItemPedidoRow = {
   precio_costo: number
   subtotal: number
   cuenta_a_pagar_id: number | null
+  /** Cantidad confirmada por la factura (three-way match; NULL = sin factura). Migración 131. */
+  cantidad_facturada: number | null
 }
 
 export type ItemPedidoInsert = {
@@ -1438,6 +1440,7 @@ export type ItemPedidoInsert = {
   precio_costo: number
   subtotal: number
   cuenta_a_pagar_id?: number | null
+  cantidad_facturada?: number | null
 }
 
 export type ItemPedidoUpdate = {
@@ -1446,6 +1449,7 @@ export type ItemPedidoUpdate = {
   precio_costo?: number
   subtotal?: number
   cuenta_a_pagar_id?: number | null
+  cantidad_facturada?: number | null
 }
 
 // ─── producción (recetas, órdenes) ────────────────────────────────────────────
@@ -4032,6 +4036,8 @@ export interface Database {
           costo_estimado: number
         }[]
       }
+      /** v12 (mig 132): reconcilia el stock por delta contra lo recibido.
+       *  p_lineas puede traer `fecha_vencimiento` (opcional) para corregir el lote. */
       fn_guardar_factura_compra: {
         Args: {
           p_cuenta_id: number
@@ -4043,6 +4049,15 @@ export interface Database {
           p_lineas: Json
           p_percepciones?: Json
           p_gastos_no_debitables?: number
+        }
+        Returns: undefined
+      }
+      /** Anula una factura de compra de orden (mig 133): revierte el stock a lo
+       *  recibido, reabre la deuda como provisoria y borra el asiento. */
+      fn_anular_factura_compra: {
+        Args: {
+          p_cuenta_id: number
+          p_usuario_id: string
         }
         Returns: undefined
       }

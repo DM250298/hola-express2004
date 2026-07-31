@@ -59,6 +59,12 @@ export interface LineaFacturaPayload extends EntradaLinea {
   item_pedido_id: number | null
   producto_id: number
   cantidad: number
+  /**
+   * Vencimiento a corregir en el lote de este renglón (opcional, ISO yyyy-MM-dd).
+   * Vacío/null = no toca el vencimiento. La reconciliación de stock vive en el
+   * RPC (mig 132): la factura ajusta stock/lote por el delta contra lo recibido.
+   */
+  fecha_vencimiento?: string | null
 }
 
 /** Datos formales del comprobante (cabecera AFIP). Todos opcionales. */
@@ -310,6 +316,7 @@ export async function guardarFacturaCompra(
       iva_compra_porcentaje: l.iva_compra_porcentaje,
       margen_porcentaje: l.margen_porcentaje,
       iva_venta_porcentaje: l.iva_venta_porcentaje,
+      fecha_vencimiento: l.fecha_vencimiento ?? null,
     })) as unknown as Json,
     // Solo se manda si hay gastos: así, antes de correr la migración 086, las
     // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.
@@ -333,4 +340,21 @@ export async function guardarFacturaCompra(
       .eq('cuenta_id', payload.cuenta_id)
     if (errComp) throw errComp
   }
+}
+
+/**
+ * Anula la factura de una cuenta a pagar (circuito con orden): revierte el
+ * stock que la factura había ingresado (vuelve a lo recibido), reabre la deuda
+ * como provisoria y borra el asiento. RPC `fn_anular_factura_compra` (mig 133).
+ */
+export async function anularFacturaCompra(
+  cuentaId: number,
+  usuarioId: string
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_anular_factura_compra', {
+    p_cuenta_id: cuentaId,
+    p_usuario_id: usuarioId,
+  })
+  if (error) throw error
 }

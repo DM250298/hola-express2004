@@ -30,6 +30,7 @@ import { useProductos } from '@/lib/hooks/useProductos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
+  useAnularFacturaCompra,
   useFacturaCompra,
   useGuardarFacturaCompra,
 } from '@/lib/hooks/useFacturasCompra'
@@ -52,12 +53,16 @@ interface LineaFactura {
   producto_id: number
   nombre: string
   codigo_barras: string | null
+  /** Lo físicamente recibido (para mostrar recibido vs. facturado). null = extra. */
+  cantidad_recibida: number | null
   cantidad: string
   costo: string
   descuento: string
   iva_compra: string
   margen: string
   iva_venta: string
+  /** Vencimiento a corregir en el lote (opcional, ISO). Vacío = no tocar. */
+  vencimiento: string
 }
 
 type CampoEditable =
@@ -67,6 +72,7 @@ type CampoEditable =
   | 'iva_compra'
   | 'margen'
   | 'iva_venta'
+  | 'vencimiento'
 
 const DEFAULTS = {
   descuento: '0',
@@ -165,6 +171,57 @@ function CampoNumero({
   )
 }
 
+/**
+ * Bajo el nombre de cada renglón del pedido: muestra lo RECIBIDO (y avisa si la
+ * cantidad facturada difiere → la factura ajustará el stock por esa diferencia)
+ * y permite corregir el vencimiento del lote. No aplica a productos extra.
+ */
+function InfoLineaRecepcion({
+  recibida,
+  cantidad,
+  esExtra,
+  vencimiento,
+  onVencimiento,
+}: {
+  recibida: number | null
+  cantidad: string
+  esExtra: boolean
+  vencimiento: string
+  onVencimiento: (v: string) => void
+}) {
+  if (esExtra) return null
+  const difiere = recibida != null && Number(cantidad) !== recibida
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+      {recibida != null && (
+        <span
+          className={`text-[10px] font-medium ${
+            difiere ? 'text-[#c43e2c]' : 'text-[#c8a58a]'
+          }`}
+          title={
+            difiere
+              ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
+              : undefined
+          }
+        >
+          Recibido: {recibida}
+          {difiere ? ' · ajusta stock' : ''}
+        </span>
+      )}
+      <label className="flex items-center gap-1 text-[10px] text-[#6f3a2a]">
+        <span className="text-[#c8a58a]">Vto.</span>
+        <Input
+          type="date"
+          value={vencimiento}
+          onChange={(e) => onVencimiento(e.target.value)}
+          title="Corregir el vencimiento del lote (opcional)"
+          className="h-7 w-[9.5rem] border-[#e4c9b0] bg-white px-1.5 text-[11px] tabular-nums"
+        />
+      </label>
+    </div>
+  )
+}
+
 export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) {
   const { data: usuario } = useUsuario()
   const { data: pedido, isLoading: cargandoPedido } = usePedidoDetalle(
@@ -173,6 +230,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const { data: facturaGuardada, isLoading: cargandoFactura } =
     useFacturaCompra(cuenta?.id ?? null)
   const guardar = useGuardarFacturaCompra()
+  const anular = useAnularFacturaCompra()
   const pricing = usePricing()
 
   const [afectaVenta, setAfectaVenta] = useState(true)
@@ -250,12 +308,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           producto_id: g.producto_id,
           nombre: it?.producto?.nombre ?? `Producto #${g.producto_id}`,
           codigo_barras: it?.producto?.codigo_barras ?? null,
+          cantidad_recibida: it?.cantidad_recibida ?? null,
           cantidad: String(g.cantidad),
           costo: String(g.costo_sin_iva),
           descuento: String(g.descuento_porcentaje),
           iva_compra: String(g.iva_compra_porcentaje),
           margen: String(g.margen_porcentaje),
           iva_venta: String(g.iva_venta_porcentaje),
+          vencimiento: '',
         }
       })
     } else {
@@ -272,10 +332,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           producto_id: it.producto_id,
           nombre: it.producto?.nombre ?? 'Producto eliminado',
           codigo_barras: it.producto?.codigo_barras ?? null,
-          cantidad: String(it.cantidad_recibida ?? 0),
+          cantidad_recibida: it.cantidad_recibida ?? null,
+          // Baseline: si ya se facturó una vez, arranca de lo facturado (así
+          // re-guardar es delta 0); si no, de lo recibido.
+          cantidad: String(it.cantidad_facturada ?? it.cantidad_recibida ?? 0),
           costo: String(it.precio_costo || 0),
           ...DEFAULTS,
           margen: margenInicial(it.producto_id),
+          vencimiento: '',
         }))
     }
     setLineas(nuevas)
@@ -340,10 +404,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         producto_id: p.id,
         nombre: p.nombre,
         codigo_barras: p.codigo_barras ?? null,
-        cantidad: it?.cantidad_recibida ? String(it.cantidad_recibida) : '1',
+        cantidad_recibida: it?.cantidad_recibida ?? null,
+        cantidad:
+          it?.cantidad_facturada != null
+            ? String(it.cantidad_facturada)
+            : it?.cantidad_recibida
+              ? String(it.cantidad_recibida)
+              : '1',
         costo: String((it?.precio_costo ?? p.precio_costo ?? 0) || 0),
         ...DEFAULTS,
         margen: margenInicial(p.id),
+        vencimiento: '',
       },
     ])
     setBusqueda('')
@@ -474,8 +545,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           iva_compra_porcentaje: Number(l.iva_compra) || 0,
           margen_porcentaje: Number(l.margen) || 0,
           iva_venta_porcentaje: Number(l.iva_venta) || 0,
+          fecha_vencimiento: l.vencimiento || null,
         })),
       },
+      { onSuccess: () => onCambioAbierto(false) }
+    )
+  }
+
+  function handleAnular() {
+    if (!cuenta || !usuario || anular.isPending || guardar.isPending) return
+    const ok = window.confirm(
+      'Anular esta factura?\n\nSe revierte el stock que ingresó (vuelve a lo recibido), ' +
+        'la deuda vuelve a provisoria y se borra el asiento contable. No se puede deshacer.'
+    )
+    if (!ok) return
+    anular.mutate(
+      { cuentaId: cuenta.id, usuarioId: usuario.id },
       { onSuccess: () => onCambioAbierto(false) }
     )
   }
@@ -487,7 +572,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     <>
     <Dialog
       open={abierto}
-      onOpenChange={(v) => !guardar.isPending && onCambioAbierto(v)}
+      onOpenChange={(v) =>
+        !guardar.isPending && !anular.isPending && onCambioAbierto(v)
+      }
     >
       <DialogContent className="sm:max-w-6xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col">
         <DialogHeader className="px-6 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0">
@@ -498,7 +585,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           <DialogDescription className="text-[#6f3a2a]">
             Vienen cargados los productos recibidos. Quitá los que la factura no
             traiga y agregá los que falten. El costo guardado es el neto (sin
-            IVA).
+            IVA). <span className="font-semibold text-[#9e6b15]">Al guardar, si
+            cambiás una cantidad se ajusta el stock por la diferencia contra lo
+            recibido.</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -711,6 +800,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           Nuevo · completá precio
                         </span>
                       )}
+                      <InfoLineaRecepcion
+                        recibida={l.cantidad_recibida}
+                        cantidad={l.cantidad}
+                        esExtra={l.item_pedido_id === null}
+                        vencimiento={l.vencimiento}
+                        onVencimiento={(v) =>
+                          setLineaCampo(l.key, 'vencimiento', v)
+                        }
+                      />
                     </div>
                     <div className="flex shrink-0 items-center">
                       <button
@@ -942,6 +1040,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                                 Nuevo · completá precio
                               </span>
                             )}
+                            <InfoLineaRecepcion
+                              recibida={l.cantidad_recibida}
+                              cantidad={l.cantidad}
+                              esExtra={l.item_pedido_id === null}
+                              vencimiento={l.vencimiento}
+                              onVencimiento={(v) =>
+                                setLineaCampo(l.key, 'vencimiento', v)
+                              }
+                            />
                           </div>
                         </div>
                       </td>
@@ -1148,10 +1255,25 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </span>
           </div>
           <div className="flex gap-2">
+            {facturaGuardada && (
+              <Button
+                variant="outline"
+                onClick={handleAnular}
+                disabled={anular.isPending || guardar.isPending}
+                className="border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
+              >
+                {anular.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                Anular
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => onCambioAbierto(false)}
-              disabled={guardar.isPending}
+              disabled={guardar.isPending || anular.isPending}
               className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
             >
               Cancelar
@@ -1160,6 +1282,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               onClick={handleGuardar}
               disabled={
                 guardar.isPending ||
+                anular.isPending ||
                 lineas.length === 0 ||
                 hayErroresCab ||
                 hayErrorPrecio

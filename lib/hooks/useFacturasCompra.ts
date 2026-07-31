@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  anularFacturaCompra,
   controlarCompraDirecta,
   getComprobantesCargados,
   getFacturaCompra,
@@ -96,10 +97,45 @@ export function useGuardarFacturaCompra() {
       qc.invalidateQueries({ queryKey: ['pedido-detalle', vars.pedido_id] })
       qc.invalidateQueries({ queryKey: ['productos'] })
       qc.invalidateQueries({ queryKey: ['inventario'] })
-      toast.success('Factura guardada · costos y precios actualizados')
+      // La factura ahora reconcilia stock/lotes (mig 132) → refrescar inventario.
+      qc.invalidateQueries({ queryKey: ['alertas-stock'] })
+      qc.invalidateQueries({ queryKey: ['lotes-activos'] })
+      qc.invalidateQueries({ queryKey: ['vencimientos'] })
+      qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      toast.success('Factura guardada · stock, costos y precios actualizados')
     },
     onError: (error: Error) => {
       toast.error(`No se pudo guardar la factura: ${error.message}`)
+    },
+  })
+}
+
+export function useAnularFacturaCompra() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      cuentaId,
+      usuarioId,
+    }: {
+      cuentaId: number
+      usuarioId: string
+    }) => anularFacturaCompra(cuentaId, usuarioId),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['factura-compra', vars.cuentaId] })
+      qc.invalidateQueries({ queryKey: ['comprobantes-cargados'] })
+      qc.invalidateQueries({ queryKey: ['resumen-fiscal'] })
+      qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
+      qc.invalidateQueries({ queryKey: ['resumen-financiero'] })
+      qc.invalidateQueries({ queryKey: ['pedidos'] })
+      qc.invalidateQueries({ queryKey: ['productos'] })
+      qc.invalidateQueries({ queryKey: ['inventario'] })
+      qc.invalidateQueries({ queryKey: ['alertas-stock'] })
+      qc.invalidateQueries({ queryKey: ['lotes-activos'] })
+      qc.invalidateQueries({ queryKey: ['vencimientos'] })
+      toast.success('Factura anulada · stock y deuda revertidos')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo anular la factura: ${error.message}`)
     },
   })
 }
