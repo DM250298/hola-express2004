@@ -69,7 +69,7 @@ export default async function PaginaMovil() {
         nombre={nombre}
         permisos={permisos}
         pedidosPendientes={resPedidos.count ?? 0}
-        tienePanel={!!emp}
+        empleadoId={emp?.id ?? null}
         conteoFisico={conteoFisico}
       />
 
