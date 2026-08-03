@@ -5,6 +5,7 @@ import {
   CalendarX,
   ChevronRight,
   ClipboardList,
+  ListChecks,
   MapPin,
   ScanLine,
   Truck,
@@ -197,6 +198,26 @@ export function HubMovil({
 
         {tienePanel && (
           <Link
+            href="/movil/tareas"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#f9b44c]/15 text-[#a06b00]">
+              <ListChecks className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                Mis tareas
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Tus tareas del día · marcá las que completás
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        )}
+
+        {tienePanel && (
+          <Link
             href="/movil/panel"
             className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
           >
@@ -208,7 +229,7 @@ export function HubMovil({
                 Mi panel
               </span>
               <span className="block text-xs text-[#6f3a2a]">
-                Asistencia, tareas y desempeño del mes
+                Asistencia y desempeño del mes
               </span>
             </span>
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
