@@ -10,6 +10,7 @@ import {
   CreditCard,
   PackageCheck,
   Pencil,
+  RotateCcw,
   Send,
   Truck,
   X,
@@ -166,6 +167,18 @@ export function DetallePedido({ pedidoId }: Props) {
               >
                 <X className="h-4 w-4" />
                 Cancelar
+              </Button>
+            )}
+            {pedido.estado === 'cancelado' && (
+              <Button
+                onClick={() =>
+                  cambiarEstado.mutate({ id: pedido.id, estado: 'enviado' })
+                }
+                disabled={cambiarEstado.isPending}
+                className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reactivar
               </Button>
             )}
           </div>
