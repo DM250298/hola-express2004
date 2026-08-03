@@ -108,6 +108,28 @@ export function HubMovil({
       )}
 
       <div className="grid grid-cols-1 gap-3">
+        {tienePanel && (
+          <Link
+            href="/movil/panel"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#391511]/10 text-[#391511]">
+              <CalendarCheck className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                Mi panel
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Asistencia y desempeño del mes
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        )}
+
+        {empleadoId !== null && <TarjetaMisTareas empleadoId={empleadoId} />}
+
         {puedeContar && (
           <Link
             href="/movil/conteo"
@@ -196,28 +218,6 @@ export function HubMovil({
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
         </Link>
-
-        {empleadoId !== null && <TarjetaMisTareas empleadoId={empleadoId} />}
-
-        {tienePanel && (
-          <Link
-            href="/movil/panel"
-            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
-          >
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#391511]/10 text-[#391511]">
-              <CalendarCheck className="h-7 w-7" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-lg font-bold text-[#391511]">
-                Mi panel
-              </span>
-              <span className="block text-xs text-[#6f3a2a]">
-                Asistencia y desempeño del mes
-              </span>
-            </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
-          </Link>
-        )}
       </div>
     </section>
   )
