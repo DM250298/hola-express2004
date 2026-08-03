@@ -48,7 +48,9 @@ const PERMISO_RUTA: Record<string, string[]> = {
   rrhh: ['/rrhh'],
   // El panel y las tareas del empleado viven bajo /rrhh pero los habilita
   // 'mi_panel' (rol empleado), no 'rrhh'. Match por prefijo exacto o sub-ruta.
-  mi_panel: ['/rrhh/mi-panel', '/rrhh/mis-tareas'],
+  // '/movil' también: el empleado común entra al hub móvil desde el celular
+  // (ve su panel y la consulta de precio) — ver el bloque de redirección abajo.
+  mi_panel: ['/rrhh/mi-panel', '/rrhh/mis-tareas', '/movil'],
   terminales: ['/terminales'],
   reportes: ['/reportes'],
   configuracion: ['/configuracion'],
@@ -130,18 +132,21 @@ export async function middleware(request: NextRequest) {
 
       // ── Celular / tablet → hub móvil ─────────────────────────────────
       // El dashboard y el POS son de ESCRITORIO. En cualquier dispositivo
-      // móvil (celular o tablet), el usuario con acceso al modo móvil
-      // (encargada, cajero, fiambrero) entra al hub /movil (contar stock /
-      // recibir), nunca al POS ni al dashboard (que en pantalla chica se ven
-      // en blanco). El POS queda solo para la PC/notebook del mostrador
-      // (`device.type` undefined = escritorio → no redirige).
+      // móvil (celular o tablet), el usuario con acceso al modo móvil entra al
+      // hub /movil, nunca al POS ni al dashboard (que en pantalla chica se ven
+      // en blanco). Alcanza a todo el personal operativo: encargada/cajero/
+      // fiambrero (stock/recepción) y el empleado común (solo 'mi_panel', que
+      // ve su panel y la consulta de precio). El POS queda solo para la PC/
+      // notebook del mostrador (`device.type` undefined = escritorio → no
+      // redirige).
       const tipoDispositivo = userAgent(request).device.type
       const esMovil =
         tipoDispositivo === 'mobile' || tipoDispositivo === 'tablet'
       const tieneAccesoMovil =
         permisos.includes('inventario') ||
         permisos.includes('recepcion') ||
-        permisos.includes('pedidos')
+        permisos.includes('pedidos') ||
+        permisos.includes('mi_panel')
       if (
         esMovil &&
         tieneAccesoMovil &&

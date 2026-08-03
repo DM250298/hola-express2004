@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
+import { tienePermiso } from '@/lib/permisos'
 import { HubMovil } from '@/components/movil/HubMovil'
 import { NovedadesStock } from '@/components/shared/NovedadesStock'
 
@@ -72,7 +73,11 @@ export default async function PaginaMovil() {
         conteoFisico={conteoFisico}
       />
 
-      <NovedadesStock className="mt-4" />
+      {/* Movimientos de stock: solo para quien trabaja el inventario. El
+          empleado común (solo 'mi_panel') no los ve. */}
+      {tienePermiso(permisos, 'inventario') && (
+        <NovedadesStock className="mt-4" />
+      )}
     </div>
   )
 }

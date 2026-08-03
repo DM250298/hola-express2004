@@ -2,9 +2,11 @@ import Link from 'next/link'
 import {
   Boxes,
   CalendarCheck,
+  CalendarX,
   ChevronRight,
   ClipboardList,
   MapPin,
+  ScanLine,
   Truck,
 } from 'lucide-react'
 import { tienePermiso } from '@/lib/permisos'
@@ -52,6 +54,7 @@ export function HubMovil({
     tienePermiso(permisos, 'conteo_gestion')
   const puedeRecibir =
     tienePermiso(permisos, 'recepcion') || tienePermiso(permisos, 'pedidos')
+  const puedeVerVencimientos = tienePermiso(permisos, 'vencimientos')
   const primerNombre = nombre.split(' ')[0]
 
   return (
@@ -151,6 +154,46 @@ export function HubMovil({
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
           </Link>
         )}
+
+        {puedeVerVencimientos && (
+          <Link
+            href="/movil/vencimientos"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#c43e2c]/12 text-[#c43e2c]">
+              <CalendarX className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                Vencimientos
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Mirá qué vence pronto y dalo de baja
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        )}
+
+        {/* Consultar precio: acceso para todo el personal (inocuo, no muestra
+            costo). Útil en el salón para cajeros y reponedores. */}
+        <Link
+          href="/movil/consulta"
+          className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+        >
+          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#f9d2a2]/50 text-[#9e6b15]">
+            <ScanLine className="h-7 w-7" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-lg font-bold text-[#391511]">
+              Consultar precio
+            </span>
+            <span className="block text-xs text-[#6f3a2a]">
+              Escaneá un producto y mirá precio y stock
+            </span>
+          </span>
+          <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+        </Link>
 
         {tienePanel && (
           <Link

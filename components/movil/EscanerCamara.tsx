@@ -32,10 +32,46 @@ const REINTENTO_MISMO_MS = 1200
 
 type Estado = 'iniciando' | 'activo' | 'sin-soporte' | 'sin-permiso' | 'error'
 
+// Clase del ponyfill una vez cargado (se cachea a nivel módulo para no volver
+// a importar ni re-preparar el WASM entre montajes de la pantalla).
+let ponyfillCargado: typeof BarcodeDetector | null = null
+
+/**
+ * Devuelve la clase `BarcodeDetector` a usar:
+ * - la NATIVA si el navegador la trae (Chrome/Android/Edge) — rápida, no baja
+ *   nada;
+ * - el ponyfill ZXing-WASM cargado bajo demanda para los que no la tienen
+ *   (iOS Safari — y por la política de Apple, todo navegador en iPhone).
+ *
+ * El `.wasm` se sirve desde `/wasm` (self-hosted, sin CDN externo) y sólo se
+ * descarga la primera vez que se escanea con el fallback.
+ */
+async function resolverDetector(): Promise<typeof BarcodeDetector | null> {
+  if (typeof window === 'undefined') return null
+  if (window.BarcodeDetector) return window.BarcodeDetector
+  if (ponyfillCargado) return ponyfillCargado
+  try {
+    const mod = await import('barcode-detector/ponyfill')
+    mod.prepareZXingModule({
+      overrides: {
+        locateFile: (path: string, prefix: string) =>
+          path.endsWith('.wasm') ? `/wasm/${path}` : prefix + path,
+      },
+    })
+    ponyfillCargado = mod.BarcodeDetector as unknown as typeof BarcodeDetector
+    return ponyfillCargado
+  } catch {
+    // Sin red para bajar el WASM o navegador sin soporte → queda la carga
+    // manual / lector USB como respaldo.
+    return null
+  }
+}
+
 /**
  * Escáner de código de barras por cámara. Usa la API nativa `BarcodeDetector`
- * (Android/Chrome). Si no está disponible o se niega el permiso, queda la
- * carga manual (que también sirve para un lector USB/Bluetooth).
+ * (Android/Chrome) y, cuando no existe (iOS), un ponyfill ZXing-WASM. Si no se
+ * puede abrir la cámara o se niega el permiso, queda la carga manual (que
+ * también sirve para un lector USB/Bluetooth).
  */
 export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -100,28 +136,51 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
 
   useEffect(() => {
     let cancelado = false
+    // Throttle del bucle de detección. Con la API nativa sería barato, pero el
+    // fallback WASM (iOS) es caro: sin límite recalienta el teléfono y encola
+    // detecciones que se pisan. ~8 lecturas/seg alcanzan de sobra para un EAN
+    // de góndola. El flag `detectando` evita solaparlas cuando `detect` tarda
+    // más que el intervalo (típico en la primera lectura del fallback).
+    const INTERVALO_DETECCION_MS = 120
+    let ultimaDeteccion = 0
+    let detectando = false
 
-    async function bucle() {
+    function bucle(t: number) {
       if (!corriendoRef.current) return
       const video = videoRef.current
       const detector = detectorRef.current
-      if (video && detector && video.readyState >= 2) {
-        try {
-          const codes = await detector.detect(video)
-          if (codes.length > 0) emitir(codes[0].rawValue)
-        } catch {
-          // frame ilegible — se ignora y se reintenta en el próximo cuadro
-        }
+      if (
+        video &&
+        detector &&
+        video.readyState >= 2 &&
+        !detectando &&
+        t - ultimaDeteccion >= INTERVALO_DETECCION_MS
+      ) {
+        detectando = true
+        ultimaDeteccion = t
+        detector
+          .detect(video)
+          .then((codes) => {
+            if (codes.length > 0) emitir(codes[0].rawValue)
+          })
+          .catch(() => {
+            // frame ilegible — se ignora y se reintenta en el próximo ciclo
+          })
+          .finally(() => {
+            detectando = false
+          })
       }
-      rafRef.current = requestAnimationFrame(() => {
-        void bucle()
-      })
+      rafRef.current = requestAnimationFrame(bucle)
     }
 
     async function iniciar() {
-      const Detector =
-        typeof window !== 'undefined' ? window.BarcodeDetector : undefined
-      if (!Detector || !navigator.mediaDevices?.getUserMedia) {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setEstado('sin-soporte')
+        return
+      }
+      const Detector = await resolverDetector()
+      if (cancelado) return
+      if (!Detector) {
         setEstado('sin-soporte')
         return
       }
@@ -151,7 +210,7 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
         await video.play()
         setEstado('activo')
         corriendoRef.current = true
-        void bucle()
+        rafRef.current = requestAnimationFrame(bucle)
       } catch (e) {
         if ((e as Error).name === 'NotAllowedError') setEstado('sin-permiso')
         else setEstado('error')
@@ -214,8 +273,8 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
               <>
                 <CameraOff className="h-6 w-6" />
                 <span className="text-sm">
-                  Este dispositivo no soporta el escáner por cámara. Usá un
-                  lector o cargá el código a mano.
+                  No se pudo iniciar el lector por cámara. Escaneá con un lector
+                  USB o cargá el código a mano.
                 </span>
               </>
             )}
