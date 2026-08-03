@@ -190,8 +190,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Se excluyen también el service worker y el manifest PWA (FASE 2 —
-    // POS offline): deben servirse tal cual, sin pasar por los guardas de auth.
-    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|[\\w-]+\\.webmanifest|icono\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Se excluyen también el service worker, el manifest PWA (FASE 2 — POS
+    // offline) y los .wasm (el lector de códigos ZXing del escáner en iOS,
+    // modo móvil): deben servirse tal cual, sin pasar por los guardas de auth.
+    // Si no, el middleware redirige el asset a /login (o a / con sesión) y el
+    // fetch recibe HTML en vez del binario → el escáner iOS no instancia el
+    // decodificador y la cámara abre pero no lee códigos.
+    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|[\\w-]+\\.webmanifest|icono\\.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|wasm)$).*)',
   ],
 }
