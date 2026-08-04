@@ -357,22 +357,28 @@ export function RecepcionMovil({ pedidoId }: Props) {
     requiereAceptacion ||
     (totalUnidades <= 0 && facturasCargadas.length === 0)
 
+  /**
+   * El N° de factura es OBLIGATORIO en toda pasada que registre mercadería:
+   * por política de la empresa no quedan facturas a medias (deudas sin
+   * identificar que después no se pueden matchear con el papel).
+   */
+  function validarNumeroFactura(): boolean {
+    const num = numeroFactura.trim()
+    if (!num) {
+      toast.error('Poné el N° de la factura para registrar la recepción.')
+      numeroFacturaInputRef.current?.focus()
+      return false
+    }
+    if (facturasCargadas.some((f) => f.numero === num)) {
+      toast.error(`La factura ${num} ya se cargó en esta entrega.`)
+      return false
+    }
+    return true
+  }
+
   function confirmar(accion: AccionConfirmar) {
     if (!usuario || hayErrores || !pedido?.proveedor) return
-    if (accion === 'otra') {
-      // Para pasar a la siguiente factura, ESTA tiene que quedar identificada:
-      // sin número no se pueden separar las deudas.
-      const num = numeroFactura.trim()
-      if (!num) {
-        toast.error('Poné el N° de esta factura antes de cargar la siguiente.')
-        numeroFacturaInputRef.current?.focus()
-        return
-      }
-      if (facturasCargadas.some((f) => f.numero === num)) {
-        toast.error(`La factura ${num} ya se cargó en esta entrega.`)
-        return
-      }
-    }
+    if (!validarNumeroFactura()) return
     accionPendiente.current = accion
     if (requiereSupervisor) {
       setModalSupervisorAbierto(true)
@@ -449,6 +455,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
    * y sale, sin llamar al RPC de gusto.
    */
   function terminar() {
+    // Validar el N° ANTES del diálogo de faltante (con 0 u. no se registra
+    // nada nuevo, así que ahí no hace falta factura).
+    if (totalUnidades > 0 && !validarNumeroFactura()) return
     if (esParcial) {
       setDialogFaltanteAbierto(true)
       return
@@ -715,7 +724,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
           ref={numeroFacturaInputRef}
           value={numeroFactura}
           onChange={(e) => setNumeroFactura(e.target.value)}
-          placeholder="N° de la factura (opcional)"
+          placeholder="N° de la factura (obligatorio)"
           className="h-11 border-[#e4c9b0] text-sm focus-visible:ring-[#f9b44c]"
         />
         <p className="mt-1.5 text-[11px] leading-snug text-[#6f3a2a]">
