@@ -1,5 +1,6 @@
 -- ╔════════════════════════════════════════════════════════════════════╗
--- ║  Migration 134 · fn_cancelar_pedido (borrar una orden de compra)     ║
+-- ║  Migration 136 · fn_cancelar_pedido (borrar una orden de compra)     ║
+-- ║  (Renumerada de 134 → 136: el 134 ya lo usaba reactivar_pedido.)     ║
 -- ║                                                                     ║
 -- ║  "Borrar orden completa" = CANCELAR dejando rastro. La orden NO se   ║
 -- ║  elimina de la base: queda en estado 'cancelado' (auditable,         ║
@@ -17,7 +18,8 @@
 -- ║   · fn_revertir_recepcion bloquea si ya se vendió/consumió o dio de  ║
 -- ║     baja mercadería de esta orden (el stock quedaría negativo).      ║
 -- ║                                                                     ║
--- ║  REQUIERE: migraciones 130 (revertir) y 133 (anular factura).       ║
+-- ║  REQUIERE: migraciones 130 (revertir), 133 (anular factura) y 135    ║
+-- ║  (fix del trigger, que restaura recibido→enviado bajo flag).         ║
 -- ║  Ejecutar UNA sola vez, COMPLETO, en el SQL Editor de Supabase.     ║
 -- ╚════════════════════════════════════════════════════════════════════╝
 
