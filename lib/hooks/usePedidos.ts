@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import {
   actualizarEstadoPedido,
   actualizarPedido,
+  cancelarPedido,
   crearPedido,
   getPedidoDetalle,
   getPedidos,
@@ -143,6 +144,37 @@ export function useRevertirRecepcion() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo revertir: ${error.message}`)
+    },
+  })
+}
+
+export function useCancelarPedido() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      pedidoId,
+      usuarioId,
+    }: {
+      pedidoId: number
+      usuarioId: string
+    }) => cancelarPedido(pedidoId, usuarioId),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
+      qc.invalidateQueries({ queryKey: ['pedido-detalle', vars.pedidoId] })
+      qc.invalidateQueries({ queryKey: ['productos'] })
+      qc.invalidateQueries({ queryKey: ['inventario'] })
+      qc.invalidateQueries({ queryKey: ['alertas-stock'] })
+      qc.invalidateQueries({ queryKey: ['lotes-activos'] })
+      qc.invalidateQueries({ queryKey: ['vencimientos'] })
+      qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
+      qc.invalidateQueries({ queryKey: ['comprobantes-cargados'] })
+      qc.invalidateQueries({ queryKey: ['resumen-fiscal'] })
+      qc.invalidateQueries({ queryKey: ['resumen-financiero'] })
+      qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+      toast.success('Orden borrada · quedó cancelada y se revirtió todo')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo borrar la orden: ${error.message}`)
     },
   })
 }

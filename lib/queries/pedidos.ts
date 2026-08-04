@@ -432,6 +432,25 @@ export async function revertirRecepcion(
   return data as unknown as ResultadoReversion
 }
 
+/**
+ * Cancela (borra) una orden de compra completa, de forma atómica
+ * (`fn_cancelar_pedido`): anula las facturas cargadas, revierte la recepción
+ * (stock/lotes/deudas provisorias) y deja la orden en 'cancelado' — queda en el
+ * historial y se puede reactivar. Falla (y no toca nada) si la orden tiene
+ * pagos registrados o si ya se vendió/consumió mercadería de la orden.
+ */
+export async function cancelarPedido(
+  pedido_id: number,
+  usuario_id: string
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_cancelar_pedido', {
+    p_pedido_id: pedido_id,
+    p_usuario_id: usuario_id,
+  })
+  if (error) throw error
+}
+
 // ─── Lotes del pedido (para reimprimir etiquetas) ─────────────────────
 
 export interface LoteDePedido {

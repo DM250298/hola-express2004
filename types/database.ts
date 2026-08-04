@@ -4061,6 +4061,15 @@ export interface Database {
         }
         Returns: undefined
       }
+      /** Borra (cancela) una orden de compra completa (mig 134): anula facturas,
+       *  revierte la recepción y deja la orden en 'cancelado'. */
+      fn_cancelar_pedido: {
+        Args: {
+          p_pedido_id: number
+          p_usuario_id: string
+        }
+        Returns: undefined
+      }
       /** Motor de precios en SQL (mig 109) — espejo de lib/pricing/motor.ts. */
       fn_precio_venta: {
         Args: {

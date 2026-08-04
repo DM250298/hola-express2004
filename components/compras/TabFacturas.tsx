@@ -2,10 +2,17 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, ExternalLink, FileText, Package } from 'lucide-react'
+import {
+  CheckCircle2,
+  ExternalLink,
+  FileText,
+  Package,
+  Trash2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModalCompraFactura } from '@/components/compras/ModalCompraFactura'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { useCancelarPedido } from '@/lib/hooks/usePedidos'
 import {
   Table,
   TableBody,
@@ -45,9 +52,21 @@ export function BadgePendientesFactura() {
 export function TabFacturas() {
   const { pendientes, isLoading, isError } = usarPendientesFactura()
   const { data: usuario } = useUsuario()
+  const cancelar = useCancelarPedido()
   const [cuentaFactura, setCuentaFactura] =
     useState<CuentaAPagarConProveedor | null>(null)
   const [modalCompra, setModalCompra] = useState(false)
+
+  function handleBorrar(pedidoId: number | null) {
+    if (pedidoId == null || !usuario || cancelar.isPending) return
+    const ok = window.confirm(
+      `¿Borrar la orden #${pedidoId} completa?\n\n` +
+        'Se revierte el stock que ingresó, se borran sus deudas y facturas, y la ' +
+        'orden queda cancelada (podés reactivarla). No se puede si tiene pagos.'
+    )
+    if (!ok) return
+    cancelar.mutate({ pedidoId, usuarioId: usuario.id })
+  }
 
   return (
     <div className="space-y-5">
@@ -107,7 +126,7 @@ export function TabFacturas() {
                 <TableHead className="text-right text-[#391511] font-semibold">
                   Monto estimado
                 </TableHead>
-                <TableHead className="text-right w-40 text-[#391511] font-semibold">
+                <TableHead className="text-right w-56 text-[#391511] font-semibold">
                   Acción
                 </TableHead>
               </TableRow>
@@ -151,14 +170,26 @@ export function TabFacturas() {
                     <MontoARS monto={c.monto} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      onClick={() => setCuentaFactura(c)}
-                      className="h-8 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Cargar factura
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => setCuentaFactura(c)}
+                        className="h-8 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        Cargar factura
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleBorrar(c.pedido_id)}
+                        disabled={cancelar.isPending}
+                        title={`Borrar la orden #${c.pedido_id} completa`}
+                        className="h-8 border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

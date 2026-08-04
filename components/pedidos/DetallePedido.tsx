@@ -12,12 +12,13 @@ import {
   Pencil,
   RotateCcw,
   Send,
+  Trash2,
   Truck,
-  X,
 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
   Table,
   TableBody,
@@ -31,6 +32,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import {
   usePedidoDetalle,
   useActualizarEstadoPedido,
+  useCancelarPedido,
 } from '@/lib/hooks/usePedidos'
 import { formatearCantidad, formatearFechaCorta } from '@/lib/utils/formato'
 import { ModalRecepcion } from './ModalRecepcion'
@@ -41,8 +43,23 @@ interface Props {
 
 export function DetallePedido({ pedidoId }: Props) {
   const { data: pedido, isLoading, isError } = usePedidoDetalle(pedidoId)
+  const { data: usuario } = useUsuario()
   const cambiarEstado = useActualizarEstadoPedido()
+  const cancelar = useCancelarPedido()
   const [modalRecepcionAbierto, setModalRecepcionAbierto] = useState(false)
+
+  function handleBorrar() {
+    if (!pedido || !usuario || cancelar.isPending) return
+    const recibido =
+      pedido.estado === 'recibido' || pedido.estado === 'recepcion_parcial'
+    const msg = recibido
+      ? `¿Borrar la orden #${pedido.id}?\n\nSe revierte el stock que ingresó, se ` +
+        'borran sus deudas y facturas, y la orden queda cancelada (podés ' +
+        'reactivarla). No se puede si tiene pagos.'
+      : `¿Borrar la orden #${pedido.id}? Queda cancelada (podés reactivarla).`
+    if (!window.confirm(msg)) return
+    cancelar.mutate({ pedidoId: pedido.id, usuarioId: usuario.id })
+  }
 
   if (isLoading) {
     return (
@@ -156,17 +173,15 @@ export function DetallePedido({ pedidoId }: Props) {
                 Cerrar recepción
               </Button>
             )}
-            {(pedido.estado === 'borrador' || pedido.estado === 'enviado') && (
+            {pedido.estado !== 'cancelado' && (
               <Button
                 variant="outline"
-                onClick={() =>
-                  cambiarEstado.mutate({ id: pedido.id, estado: 'cancelado' })
-                }
-                disabled={cambiarEstado.isPending}
+                onClick={handleBorrar}
+                disabled={cancelar.isPending}
                 className="border-[#c43e2c]/30 text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c] gap-1.5"
               >
-                <X className="h-4 w-4" />
-                Cancelar
+                <Trash2 className="h-4 w-4" />
+                Borrar orden
               </Button>
             )}
             {pedido.estado === 'cancelado' && (
