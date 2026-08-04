@@ -353,6 +353,11 @@ export interface RecibirPedidoPayload {
   usuario_id: string
   condicion_pago_dias: number
   items: ItemRecepcion[]
+  /**
+   * true = el caller muestra su propio toast (p. ej. la recepción móvil
+   * factura por factura) y el hook no dispara los genéricos.
+   */
+  silenciarToasts?: boolean
 }
 
 /**

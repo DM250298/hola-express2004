@@ -113,6 +113,7 @@ export function useRecibirPedido() {
       qc.invalidateQueries({ queryKey: ['lotes-activos'] })
       qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
       qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      if (variables.silenciarToasts) return
       if (_d.es_parcial) {
         toast.warning(
           'Recepción parcial registrada · el pedido queda abierto para el faltante'

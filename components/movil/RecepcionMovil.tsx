@@ -14,7 +14,6 @@ import {
   Plus,
   Search,
   ShieldCheck,
-  Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -66,15 +65,21 @@ interface ItemEstado {
   venta_por_peso: boolean
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
-  /** Factura de esta entrega a la que se imputa el renglón (ref local). */
-  factura_ref: string
 }
 
-/** Una factura de la entrega (varias por pedido). `ref` es un id local estable. */
-interface FacturaEntrega {
-  ref: string
+/** Una factura ya confirmada en esta entrega (una pasada = una factura). */
+interface FacturaCargada {
   numero: string
+  unidades: number
 }
+
+/**
+ * Qué se hace al confirmar la pasada actual:
+ * - 'otra': guarda esta factura y deja la pantalla lista para la siguiente
+ * - 'salir': guarda y vuelve a la lista (el faltante queda pendiente)
+ * - 'cerrar': guarda, cierra el pedido aunque falte mercadería, y vuelve
+ */
+type AccionConfirmar = 'otra' | 'salir' | 'cerrar'
 
 /** Datos mínimos de un producto para sumarlo a la recepción (buscado o creado). */
 interface ProdParaAgregar {
@@ -110,11 +115,18 @@ interface Props {
 }
 
 /**
- * Recepción de un pedido desde el teléfono: escaneo con cámara (cada lectura
- * suma 1 al producto, editable), fecha de vencimiento opcional por ítem, clave
- * de supervisor si se recibe de más, y registro atómico vía `fn_recibir_pedido`.
- * No muestra precios/costos. Permite agregar un producto que no estaba en la
- * orden (creándolo si hace falta).
+ * Recepción de un pedido desde el teléfono: escaneo con cámara, fecha de
+ * vencimiento opcional por ítem, clave de supervisor si se recibe de más, y
+ * registro atómico vía `fn_recibir_pedido`. No muestra precios/costos.
+ * Permite agregar un producto que no estaba en la orden (creándolo si hace
+ * falta).
+ *
+ * Multi-factura: UNA FACTURA POR VEZ. Se carga el número del papel que se
+ * tiene en la mano, se escanea todo lo suyo, y "Otra factura" confirma esa
+ * tanda (recepción parcial, con su propia cuenta a pagar) y deja la pantalla
+ * limpia para la siguiente. Cada pasada manda al RPC SOLO los renglones con
+ * cantidad, para no re-imputarle a la factura nueva los renglones que ya
+ * quedaron en la cuenta de una factura anterior.
  */
 export function RecepcionMovil({ pedidoId }: Props) {
   const router = useRouter()
@@ -125,17 +137,16 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const cambiarEstado = useActualizarEstadoPedido()
 
   const [itemsEstado, setItemsEstado] = useState<ItemEstado[]>([])
-  // Facturas de esta entrega (una deuda por factura). Empieza con una.
-  const [facturas, setFacturas] = useState<FacturaEntrega[]>([
-    { ref: 'f1', numero: '' },
-  ])
-  const [facturaActivaRef, setFacturaActivaRef] = useState('f1')
-  const contadorFacturaRef = useRef(1)
+  // Factura que se está cargando ahora (una por vez) + las ya confirmadas.
+  const [numeroFactura, setNumeroFactura] = useState('')
+  const [facturasCargadas, setFacturasCargadas] = useState<FacturaCargada[]>([])
+  const numeroFacturaInputRef = useRef<HTMLInputElement | null>(null)
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
   const [excesoAutorizado, setExcesoAutorizado] = useState(false)
   const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
   const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
-  const cerrarTrasRecepcion = useRef(false)
+  const [dialogFaltanteAbierto, setDialogFaltanteAbierto] = useState(false)
+  const accionPendiente = useRef<AccionConfirmar>('salir')
 
   // Producto activo (último escaneado): se resalta y se enfoca su campo para
   // cargar la cantidad total. El escaneo deja de ser un "+1" como protagonista.
@@ -174,51 +185,12 @@ export function RecepcionMovil({ pedidoId }: Props) {
         venta_por_peso: it.producto?.venta_por_peso ?? false,
         fecha_vencimiento: '',
         dias_vencimiento_minimo: it.producto?.dias_vencimiento_minimo ?? null,
-        factura_ref: 'f1',
       }))
     )
-    // Arranca cada pedido con una sola factura.
-    setFacturas([{ ref: 'f1', numero: '' }])
-    setFacturaActivaRef('f1')
-    contadorFacturaRef.current = 1
     setAceptaPorDebajoMin(false)
     setExcesoAutorizado(false)
     setAutorizadoPor(null)
   }, [pedido])
-
-  // ── Facturas de la entrega ──────────────────────────────────────────
-  function agregarFactura() {
-    contadorFacturaRef.current += 1
-    const ref = `f${contadorFacturaRef.current}`
-    setFacturas((prev) => [...prev, { ref, numero: '' }])
-    setFacturaActivaRef(ref)
-  }
-
-  function quitarFactura(ref: string) {
-    if (facturas.length <= 1) return
-    const restantes = facturas.filter((f) => f.ref !== ref)
-    const destino = restantes[0].ref
-    // Los renglones de la factura borrada pasan a la primera que quede.
-    setItemsEstado((prev) =>
-      prev.map((it) =>
-        it.factura_ref === ref ? { ...it, factura_ref: destino } : it
-      )
-    )
-    setFacturas(restantes)
-    if (facturaActivaRef === ref) setFacturaActivaRef(destino)
-  }
-
-  function cambiarNumeroFactura(ref: string, numero: string) {
-    setFacturas((prev) =>
-      prev.map((f) => (f.ref === ref ? { ...f, numero } : f))
-    )
-  }
-
-  function moverItemAFactura(item_id: number, ref: string) {
-    setItemsEstado((prev) =>
-      prev.map((it) => (it.item_id === item_id ? { ...it, factura_ref: ref } : it))
-    )
-  }
 
   function actualizarItem(
     item_id: number,
@@ -294,13 +266,10 @@ export function RecepcionMovil({ pedidoId }: Props) {
     // Si ya es el activo, ignorar (evita que la cámara lo re-dispare al tipear).
     if (activoId === item.item_id) return
     setActivoId(item.item_id)
-    // Al escanear, el renglón se imputa a la factura activa (así separás por
-    // factura escaneando bajo cada una).
     setItemsEstado((prev) => {
       const sel = prev.find((it) => it.item_id === item.item_id)
       if (!sel) return prev
-      const actualizado = { ...sel, factura_ref: facturaActivaRef }
-      return [actualizado, ...prev.filter((it) => it.item_id !== item.item_id)]
+      return [sel, ...prev.filter((it) => it.item_id !== item.item_id)]
     })
     toast.success(`${item.nombre} — cargá la cantidad`)
   }
@@ -331,18 +300,20 @@ export function RecepcionMovil({ pedidoId }: Props) {
         Number(it.cantidad_recibida) < 0)
   )
 
+  // Solo cuenta como exceso lo que ESTA pasada agrega por encima del pedido:
+  // un exceso ya recibido (y autorizado) en una factura anterior no tiene que
+  // volver a pedir clave de supervisor si ahora no se le suma nada.
   const itemsConExceso = useMemo(
     () =>
-      itemsEstado.filter(
-        (it) =>
-          it.ya_recibido + (Number(it.cantidad_recibida) || 0) >
-          it.cantidad_pedida
-      ),
+      itemsEstado.filter((it) => {
+        const cant = Number(it.cantidad_recibida) || 0
+        return cant > 0 && it.ya_recibido + cant > it.cantidad_pedida
+      }),
     [itemsEstado]
   )
   const requiereSupervisor = itemsConExceso.length > 0 && !excesoAutorizado
 
-  const esParcial = useMemo(() => {
+  const unidadesFaltantes = useMemo(() => {
     const pedidoTotal = itemsEstado.reduce(
       (acc, it) => acc + it.cantidad_pedida,
       0
@@ -351,8 +322,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
       (acc, it) => acc + it.ya_recibido + (Number(it.cantidad_recibida) || 0),
       0
     )
-    return recibidoTotal < pedidoTotal
+    return Math.max(0, pedidoTotal - recibidoTotal)
   }, [itemsEstado])
+  const esParcial = unidadesFaltantes > 0
 
   const itemsPorDebajoMinimo = useMemo(() => {
     return itemsEstado.flatMap((it) => {
@@ -374,65 +346,132 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const requiereAceptacion =
     itemsPorDebajoMinimo.length > 0 && !aceptaPorDebajoMin
 
-  // Con 2+ facturas, cada una con mercadería tiene que tener número: si dos
-  // quedaran sin número, el sistema no podría separarlas en deudas distintas.
-  const facturasSinNumero = useMemo(() => {
-    if (facturas.length <= 1) return []
-    return facturas.filter((f) => {
-      if (f.numero.trim()) return false
-      const uds = itemsEstado
-        .filter((it) => it.factura_ref === f.ref)
-        .reduce((a, it) => a + (Number(it.cantidad_recibida) || 0), 0)
-      return uds > 0
-    })
-  }, [facturas, itemsEstado])
-
   const procesando = recibir.isPending || cambiarEstado.isPending
   const accionDeshabilitada =
+    procesando || hayErrores || totalUnidades <= 0 || requiereAceptacion
+  // "Terminar" se habilita con 0 u. si ya hubo facturas guardadas en pasadas
+  // anteriores (solo resuelve el estado del pedido y sale).
+  const terminarDeshabilitado =
     procesando ||
     hayErrores ||
-    totalUnidades <= 0 ||
     requiereAceptacion ||
-    facturasSinNumero.length > 0
+    (totalUnidades <= 0 && facturasCargadas.length === 0)
 
-  function confirmar(cerrarPedido: boolean) {
+  function confirmar(accion: AccionConfirmar) {
     if (!usuario || hayErrores || !pedido?.proveedor) return
-    cerrarTrasRecepcion.current = cerrarPedido
+    if (accion === 'otra') {
+      // Para pasar a la siguiente factura, ESTA tiene que quedar identificada:
+      // sin número no se pueden separar las deudas.
+      const num = numeroFactura.trim()
+      if (!num) {
+        toast.error('Poné el N° de esta factura antes de cargar la siguiente.')
+        numeroFacturaInputRef.current?.focus()
+        return
+      }
+      if (facturasCargadas.some((f) => f.numero === num)) {
+        toast.error(`La factura ${num} ya se cargó en esta entrega.`)
+        return
+      }
+    }
+    accionPendiente.current = accion
     if (requiereSupervisor) {
       setModalSupervisorAbierto(true)
       return
     }
-    ejecutarRecepcion(cerrarPedido)
+    ejecutarRecepcion(accion)
   }
 
-  function ejecutarRecepcion(cerrarPedido: boolean) {
+  function ejecutarRecepcion(accion: AccionConfirmar) {
     if (!usuario || !pedido?.proveedor) return
+    const numero = numeroFactura.trim()
+    const unidades = totalUnidades
     recibir.mutate(
       {
         pedido_id: pedido.id,
         proveedor_id: pedido.proveedor.id,
         usuario_id: usuario.id,
         condicion_pago_dias: condicionDias,
-        items: itemsEstado.map((it) => ({
-          item_id: it.item_id,
-          producto_id: it.producto_id,
-          cantidad_recibida: Math.max(0, Number(it.cantidad_recibida) || 0),
-          precio_costo: it.precio_costo,
-          fecha_vencimiento: it.fecha_vencimiento || null,
-          factura_ref: it.factura_ref,
-          numero_factura:
-            facturas.find((f) => f.ref === it.factura_ref)?.numero.trim() || null,
-        })),
+        silenciarToasts: accion === 'otra',
+        // SOLO los renglones con cantidad: los de facturas ya confirmadas no
+        // viajan de nuevo, así el RPC no les re-imputa la cuenta a esta factura.
+        items: itemsEstado
+          .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
+          .map((it) => ({
+            item_id: it.item_id,
+            producto_id: it.producto_id,
+            cantidad_recibida: Number(it.cantidad_recibida),
+            precio_costo: it.precio_costo,
+            fecha_vencimiento: it.fecha_vencimiento || null,
+            factura_ref: 'f1',
+            numero_factura: numero || null,
+          })),
       },
       {
         onSuccess: (resultado) => {
-          if (cerrarPedido && resultado.es_parcial) {
+          if (accion === 'otra') {
+            // La factura quedó guardada: pantalla limpia para la siguiente.
+            setFacturasCargadas((prev) => [...prev, { numero, unidades }])
+            setNumeroFactura('')
+            setActivoId(null)
+            setAceptaPorDebajoMin(false)
+            setExcesoAutorizado(false)
+            setAutorizadoPor(null)
+            setItemsEstado((prev) =>
+              prev.map((it) => ({
+                ...it,
+                ya_recibido: it.ya_recibido + (Number(it.cantidad_recibida) || 0),
+                cantidad_recibida: '',
+                fecha_vencimiento: '',
+              }))
+            )
+            toast.success(
+              `Factura ${numero} guardada (${formatearNumero(
+                Math.round(unidades * 1000) / 1000
+              )} u.). Cargá la siguiente.`
+            )
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+            numeroFacturaInputRef.current?.focus()
+            return
+          }
+          if (accion === 'cerrar' && resultado.es_parcial) {
             cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
           }
           router.push('/movil/recepcion')
         },
       }
     )
+  }
+
+  /**
+   * Botón principal. Si falta mercadería del pedido, primero pregunta qué
+   * hacer con el faltante (queda pendiente vs. cerrar igual). Con todo ya
+   * guardado en pasadas anteriores (0 u. cargadas ahora) solo resuelve estado
+   * y sale, sin llamar al RPC de gusto.
+   */
+  function terminar() {
+    if (esParcial) {
+      setDialogFaltanteAbierto(true)
+      return
+    }
+    if (totalUnidades <= 0) {
+      router.push('/movil/recepcion')
+      return
+    }
+    confirmar('salir')
+  }
+
+  /** Elección del diálogo de faltante. */
+  function resolverFaltante(accion: 'salir' | 'cerrar') {
+    setDialogFaltanteAbierto(false)
+    if (totalUnidades <= 0) {
+      // No hay nada nuevo que guardar: las pasadas anteriores ya registraron todo.
+      if (accion === 'cerrar' && pedido) {
+        cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
+      }
+      router.push('/movil/recepcion')
+      return
+    }
+    confirmar(accion)
   }
 
   /** Suma un producto (ya existente en el catálogo) a esta recepción. */
@@ -489,7 +528,6 @@ export function RecepcionMovil({ pedidoId }: Props) {
         venta_por_peso: prod.venta_por_peso,
         fecha_vencimiento: venc,
         dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
-        factura_ref: facturaActivaRef,
       },
     ])
     setActivoId(nuevoItem.id)
@@ -646,98 +684,44 @@ export function RecepcionMovil({ pedidoId }: Props) {
         />
       </div>
 
-      {/* Facturas de esta entrega — una deuda por factura */}
+      {/* Factura que se está cargando (una por vez) + las ya guardadas */}
       <div className="mb-4">
-        <div className="mb-1.5 flex items-center justify-between">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
-            Facturas de esta entrega
-          </p>
-          <button
-            type="button"
-            onClick={agregarFactura}
-            className="flex items-center gap-1 text-xs font-semibold text-[#9e6b15] active:scale-95"
-          >
-            <Plus className="h-3.5 w-3.5" /> Agregar factura
-          </button>
-        </div>
-
-        <div className="space-y-1.5">
-          {facturas.map((f, idx) => {
-            const activa = f.ref === facturaActivaRef
-            const items = itemsEstado.filter((it) => it.factura_ref === f.ref)
-            const uds = items.reduce(
-              (a, it) => a + (Number(it.cantidad_recibida) || 0),
-              0
-            )
-            return (
-              <div
-                key={f.ref}
-                onClick={() => setFacturaActivaRef(f.ref)}
-                className={cn(
-                  'rounded-xl border p-2.5 transition',
-                  activa
-                    ? 'border-[#f9b44c] bg-[#f9b44c]/10 ring-1 ring-[#f9b44c]/40'
-                    : 'border-[#e4c9b0]/70 bg-white'
-                )}
+        {facturasCargadas.length > 0 && (
+          <ul className="mb-2 space-y-1">
+            {facturasCargadas.map((f, idx) => (
+              <li
+                key={idx}
+                className="flex items-center gap-2 rounded-lg border border-[#2f7d4f]/30 bg-[#2f7d4f]/10 px-3 py-1.5 text-xs text-[#2f7d4f]"
               >
-                <div className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold',
-                      activa
-                        ? 'bg-[#f9b44c] text-[#391511]'
-                        : 'bg-[#e4c9b0]/60 text-[#6f3a2a]'
-                    )}
-                  >
-                    {idx + 1}
-                  </span>
-                  <Input
-                    value={f.numero}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => cambiarNumeroFactura(f.ref, e.target.value)}
-                    placeholder={`N° de la factura ${idx + 1}`}
-                    className="h-9 flex-1 border-[#e4c9b0] text-sm focus-visible:ring-[#f9b44c]"
-                  />
-                  {facturas.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        quitarFactura(f.ref)
-                      }}
-                      className="shrink-0 text-[#c8a58a] active:text-[#c43e2c]"
-                      aria-label="Quitar factura"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-                <p className="mt-1 pl-8 text-[10px] text-[#6f3a2a]">
-                  {activa && (
-                    <span className="font-semibold text-[#9e6b15]">Activa · </span>
-                  )}
-                  {items.length} {items.length === 1 ? 'producto' : 'productos'} ·{' '}
-                  {uds} u.
-                </p>
-              </div>
-            )
-          })}
-        </div>
+                <Check className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate font-semibold">
+                  Factura {f.numero}
+                </span>
+                <span className="ml-auto shrink-0 tabular-nums">
+                  {formatearNumero(Math.round(f.unidades * 1000) / 1000)} u.
+                  guardadas
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        {facturas.length > 1 && facturasSinNumero.length > 0 && (
-          <p className="mt-1.5 flex items-start gap-1 text-[10px] leading-snug text-[#c43e2c]">
-            <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
-            Poné el número de cada factura con productos para poder separarlas en
-            deudas distintas.
-          </p>
-        )}
-        {facturas.length > 1 && facturasSinNumero.length === 0 && (
-          <p className="mt-1.5 text-[10px] leading-snug text-[#6f3a2a]">
-            Lo que escaneés/cargues se imputa a la factura{' '}
-            <strong>activa</strong>. Tocá una factura para activarla, o cambiá la
-            factura de un producto con el selector de su fila.
-          </p>
-        )}
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+          {facturasCargadas.length > 0
+            ? `Factura ${facturasCargadas.length + 1} de esta entrega`
+            : 'Factura de esta entrega'}
+        </p>
+        <Input
+          ref={numeroFacturaInputRef}
+          value={numeroFactura}
+          onChange={(e) => setNumeroFactura(e.target.value)}
+          placeholder="N° de la factura (opcional)"
+          className="h-11 border-[#e4c9b0] text-sm focus-visible:ring-[#f9b44c]"
+        />
+        <p className="mt-1.5 text-[11px] leading-snug text-[#6f3a2a]">
+          ¿Vinieron varias facturas? Cargá los productos de <strong>una</strong>,
+          tocá <strong>Otra factura</strong> abajo, y seguí con la siguiente.
+        </p>
       </div>
 
       {excesoAutorizado && autorizadoPor && (
@@ -788,21 +772,6 @@ export function RecepcionMovil({ pedidoId }: Props) {
                     )}
                   </p>
                 </div>
-                {facturas.length > 1 && (
-                  <select
-                    value={it.factura_ref}
-                    onChange={(e) => moverItemAFactura(it.item_id, e.target.value)}
-                    aria-label="Factura del producto"
-                    className="h-8 shrink-0 rounded-md border border-[#e4c9b0] bg-white px-1.5 text-[11px] font-medium text-[#391511] focus:outline-none focus:ring-2 focus:ring-[#f9b44c]"
-                  >
-                    {facturas.map((f, idx) => (
-                      <option key={f.ref} value={f.ref}>
-                        F{idx + 1}
-                        {f.numero ? ` · ${f.numero}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -918,54 +887,48 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
       {/* Barra de acción fija abajo */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[#e4c9b0]/60 bg-[#fdfaf6]/95 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-md items-center justify-between gap-3">
-          <div>
+        <div className="mx-auto flex max-w-md items-center justify-between gap-2">
+          <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-              {itemsEstado.some((it) => it.ya_recibido > 0)
-                ? 'Esta entrega'
-                : 'A recibir'}
+              {facturasCargadas.length > 0
+                ? 'Esta factura'
+                : itemsEstado.some((it) => it.ya_recibido > 0)
+                  ? 'Esta entrega'
+                  : 'A recibir'}
             </div>
             <div className="text-xl font-extrabold tabular-nums text-[#391511]">
               {formatearNumero(Math.round(totalUnidades * 1000) / 1000)} u.
             </div>
           </div>
-          {esParcial && totalUnidades > 0 ? (
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => confirmar(false)}
-                disabled={accionDeshabilitada}
-                className="h-12 border-[#e4a42a]/60 text-[#9e6b15]"
-              >
-                Parcial
-              </Button>
-              <Button
-                type="button"
-                onClick={() => confirmar(true)}
-                disabled={accionDeshabilitada}
-                className="h-12 bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
-              >
-                Cerrar
-              </Button>
-            </div>
-          ) : (
+          <div className="flex shrink-0 gap-2">
             <Button
               type="button"
-              onClick={() => confirmar(false)}
+              variant="outline"
+              onClick={() => confirmar('otra')}
               disabled={accionDeshabilitada}
-              className="h-12 bg-[#f9b44c] px-6 font-semibold text-[#391511] hover:bg-[#e4a42a]"
+              className="h-12 border-[#e4a42a]/60 px-3 text-[#9e6b15]"
+            >
+              <Plus className="mr-1 h-4 w-4" />
+              Otra factura
+            </Button>
+            <Button
+              type="button"
+              onClick={terminar}
+              disabled={terminarDeshabilitado}
+              className="h-12 bg-[#f9b44c] px-4 font-semibold text-[#391511] hover:bg-[#e4a42a]"
             >
               {procesando ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   …
                 </>
-              ) : (
+              ) : totalUnidades > 0 ? (
                 'Confirmar'
+              ) : (
+                'Terminar'
               )}
             </Button>
-          )}
+          </div>
         </div>
       </div>
 
@@ -976,9 +939,51 @@ export function RecepcionMovil({ pedidoId }: Props) {
         onAutorizado={(nombre) => {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)
-          ejecutarRecepcion(cerrarTrasRecepcion.current)
+          ejecutarRecepcion(accionPendiente.current)
         }}
       />
+
+      {/* Diálogo: quedó mercadería sin recibir — ¿pendiente o cerrar? */}
+      <Dialog
+        open={dialogFaltanteAbierto}
+        onOpenChange={setDialogFaltanteAbierto}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#391511]">
+              <AlertTriangle className="h-5 w-5 text-[#9e6b15]" />
+              Falta mercadería del pedido
+            </DialogTitle>
+            <DialogDescription className="text-[#6f3a2a]">
+              Quedan{' '}
+              <strong className="tabular-nums">
+                {formatearNumero(Math.round(unidadesFaltantes * 1000) / 1000)} u.
+              </strong>{' '}
+              sin recibir. Lo que cargaste se guarda igual — elegí qué pasa con
+              el faltante:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              onClick={() => resolverFaltante('salir')}
+              disabled={procesando}
+              className="h-12 w-full bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
+            >
+              Llega en otra entrega — dejarlo pendiente
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => resolverFaltante('cerrar')}
+              disabled={procesando}
+              className="h-12 w-full border-[#e4c9b0] text-[#6f3a2a]"
+            >
+              No llega más — cerrar el pedido igual
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal: buscar / agregar producto que no está en el pedido */}
       <Dialog
