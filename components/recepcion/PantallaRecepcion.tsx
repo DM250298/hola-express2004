@@ -249,6 +249,11 @@ export function PantallaRecepcion() {
                               Para hoy
                             </span>
                           )}
+                          {p.estado === 'recepcion_parcial' && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-[#c43e2c]/10 text-[#c43e2c] px-1.5 py-0.5 rounded-full">
+                              Recibido en parte
+                            </span>
+                          )}
                         </div>
                         <h3 className="font-bold text-[#391511] text-lg leading-tight">
                           {p.proveedor?.nombre ?? 'Proveedor eliminado'}
@@ -283,8 +288,31 @@ export function PantallaRecepcion() {
                       className="w-full h-12 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-extrabold rounded-xl gap-2"
                     >
                       <PackageCheck className="h-5 w-5" />
-                      Recibir mercadería
+                      {p.estado === 'recepcion_parcial'
+                        ? 'Completar recepción'
+                        : 'Recibir mercadería'}
                     </Button>
+                    {/* Saneamiento de parciales viejos: deshacer lo recibido
+                        para volver a recibir la orden COMPLETA (política sin
+                        recepción parcial). Las guardas del RPC lo bloquean con
+                        un mensaje claro si ya se vendió mercadería. */}
+                    {p.estado === 'recepcion_parcial' && (
+                      <Button
+                        variant="outline"
+                        onClick={() => setPedidoARevertir(p)}
+                        disabled={
+                          revertir.isPending && pedidoARevertir?.id === p.id
+                        }
+                        className="w-full mt-2 border-[#e0b4aa] text-[#c43e2c] hover:bg-[#c43e2c]/10 gap-1.5"
+                      >
+                        {revertir.isPending && pedidoARevertir?.id === p.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4" />
+                        )}
+                        Deshacer lo parcial y recibir completa
+                      </Button>
+                    )}
                   </div>
                 )
               })}

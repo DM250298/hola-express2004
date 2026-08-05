@@ -27,7 +27,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
-import { useActualizarEstadoPedido, useRecibirPedido } from '@/lib/hooks/usePedidos'
+import { useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
@@ -76,10 +76,6 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   // costo de la recepción aunque el dato exista para calcular el stock.
   const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const recibir = useRecibirPedido()
-  const cambiarEstado = useActualizarEstadoPedido()
-  // Recuerda si el operador eligió "cerrar pedido" mientras se valida el
-  // supervisor (el flujo de exceso pasa por el modal de clave).
-  const cerrarTrasRecepcion = useRef(false)
   const [itemsEstado, setItemsEstado] = useState<ItemEstado[]>([])
   const [itemsParaEtiquetar, setItemsParaEtiquetar] = useState<ItemParaEtiqueta[]>([])
   const [modalEtiquetasAbierto, setModalEtiquetasAbierto] = useState(false)
@@ -252,18 +248,25 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     [itemsEstado]
   )
 
-  /** ¿Queda faltante tras esta entrega? (acumulado < lo pedido en total) */
-  const esParcial = useMemo(() => {
-    const pedidoTotal = itemsEstado.reduce(
-      (acc, it) => acc + it.cantidad_pedida,
-      0
-    )
-    const recibidoTotal = itemsEstado.reduce(
-      (acc, it) => acc + it.ya_recibido + (Number(it.cantidad_recibida) || 0),
-      0
-    )
-    return recibidoTotal < pedidoTotal
-  }, [itemsEstado])
+  /**
+   * Renglones que no llegan a lo pedido (acumulado por item). Con faltantes
+   * NO se puede confirmar: la orden se recibe COMPLETA o no se recibe
+   * (política de la empresa, sin recepción parcial). Incluye los `no_pedido`
+   * (su placeholder pedida=1 obliga a contar lo que se agregó).
+   */
+  const itemsFaltantes = useMemo(
+    () =>
+      itemsEstado.flatMap((it) => {
+        const falta =
+          it.cantidad_pedida -
+          it.ya_recibido -
+          (Number(it.cantidad_recibida) || 0)
+        return falta > 0 ? [{ ...it, falta }] : []
+      }),
+    [itemsEstado]
+  )
+  const ordenIncompleta = itemsFaltantes.length > 0
+  const unidadesFaltantes = itemsFaltantes.reduce((a, it) => a + it.falta, 0)
 
   /** Items que tienen fecha de vencimiento por debajo del mínimo configurado. */
   const itemsPorDebajoMinimo = useMemo(() => {
@@ -286,15 +289,19 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   const hayPorDebajoMinimo = itemsPorDebajoMinimo.length > 0
   const requiereAceptacion = hayPorDebajoMinimo && !aceptaPorDebajoMin
 
-  const procesando = recibir.isPending || cambiarEstado.isPending
+  const procesando = recibir.isPending
   const accionDeshabilitada =
-    procesando || hayErrores || totalRecibido <= 0 || requiereAceptacion
+    procesando ||
+    hayErrores ||
+    totalRecibido <= 0 ||
+    requiereAceptacion ||
+    ordenIncompleta
 
-  function confirmar(cerrarPedido: boolean) {
+  function confirmar() {
     if (!usuario || hayErrores) return
     if (!pedido.proveedor) return
-
-    cerrarTrasRecepcion.current = cerrarPedido
+    // La orden se recibe completa o no se recibe (sin parcial).
+    if (ordenIncompleta) return
 
     // Recibir más de lo pedido exige autorización de un supervisor
     if (requiereSupervisor) {
@@ -302,10 +309,10 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
       return
     }
 
-    ejecutarRecepcion(cerrarPedido)
+    ejecutarRecepcion()
   }
 
-  function ejecutarRecepcion(cerrarPedido: boolean) {
+  function ejecutarRecepcion() {
     if (!usuario || !pedido.proveedor) return
 
     recibir.mutate(
@@ -314,22 +321,21 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         proveedor_id: pedido.proveedor.id,
         usuario_id: usuario.id,
         condicion_pago_dias: condicionDias,
-        items: itemsEstado.map((it) => ({
-          item_id: it.item_id,
-          producto_id: it.producto_id,
-          cantidad_recibida: Math.max(0, Number(it.cantidad_recibida) || 0),
-          precio_costo: it.precio_costo,
-          fecha_vencimiento: it.fecha_vencimiento || null,
-        })),
+        // SOLO renglones con cantidad: al completar un parcial viejo, mandar
+        // los renglones ya recibidos (aunque con 0) haría que el RPC les
+        // re-impute la cuenta a esta recepción.
+        items: itemsEstado
+          .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
+          .map((it) => ({
+            item_id: it.item_id,
+            producto_id: it.producto_id,
+            cantidad_recibida: Number(it.cantidad_recibida),
+            precio_costo: it.precio_costo,
+            fecha_vencimiento: it.fecha_vencimiento || null,
+          })),
       },
       {
         onSuccess: (resultado) => {
-          // Si eligió cerrar y la recepción quedó parcial, forzamos el pedido
-          // a 'recibido' (el proveedor no trae el faltante). La deuda ya quedó
-          // con lo efectivamente recibido.
-          if (cerrarPedido && resultado.es_parcial) {
-            cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
-          }
           // Alertar variaciones de costo por encima del umbral configurado
           if (resultado.variaciones && resultado.variaciones.length > 0) {
             const nombres = resultado.variaciones
@@ -719,10 +725,17 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                 </div>
               </>
             )}
-            {esParcial && totalRecibido > 0 && (
-              <p className="text-[11px] text-[#9e6b15] font-medium mt-0.5">
-                Estás recibiendo menos de lo pedido: elegí cerrar el pedido o
-                dejar el faltante pendiente.
+            {ordenIncompleta && totalRecibido > 0 && (
+              <p className="text-[11px] text-[#c43e2c] font-medium mt-0.5 max-w-md">
+                Faltan{' '}
+                <span className="font-bold tabular-nums">
+                  {formatearNumero(Math.round(unidadesFaltantes * 1000) / 1000)}{' '}
+                  u.
+                </span>{' '}
+                en {itemsFaltantes.length} renglón
+                {itemsFaltantes.length === 1 ? '' : 'es'}: la orden se recibe{' '}
+                <strong>completa</strong> o no se recibe. Si el proveedor no
+                trajo el resto, ajustá la orden y después registrá la recepción.
               </p>
             )}
           </div>
@@ -736,50 +749,21 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             >
               Cancelar
             </Button>
-            {esParcial && totalRecibido > 0 ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => confirmar(false)}
-                  disabled={accionDeshabilitada}
-                  className="border-[#e4a42a]/60 text-[#9e6b15] hover:bg-[#e4a42a]/10 hover:text-[#9e6b15]"
-                >
-                  {procesando ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Procesando…
-                    </>
-                  ) : (
-                    'Guardar parcial'
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => confirmar(true)}
-                  disabled={accionDeshabilitada}
-                  className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
-                >
-                  Cerrar pedido
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                onClick={() => confirmar(false)}
-                disabled={accionDeshabilitada}
-                className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
-              >
-                {procesando ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Procesando…
-                  </>
-                ) : (
-                  'Confirmar recepción'
-                )}
-              </Button>
-            )}
+            <Button
+              type="button"
+              onClick={confirmar}
+              disabled={accionDeshabilitada}
+              className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+            >
+              {procesando ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando…
+                </>
+              ) : (
+                'Confirmar recepción'
+              )}
+            </Button>
           </div>
         </div>
 
@@ -809,9 +793,8 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         onAutorizado={(nombre) => {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)
-          // Ya autorizado: ejecutar directamente, sin re-chequear supervisor,
-          // respetando si el operador eligió cerrar el pedido.
-          ejecutarRecepcion(cerrarTrasRecepcion.current)
+          // Ya autorizado: ejecutar directamente, sin re-chequear supervisor.
+          ejecutarRecepcion()
         }}
       />
     </Dialog>

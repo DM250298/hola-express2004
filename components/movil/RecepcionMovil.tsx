@@ -28,11 +28,7 @@ import {
 } from '@/components/ui/dialog'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { EscanerCamara } from './EscanerCamara'
-import {
-  useActualizarEstadoPedido,
-  usePedidoDetalle,
-  useRecibirPedido,
-} from '@/lib/hooks/usePedidos'
+import { usePedidoDetalle, useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { agregarItemPedido, parsearDiasCondicionPago } from '@/lib/queries/pedidos'
@@ -67,19 +63,23 @@ interface ItemEstado {
   dias_vencimiento_minimo: number | null
 }
 
-/** Una factura ya confirmada en esta entrega (una pasada = una factura). */
-interface FacturaCargada {
+/**
+ * Una factura cerrada LOCALMENTE en esta entrega. Nada viaja a la base hasta
+ * el Confirmar final: la orden se recibe completa o no se recibe (política de
+ * la empresa, sin recepción parcial).
+ */
+interface PasadaFactura {
+  ref: string
   numero: string
   unidades: number
+  items: {
+    item_id: number
+    producto_id: number
+    cantidad: number
+    precio_costo: number
+    fecha_vencimiento: string
+  }[]
 }
-
-/**
- * Qué se hace al confirmar la pasada actual:
- * - 'otra': guarda esta factura y deja la pantalla lista para la siguiente
- * - 'salir': guarda y vuelve a la lista (el faltante queda pendiente)
- * - 'cerrar': guarda, cierra el pedido aunque falte mercadería, y vuelve
- */
-type AccionConfirmar = 'otra' | 'salir' | 'cerrar'
 
 /** Datos mínimos de un producto para sumarlo a la recepción (buscado o creado). */
 interface ProdParaAgregar {
@@ -122,11 +122,16 @@ interface Props {
  * falta).
  *
  * Multi-factura: UNA FACTURA POR VEZ. Se carga el número del papel que se
- * tiene en la mano, se escanea todo lo suyo, y "Otra factura" confirma esa
- * tanda (recepción parcial, con su propia cuenta a pagar) y deja la pantalla
- * limpia para la siguiente. Cada pasada manda al RPC SOLO los renglones con
- * cantidad, para no re-imputarle a la factura nueva los renglones que ya
- * quedaron en la cuenta de una factura anterior.
+ * tiene en la mano, se escanea todo lo suyo, y "Otra factura" cierra esa
+ * tanda EN EL TELÉFONO y deja la pantalla limpia para la siguiente. Nada se
+ * graba hasta el Confirmar final: ahí viajan todas las facturas juntas en una
+ * sola llamada a `fn_recibir_pedido` (una cuenta a pagar por factura, vía
+ * `factura_ref` por renglón — el RPC acumula filas repetidas del mismo item).
+ *
+ * POLÍTICA DE LA EMPRESA (2026-08-04): la orden se recibe COMPLETA o no se
+ * recibe. El Confirmar final se bloquea si algún renglón queda por debajo de
+ * lo pedido; si el proveedor no trajo algo, un encargado ajusta la orden
+ * desde Compras (escritorio) y recién ahí se recibe.
  */
 export function RecepcionMovil({ pedidoId }: Props) {
   const router = useRouter()
@@ -134,19 +139,17 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const { data: pedido, isLoading } = usePedidoDetalle(pedidoId)
   const { data: categorias } = useCategorias()
   const recibir = useRecibirPedido()
-  const cambiarEstado = useActualizarEstadoPedido()
 
   const [itemsEstado, setItemsEstado] = useState<ItemEstado[]>([])
-  // Factura que se está cargando ahora (una por vez) + las ya confirmadas.
+  // Factura que se está cargando ahora (una por vez) + las cerradas localmente.
   const [numeroFactura, setNumeroFactura] = useState('')
-  const [facturasCargadas, setFacturasCargadas] = useState<FacturaCargada[]>([])
+  const [pasadas, setPasadas] = useState<PasadaFactura[]>([])
   const numeroFacturaInputRef = useRef<HTMLInputElement | null>(null)
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
   const [excesoAutorizado, setExcesoAutorizado] = useState(false)
   const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
   const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
   const [dialogFaltanteAbierto, setDialogFaltanteAbierto] = useState(false)
-  const accionPendiente = useRef<AccionConfirmar>('salir')
 
   // Producto activo (último escaneado): se resalta y se enfoca su campo para
   // cargar la cantidad total. El escaneo deja de ser un "+1" como protagonista.
@@ -300,31 +303,48 @@ export function RecepcionMovil({ pedidoId }: Props) {
         Number(it.cantidad_recibida) < 0)
   )
 
-  // Solo cuenta como exceso lo que ESTA pasada agrega por encima del pedido:
-  // un exceso ya recibido (y autorizado) en una factura anterior no tiene que
-  // volver a pedir clave de supervisor si ahora no se le suma nada.
+  /** Acumulado por item de las facturas cerradas localmente en esta entrega. */
+  const recibidoLocal = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const p of pasadas)
+      for (const it of p.items)
+        m.set(it.item_id, (m.get(it.item_id) ?? 0) + it.cantidad)
+    return m
+  }, [pasadas])
+
+  // Solo cuenta como exceso lo que ESTA entrega agrega por encima del pedido:
+  // un exceso ya autorizado en una recepción anterior no vuelve a pedir clave
+  // si ahora no se le suma nada.
   const itemsConExceso = useMemo(
     () =>
       itemsEstado.filter((it) => {
-        const cant = Number(it.cantidad_recibida) || 0
-        return cant > 0 && it.ya_recibido + cant > it.cantidad_pedida
+        const nuevo =
+          (recibidoLocal.get(it.item_id) ?? 0) +
+          (Number(it.cantidad_recibida) || 0)
+        return nuevo > 0 && it.ya_recibido + nuevo > it.cantidad_pedida
       }),
-    [itemsEstado]
+    [itemsEstado, recibidoLocal]
   )
   const requiereSupervisor = itemsConExceso.length > 0 && !excesoAutorizado
 
-  const unidadesFaltantes = useMemo(() => {
-    const pedidoTotal = itemsEstado.reduce(
-      (acc, it) => acc + it.cantidad_pedida,
-      0
-    )
-    const recibidoTotal = itemsEstado.reduce(
-      (acc, it) => acc + it.ya_recibido + (Number(it.cantidad_recibida) || 0),
-      0
-    )
-    return Math.max(0, pedidoTotal - recibidoTotal)
-  }, [itemsEstado])
-  const esParcial = unidadesFaltantes > 0
+  /**
+   * Renglones que todavía no llegan a lo pedido (contando lo de la base, las
+   * facturas locales y lo tipeado ahora). Con faltantes NO se puede confirmar:
+   * la orden se recibe completa o no se recibe.
+   */
+  const itemsFaltantes = useMemo(
+    () =>
+      itemsEstado.flatMap((it) => {
+        const total =
+          it.ya_recibido +
+          (recibidoLocal.get(it.item_id) ?? 0) +
+          (Number(it.cantidad_recibida) || 0)
+        const falta = it.cantidad_pedida - total
+        return falta > 0 ? [{ ...it, falta }] : []
+      }),
+    [itemsEstado, recibidoLocal]
+  )
+  const unidadesFaltantes = itemsFaltantes.reduce((a, it) => a + it.falta, 0)
 
   const itemsPorDebajoMinimo = useMemo(() => {
     return itemsEstado.flatMap((it) => {
@@ -346,20 +366,20 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const requiereAceptacion =
     itemsPorDebajoMinimo.length > 0 && !aceptaPorDebajoMin
 
-  const procesando = recibir.isPending || cambiarEstado.isPending
+  const procesando = recibir.isPending
   const accionDeshabilitada =
     procesando || hayErrores || totalUnidades <= 0 || requiereAceptacion
-  // "Terminar" se habilita con 0 u. si ya hubo facturas guardadas en pasadas
-  // anteriores (solo resuelve el estado del pedido y sale).
+  // "Confirmar" se habilita con 0 u. tipeadas si hay facturas locales
+  // cerradas (son ellas las que viajan al confirmar).
   const terminarDeshabilitado =
     procesando ||
     hayErrores ||
     requiereAceptacion ||
-    (totalUnidades <= 0 && facturasCargadas.length === 0)
+    (totalUnidades <= 0 && pasadas.length === 0)
 
   /**
-   * El N° de factura es OBLIGATORIO en toda pasada que registre mercadería:
-   * por política de la empresa no quedan facturas a medias (deudas sin
+   * El N° de factura es OBLIGATORIO en toda factura con mercadería: por
+   * política de la empresa no quedan facturas a medias (deudas sin
    * identificar que después no se pueden matchear con el papel).
    */
   function validarNumeroFactura(): boolean {
@@ -369,118 +389,116 @@ export function RecepcionMovil({ pedidoId }: Props) {
       numeroFacturaInputRef.current?.focus()
       return false
     }
-    if (facturasCargadas.some((f) => f.numero === num)) {
+    if (pasadas.some((p) => p.numero === num)) {
       toast.error(`La factura ${num} ya se cargó en esta entrega.`)
       return false
     }
     return true
   }
 
-  function confirmar(accion: AccionConfirmar) {
-    if (!usuario || hayErrores || !pedido?.proveedor) return
+  /**
+   * "Otra factura": cierra la factura actual EN EL TELÉFONO (todavía no se
+   * graba nada) y deja la pantalla limpia para la siguiente. Todo viaja junto
+   * en el Confirmar final.
+   */
+  function cerrarFacturaLocal() {
+    if (hayErrores || totalUnidades <= 0) return
     if (!validarNumeroFactura()) return
-    accionPendiente.current = accion
+    const numero = numeroFactura.trim()
+    const items = itemsEstado
+      .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
+      .map((it) => ({
+        item_id: it.item_id,
+        producto_id: it.producto_id,
+        cantidad: Number(it.cantidad_recibida),
+        precio_costo: it.precio_costo,
+        fecha_vencimiento: it.fecha_vencimiento,
+      }))
+    setPasadas((prev) => [
+      ...prev,
+      { ref: `f${prev.length + 1}`, numero, unidades: totalUnidades, items },
+    ])
+    setNumeroFactura('')
+    setActivoId(null)
+    setAceptaPorDebajoMin(false)
+    setItemsEstado((prev) =>
+      prev.map((it) => ({
+        ...it,
+        cantidad_recibida: '',
+        fecha_vencimiento: '',
+      }))
+    )
+    toast.success(
+      `Factura ${numero} lista (${formatearNumero(
+        Math.round(totalUnidades * 1000) / 1000
+      )} u.). Cargá la siguiente — se confirma todo al final.`
+    )
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    numeroFacturaInputRef.current?.focus()
+  }
+
+  /**
+   * Confirmar final: exige la orden COMPLETA (sin recepción parcial, por
+   * política) y recién ahí graba todas las facturas juntas, en una sola
+   * transacción de `fn_recibir_pedido`.
+   */
+  function confirmarTodo() {
+    if (!usuario || hayErrores || !pedido?.proveedor) return
+    if (totalUnidades > 0 && !validarNumeroFactura()) return
+    if (itemsFaltantes.length > 0) {
+      setDialogFaltanteAbierto(true)
+      return
+    }
     if (requiereSupervisor) {
       setModalSupervisorAbierto(true)
       return
     }
-    ejecutarRecepcion(accion)
+    ejecutarRecepcion()
   }
 
-  function ejecutarRecepcion(accion: AccionConfirmar) {
+  function ejecutarRecepcion() {
     if (!usuario || !pedido?.proveedor) return
-    const numero = numeroFactura.trim()
-    const unidades = totalUnidades
+    const refActual = `f${pasadas.length + 1}`
+    const numeroActual = numeroFactura.trim()
+    // Una fila por (factura, renglón con cantidad): el RPC acumula filas
+    // repetidas del mismo item y arma una cuenta a pagar por factura_ref.
+    const items = [
+      ...pasadas.flatMap((p) =>
+        p.items.map((it) => ({
+          item_id: it.item_id,
+          producto_id: it.producto_id,
+          cantidad_recibida: it.cantidad,
+          precio_costo: it.precio_costo,
+          fecha_vencimiento: it.fecha_vencimiento || null,
+          factura_ref: p.ref,
+          numero_factura: p.numero,
+        }))
+      ),
+      ...itemsEstado
+        .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
+        .map((it) => ({
+          item_id: it.item_id,
+          producto_id: it.producto_id,
+          cantidad_recibida: Number(it.cantidad_recibida),
+          precio_costo: it.precio_costo,
+          fecha_vencimiento: it.fecha_vencimiento || null,
+          factura_ref: refActual,
+          numero_factura: numeroActual || null,
+        })),
+    ]
+    if (items.length === 0) return
     recibir.mutate(
       {
         pedido_id: pedido.id,
         proveedor_id: pedido.proveedor.id,
         usuario_id: usuario.id,
         condicion_pago_dias: condicionDias,
-        silenciarToasts: accion === 'otra',
-        // SOLO los renglones con cantidad: los de facturas ya confirmadas no
-        // viajan de nuevo, así el RPC no les re-imputa la cuenta a esta factura.
-        items: itemsEstado
-          .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
-          .map((it) => ({
-            item_id: it.item_id,
-            producto_id: it.producto_id,
-            cantidad_recibida: Number(it.cantidad_recibida),
-            precio_costo: it.precio_costo,
-            fecha_vencimiento: it.fecha_vencimiento || null,
-            factura_ref: 'f1',
-            numero_factura: numero || null,
-          })),
+        items,
       },
       {
-        onSuccess: (resultado) => {
-          if (accion === 'otra') {
-            // La factura quedó guardada: pantalla limpia para la siguiente.
-            setFacturasCargadas((prev) => [...prev, { numero, unidades }])
-            setNumeroFactura('')
-            setActivoId(null)
-            setAceptaPorDebajoMin(false)
-            setExcesoAutorizado(false)
-            setAutorizadoPor(null)
-            setItemsEstado((prev) =>
-              prev.map((it) => ({
-                ...it,
-                ya_recibido: it.ya_recibido + (Number(it.cantidad_recibida) || 0),
-                cantidad_recibida: '',
-                fecha_vencimiento: '',
-              }))
-            )
-            toast.success(
-              `Factura ${numero} guardada (${formatearNumero(
-                Math.round(unidades * 1000) / 1000
-              )} u.). Cargá la siguiente.`
-            )
-            window.scrollTo({ top: 0, behavior: 'smooth' })
-            numeroFacturaInputRef.current?.focus()
-            return
-          }
-          if (accion === 'cerrar' && resultado.es_parcial) {
-            cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
-          }
-          router.push('/movil/recepcion')
-        },
+        onSuccess: () => router.push('/movil/recepcion'),
       }
     )
-  }
-
-  /**
-   * Botón principal. Si falta mercadería del pedido, primero pregunta qué
-   * hacer con el faltante (queda pendiente vs. cerrar igual). Con todo ya
-   * guardado en pasadas anteriores (0 u. cargadas ahora) solo resuelve estado
-   * y sale, sin llamar al RPC de gusto.
-   */
-  function terminar() {
-    // Validar el N° ANTES del diálogo de faltante (con 0 u. no se registra
-    // nada nuevo, así que ahí no hace falta factura).
-    if (totalUnidades > 0 && !validarNumeroFactura()) return
-    if (esParcial) {
-      setDialogFaltanteAbierto(true)
-      return
-    }
-    if (totalUnidades <= 0) {
-      router.push('/movil/recepcion')
-      return
-    }
-    confirmar('salir')
-  }
-
-  /** Elección del diálogo de faltante. */
-  function resolverFaltante(accion: 'salir' | 'cerrar') {
-    setDialogFaltanteAbierto(false)
-    if (totalUnidades <= 0) {
-      // No hay nada nuevo que guardar: las pasadas anteriores ya registraron todo.
-      if (accion === 'cerrar' && pedido) {
-        cambiarEstado.mutate({ id: pedido.id, estado: 'recibido' })
-      }
-      router.push('/movil/recepcion')
-      return
-    }
-    confirmar(accion)
   }
 
   /** Suma un producto (ya existente en el catálogo) a esta recepción. */
@@ -693,22 +711,22 @@ export function RecepcionMovil({ pedidoId }: Props) {
         />
       </div>
 
-      {/* Factura que se está cargando (una por vez) + las ya guardadas */}
+      {/* Factura que se está cargando (una por vez) + las cerradas localmente */}
       <div className="mb-4">
-        {facturasCargadas.length > 0 && (
+        {pasadas.length > 0 && (
           <ul className="mb-2 space-y-1">
-            {facturasCargadas.map((f, idx) => (
+            {pasadas.map((p) => (
               <li
-                key={idx}
-                className="flex items-center gap-2 rounded-lg border border-[#2f7d4f]/30 bg-[#2f7d4f]/10 px-3 py-1.5 text-xs text-[#2f7d4f]"
+                key={p.ref}
+                className="flex items-center gap-2 rounded-lg border border-[#f9b44c]/50 bg-[#f9b44c]/10 px-3 py-1.5 text-xs text-[#6f3a2a]"
               >
-                <Check className="h-3.5 w-3.5 shrink-0" />
-                <span className="min-w-0 truncate font-semibold">
-                  Factura {f.numero}
+                <Check className="h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
+                <span className="min-w-0 truncate font-semibold text-[#391511]">
+                  Factura {p.numero}
                 </span>
                 <span className="ml-auto shrink-0 tabular-nums">
-                  {formatearNumero(Math.round(f.unidades * 1000) / 1000)} u.
-                  guardadas
+                  {formatearNumero(Math.round(p.unidades * 1000) / 1000)} u. ·
+                  lista
                 </span>
               </li>
             ))}
@@ -716,8 +734,8 @@ export function RecepcionMovil({ pedidoId }: Props) {
         )}
 
         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
-          {facturasCargadas.length > 0
-            ? `Factura ${facturasCargadas.length + 1} de esta entrega`
+          {pasadas.length > 0
+            ? `Factura ${pasadas.length + 1} de esta entrega`
             : 'Factura de esta entrega'}
         </p>
         <Input
@@ -730,6 +748,8 @@ export function RecepcionMovil({ pedidoId }: Props) {
         <p className="mt-1.5 text-[11px] leading-snug text-[#6f3a2a]">
           ¿Vinieron varias facturas? Cargá los productos de <strong>una</strong>,
           tocá <strong>Otra factura</strong> abajo, y seguí con la siguiente.
+          Nada se guarda hasta el <strong>Confirmar</strong> final, con la orden
+          completa.
         </p>
       </div>
 
@@ -743,7 +763,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
       <ul className="space-y-2">
         {itemsEstado.map((it) => {
           const cantNum = Number(it.cantidad_recibida) || 0
-          const diferencia = it.ya_recibido + cantNum - it.cantidad_pedida
+          // "Ya recibido" junta lo de la base con las facturas locales.
+          const yaTotal = it.ya_recibido + (recibidoLocal.get(it.item_id) ?? 0)
+          const diferencia = yaTotal + cantNum - it.cantidad_pedida
           const activo = it.item_id === activoId
           return (
             <li
@@ -770,12 +792,12 @@ export function RecepcionMovil({ pedidoId }: Props) {
                     <span className="font-semibold tabular-nums">
                       {formatearCantidad(it.cantidad_pedida, it.venta_por_peso)}
                     </span>
-                    {it.ya_recibido > 0 && (
+                    {yaTotal > 0 && (
                       <>
                         {' '}
                         · ya recibido{' '}
                         <span className="font-semibold tabular-nums">
-                          {formatearCantidad(it.ya_recibido, it.venta_por_peso)}
+                          {formatearCantidad(yaTotal, it.venta_por_peso)}
                         </span>
                       </>
                     )}
@@ -899,7 +921,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         <div className="mx-auto flex max-w-md items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-              {facturasCargadas.length > 0
+              {pasadas.length > 0
                 ? 'Esta factura'
                 : itemsEstado.some((it) => it.ya_recibido > 0)
                   ? 'Esta entrega'
@@ -913,7 +935,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
             <Button
               type="button"
               variant="outline"
-              onClick={() => confirmar('otra')}
+              onClick={cerrarFacturaLocal}
               disabled={accionDeshabilitada}
               className="h-12 border-[#e4a42a]/60 px-3 text-[#9e6b15]"
             >
@@ -922,7 +944,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
             </Button>
             <Button
               type="button"
-              onClick={terminar}
+              onClick={confirmarTodo}
               disabled={terminarDeshabilitado}
               className="h-12 bg-[#f9b44c] px-4 font-semibold text-[#391511] hover:bg-[#e4a42a]"
             >
@@ -931,10 +953,10 @@ export function RecepcionMovil({ pedidoId }: Props) {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   …
                 </>
-              ) : totalUnidades > 0 ? (
-                'Confirmar'
+              ) : pasadas.length > 0 ? (
+                'Confirmar todo'
               ) : (
-                'Terminar'
+                'Confirmar'
               )}
             </Button>
           </div>
@@ -948,11 +970,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
         onAutorizado={(nombre) => {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)
-          ejecutarRecepcion(accionPendiente.current)
+          ejecutarRecepcion()
         }}
       />
 
-      {/* Diálogo: quedó mercadería sin recibir — ¿pendiente o cerrar? */}
+      {/* Diálogo BLOQUEANTE: la orden se recibe completa o no se recibe */}
       <Dialog
         open={dialogFaltanteAbierto}
         onOpenChange={setDialogFaltanteAbierto}
@@ -960,37 +982,46 @@ export function RecepcionMovil({ pedidoId }: Props) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[#391511]">
-              <AlertTriangle className="h-5 w-5 text-[#9e6b15]" />
-              Falta mercadería del pedido
+              <AlertTriangle className="h-5 w-5 text-[#c43e2c]" />
+              No se puede recibir incompleta
             </DialogTitle>
             <DialogDescription className="text-[#6f3a2a]">
-              Quedan{' '}
+              La orden se recibe <strong>completa</strong> o no se recibe
+              (política de la empresa). Faltan{' '}
               <strong className="tabular-nums">
                 {formatearNumero(Math.round(unidadesFaltantes * 1000) / 1000)} u.
-              </strong>{' '}
-              sin recibir. Lo que cargaste se guarda igual — elegí qué pasa con
-              el faltante:
+              </strong>
+              :
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Button
-              type="button"
-              onClick={() => resolverFaltante('salir')}
-              disabled={procesando}
-              className="h-12 w-full bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
-            >
-              Llega en otra entrega — dejarlo pendiente
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => resolverFaltante('cerrar')}
-              disabled={procesando}
-              className="h-12 w-full border-[#e4c9b0] text-[#6f3a2a]"
-            >
-              No llega más — cerrar el pedido igual
-            </Button>
-          </div>
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] p-2 text-xs text-[#391511]">
+            {itemsFaltantes.slice(0, 6).map((it) => (
+              <li key={it.item_id} className="flex items-center justify-between gap-2">
+                <span className="min-w-0 truncate font-medium">{it.nombre}</span>
+                <span className="shrink-0 tabular-nums text-[#c43e2c]">
+                  faltan {formatearCantidad(it.falta, it.venta_por_peso)}
+                </span>
+              </li>
+            ))}
+            {itemsFaltantes.length > 6 && (
+              <li className="pt-1 text-[#6f3a2a]">
+                …y {itemsFaltantes.length - 6} producto
+                {itemsFaltantes.length - 6 === 1 ? '' : 's'} más
+              </li>
+            )}
+          </ul>
+          <p className="text-xs leading-snug text-[#6f3a2a]">
+            Cargá lo que falta y volvé a confirmar. Si el proveedor no lo trajo,
+            un encargado tiene que <strong>ajustar la orden</strong> desde
+            Compras en la compu, y después la recibís completa.
+          </p>
+          <Button
+            type="button"
+            onClick={() => setDialogFaltanteAbierto(false)}
+            className="h-12 w-full bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
+          >
+            Entendido
+          </Button>
         </DialogContent>
       </Dialog>
 
