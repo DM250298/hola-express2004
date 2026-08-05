@@ -45,3 +45,24 @@ export async function updateProveedor(
   if (error) throw error
   return data
 }
+
+/**
+ * Completa el CUIT de la ficha del proveedor SOLO si todavía no tiene uno.
+ * Lo usa la carga de factura: el CUIT que tipea administración queda guardado
+ * para que la próxima factura de ese proveedor venga precargada. El filtro
+ * `is('cuit', null)` hace la condición en el server, así nunca pisa un CUIT
+ * cargado (aunque el cache del cliente esté desactualizado).
+ */
+export async function completarCuitProveedor(
+  id: number,
+  cuit: string
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('proveedores')
+    .update({ cuit })
+    .eq('id', id)
+    .is('cuit', null)
+
+  if (error) throw error
+}

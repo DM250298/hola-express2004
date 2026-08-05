@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileText, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ import {
 } from '@/lib/hooks/useFacturasCompra'
 import { usePricing } from '@/lib/hooks/usePricing'
 import { calcularLinea } from '@/lib/queries/facturasCompra'
+import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
 
@@ -61,8 +62,14 @@ interface LineaFactura {
   iva_compra: string
   margen: string
   iva_venta: string
-  /** Vencimiento a corregir en el lote (opcional, ISO). Vacío = no tocar. */
-  vencimiento: string
+  /**
+   * Qué campo manda en el lado venta de ESTA fila:
+   *  · 'margen' → el motor calcula el precio (y lo redondea al múltiplo de arriba)
+   *  · 'precio' → el precio tipeado se respeta tal cual y el margen se deduce
+   */
+  modoVenta: 'margen' | 'precio'
+  /** Precio final CON IVA tipeado a mano. Solo manda en modo 'precio'. */
+  precio: string
 }
 
 type CampoEditable =
@@ -72,7 +79,6 @@ type CampoEditable =
   | 'iva_compra'
   | 'margen'
   | 'iva_venta'
-  | 'vencimiento'
 
 const DEFAULTS = {
   descuento: '0',
@@ -117,7 +123,9 @@ function cuitValido(s: string): boolean {
 }
 
 const CABECERA_DEFAULT: CabeceraState = {
-  tipo_comprobante: 'A',
+  // Vacío a propósito: lo completa el proveedor de la cuenta según su condición
+  // de IVA (ver tipoDesdeCondicionIva); si no hay dato, cae a 'A'.
+  tipo_comprobante: '',
   punto_venta: '',
   numero_comprobante: '',
   cae: '',
@@ -172,54 +180,57 @@ function CampoNumero({
 }
 
 /**
- * Bajo el nombre de cada renglón del pedido: muestra lo RECIBIDO (y avisa si la
- * cantidad facturada difiere → la factura ajustará el stock por esa diferencia)
- * y permite corregir el vencimiento del lote. No aplica a productos extra.
+ * Bajo el nombre de cada renglón del pedido: muestra lo RECIBIDO y avisa si la
+ * cantidad facturada difiere → la factura ajustará el stock por esa diferencia.
+ * No aplica a productos extra. (El vencimiento se carga en la recepción, que es
+ * donde se tiene la mercadería a la vista; acá no se toca.)
  */
 function InfoLineaRecepcion({
   recibida,
   cantidad,
   esExtra,
-  vencimiento,
-  onVencimiento,
 }: {
   recibida: number | null
   cantidad: string
   esExtra: boolean
-  vencimiento: string
-  onVencimiento: (v: string) => void
 }) {
-  if (esExtra) return null
-  const difiere = recibida != null && Number(cantidad) !== recibida
+  if (esExtra || recibida == null) return null
+  const difiere = Number(cantidad) !== recibida
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-      {recibida != null && (
-        <span
-          className={`text-[10px] font-medium ${
-            difiere ? 'text-[#c43e2c]' : 'text-[#c8a58a]'
-          }`}
-          title={
-            difiere
-              ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
-              : undefined
-          }
-        >
-          Recibido: {recibida}
-          {difiere ? ' · ajusta stock' : ''}
-        </span>
-      )}
-      <label className="flex items-center gap-1 text-[10px] text-[#6f3a2a]">
-        <span className="text-[#c8a58a]">Vto.</span>
-        <Input
-          type="date"
-          value={vencimiento}
-          onChange={(e) => onVencimiento(e.target.value)}
-          title="Corregir el vencimiento del lote (opcional)"
-          className="h-7 w-[9.5rem] border-[#e4c9b0] bg-white px-1.5 text-[11px] tabular-nums"
-        />
-      </label>
+    <div className="mt-1">
+      <span
+        className={`text-[10px] font-medium ${
+          difiere ? 'text-[#c43e2c]' : 'text-[#c8a58a]'
+        }`}
+        title={
+          difiere
+            ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
+            : undefined
+        }
+      >
+        Recibido: {recibida}
+        {difiere ? ' · ajusta stock' : ''}
+      </span>
     </div>
   )
+}
+
+/**
+ * Letra de comprobante que suele emitir un proveedor según su condición frente
+ * al IVA (el receptor, Hola Express, es responsable inscripto). Es solo un
+ * default editable: el administrativo puede cambiarlo si la factura dice otra.
+ */
+function tipoDesdeCondicionIva(cond: string | null | undefined): string {
+  switch (cond) {
+    case 'responsable_inscripto':
+      return 'A'
+    case 'monotributo':
+    case 'exento':
+    case 'consumidor_final':
+      return 'C'
+    default:
+      return 'A'
+  }
 }
 
 export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) {
@@ -290,10 +301,35 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   //  · Con factura guardada → reconstruir lo que se había facturado.
   //  · Sin factura → SOLO los productos efectivamente recibidos (lo que el
   //    proveedor entregó); el resto se agrega a mano con el buscador.
+  //
+  // Guard de una-init-por-apertura: sin él, cualquier query que resuelva tarde
+  // vuelve a disparar el effect y pisa lo que el administrativo ya tipeó.
+  const initRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!abierto || cargando) return
+    if (!abierto) {
+      initRef.current = null
+      return
+    }
+    if (cargando || pricing.cargando) return
+    const claveInit = `c${cuenta?.id ?? 0}`
+    if (initRef.current === claveInit) return
+    initRef.current = claveInit
     let nuevas: LineaFactura[]
     if (facturaGuardada && facturaGuardada.items.length > 0) {
+      // Factor de gastos con el que se guardó esta factura: hace falta para
+      // reconstruir el costo landed y detectar si el precio guardado fue puesto
+      // a mano (no coincide con el que sale del margen).
+      const netoGuardado = facturaGuardada.items.reduce((acc, g) => {
+        const neto = r2(
+          Number(g.costo_sin_iva) * (1 - Number(g.descuento_porcentaje) / 100)
+        )
+        return acc + neto * Number(g.cantidad)
+      }, 0)
+      const gastosGuardados = Number(
+        facturaGuardada.factura.gastos_no_debitables ?? 0
+      )
+      const factorGuardado =
+        netoGuardado > 0 ? 1 + gastosGuardados / netoGuardado : 1
       // Las facturas de este flujo siempre tienen producto (las líneas sin
       // producto son solo de la compra directa, que no se edita acá).
       nuevas = facturaGuardada.items
@@ -302,22 +338,45 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         )
         .map((g) => {
           const it = items.find((i) => i.producto_id === g.producto_id)
-        return {
-          key: `prod-${g.producto_id}`,
-          item_pedido_id: it?.id ?? null,
-          producto_id: g.producto_id,
-          nombre: it?.producto?.nombre ?? `Producto #${g.producto_id}`,
-          codigo_barras: it?.producto?.codigo_barras ?? null,
-          cantidad_recibida: it?.cantidad_recibida ?? null,
-          cantidad: String(g.cantidad),
-          costo: String(g.costo_sin_iva),
-          descuento: String(g.descuento_porcentaje),
-          iva_compra: String(g.iva_compra_porcentaje),
-          margen: String(g.margen_porcentaje),
-          iva_venta: String(g.iva_venta_porcentaje),
-          vencimiento: '',
-        }
-      })
+          // ¿El precio guardado salió del margen o lo puso alguien a mano?
+          // Mismo criterio que el drawer de producto: si difiere del que
+          // recalcula el motor, la línea vuelve en modo precio con el valor
+          // GUARDADO (nunca el recalculado, que subiría por el redondeo).
+          const costoLanded = r2(
+            r2(
+              Number(g.costo_sin_iva) *
+                (1 - Number(g.descuento_porcentaje) / 100)
+            ) * factorGuardado
+          )
+          const recalc = pricing.calcular(
+            costoLanded,
+            Number(g.margen_porcentaje) || 0,
+            Number(g.iva_venta_porcentaje) || 0
+          )
+          const precioGuardado = Number(g.precio_con_iva) || 0
+          const esPrecioManual =
+            recalc.desglose != null &&
+            precioGuardado > 0 &&
+            Math.abs(precioGuardado - recalc.desglose.precioRedondeado) > 0.5
+          return {
+            key: `prod-${g.producto_id}`,
+            item_pedido_id: it?.id ?? null,
+            producto_id: g.producto_id,
+            nombre: it?.producto?.nombre ?? `Producto #${g.producto_id}`,
+            codigo_barras: it?.producto?.codigo_barras ?? null,
+            cantidad_recibida: it?.cantidad_recibida ?? null,
+            cantidad: String(g.cantidad),
+            costo: String(g.costo_sin_iva),
+            descuento: String(g.descuento_porcentaje),
+            iva_compra: String(g.iva_compra_porcentaje),
+            margen: String(g.margen_porcentaje),
+            iva_venta: String(g.iva_venta_porcentaje),
+            modoVenta: (esPrecioManual ? 'precio' : 'margen') as
+              | 'margen'
+              | 'precio',
+            precio: esPrecioManual ? String(precioGuardado) : '',
+          }
+        })
     } else {
       // Solo los renglones imputados a ESTA factura/deuda (multi-factura).
       // Fallback para pedidos viejos (pre multi-factura): si ningún renglón tiene
@@ -347,7 +406,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           costo: String(it.precio_costo || 0),
           ...DEFAULTS,
           margen: margenInicial(it.producto_id),
-          vencimiento: '',
+          modoVenta: 'margen' as const,
+          precio: '',
         }))
     }
     setLineas(nuevas)
@@ -356,11 +416,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
       const f = facturaGuardada.factura
       setCab({
-        tipo_comprobante: f.tipo_comprobante ?? 'A',
+        tipo_comprobante: f.tipo_comprobante ?? '',
         punto_venta: f.punto_venta ?? '',
         numero_comprobante: f.numero_comprobante ?? '',
         cae: f.cae ?? '',
-        cuit_proveedor: f.cuit_proveedor || proveedorCuenta?.cuit || '',
+        cuit_proveedor: f.cuit_proveedor ?? '',
         fecha_emision: f.fecha ?? hoyIso(),
       })
       setPercepciones({
@@ -372,19 +432,50 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         f.gastos_no_debitables ? String(f.gastos_no_debitables) : ''
       )
     } else {
-      setCab({
-        ...CABECERA_DEFAULT,
-        cuit_proveedor: proveedorCuenta?.cuit ?? '',
-      })
+      // Tipo y CUIT quedan vacíos a propósito: los completa el effect de abajo
+      // con los datos de la ficha del proveedor, sin pisar nada tipeado.
+      setCab({ ...CABECERA_DEFAULT })
       setPercepciones({ iibb: '', iva: '', otros: '' })
       setGastosNoDebitables('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierto, cargando, facturaGuardada, proveedorCuenta?.cuit])
+  }, [abierto, cargando, pricing.cargando, facturaGuardada, cuenta?.id])
+
+  // Autocompleta la cabecera con los datos de la ficha del proveedor. Va en un
+  // effect aparte y solo RELLENA LO VACÍO: la ficha puede resolver después de
+  // que el administrativo ya empezó a tipear, y nunca tiene que pisarlo.
+  useEffect(() => {
+    if (!abierto || !proveedorCuenta) return
+    setCab((prev) => ({
+      ...prev,
+      cuit_proveedor: prev.cuit_proveedor || proveedorCuenta.cuit || '',
+      tipo_comprobante:
+        prev.tipo_comprobante ||
+        tipoDesdeCondicionIva(proveedorCuenta.condicion_iva),
+    }))
+  }, [abierto, proveedorCuenta])
 
   function setLineaCampo(key: string, campo: CampoEditable, valor: string) {
     setLineas((prev) =>
       prev.map((l) => (l.key === key ? { ...l, [campo]: valor } : l))
+    )
+  }
+
+  /** Tocar el margen hace que ESTE campo mande: el precio vuelve a calcularse. */
+  function setMargenLinea(key: string, valor: string) {
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.key === key ? { ...l, margen: valor, modoVenta: 'margen' } : l
+      )
+    )
+  }
+
+  /** Tipear el precio lo fija: se respeta tal cual y el margen se deduce. */
+  function setPrecioLinea(key: string, valor: string) {
+    setLineas((prev) =>
+      prev.map((l) =>
+        l.key === key ? { ...l, precio: valor, modoVenta: 'precio' } : l
+      )
     )
   }
 
@@ -422,7 +513,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         costo: String((it?.precio_costo ?? p.precio_costo ?? 0) || 0),
         ...DEFAULTS,
         margen: margenInicial(p.id),
-        vencimiento: '',
+        modoVenta: 'margen' as const,
+        precio: '',
       },
     ])
     setBusqueda('')
@@ -471,19 +563,56 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       },
       factorGastos
     )
-    // Precio de venta con el MOTOR (margen asegurado neto de IIBB + imp.
-    // créd/déb + comisión MP), sobre el costo ya prorrateado — espejo de lo
-    // que guarda el RPC vía fn_precio_venta (migración 109).
+    // Lado venta, dos vías (espejo del RPC v13, mig 138):
+    //  · modo margen → el MOTOR calcula el precio (margen asegurado neto de
+    //    IIBB + imp. créd/déb + comisión MP) y lo redondea al múltiplo de arriba.
+    //  · modo precio → el precio tipeado manda y se DEDUCE el margen real.
+    if (l.modoVenta === 'precio') {
+      const precioFinal = Number(l.precio) || 0
+      const inv = pricing.calcularDesdePrecio(
+        precioFinal,
+        calc.costoFinal,
+        Number(l.iva_venta) || 0
+      )
+      // `desglose.margen` viene como FRACCIÓN (y es null si el costo es 0).
+      const margenPct =
+        inv.desglose?.margen != null ? r2(inv.desglose.margen * 100) : null
+      const error =
+        inv.error ??
+        (precioFinal <= 0
+          ? 'Poné un precio, o tocá el margen para volver al automático.'
+          : margenPct == null
+            ? 'Sin costo no se puede deducir el margen de ese precio.'
+            : null)
+      return {
+        l,
+        calc,
+        cantidad,
+        venta: null,
+        precioFinal,
+        margenPct,
+        error,
+      }
+    }
     const venta = pricing.calcular(
       calc.costoFinal,
       Number(l.margen) || 0,
       Number(l.iva_venta) || 0
     )
-    return { l, calc, venta, cantidad }
+    return {
+      l,
+      calc,
+      cantidad,
+      venta,
+      precioFinal: venta.desglose?.precioRedondeado ?? 0,
+      margenPct: Number(l.margen) || 0,
+      error: venta.error,
+    }
   })
-  // Con un divisor inválido (cargas > 100%) el RPC rechazaría la factura:
-  // se bloquea el guardado y se muestra el error en la línea.
-  const hayErrorPrecio = calculadas.some((c) => c.venta.error !== null)
+  // Con un divisor inválido (cargas > 100%), un precio vacío o un costo 0 en
+  // modo precio, el par precio/margen no cierra: se bloquea el guardado y se
+  // muestra el error en la línea.
+  const hayErrorPrecio = calculadas.some((c) => c.error !== null)
 
   const totales = calculadas.reduce(
     (acc, { calc, cantidad }) => {
@@ -519,7 +648,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     }
     if (hayErrorPrecio) {
       toast.error(
-        'No se puede calcular el precio de venta (revisá las tasas en la configuración fiscal / medios de pago).'
+        'Revisá el precio de venta de las líneas marcadas en rojo.'
       )
       return
     }
@@ -544,16 +673,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           cae: limpio(cab.cae),
           cuit_proveedor: limpio(cab.cuit_proveedor),
         },
-        lineas: calculadas.map(({ l, cantidad }) => ({
+        lineas: calculadas.map(({ l, cantidad, margenPct }) => ({
           item_pedido_id: l.item_pedido_id,
           producto_id: l.producto_id,
           cantidad,
           costo_sin_iva: Number(l.costo) || 0,
           descuento_porcentaje: Number(l.descuento) || 0,
           iva_compra_porcentaje: Number(l.iva_compra) || 0,
-          margen_porcentaje: Number(l.margen) || 0,
+          // En modo precio manda el precio: el margen viaja informativo (el
+          // RPC lo re-deduce del precio, que es la fuente de verdad).
+          margen_porcentaje: margenPct ?? 0,
           iva_venta_porcentaje: Number(l.iva_venta) || 0,
-          fecha_vencimiento: l.vencimiento || null,
+          precio_venta:
+            l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
         })),
       },
       { onSuccess: () => onCambioAbierto(false) }
@@ -614,13 +746,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </label>
           </div>
           <p className="text-[11px] text-[#c8a58a] -mt-2">
-            El precio de venta asegura el margen después de IIBB, imp.
-            créd/déb y la comisión de Mercado Pago (peor caso), y se redondea
-            para arriba
+            Poné el <strong>margen</strong> y el precio se calcula solo
+            (asegura el margen después de IIBB, imp. créd/déb y la comisión de
+            Mercado Pago —peor caso—, y redondea para arriba
             {pricing.config
               ? ` a múltiplos de $${pricing.config.redondeoMultiplo}`
               : ''}
-            . El margen viene precargado del que tiene cada producto.
+            ), o tipeá el <strong>precio de venta</strong> que querés y el
+            margen real se deduce solo.
           </p>
 
           {/* Comprobante escaneado en la recepción (se puede agregar más acá) */}
@@ -782,7 +915,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             {/* Mobile (< md): cada línea como tarjeta apilada, compra arriba y
                 venta abajo, para no tener que hacer scroll horizontal. */}
             <div className="space-y-3 md:hidden">
-              {calculadas.map(({ l, calc, venta, cantidad }) => (
+              {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, error }) => (
                 <div
                   key={l.key}
                   className="overflow-hidden rounded-xl border border-[#e4c9b0] bg-white"
@@ -812,10 +945,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         recibida={l.cantidad_recibida}
                         cantidad={l.cantidad}
                         esExtra={l.item_pedido_id === null}
-                        vencimiento={l.vencimiento}
-                        onVencimiento={(v) =>
-                          setLineaCampo(l.key, 'vencimiento', v)
-                        }
                       />
                     </div>
                     <div className="flex shrink-0 items-center">
@@ -906,9 +1035,30 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     </span>
                     <div className="grid grid-cols-2 gap-2.5">
                       <CampoNumero
-                        label="Margen %"
-                        value={l.margen}
-                        onChange={(v) => setLineaCampo(l.key, 'margen', v)}
+                        label={
+                          l.modoVenta === 'precio' ? 'Margen % (real)' : 'Margen %'
+                        }
+                        value={
+                          l.modoVenta === 'margen'
+                            ? l.margen
+                            : margenPct != null
+                              ? String(margenPct)
+                              : ''
+                        }
+                        onChange={(v) => setMargenLinea(l.key, v)}
+                      />
+                      <CampoNumero
+                        label="Precio venta $"
+                        value={
+                          l.modoVenta === 'precio'
+                            ? l.precio
+                            : venta?.desglose
+                              ? String(venta.desglose.precioRedondeado)
+                              : ''
+                        }
+                        onChange={(v) => setPrecioLinea(l.key, v)}
+                        min="0"
+                        step="0.01"
                       />
                       <CampoNumero
                         label="IVA venta %"
@@ -917,16 +1067,33 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         min="0"
                       />
                     </div>
-                    {venta.error ? (
+                    {error ? (
                       <p className="mt-2.5 border-t border-[#e4c9b0]/60 pt-2 text-xs text-[#c43e2c]">
-                        {venta.error}
+                        {error}
                       </p>
+                    ) : l.modoVenta === 'precio' ? (
+                      <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
+                        <span className="text-[#6f3a2a]">
+                          Precio fijado a mano
+                        </span>
+                        <span
+                          className={
+                            (margenPct ?? 0) < 0
+                              ? 'font-semibold text-[#c43e2c]'
+                              : 'font-semibold text-[#2f7d4f]'
+                          }
+                        >
+                          {(margenPct ?? 0) < 0
+                            ? `Margen ${margenPct}% · vendés abajo del costo`
+                            : `Margen real ${margenPct}%`}
+                        </span>
+                      </div>
                     ) : (
                       <>
                         <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
                           <span className="text-[#6f3a2a]">Precio exacto</span>
                           <span className="font-medium text-[#6f3a2a]">
-                            {venta.desglose ? (
+                            {venta?.desglose ? (
                               <MontoARS monto={venta.desglose.precioFinalExacto} />
                             ) : (
                               '…'
@@ -938,11 +1105,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             Precio venta
                           </span>
                           <span className="font-bold text-[#391511]">
-                            {venta.desglose ? (
-                              <MontoARS monto={venta.desglose.precioRedondeado} />
-                            ) : (
-                              '…'
-                            )}
+                            <MontoARS monto={precioFinal} />
                           </span>
                         </div>
                       </>
@@ -998,14 +1161,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <th className="p-1.5 font-medium">IVA %</th>
                     <th
                       className="p-1.5 font-medium"
-                      title="Precio final redondeado hacia arriba — es el que se guarda en el producto"
+                      title="Editable: tipeá el precio que querés y el margen se deduce solo. Si no lo tocás, sale del margen (redondeado hacia arriba)."
                     >
-                      Precio venta
+                      Precio venta ✎
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {calculadas.map(({ l, calc, venta, cantidad }) => (
+                  {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, error }) => (
                     <tr
                       key={l.key}
                       className="border-b border-[#e4c9b0]/40 bg-white"
@@ -1052,10 +1215,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                               recibida={l.cantidad_recibida}
                               cantidad={l.cantidad}
                               esExtra={l.item_pedido_id === null}
-                              vencimiento={l.vencimiento}
-                              onVencimiento={(v) =>
-                                setLineaCampo(l.key, 'vencimiento', v)
-                              }
                             />
                           </div>
                         </div>
@@ -1120,20 +1279,44 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       <td className="p-1 w-16">
                         <Input
                           type="number"
-                          value={l.margen}
-                          onChange={(ev) =>
-                            setLineaCampo(l.key, 'margen', ev.target.value)
+                          value={
+                            l.modoVenta === 'margen'
+                              ? l.margen
+                              : margenPct != null
+                                ? String(margenPct)
+                                : ''
                           }
-                          className={inputCls}
+                          onChange={(ev) =>
+                            setMargenLinea(l.key, ev.target.value)
+                          }
+                          title={
+                            l.modoVenta === 'precio'
+                              ? 'Margen real que deja el precio fijado. Tocalo para volver al precio automático.'
+                              : undefined
+                          }
+                          className={cn(
+                            inputCls,
+                            l.modoVenta === 'precio' &&
+                              'border-dashed text-[#6f3a2a]',
+                            l.modoVenta === 'precio' &&
+                              (margenPct ?? 0) < 0 &&
+                              'border-[#c43e2c] text-[#c43e2c] font-bold'
+                          )}
                         />
                       </td>
                       <td
                         className="p-2 text-right tabular-nums text-[#6f3a2a]"
-                        title={venta.error ?? undefined}
+                        title={
+                          l.modoVenta === 'precio'
+                            ? 'Precio fijado a mano'
+                            : (error ?? undefined)
+                        }
                       >
-                        {venta.error ? (
+                        {l.modoVenta === 'precio' ? (
+                          <span className="text-[#c8a58a]">—</span>
+                        ) : error ? (
                           <span className="text-[#c43e2c] font-bold">—</span>
-                        ) : venta.desglose ? (
+                        ) : venta?.desglose ? (
                           <MontoARS monto={venta.desglose.precioFinalExacto} />
                         ) : (
                           '…'
@@ -1150,17 +1333,31 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           className={inputCls}
                         />
                       </td>
-                      <td
-                        className="p-2 text-right tabular-nums font-bold text-[#391511]"
-                        title={venta.error ?? undefined}
-                      >
-                        {venta.error ? (
-                          <span className="text-[#c43e2c]">—</span>
-                        ) : venta.desglose ? (
-                          <MontoARS monto={venta.desglose.precioRedondeado} />
-                        ) : (
-                          '…'
-                        )}
+                      <td className="p-1 w-24" title={error ?? undefined}>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={
+                            l.modoVenta === 'precio'
+                              ? l.precio
+                              : venta?.desglose
+                                ? String(venta.desglose.precioRedondeado)
+                                : ''
+                          }
+                          onChange={(ev) =>
+                            setPrecioLinea(l.key, ev.target.value)
+                          }
+                          placeholder={error ? '—' : '0'}
+                          title="Tipealo para fijar el precio final; el margen se deduce solo"
+                          className={cn(
+                            inputCls,
+                            'font-bold',
+                            l.modoVenta === 'precio' &&
+                              'border-[#f9b44c] bg-[#f9b44c]/10',
+                            error && 'border-[#c43e2c]'
+                          )}
+                        />
                       </td>
                     </tr>
                   ))}

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { completarCuitProveedor } from '@/lib/queries/proveedores'
 import type {
   FacturaCompraRow,
   ItemFacturaCompraRow,
@@ -60,11 +61,12 @@ export interface LineaFacturaPayload extends EntradaLinea {
   producto_id: number
   cantidad: number
   /**
-   * Vencimiento a corregir en el lote de este renglón (opcional, ISO yyyy-MM-dd).
-   * Vacío/null = no toca el vencimiento. La reconciliación de stock vive en el
-   * RPC (mig 132): la factura ajusta stock/lote por el delta contra lo recibido.
+   * Precio de venta final (CON IVA) fijado a mano en la factura (mig 138).
+   * Si viene, EL PRECIO MANDA: el RPC lo respeta tal cual y deduce el margen
+   * real (par coherente). Null = el margen manda y el precio lo calcula el
+   * motor, redondeando al múltiplo de arriba.
    */
-  fecha_vencimiento?: string | null
+  precio_venta?: number | null
 }
 
 /** Datos formales del comprobante (cabecera AFIP). Todos opcionales. */
@@ -316,7 +318,7 @@ export async function guardarFacturaCompra(
       iva_compra_porcentaje: l.iva_compra_porcentaje,
       margen_porcentaje: l.margen_porcentaje,
       iva_venta_porcentaje: l.iva_venta_porcentaje,
-      fecha_vencimiento: l.fecha_vencimiento ?? null,
+      precio_venta: l.precio_venta ?? null,
     })) as unknown as Json,
     // Solo se manda si hay gastos: así, antes de correr la migración 086, las
     // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.
@@ -339,6 +341,18 @@ export async function guardarFacturaCompra(
       })
       .eq('cuenta_id', payload.cuenta_id)
     if (errComp) throw errComp
+  }
+
+  // 4. Completa el CUIT en la ficha del proveedor si no tenía (nunca pisa uno
+  //    cargado). Best-effort: la factura ya está guardada, un error acá no
+  //    tiene que hacerla fallar.
+  const cuitDigitos = (comp?.cuit_proveedor ?? '').replace(/\D/g, '')
+  if (payload.proveedor_id && cuitDigitos.length === 11) {
+    try {
+      await completarCuitProveedor(payload.proveedor_id, cuitDigitos)
+    } catch {
+      // La ficha se completa a mano desde Configuración › Proveedores.
+    }
   }
 }
 

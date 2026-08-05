@@ -102,6 +102,8 @@ export function useGuardarFacturaCompra() {
       qc.invalidateQueries({ queryKey: ['lotes-activos'] })
       qc.invalidateQueries({ queryKey: ['vencimientos'] })
       qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      // El CUIT tipeado puede haber completado la ficha del proveedor.
+      qc.invalidateQueries({ queryKey: ['proveedores'] })
       toast.success('Factura guardada · stock, costos y precios actualizados')
     },
     onError: (error: Error) => {
