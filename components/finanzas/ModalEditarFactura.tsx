@@ -1,7 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FileText, Loader2, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +47,7 @@ import { calcularLinea } from '@/lib/queries/facturasCompra'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
+import type { ProveedorRow } from '@/types/database'
 
 interface Props {
   abierto: boolean
@@ -233,6 +242,16 @@ function tipoDesdeCondicionIva(cond: string | null | undefined): string {
   }
 }
 
+/**
+ * Letra sugerida por la ficha del proveedor. Sin ficha resuelta devuelve ''
+ * (y NO 'A'): si devolviera 'A', el effect de relleno la vería como un valor
+ * ya puesto y no la corregiría cuando la ficha llegue tarde (un monotributista
+ * quedaría clavado en A).
+ */
+function tipoSugerido(p: ProveedorRow | undefined): string {
+  return p ? tipoDesdeCondicionIva(p.condicion_iva) : ''
+}
+
 export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) {
   const { data: usuario } = useUsuario()
   const { data: pedido, isLoading: cargandoPedido } = usePedidoDetalle(
@@ -284,11 +303,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     return m && m > 0 ? String(m) : DEFAULTS.margen
   }
 
-  // Proveedor de la cuenta → para autocompletar su CUIT en el comprobante.
+  // Ficha del proveedor de la cuenta → autocompleta el comprobante y se muestra
+  // en la tarjeta de arriba (razón social).
   const { data: proveedores } = useProveedores()
-  const proveedorCuenta = proveedores?.find(
-    (p) => p.id === cuenta?.proveedor_id
+  const proveedorCuenta = useMemo(
+    () => proveedores?.find((p) => p.id === cuenta?.proveedor_id),
+    [proveedores, cuenta?.proveedor_id]
   )
+  // Derivados PRIMITIVOS para el effect de relleno: `proveedorCuenta` cambia de
+  // identidad en cada refetch de la lista aunque el dato sea idéntico (find
+  // sobre un array nuevo = objeto nuevo), y el useMemo no lo evita.
+  const hayFicha = proveedorCuenta != null
+  const provCuit = proveedorCuenta?.cuit ?? ''
+  const provCondIva = proveedorCuenta?.condicion_iva ?? ''
 
   function setCabCampo(campo: keyof CabeceraState, valor: string) {
     setCab((prev) => ({ ...prev, [campo]: valor }))
@@ -297,21 +324,46 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const items = useMemo(() => pedido?.items ?? [], [pedido])
   const cargando = cargandoPedido || cargandoFactura
 
-  // Inicializar líneas:
-  //  · Con factura guardada → reconstruir lo que se había facturado.
-  //  · Sin factura → SOLO los productos efectivamente recibidos (lo que el
-  //    proveedor entregó); el resto se agrega a mano con el buscador.
+  // Init del modal, en DOS bloques con guards independientes (van en el mismo
+  // effect para no depender del orden de declaración entre effects):
   //
-  // Guard de una-init-por-apertura: sin él, cualquier query que resuelva tarde
-  // vuelve a disparar el effect y pisa lo que el administrativo ya tipeó.
+  //  (1) CABECERA — no depende de ninguna query, así que corre apenas se abre.
+  //      Si esperara a que resuelvan pedido/factura/pricing, borraría lo que el
+  //      administrativo tipeó mientras las líneas estaban en skeleton (los
+  //      campos de arriba se renderizan siempre, no tienen skeleton).
+  //  (2) LÍNEAS — recién con todo resuelto. Su guard es el que impide que una
+  //      query que resuelve tarde pise lo ya tipeado en los renglones.
   const initRef = useRef<string | null>(null)
+  const cabRef = useRef<string | null>(null)
   useEffect(() => {
     if (!abierto) {
       initRef.current = null
+      cabRef.current = null
       return
     }
-    if (cargando || pricing.cargando) return
     const claveInit = `c${cuenta?.id ?? 0}`
+
+    // ── (1) Cabecera + percepciones + gastos ──────────────────────────
+    // `proveedorCuenta` se lee del closure a propósito (no es dep): el effect
+    // que se ejecuta es el del render que lo agendó, así que ve el valor
+    // actual. Si la lista de proveedores resuelve DESPUÉS, completa el effect
+    // de relleno de más abajo.
+    if (cabRef.current !== claveInit) {
+      cabRef.current = claveInit
+      setCab({
+        ...CABECERA_DEFAULT,
+        cuit_proveedor: proveedorCuenta?.cuit ?? '',
+        tipo_comprobante: tipoSugerido(proveedorCuenta),
+      })
+      setPercepciones({ iibb: '', iva: '', otros: '' })
+      setGastosNoDebitables('')
+    }
+
+    // ── (2) Líneas ────────────────────────────────────────────────────
+    //  · Con factura guardada → reconstruir lo que se había facturado.
+    //  · Sin factura → SOLO los productos efectivamente recibidos (lo que el
+    //    proveedor entregó); el resto se agrega a mano con el buscador.
+    if (cargando || pricing.cargando) return
     if (initRef.current === claveInit) return
     initRef.current = claveInit
     let nuevas: LineaFactura[]
@@ -412,15 +464,20 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     }
     setLineas(nuevas)
     setBusqueda('')
+    // La cabecera solo se pisa cuando HAY factura guardada (ahí el dato del
+    // comprobante manda). Sin factura ya quedó lista en el bloque (1), y lo que
+    // se haya tipeado mientras cargaban las líneas tiene que sobrevivir.
     if (facturaGuardada) {
       setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
       const f = facturaGuardada.factura
       setCab({
-        tipo_comprobante: f.tipo_comprobante ?? '',
+        tipo_comprobante: f.tipo_comprobante || tipoSugerido(proveedorCuenta),
         punto_venta: f.punto_venta ?? '',
         numero_comprobante: f.numero_comprobante ?? '',
         cae: f.cae ?? '',
-        cuit_proveedor: f.cuit_proveedor ?? '',
+        // El CUIT de la FACTURA manda: puede diferir del de la ficha (el
+        // proveedor facturó con otro) y es el que va al Libro IVA.
+        cuit_proveedor: f.cuit_proveedor || proveedorCuenta?.cuit || '',
         fecha_emision: f.fecha ?? hoyIso(),
       })
       setPercepciones({
@@ -431,29 +488,23 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setGastosNoDebitables(
         f.gastos_no_debitables ? String(f.gastos_no_debitables) : ''
       )
-    } else {
-      // Tipo y CUIT quedan vacíos a propósito: los completa el effect de abajo
-      // con los datos de la ficha del proveedor, sin pisar nada tipeado.
-      setCab({ ...CABECERA_DEFAULT })
-      setPercepciones({ iibb: '', iva: '', otros: '' })
-      setGastosNoDebitables('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cargando, pricing.cargando, facturaGuardada, cuenta?.id])
 
-  // Autocompleta la cabecera con los datos de la ficha del proveedor. Va en un
-  // effect aparte y solo RELLENA LO VACÍO: la ficha puede resolver después de
-  // que el administrativo ya empezó a tipear, y nunca tiene que pisarlo.
+  // Rellena la cabecera con la ficha del proveedor cuando la lista resuelve
+  // DESPUÉS de la init. Solo completa lo VACÍO: nunca pisa lo tipeado ni lo
+  // que vino de una factura guardada. Deps primitivas para no re-correr en
+  // cada refetch de la lista de proveedores.
   useEffect(() => {
-    if (!abierto || !proveedorCuenta) return
+    if (!abierto || !hayFicha) return
     setCab((prev) => ({
       ...prev,
-      cuit_proveedor: prev.cuit_proveedor || proveedorCuenta.cuit || '',
+      cuit_proveedor: prev.cuit_proveedor || provCuit,
       tipo_comprobante:
-        prev.tipo_comprobante ||
-        tipoDesdeCondicionIva(proveedorCuenta.condicion_iva),
+        prev.tipo_comprobante || tipoDesdeCondicionIva(provCondIva),
     }))
-  }, [abierto, proveedorCuenta])
+  }, [abierto, hayFicha, provCuit, provCondIva])
 
   function setLineaCampo(key: string, campo: CampoEditable, valor: string) {
     setLineas((prev) =>
@@ -639,6 +690,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     !/^\d{1,8}$/.test(cab.numero_comprobante.trim())
   const hayErroresCab = cuitError || ptoError || nroError
 
+  // ── Ficha del proveedor: lo que se muestra y el aviso de datos faltantes ──
+  // La ficha viva manda; `cuenta.proveedor_nombre` (del embed) es el fallback
+  // para que el nombre no parpadee mientras la lista resuelve.
+  const nombreProveedor =
+    proveedorCuenta?.nombre || cuenta?.proveedor_nombre || 'Sin asignar'
+  const razonSocial = (proveedorCuenta?.razon_social ?? '').trim()
+  // El aviso solo sale con la ficha YA resuelta: sin eso parpadearía en cada
+  // apertura, y no podemos afirmar nada de una ficha que no leímos (proveedor
+  // borrado, o que no está en la lista).
+  const faltaRazonSocial = hayFicha && razonSocial === ''
+  // El CUIT tipeado completa la ficha sola al guardar (completarCuitProveedor),
+  // pero SOLO si es válido de 11 dígitos: hasta entonces el aviso se queda.
+  const avisarCuit =
+    hayFicha && provCuit.trim() === '' && !cuitValido(cab.cuit_proveedor)
+  const avisoFicha = faltaRazonSocial || avisarCuit
+
   function handleGuardar() {
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
     if (lineas.length === 0) return
@@ -732,18 +799,56 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         </DialogHeader>
 
         <div className="flex-1 overflow-auto px-6 py-5 space-y-4">
-          {/* Cabecera */}
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-sm text-[#6f3a2a]">
-              Proveedor:{' '}
-              <span className="font-semibold text-[#391511]">
-                {cuenta?.proveedor_nombre ?? 'Sin asignar'}
-              </span>
+          {/* Ficha del proveedor: lo que va a salir en el comprobante y en el
+              Libro IVA. Read-only a propósito — la fuente de verdad es
+              Configuración › Proveedores. */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+                  Proveedor
+                </span>
+                <span className="block truncate text-base font-bold leading-tight text-[#391511]">
+                  {nombreProveedor}
+                </span>
+                {razonSocial && (
+                  <span className="mt-0.5 block text-xs text-[#6f3a2a]">
+                    Razón social:{' '}
+                    <span className="font-medium text-[#391511]">
+                      {razonSocial}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <label className="flex shrink-0 items-center gap-2 text-sm text-[#391511]">
+                <Switch checked={afectaVenta} onCheckedChange={setAfectaVenta} />
+                Afectar precio de venta
+              </label>
             </div>
-            <label className="flex items-center gap-2 text-sm text-[#391511]">
-              <Switch checked={afectaVenta} onCheckedChange={setAfectaVenta} />
-              Afectar precio de venta
-            </label>
+
+            {avisoFicha && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#f9b44c]/50 bg-[#f9b44c]/15 px-3 py-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
+                <div className="min-w-0 space-y-0.5 text-[11px] leading-snug text-[#6f3a2a]">
+                  <p className="font-semibold text-[#391511]">
+                    La ficha de {nombreProveedor} está incompleta
+                  </p>
+                  {faltaRazonSocial && (
+                    <p>
+                      Le falta la <strong>razón social</strong>. Cargala en
+                      Configuración › Proveedores: es la que sale en el Libro
+                      IVA y, si está vacía, sale el nombre de fantasía.
+                    </p>
+                  )}
+                  {avisarCuit && (
+                    <p>
+                      Le falta el <strong>CUIT</strong>. El que pongas acá abajo
+                      queda guardado en la ficha al guardar la factura.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <p className="text-[11px] text-[#c8a58a] -mt-2">
             Poné el <strong>margen</strong> y el precio se calcula solo
@@ -777,7 +882,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   }
                 >
                   <SelectTrigger className="h-8 border-[#e4c9b0] bg-white text-xs">
-                    <SelectValue />
+                    <SelectValue placeholder="Elegí" />
                   </SelectTrigger>
                   <SelectContent>
                     {TIPOS_COMPROBANTE.map((t) => (
