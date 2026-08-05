@@ -1429,6 +1429,8 @@ export type ItemPedidoRow = {
   cuenta_a_pagar_id: number | null
   /** Cantidad confirmada por la factura (three-way match; NULL = sin factura). Migración 131. */
   cantidad_facturada: number | null
+  /** Secuencia de escaneo en la recepción (orden del papel de la factura). Migración 137. */
+  orden_recepcion: number | null
 }
 
 export type ItemPedidoInsert = {
@@ -1441,6 +1443,7 @@ export type ItemPedidoInsert = {
   subtotal: number
   cuenta_a_pagar_id?: number | null
   cantidad_facturada?: number | null
+  orden_recepcion?: number | null
 }
 
 export type ItemPedidoUpdate = {
@@ -1450,6 +1453,7 @@ export type ItemPedidoUpdate = {
   subtotal?: number
   cuenta_a_pagar_id?: number | null
   cantidad_facturada?: number | null
+  orden_recepcion?: number | null
 }
 
 // ─── producción (recetas, órdenes) ────────────────────────────────────────────
@@ -3927,6 +3931,8 @@ export interface Database {
           p_usuario_id: string
           p_condicion_pago_dias: number
           p_items: Json
+          /** Item_ids confirmados como faltantes ("no vino"). Migración 137; opcional para compatibilidad. */
+          p_no_vino?: Json
         }
         Returns: {
           cuenta_a_pagar_id: number

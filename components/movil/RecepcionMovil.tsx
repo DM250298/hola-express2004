@@ -61,6 +61,8 @@ interface ItemEstado {
   venta_por_peso: boolean
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
+  /** Secuencia de escaneo/carga en esta entrega (orden del papel de la factura). */
+  orden: number | null
 }
 
 /**
@@ -78,6 +80,7 @@ interface PasadaFactura {
     cantidad: number
     precio_costo: number
     fecha_vencimiento: string
+    orden: number | null
   }[]
 }
 
@@ -129,9 +132,14 @@ interface Props {
  * `factura_ref` por renglón — el RPC acumula filas repetidas del mismo item).
  *
  * POLÍTICA DE LA EMPRESA (2026-08-04): la orden se recibe COMPLETA o no se
- * recibe. El Confirmar final se bloquea si algún renglón queda por debajo de
- * lo pedido; si el proveedor no trajo algo, un encargado ajusta la orden
- * desde Compras (escritorio) y recién ahí se recibe.
+ * recibe. Si al confirmar hay renglones por debajo de lo pedido, el diálogo
+ * de faltantes ofrece confirmarlos como "no vino": la orden se ajusta en la
+ * misma transacción (0 recibido → el renglón se elimina; incompleto → la
+ * pedida baja a lo recibido) y se recibe completa. Queda en auditoría.
+ *
+ * Además cada renglón guarda la SECUENCIA en que se escaneó/cargó
+ * (`orden_recepcion`, mig 137) — el orden del papel de la factura — para que
+ * administración cargue los precios en ese mismo orden.
  */
 export function RecepcionMovil({ pedidoId }: Props) {
   const router = useRouter()
@@ -150,6 +158,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
   const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
   const [dialogFaltanteAbierto, setDialogFaltanteAbierto] = useState(false)
+  // Faltantes confirmados como "no vino" a la espera de la clave de
+  // supervisor (solo cuando además hay exceso).
+  const [noVinoPendiente, setNoVinoPendiente] = useState<number[]>([])
+  // Secuencia de escaneo de la entrega (orden del papel). Se resetea solo al
+  // cambiar de pedido, no en cada refetch.
+  const ordenSiguiente = useRef(1)
+  const pedidoIdVisto = useRef<number | null>(null)
 
   // Producto activo (último escaneado): se resalta y se enfoca su campo para
   // cargar la cantidad total. El escaneo deja de ser un "+1" como protagonista.
@@ -175,6 +190,10 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   useEffect(() => {
     if (!pedido) return
+    if (pedidoIdVisto.current !== pedido.id) {
+      pedidoIdVisto.current = pedido.id
+      ordenSiguiente.current = 1
+    }
     setItemsEstado(
       pedido.items.map((it) => ({
         item_id: it.id,
@@ -188,34 +207,45 @@ export function RecepcionMovil({ pedidoId }: Props) {
         venta_por_peso: it.producto?.venta_por_peso ?? false,
         fecha_vencimiento: '',
         dias_vencimiento_minimo: it.producto?.dias_vencimiento_minimo ?? null,
+        orden: null,
       }))
     )
     setAceptaPorDebajoMin(false)
     setExcesoAutorizado(false)
     setAutorizadoPor(null)
+    setNoVinoPendiente([])
   }, [pedido])
 
   function actualizarItem(
     item_id: number,
     cambios: Partial<Pick<ItemEstado, 'cantidad_recibida' | 'fecha_vencimiento'>>
   ) {
+    // La primera vez que el renglón queda con cantidad se le asigna la
+    // secuencia de escaneo (= orden del papel de la factura).
+    let orden: number | null = null
+    if (
+      cambios.cantidad_recibida !== undefined &&
+      (Number(cambios.cantidad_recibida) || 0) > 0
+    ) {
+      const it = itemsEstado.find((i) => i.item_id === item_id)
+      if (it && it.orden == null) orden = ordenSiguiente.current++
+    }
     setItemsEstado((prev) =>
-      prev.map((it) => (it.item_id === item_id ? { ...it, ...cambios } : it))
+      prev.map((it) =>
+        it.item_id === item_id
+          ? { ...it, ...cambios, ...(orden != null ? { orden } : {}) }
+          : it
+      )
     )
   }
 
   /** Botón secundario: suma 1 unidad al producto (para los que prefieren tallar). */
   function sumarUno(item_id: number) {
-    setItemsEstado((prev) =>
-      prev.map((it) =>
-        it.item_id === item_id
-          ? {
-              ...it,
-              cantidad_recibida: String((Number(it.cantidad_recibida) || 0) + 1),
-            }
-          : it
-      )
-    )
+    const it = itemsEstado.find((i) => i.item_id === item_id)
+    if (!it) return
+    actualizarItem(item_id, {
+      cantidad_recibida: String((Number(it.cantidad_recibida) || 0) + 1),
+    })
   }
 
   // Al marcar un producto como activo (recién escaneado), enfocamos su campo
@@ -413,6 +443,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         cantidad: Number(it.cantidad_recibida),
         precio_costo: it.precio_costo,
         fecha_vencimiento: it.fecha_vencimiento,
+        orden: it.orden,
       }))
     setPasadas((prev) => [
       ...prev,
@@ -440,7 +471,8 @@ export function RecepcionMovil({ pedidoId }: Props) {
   /**
    * Confirmar final: exige la orden COMPLETA (sin recepción parcial, por
    * política) y recién ahí graba todas las facturas juntas, en una sola
-   * transacción de `fn_recibir_pedido`.
+   * transacción de `fn_recibir_pedido`. Con faltantes abre el diálogo que
+   * ofrece confirmarlos como "no vino".
    */
   function confirmarTodo() {
     if (!usuario || hayErrores || !pedido?.proveedor) return
@@ -450,13 +482,31 @@ export function RecepcionMovil({ pedidoId }: Props) {
       return
     }
     if (requiereSupervisor) {
+      setNoVinoPendiente([])
       setModalSupervisorAbierto(true)
       return
     }
     ejecutarRecepcion()
   }
 
-  function ejecutarRecepcion() {
+  /**
+   * "No vinieron — descontar y recibir": los faltantes se confirman como no
+   * venidos (0 → el renglón se elimina de la orden; incompleto → la pedida
+   * baja a lo recibido) y la orden se recibe completa, todo en la misma
+   * transacción. Si además hay exceso, primero pasa por el supervisor.
+   */
+  function confirmarNoVino() {
+    const ids = itemsFaltantes.map((it) => it.item_id)
+    setDialogFaltanteAbierto(false)
+    if (requiereSupervisor) {
+      setNoVinoPendiente(ids)
+      setModalSupervisorAbierto(true)
+      return
+    }
+    ejecutarRecepcion(ids)
+  }
+
+  function ejecutarRecepcion(noVino: number[] = []) {
     if (!usuario || !pedido?.proveedor) return
     const refActual = `f${pasadas.length + 1}`
     const numeroActual = numeroFactura.trim()
@@ -472,6 +522,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
           fecha_vencimiento: it.fecha_vencimiento || null,
           factura_ref: p.ref,
           numero_factura: p.numero,
+          orden: it.orden,
         }))
       ),
       ...itemsEstado
@@ -484,6 +535,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
           fecha_vencimiento: it.fecha_vencimiento || null,
           factura_ref: refActual,
           numero_factura: numeroActual || null,
+          orden: it.orden,
         })),
     ]
     if (items.length === 0) return
@@ -494,6 +546,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         usuario_id: usuario.id,
         condicion_pago_dias: condicionDias,
         items,
+        no_vino: noVino,
       },
       {
         onSuccess: () => router.push('/movil/recepcion'),
@@ -511,6 +564,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
     if (yaEnLista) {
       // Ya estaba en la lista: en vez de descartar la cantidad tipeada, la
       // aplicamos al ítem existente y lo resaltamos.
+      const orden = yaEnLista.orden ?? ordenSiguiente.current++
       setItemsEstado((prev) =>
         prev.map((it) =>
           it.producto_id === prod.id
@@ -518,6 +572,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
                 ...it,
                 cantidad_recibida: String(cant),
                 fecha_vencimiento: venc || it.fecha_vencimiento,
+                orden,
               }
             : it
         )
@@ -555,6 +610,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         venta_por_peso: prod.venta_por_peso,
         fecha_vencimiento: venc,
         dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
+        orden: ordenSiguiente.current++,
       },
     ])
     setActivoId(nuevoItem.id)
@@ -970,11 +1026,12 @@ export function RecepcionMovil({ pedidoId }: Props) {
         onAutorizado={(nombre) => {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)
-          ejecutarRecepcion()
+          ejecutarRecepcion(noVinoPendiente)
         }}
       />
 
-      {/* Diálogo BLOQUEANTE: la orden se recibe completa o no se recibe */}
+      {/* Diálogo de faltantes: la orden se recibe completa — lo que no vino
+          se puede descontar acá mismo (la orden se ajusta y queda auditado) */}
       <Dialog
         open={dialogFaltanteAbierto}
         onOpenChange={setDialogFaltanteAbierto}
@@ -983,26 +1040,36 @@ export function RecepcionMovil({ pedidoId }: Props) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-[#391511]">
               <AlertTriangle className="h-5 w-5 text-[#c43e2c]" />
-              No se puede recibir incompleta
+              Falta mercadería del pedido
             </DialogTitle>
             <DialogDescription className="text-[#6f3a2a]">
-              La orden se recibe <strong>completa</strong> o no se recibe
-              (política de la empresa). Faltan{' '}
+              Faltan{' '}
               <strong className="tabular-nums">
                 {formatearNumero(Math.round(unidadesFaltantes * 1000) / 1000)} u.
-              </strong>
-              :
+              </strong>{' '}
+              de lo pedido. Si el proveedor no las trajo, se descuentan de la
+              orden y se recibe completa:
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] p-2 text-xs text-[#391511]">
-            {itemsFaltantes.slice(0, 6).map((it) => (
-              <li key={it.item_id} className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate font-medium">{it.nombre}</span>
-                <span className="shrink-0 tabular-nums text-[#c43e2c]">
-                  faltan {formatearCantidad(it.falta, it.venta_por_peso)}
-                </span>
-              </li>
-            ))}
+            {itemsFaltantes.slice(0, 6).map((it) => {
+              const queda = it.cantidad_pedida - it.falta
+              return (
+                <li
+                  key={it.item_id}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="min-w-0 truncate font-medium">
+                    {it.nombre}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[#c43e2c]">
+                    {queda <= 0
+                      ? 'no vino — se saca de la orden'
+                      : `queda en ${formatearCantidad(queda, it.venta_por_peso)}`}
+                  </span>
+                </li>
+              )
+            })}
             {itemsFaltantes.length > 6 && (
               <li className="pt-1 text-[#6f3a2a]">
                 …y {itemsFaltantes.length - 6} producto
@@ -1010,18 +1077,25 @@ export function RecepcionMovil({ pedidoId }: Props) {
               </li>
             )}
           </ul>
-          <p className="text-xs leading-snug text-[#6f3a2a]">
-            Cargá lo que falta y volvé a confirmar. Si el proveedor no lo trajo,
-            un encargado tiene que <strong>ajustar la orden</strong> desde
-            Compras en la compu, y después la recibís completa.
-          </p>
-          <Button
-            type="button"
-            onClick={() => setDialogFaltanteAbierto(false)}
-            className="h-12 w-full bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
-          >
-            Entendido
-          </Button>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              onClick={confirmarNoVino}
+              disabled={procesando}
+              className="h-12 w-full bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
+            >
+              No vinieron — descontar y recibir
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDialogFaltanteAbierto(false)}
+              disabled={procesando}
+              className="h-12 w-full border-[#e4c9b0] text-[#6f3a2a]"
+            >
+              Volver a cargar
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

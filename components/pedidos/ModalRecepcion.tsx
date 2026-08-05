@@ -62,6 +62,8 @@ interface ItemEstado {
   /** Producto agregado al vuelo (no estaba en la orden): se exime del control
    *  de exceso vs. lo pedido. */
   no_pedido?: boolean
+  /** Secuencia de escaneo/carga en esta recepción (orden del papel de la factura). */
+  orden: number | null
 }
 
 interface Props {
@@ -94,6 +96,13 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   const [autorizadoPor, setAutorizadoPor] = useState<string | null>(null)
   const [modalSupervisorAbierto, setModalSupervisorAbierto] = useState(false)
 
+  // "No vino": diálogo de faltantes + ids confirmados a la espera del
+  // supervisor (solo cuando además hay exceso).
+  const [dialogNoVinoAbierto, setDialogNoVinoAbierto] = useState(false)
+  const [noVinoPendiente, setNoVinoPendiente] = useState<number[]>([])
+  // Secuencia de escaneo/carga (orden del papel de la factura, mig 137).
+  const ordenSiguiente = useRef(1)
+
   useEffect(() => {
     if (abierto) {
       setItemsEstado(
@@ -114,6 +123,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             fecha_vencimiento: '',
             dias_vencimiento_minimo:
               it.producto?.dias_vencimiento_minimo ?? null,
+            orden: null,
           }
         })
       )
@@ -121,6 +131,8 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
       setExcesoAutorizado(false)
       setAutorizadoPor(null)
       setCodigoScan('')
+      setNoVinoPendiente([])
+      ordenSiguiente.current = 1
     }
   }, [abierto, pedido])
 
@@ -150,8 +162,23 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     item_id: number,
     cambios: Partial<Pick<ItemEstado, 'cantidad_recibida' | 'fecha_vencimiento'>>
   ) {
+    // La primera vez que el renglón queda con cantidad se le asigna la
+    // secuencia de escaneo (= orden del papel de la factura). El escaneo
+    // guiado también pasa por acá (procesarScan).
+    let orden: number | null = null
+    if (
+      cambios.cantidad_recibida !== undefined &&
+      (Number(cambios.cantidad_recibida) || 0) > 0
+    ) {
+      const it = itemsEstado.find((i) => i.item_id === item_id)
+      if (it && it.orden == null) orden = ordenSiguiente.current++
+    }
     setItemsEstado((prev) =>
-      prev.map((it) => (it.item_id === item_id ? { ...it, ...cambios } : it))
+      prev.map((it) =>
+        it.item_id === item_id
+          ? { ...it, ...cambios, ...(orden != null ? { orden } : {}) }
+          : it
+      )
     )
   }
 
@@ -189,6 +216,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           fecha_vencimiento: '',
           dias_vencimiento_minimo: prod.dias_vencimiento_minimo ?? null,
           no_pedido: true,
+          orden: null,
         },
       ])
       toast.success(`${prod.nombre} agregado a la recepción`)
@@ -291,20 +319,21 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
 
   const procesando = recibir.isPending
   const accionDeshabilitada =
-    procesando ||
-    hayErrores ||
-    totalRecibido <= 0 ||
-    requiereAceptacion ||
-    ordenIncompleta
+    procesando || hayErrores || totalRecibido <= 0 || requiereAceptacion
 
   function confirmar() {
     if (!usuario || hayErrores) return
     if (!pedido.proveedor) return
-    // La orden se recibe completa o no se recibe (sin parcial).
-    if (ordenIncompleta) return
+    // La orden se recibe completa o no se recibe: con faltantes se abre el
+    // diálogo que ofrece confirmarlos como "no vino" (descuenta de la orden).
+    if (ordenIncompleta) {
+      setDialogNoVinoAbierto(true)
+      return
+    }
 
     // Recibir más de lo pedido exige autorización de un supervisor
     if (requiereSupervisor) {
+      setNoVinoPendiente([])
       setModalSupervisorAbierto(true)
       return
     }
@@ -312,7 +341,23 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     ejecutarRecepcion()
   }
 
-  function ejecutarRecepcion() {
+  /**
+   * "No vinieron — descontar y recibir": los faltantes se confirman como no
+   * venidos (0 → el renglón se elimina; incompleto → la pedida baja a lo
+   * recibido) y la orden se recibe completa en la misma transacción.
+   */
+  function confirmarNoVino() {
+    const ids = itemsFaltantes.map((it) => it.item_id)
+    setDialogNoVinoAbierto(false)
+    if (requiereSupervisor) {
+      setNoVinoPendiente(ids)
+      setModalSupervisorAbierto(true)
+      return
+    }
+    ejecutarRecepcion(ids)
+  }
+
+  function ejecutarRecepcion(noVino: number[] = []) {
     if (!usuario || !pedido.proveedor) return
 
     recibir.mutate(
@@ -332,7 +377,9 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             cantidad_recibida: Number(it.cantidad_recibida),
             precio_costo: it.precio_costo,
             fecha_vencimiento: it.fecha_vencimiento || null,
+            orden: it.orden,
           })),
+        no_vino: noVino,
       },
       {
         onSuccess: (resultado) => {
@@ -733,9 +780,9 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                   u.
                 </span>{' '}
                 en {itemsFaltantes.length} renglón
-                {itemsFaltantes.length === 1 ? '' : 'es'}: la orden se recibe{' '}
-                <strong>completa</strong> o no se recibe. Si el proveedor no
-                trajo el resto, ajustá la orden y después registrá la recepción.
+                {itemsFaltantes.length === 1 ? '' : 'es'}. Al confirmar podés
+                marcarlos como <strong>no vinieron</strong>: se descuentan de la
+                orden y se recibe completa.
               </p>
             )}
           </div>
@@ -794,9 +841,74 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)
           // Ya autorizado: ejecutar directamente, sin re-chequear supervisor.
-          ejecutarRecepcion()
+          ejecutarRecepcion(noVinoPendiente)
         }}
       />
+
+      {/* Diálogo de faltantes: descontar lo que no vino y recibir completa */}
+      <Dialog open={dialogNoVinoAbierto} onOpenChange={setDialogNoVinoAbierto}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#391511]">
+              <AlertTriangle className="h-5 w-5 text-[#c43e2c]" />
+              Falta mercadería del pedido
+            </DialogTitle>
+            <DialogDescription className="text-[#6f3a2a]">
+              Faltan{' '}
+              <strong className="tabular-nums">
+                {formatearNumero(Math.round(unidadesFaltantes * 1000) / 1000)} u.
+              </strong>{' '}
+              de lo pedido. Si el proveedor no las trajo, se descuentan de la
+              orden y se recibe completa:
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-[#e4c9b0]/60 bg-[#fdfaf6] p-2 text-xs text-[#391511]">
+            {itemsFaltantes.slice(0, 8).map((it) => {
+              const queda = it.cantidad_pedida - it.falta
+              return (
+                <li
+                  key={it.item_id}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="min-w-0 truncate font-medium">
+                    {it.nombre}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-[#c43e2c]">
+                    {queda <= 0
+                      ? 'no vino — se saca de la orden'
+                      : `queda en ${formatearCantidad(queda, it.venta_por_peso)}`}
+                  </span>
+                </li>
+              )
+            })}
+            {itemsFaltantes.length > 8 && (
+              <li className="pt-1 text-[#6f3a2a]">
+                …y {itemsFaltantes.length - 8} renglón
+                {itemsFaltantes.length - 8 === 1 ? '' : 'es'} más
+              </li>
+            )}
+          </ul>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDialogNoVinoAbierto(false)}
+              disabled={procesando}
+              className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
+            >
+              Volver a cargar
+            </Button>
+            <Button
+              type="button"
+              onClick={confirmarNoVino}
+              disabled={procesando}
+              className="flex-1 bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
+            >
+              No vinieron — descontar y recibir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

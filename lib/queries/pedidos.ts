@@ -345,6 +345,8 @@ export interface ItemRecepcion {
   factura_ref?: string
   /** Nº de factura tal como lo tipeó quien recibe (NULL = sin identificar). */
   numero_factura?: string | null
+  /** Secuencia de escaneo en la entrega (orden del papel de la factura). Mig 137. */
+  orden?: number | null
 }
 
 export interface RecibirPedidoPayload {
@@ -353,6 +355,13 @@ export interface RecibirPedidoPayload {
   usuario_id: string
   condicion_pago_dias: number
   items: ItemRecepcion[]
+  /**
+   * Item_ids confirmados como faltantes ("no vino"): con 0 recibido total el
+   * renglón se elimina de la orden; incompletos bajan la pedida a lo recibido.
+   * Solo se manda al RPC cuando tiene elementos (compatibilidad con la firma
+   * de 5 argumentos previa a la mig 137).
+   */
+  no_vino?: number[]
   /**
    * true = el caller muestra su propio toast (p. ej. la recepción móvil
    * factura por factura) y el hook no dispara los genéricos.
@@ -401,7 +410,14 @@ export async function recibirPedido(
       fecha_vencimiento: it.fecha_vencimiento,
       factura_ref: it.factura_ref ?? null,
       numero_factura: it.numero_factura ?? null,
+      orden: it.orden ?? null,
     })) as unknown as Json,
+    // p_no_vino solo viaja cuando hay faltantes confirmados: si se omite, la
+    // llamada matchea también la firma vieja de 5 argumentos (pre-mig 137),
+    // así el deploy del frontend no depende de que la migración ya corrió.
+    ...(payload.no_vino && payload.no_vino.length > 0
+      ? { p_no_vino: payload.no_vino as unknown as Json }
+      : {}),
   })
 
   if (error) throw error
