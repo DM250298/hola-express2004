@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
+import { completarCuitProveedor } from '@/lib/queries/proveedores'
+import { soloDigitos } from '@/lib/utils/fiscal'
 import type { Json } from '@/types/database'
 
 export interface CompraDirectaLinea {
@@ -59,6 +61,19 @@ export async function registrarCompraDirecta(p: CompraDirectaPayload) {
     p_pago: p.pago as unknown as Json,
   })
   if (error) throw error
+
+  // Completa el CUIT en la ficha del proveedor si no tenía (nunca pisa uno ya
+  // cargado: el filtro `.is('cuit', null)` corre en el server). Best-effort: la
+  // compra ya quedó registrada y pagada, un error acá no puede voltearla.
+  const cuitDigitos = soloDigitos(p.fiscal.cuit ?? '')
+  if (p.proveedor_id && cuitDigitos.length === 11) {
+    try {
+      await completarCuitProveedor(p.proveedor_id, cuitDigitos)
+    } catch {
+      // Se completa a mano desde Configuración › Proveedores.
+    }
+  }
+
   return data
 }
 

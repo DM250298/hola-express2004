@@ -30,6 +30,8 @@ export function useRegistrarCompraDirecta() {
       qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
       qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
       qc.invalidateQueries({ queryKey: ['resumen-turno'] })
+      // El CUIT tipeado puede haber completado la ficha del proveedor.
+      qc.invalidateQueries({ queryKey: ['proveedores'] })
       toast.success('Compra registrada con factura')
     },
     onError: (e: Error) =>

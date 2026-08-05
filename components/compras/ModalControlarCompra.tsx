@@ -31,6 +31,8 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { formatearFechaCorta } from '@/lib/utils/formato'
+import { cuitValido } from '@/lib/utils/fiscal'
+import { cn } from '@/lib/utils'
 import {
   useControlarCompraDirecta,
   useAnularCompraDirecta,
@@ -77,9 +79,12 @@ export function ModalControlarCompra({
   }, [abierto, compra])
 
   const procesando = controlar.isPending || anular.isPending
+  // Se valida solo lo que se tipeó: una compra vieja pudo quedar con un CUIT
+  // mal cargado y no hay que impedir corregir el resto por eso.
+  const cuitError = cuit.trim() !== '' && !cuitValido(cuit)
 
   function guardar(marcarControlada: boolean) {
-    if (!compra) return
+    if (!compra || cuitError) return
     controlar.mutate(
       {
         factura_id: compra.id,
@@ -247,10 +252,18 @@ export function ModalControlarCompra({
                 <Input
                   value={cuit}
                   onChange={(e) => setCuit(e.target.value)}
-                  placeholder="30-11111111-1"
+                  placeholder="30111111111"
                   disabled={procesando}
-                  className="h-9 tabular-nums border-[#e4c9b0]"
+                  className={cn(
+                    'h-9 tabular-nums',
+                    cuitError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  )}
                 />
+                {cuitError && (
+                  <p className="text-[10px] text-[#c43e2c]">
+                    CUIT inválido (11 dígitos).
+                  </p>
+                )}
               </div>
 
               {compra.controlada && (
@@ -277,7 +290,7 @@ export function ModalControlarCompra({
               type="button"
               variant="outline"
               onClick={() => guardar(false)}
-              disabled={procesando}
+              disabled={procesando || cuitError}
               className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
             >
               Guardar
@@ -285,7 +298,7 @@ export function ModalControlarCompra({
             <Button
               type="button"
               onClick={() => guardar(true)}
-              disabled={procesando}
+              disabled={procesando || cuitError}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
             >
               {procesando ? (

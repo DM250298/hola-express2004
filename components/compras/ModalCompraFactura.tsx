@@ -1,7 +1,15 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Loader2, Package, Plus, Search, Trash2, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Loader2,
+  Package,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,8 +33,15 @@ import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useBuscarProductos } from '@/lib/hooks/useProductos'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import { useRegistrarCompraDirecta } from '@/lib/hooks/useComprasDirectas'
+import { useConfigFiscal } from '@/lib/hooks/useFiscal'
 import { CATEGORIAS_EGRESO } from '@/lib/queries/finanzas'
 import { cn } from '@/lib/utils'
+import {
+  cuitValido,
+  discriminaIva,
+  soloDigitos,
+  tipoDesdeCondicionIva,
+} from '@/lib/utils/fiscal'
 
 interface LineaStock {
   producto_id: number
@@ -64,6 +79,7 @@ export function ModalCompraFactura({
 }: Props) {
   const { data: proveedores } = useProveedores()
   const { data: cuentas } = useCuentas(true)
+  const { data: configFiscal } = useConfigFiscal()
   const registrar = useRegistrarCompraDirecta()
 
   const [proveedorId, setProveedorId] = useState('')
@@ -86,6 +102,15 @@ export function ModalCompraFactura({
   const [tipoComp, setTipoComp] = useState('A')
   const [puntoVenta, setPuntoVenta] = useState('')
   const [numero, setNumero] = useState('')
+  // CUIT que va al Libro IVA. Se precarga de la ficha al elegir proveedor pero
+  // es editable: si la ficha está vacía, este es el único lugar por donde el
+  // dato entra al sistema (antes viajaba null y nadie se enteraba).
+  const [cuit, setCuit] = useState('')
+  // Solo se valida el CUIT que TIPEÓ el usuario: las fichas viejas pueden
+  // tener CUITs con el verificador mal (ni el ABM ni la importación lo
+  // chequean), y bloquear por eso dejaría sin poder comprar a alguien que
+  // encima no tiene permiso para entrar a Configuración a arreglarlo.
+  const [cuitTocado, setCuitTocado] = useState(false)
 
   // Pago (finanzas)
   const [cuentaId, setCuentaId] = useState('')
@@ -106,7 +131,38 @@ export function ModalCompraFactura({
     setTipoComp('A')
     setPuntoVenta('')
     setNumero('')
+    setCuit('')
+    setCuitTocado(false)
     setCuentaId('')
+  }
+
+  /**
+   * Elegir proveedor precarga sus datos fiscales. Va acá y no en un useEffect
+   * porque el proveedor SOLO se puede elegir de la lista ya cargada: en este
+   * punto la ficha está garantizada en memoria, así que no existe el caso de
+   * "la ficha resuelve tarde" ni el riesgo de pisar lo tipeado después.
+   *
+   * El CUIT se REEMPLAZA siempre: lo que hubiera era del proveedor anterior, y
+   * dejarlo pegado mandaría el CUIT de otro al Libro IVA.
+   */
+  function elegirProveedor(v: string | null) {
+    const id = v ?? ''
+    setProveedorId(id)
+    const p = (proveedores ?? []).find((x) => String(x.id) === id)
+    setCuit(p?.cuit ?? '')
+    setCuitTocado(false)
+    aplicarTipo(tipoDesdeCondicionIva(p?.condicion_iva))
+  }
+
+  /**
+   * El tipo de comprobante manda sobre el IVA: una B, C o X no discrimina IVA,
+   * así que dejarle el 21% cargado inventa un crédito fiscal que no existe y
+   * mete en el Libro IVA una fila que se contradice sola (letra C con IVA
+   * discriminado). Queda editable por si el papel dice otra cosa.
+   */
+  function aplicarTipo(t: string) {
+    setTipoComp(t)
+    setIvaPct(discriminaIva(t) ? '21' : '0')
   }
 
   function agregarLinea(prod: {
@@ -164,6 +220,29 @@ export function ModalCompraFactura({
   const total = Math.round((neto + ivaTotal) * 100) / 100
 
   const proveedorSel = (proveedores ?? []).find((p) => String(p.id) === proveedorId)
+
+  // ── Ficha del proveedor: validación del CUIT y aviso de datos faltantes ──
+  const hayFicha = proveedorSel != null
+  const provCuit = (proveedorSel?.cuit ?? '').trim()
+  const razonSocial = (proveedorSel?.razon_social ?? '').trim()
+  const nombreProveedor = proveedorSel?.nombre ?? 'el proveedor'
+  // Solo bloquea lo que el usuario tipeó mal (ver comentario de `cuitTocado`).
+  const cuitError = cuitTocado && cuit.trim() !== '' && !cuitValido(cuit)
+  // La factura trae DOS CUIT: el del que emite y el nuestro. Copiar el nuestro
+  // es el error más fácil de cometer y pasa la validación sin chistar, así que
+  // se bloquea explícito.
+  const cuitPropio = soloDigitos(configFiscal?.cuit ?? '')
+  const esCuitPropio =
+    cuitPropio.length === 11 && soloDigitos(cuit) === cuitPropio
+  // La razón social no se arregla desde acá (se edita en Configuración) y en
+  // el POS sería ruido para quien está cobrando: solo se avisa en Finanzas.
+  const faltaRazonSocial =
+    contexto === 'finanzas' && hayFicha && razonSocial === ''
+  // El CUIT tipeado completa la ficha sola al registrar, pero solo si es válido
+  // de 11 dígitos: hasta entonces el aviso se queda.
+  const avisarCuit = hayFicha && provCuit === '' && !cuitValido(cuit)
+  const avisoFicha = faltaRazonSocial || avisarCuit
+
   const cuentaSel = (cuentas ?? []).find((c) => String(c.id) === cuentaId)
   const saldoResultante =
     contexto === 'finanzas' && cuentaSel && total > 0
@@ -181,6 +260,8 @@ export function ModalCompraFactura({
   const puedeConfirmar =
     !procesando &&
     !!proveedorId &&
+    !cuitError &&
+    !esCuitPropio &&
     total > 0 &&
     (mueveStock ? lineasValidas : gastoValido) &&
     (contexto === 'pos' ? !!turnoId : !!cuentaId && !bloqueoBoveda)
@@ -196,7 +277,9 @@ export function ModalCompraFactura({
           tipo_comprobante: tipoComp || null,
           punto_venta: puntoVenta.trim() || null,
           numero_comprobante: numero.trim() || null,
-          cuit: proveedorSel?.cuit ?? null,
+          // Pelado: así lo guarda la ficha y así lo compara el índice único de
+          // comprobantes (si acá fuera con guiones, no cruzaría).
+          cuit: soloDigitos(cuit) || null,
           neto: Math.round(neto * 100) / 100,
           iva_total: ivaTotal,
         },
@@ -250,18 +333,51 @@ export function ModalCompraFactura({
             <Label className="text-[#391511] font-medium text-sm">
               Proveedor <span className="text-[#c43e2c]">*</span>
             </Label>
-            <Select value={proveedorId} onValueChange={(v) => setProveedorId(v ?? '')} disabled={procesando}>
+            <Select value={proveedorId} onValueChange={elegirProveedor} disabled={procesando}>
               <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
                 <SelectValue placeholder="Elegí el proveedor…" />
               </SelectTrigger>
               <SelectContent>
-                {(proveedores ?? []).map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>
-                    {p.nombre}
-                  </SelectItem>
-                ))}
+                {(proveedores ?? []).map((p) => {
+                  // El CUIT/razón social a la vista evitan confundir dos
+                  // proveedores de nombre parecido (el CUIT elegido se copia a
+                  // la factura y puede quedar en la ficha).
+                  const detalle = [p.razon_social, p.cuit]
+                    .filter(Boolean)
+                    .join(' · ')
+                  return (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.nombre}
+                      {detalle ? ` — ${detalle}` : ''}
+                    </SelectItem>
+                  )
+                })}
               </SelectContent>
             </Select>
+
+            {avisoFicha && (
+              <div className="mt-2 flex items-start gap-2 rounded-lg border border-[#f9b44c]/50 bg-[#f9b44c]/15 px-3 py-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
+                <div className="min-w-0 space-y-0.5 text-[11px] leading-snug text-[#6f3a2a]">
+                  <p className="font-semibold text-[#391511]">
+                    La ficha de {nombreProveedor} está incompleta
+                  </p>
+                  {avisarCuit && (
+                    <p>
+                      Le falta el <strong>CUIT</strong>. El que pongas más abajo
+                      queda guardado en la ficha al registrar la compra.
+                    </p>
+                  )}
+                  {faltaRazonSocial && (
+                    <p>
+                      Le falta la <strong>razón social</strong>. Cargala en
+                      Configuración › Proveedores: es la que sale en el Libro
+                      IVA y, si está vacía, sale el nombre de fantasía.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ¿Mueve stock? */}
@@ -451,11 +567,42 @@ export function ModalCompraFactura({
             </div>
           )}
 
+          {/* CUIT del comprobante — fila propia: no entra en el grid de 4 */}
+          <div className="space-y-1.5">
+            <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+              CUIT proveedor
+            </Label>
+            <Input
+              inputMode="numeric"
+              placeholder="30xxxxxxxxx"
+              value={cuit}
+              onChange={(e) => {
+                setCuit(e.target.value)
+                setCuitTocado(true)
+              }}
+              disabled={procesando}
+              className={cn(
+                'h-9 tabular-nums',
+                cuitError || esCuitPropio ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+              )}
+            />
+            {esCuitPropio ? (
+              <p className="text-[10px] text-[#c43e2c]">
+                Ese es el CUIT de Hola Express: cargá el del proveedor que
+                emite la factura.
+              </p>
+            ) : cuitError ? (
+              <p className="text-[10px] text-[#c43e2c]">
+                CUIT inválido (11 dígitos).
+              </p>
+            ) : null}
+          </div>
+
           {/* Comprobante + IVA */}
           <div className="grid grid-cols-4 gap-2">
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Tipo</Label>
-              <Select value={tipoComp} onValueChange={(v) => setTipoComp(v ?? 'A')} disabled={procesando}>
+              <Select value={tipoComp} onValueChange={(v) => aplicarTipo(v ?? 'A')} disabled={procesando}>
                 <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] h-9">
                   <SelectValue />
                 </SelectTrigger>
@@ -498,6 +645,13 @@ export function ModalCompraFactura({
               />
             </div>
           </div>
+          {!discriminaIva(tipoComp) && Number(ivaPct) > 0 && (
+            <p className="-mt-2 flex items-start gap-1 text-[10px] leading-snug text-[#c43e2c]">
+              <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+              Un comprobante {tipoComp} no discrimina IVA: cargarle{' '}
+              {ivaPct}% suma un crédito fiscal que no existe.
+            </p>
+          )}
 
           {/* Pago */}
           {contexto === 'pos' ? (

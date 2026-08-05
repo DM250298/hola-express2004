@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { completarCuitProveedor } from '@/lib/queries/proveedores'
+import { soloDigitos } from '@/lib/utils/fiscal'
 import type {
   FacturaCompraRow,
   ItemFacturaCompraRow,
@@ -222,13 +223,39 @@ export async function controlarCompraDirecta(payload: {
   controlada: boolean
 }): Promise<void> {
   const supabase = createClient()
+  // CUIT pelado: es parte de la clave del índice único de comprobantes, y si
+  // acá entrara con guiones no cruzaría contra las otras puertas de carga.
+  const cuit = payload.cuit ? soloDigitos(payload.cuit) || null : null
+
+  // Pre-chequeo de duplicado: el RPC hace el update sin guarda, así que sin
+  // esto un comprobante repetido devuelve el error crudo de Postgres
+  // ("duplicate key value violates unique constraint…") en la cara del usuario.
+  if (cuit && payload.tipo && payload.punto && payload.numero) {
+    const { data: dup, error: errDup } = await supabase
+      .from('facturas_compra')
+      .select('id')
+      .eq('cuit_proveedor', cuit)
+      .eq('tipo_comprobante', payload.tipo)
+      .eq('punto_venta', payload.punto)
+      .eq('numero_comprobante', payload.numero)
+      .neq('id', payload.factura_id)
+      .limit(1)
+      .maybeSingle<{ id: number }>()
+    if (errDup) throw errDup
+    if (dup) {
+      throw new Error(
+        `Ese comprobante (${payload.tipo} ${payload.punto}-${payload.numero}) ya está cargado en otra factura.`
+      )
+    }
+  }
+
   const { error } = await supabase.rpc('fn_controlar_compra_directa', {
     p_factura_id: payload.factura_id,
     p_usuario_id: payload.usuario_id,
     p_tipo: payload.tipo,
     p_punto: payload.punto,
     p_numero: payload.numero,
-    p_cuit: payload.cuit,
+    p_cuit: cuit,
     p_controlada: payload.controlada,
   })
   if (error) throw error
@@ -269,20 +296,26 @@ export async function guardarFacturaCompra(
 ): Promise<void> {
   const supabase = createClient()
   const comp = payload.comprobante
+  // CUIT pelado UNA vez: se usa para el anti-duplicado y para guardar, así el
+  // chequeo compara exactamente lo mismo que después queda en la fila (el
+  // índice único compara texto exacto, y con guiones no cruzaría).
+  const cuitNorm = comp?.cuit_proveedor
+    ? soloDigitos(comp.cuit_proveedor) || null
+    : null
 
   // 1. Anti-duplicado: si el comprobante está identificado por completo,
   //    no puede existir el mismo (CUIT + tipo + punto + número) en OTRA
   //    cuenta. Re-guardar la misma cuenta sí es válido.
   if (
-    comp?.cuit_proveedor &&
-    comp.tipo_comprobante &&
+    cuitNorm &&
+    comp?.tipo_comprobante &&
     comp.punto_venta &&
     comp.numero_comprobante
   ) {
     const { data: dup, error: errDup } = await supabase
       .from('facturas_compra')
       .select('cuenta_id')
-      .eq('cuit_proveedor', comp.cuit_proveedor)
+      .eq('cuit_proveedor', cuitNorm)
       .eq('tipo_comprobante', comp.tipo_comprobante)
       .eq('punto_venta', comp.punto_venta)
       .eq('numero_comprobante', comp.numero_comprobante)
@@ -337,7 +370,7 @@ export async function guardarFacturaCompra(
         punto_venta: comp.punto_venta,
         numero_comprobante: comp.numero_comprobante,
         cae: comp.cae,
-        cuit_proveedor: comp.cuit_proveedor,
+        cuit_proveedor: cuitNorm,
       })
       .eq('cuenta_id', payload.cuenta_id)
     if (errComp) throw errComp
