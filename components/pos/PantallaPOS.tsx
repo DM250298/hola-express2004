@@ -5,6 +5,7 @@ import {
   ArrowDownToLine,
   Keyboard,
   Lightbulb,
+  HandCoins,
   Loader2,
   LockKeyhole,
   Package,
@@ -41,6 +42,8 @@ import { TicketResumen } from './TicketResumen'
 import { OverlayAtajos } from './OverlayAtajos'
 import { IndicadorConexion } from './IndicadorConexion'
 import { SelectorCliente, type ClienteSeleccionado } from './SelectorCliente'
+import { SelectorDeudorCtaCte } from './SelectorDeudorCtaCte'
+import { ModalCobrarCtaCte } from '@/components/finanzas/ModalCobrarCtaCte'
 import { ModalCobroTerminal } from './ModalCobroTerminal'
 import { ModalIngresoPeso } from './ModalIngresoPeso'
 import { useTerminales } from '@/lib/hooks/useTerminales'
@@ -50,6 +53,7 @@ import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { PagoPayload, ProductoFrecuente } from '@/lib/queries/ventas'
 import type { VentaCompleta } from '@/lib/queries/ventas'
+import type { DeudorBuscado } from '@/types/database'
 
 interface Props {
   usuarioId: string
@@ -115,6 +119,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const [overlayAtajosAbierto, setOverlayAtajosAbierto] = useState(false)
   const [selectorClienteAbierto, setSelectorClienteAbierto] = useState(false)
   const [modalTerminalAbierto, setModalTerminalAbierto] = useState(false)
+  /** Flujo "cobrar fiado" en efectivo: buscador de deudor → modal de cobro. */
+  const [selectorCobroFiadoAbierto, setSelectorCobroFiadoAbierto] =
+    useState(false)
+  const [deudorCobroFiado, setDeudorCobroFiado] =
+    useState<DeudorBuscado | null>(null)
   /** Producto por peso pendiente de ingreso de gramos. */
   const [productoPeso, setProductoPeso] = useState<{
     producto_id: number
@@ -564,6 +573,16 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           <Button
             variant="ghost"
             size="sm"
+            onClick={() => setSelectorCobroFiadoAbierto(true)}
+            title="Cobrar una deuda de cuenta corriente en efectivo"
+            className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5"
+          >
+            <HandCoins className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Cobrar fiado</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setModalSugerirAbierto(true)}
             title="Sugerir un producto que pidió un cliente"
             className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5"
@@ -792,6 +811,24 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         abierto={selectorClienteAbierto}
         onCambioAbierto={setSelectorClienteAbierto}
         onSeleccionar={elegirCliente}
+      />
+
+      {/* Cobrar fiado en efectivo: el deudor pasa por el mostrador a pagar. */}
+      <SelectorDeudorCtaCte
+        abierto={selectorCobroFiadoAbierto}
+        onCambioAbierto={setSelectorCobroFiadoAbierto}
+        modo="cobrar"
+        onSeleccionar={(d) => setDeudorCobroFiado(d)}
+      />
+      <ModalCobrarCtaCte
+        abierto={deudorCobroFiado !== null}
+        onCambioAbierto={(v) => !v && setDeudorCobroFiado(null)}
+        deudorTipo={deudorCobroFiado?.deudor_tipo ?? null}
+        deudorId={deudorCobroFiado?.deudor_id ?? null}
+        deudorNombre={deudorCobroFiado?.nombre ?? ''}
+        saldo={deudorCobroFiado?.saldo ?? 0}
+        contexto="pos"
+        turnoId={turno.id}
       />
 
       <ModalCobroTerminal

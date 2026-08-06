@@ -50,7 +50,7 @@ const PERMISO_RUTA: Record<string, string[]> = {
   // 'mi_panel' (rol empleado), no 'rrhh'. Match por prefijo exacto o sub-ruta.
   // '/movil' también: el empleado común entra al hub móvil desde el celular
   // (ve su panel y la consulta de precio) — ver el bloque de redirección abajo.
-  mi_panel: ['/rrhh/mi-panel', '/rrhh/mis-tareas', '/movil'],
+  mi_panel: ['/rrhh/mi-panel', '/rrhh/mis-tareas', '/rrhh/mi-cuenta', '/movil'],
   terminales: ['/terminales'],
   reportes: ['/reportes'],
   configuracion: ['/configuracion'],

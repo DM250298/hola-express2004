@@ -13,19 +13,22 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { SelectorDeudorCtaCte } from '@/components/pos/SelectorDeudorCtaCte'
 import { useShortcuts } from '@/lib/hooks/useShortcuts'
 import { useMediosPagoActivos } from '@/lib/hooks/useMediosPago'
 import { getNotaCredito } from '@/lib/queries/devoluciones'
 import { resolverIconoMedio } from '@/lib/utils/iconosMedioPago'
 import { formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
-import type { MedioPago } from '@/types/database'
+import type { DeudorBuscado, MedioPago } from '@/types/database'
 import type { PagoPayload } from '@/lib/queries/ventas'
 
 /** Código "sintético" que representa el cobro por maquinita Point. */
 export const MEDIO_MAQUINITA = '__maquinita'
 /** Código "sintético" para pagar con una nota de crédito (vale). */
 export const MEDIO_NOTA_CREDITO = '__nc'
+/** Medio REAL (tabla medios_pago) que fía la venta a un deudor. */
+export const MEDIO_CUENTA_CORRIENTE = 'cuenta_corriente'
 
 interface Props {
   abierto: boolean
@@ -53,6 +56,8 @@ interface PagoLinea {
   /** Solo para nota de crédito. */
   ncCodigo?: string
   ncSaldo?: number
+  /** Solo para cuenta corriente: deudor elegido en el buscador. */
+  ccDeudor?: DeudorBuscado
 }
 
 function nuevoId() {
@@ -73,6 +78,22 @@ export function ModalCobro({
   const [indiceActivo, setIndiceActivo] = useState(0)
   const [ncInput, setNcInput] = useState('')
   const [validandoNc, setValidandoNc] = useState(false)
+  const [selectorDeudorAbierto, setSelectorDeudorAbierto] = useState(false)
+  // Estado de conexión propio (listeners livianos): fiar exige estar online
+  // porque el tope se valida en el server y la venta fiada NUNCA se encola.
+  const [online, setOnline] = useState(true)
+
+  useEffect(() => {
+    setOnline(typeof navigator === 'undefined' || navigator.onLine !== false)
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
 
   // Medios disponibles (dinámicos). Los primeros 4 reciben atajo F1-F4.
   // Si hay terminal activa, agregamos "Maquinita" como un medio extra al final.
@@ -130,21 +151,51 @@ export function ModalCobro({
       p.medio !== MEDIO_NOTA_CREDITO ||
       (!!p.ncCodigo && Number(p.monto) <= (p.ncSaldo ?? 0) + 0.01)
   )
+  // La línea de cuenta corriente necesita un deudor con cupo; para clientes
+  // (que sí informan el disponible) el monto no puede superarlo. El tope del
+  // empleado lo controla solo el server (revelar el cupo = revelar el sueldo).
+  const ctaCteOk =
+    online &&
+    pagos.every(
+      (p) =>
+        p.medio !== MEDIO_CUENTA_CORRIENTE ||
+        (!!p.ccDeudor &&
+          p.ccDeudor.tiene_cupo &&
+          (p.ccDeudor.disponible === null ||
+            Number(p.monto) <= p.ccDeudor.disponible + 0.01))
+    )
   const puedeConfirmar =
     !procesando &&
     !sinMedios &&
     cubierto &&
     ncOk &&
+    ctaCteOk &&
     pagos.length > 0 &&
     pagos.every((p) => Number(p.monto) > 0)
   const pagoActivoEsEfectivo = pagoActivo?.medio === 'efectivo'
   const pagoActivoEsNc = pagoActivo?.medio === MEDIO_NOTA_CREDITO
+  const pagoActivoEsCtaCte = pagoActivo?.medio === MEDIO_CUENTA_CORRIENTE
   // Mientras se tipea el código del vale, se apaga el teclado del cobro para
   // que las teclas vayan al input y no al keypad de montos.
   const ingresandoCodigoNc = pagoActivoEsNc && !pagoActivo?.ncCodigo
 
   function cambiarMedio(medio: MedioPago) {
     if (!pagoActivo) return
+    if (medio === MEDIO_CUENTA_CORRIENTE) {
+      if (!online) {
+        toast.error('Sin conexión no se puede fiar (hay que verificar el cupo).')
+        return
+      }
+      // Máximo UNA línea de cuenta corriente por venta (el server también
+      // lo valida): una venta se fía a un solo deudor.
+      const otraLinea = pagos.some(
+        (p, i) => i !== indiceActivo && p.medio === MEDIO_CUENTA_CORRIENTE
+      )
+      if (otraLinea) {
+        toast.error('Ya hay una línea de cuenta corriente en esta venta.')
+        return
+      }
+    }
     setPagos((prev) =>
       prev.map((p, i) =>
         i === indiceActivo
@@ -154,9 +205,39 @@ export function ModalCobro({
               // al salir de nota de crédito, limpiar sus datos
               ncCodigo: medio === MEDIO_NOTA_CREDITO ? p.ncCodigo : undefined,
               ncSaldo: medio === MEDIO_NOTA_CREDITO ? p.ncSaldo : undefined,
+              // al salir de cuenta corriente, soltar el deudor
+              ccDeudor:
+                medio === MEDIO_CUENTA_CORRIENTE ? p.ccDeudor : undefined,
             }
           : p
       )
+    )
+    // Al entrar a cuenta corriente sin deudor elegido, abrir el buscador.
+    if (medio === MEDIO_CUENTA_CORRIENTE && !pagoActivo.ccDeudor) {
+      setSelectorDeudorAbierto(true)
+    }
+  }
+
+  /** El buscador devolvió el deudor: se asigna a la línea activa. */
+  function asignarDeudor(deudor: DeudorBuscado) {
+    setPagos((prev) =>
+      prev.map((p, i) => {
+        if (i !== indiceActivo) return p
+        let monto = p.monto
+        if (!monto) {
+          // Prefill con lo que falta cubrir (capado al cupo del cliente).
+          const otros = prev.reduce(
+            (acc, q, j) => (j === i ? acc : acc + (Number(q.monto) || 0)),
+            0
+          )
+          let necesario = Math.max(0, total - otros)
+          if (deudor.disponible !== null) {
+            necesario = Math.min(necesario, deudor.disponible)
+          }
+          if (necesario > 0) monto = necesario.toFixed(2)
+        }
+        return { ...p, ccDeudor: deudor, monto }
+      })
     )
   }
 
@@ -237,6 +318,14 @@ export function ModalCobro({
         nc_codigo: p.ncCodigo ?? null,
       }
     }
+    if (p.medio === MEDIO_CUENTA_CORRIENTE) {
+      return {
+        medio_pago: MEDIO_CUENTA_CORRIENTE,
+        monto: Number(p.monto),
+        deudor_tipo: p.ccDeudor?.deudor_tipo ?? null,
+        deudor_id: p.ccDeudor?.deudor_id ?? null,
+      }
+    }
     return { medio_pago: p.medio, monto: Number(p.monto) }
   }
 
@@ -314,7 +403,10 @@ export function ModalCobro({
     [pagoActivo, pagos, indiceActivo, total, puedeConfirmar, medios]
   )
 
-  useShortcuts(shortcuts, abierto && !procesando && !ingresandoCodigoNc)
+  useShortcuts(
+    shortcuts,
+    abierto && !procesando && !ingresandoCodigoNc && !selectorDeudorAbierto
+  )
 
   return (
     <Dialog open={abierto} onOpenChange={(v) => !procesando && onCambioAbierto(v)}>
@@ -374,15 +466,23 @@ export function ModalCobro({
                   {medios.map((m) => {
                     const Icono = m.Icono
                     const activo = pagoActivo?.medio === m.valor
+                    const fiadoOffline =
+                      m.valor === MEDIO_CUENTA_CORRIENTE && !online
                     return (
                       <button
                         key={m.valor}
                         type="button"
                         onClick={() => cambiarMedio(m.valor)}
-                        disabled={procesando}
-                        title={`${m.etiqueta}${m.tecla ? ` (${m.tecla})` : ''}${
-                          m.comision > 0 ? ` · ${m.comision}% comisión` : ''
-                        }`}
+                        disabled={procesando || fiadoOffline}
+                        title={
+                          fiadoOffline
+                            ? 'Sin conexión no se puede fiar'
+                            : `${m.etiqueta}${m.tecla ? ` (${m.tecla})` : ''}${
+                                m.comision > 0
+                                  ? ` · ${m.comision}% comisión`
+                                  : ''
+                              }`
+                        }
                         className={cn(
                           'relative flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border-2 transition-all',
                           activo
@@ -416,6 +516,76 @@ export function ModalCobro({
                   })}
                 </div>
               </div>
+
+              {/* Cuenta corriente: deudor de la línea activa */}
+              {pagoActivoEsCtaCte && (
+                <div className="rounded-xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/8 p-3 space-y-2">
+                  {pagoActivo?.ccDeudor ? (
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <div className="min-w-0">
+                        <span className="text-[#391511] font-semibold truncate">
+                          {pagoActivo.ccDeudor.nombre}
+                        </span>
+                        <span
+                          className={cn(
+                            'ml-1.5 text-[9px] uppercase tracking-wider rounded-full px-1.5 py-0.5',
+                            pagoActivo.ccDeudor.deudor_tipo === 'empleado'
+                              ? 'bg-[#f9d2a2]/60 text-[#6f3a2a]'
+                              : 'bg-[#6f3a2a]/10 text-[#6f3a2a]'
+                          )}
+                        >
+                          {pagoActivo.ccDeudor.deudor_tipo === 'empleado'
+                            ? 'Empleado'
+                            : 'Cliente'}
+                        </span>
+                        <div className="text-xs text-[#6f3a2a]">
+                          {pagoActivo.ccDeudor.saldo > 0.009 ? (
+                            <>
+                              debe{' '}
+                              <MontoARS monto={pagoActivo.ccDeudor.saldo} />
+                            </>
+                          ) : (
+                            'sin deuda previa'
+                          )}
+                          {pagoActivo.ccDeudor.disponible !== null && (
+                            <>
+                              {' · '}cupo{' '}
+                              <MontoARS
+                                monto={pagoActivo.ccDeudor.disponible}
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectorDeudorAbierto(true)}
+                        className="border-[#e4c9b0] text-[#6f3a2a] shrink-0"
+                      >
+                        Cambiar
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      onClick={() => setSelectorDeudorAbierto(true)}
+                      className="w-full h-10 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
+                    >
+                      Elegir a quién se le fía…
+                    </Button>
+                  )}
+                  {pagoActivo?.ccDeudor &&
+                    pagoActivo.ccDeudor.disponible !== null &&
+                    Number(pagoActivo.monto) >
+                      pagoActivo.ccDeudor.disponible + 0.01 && (
+                      <p className="text-xs text-[#c43e2c] font-semibold">
+                        El monto supera el cupo disponible del cliente.
+                      </p>
+                    )}
+                </div>
+              )}
 
               {/* Nota de crédito: ingresar código del vale */}
               {pagoActivoEsNc && (
@@ -605,6 +775,12 @@ export function ModalCobro({
           </Button>
         </div>
       </DialogContent>
+
+      <SelectorDeudorCtaCte
+        abierto={selectorDeudorAbierto}
+        onCambioAbierto={setSelectorDeudorAbierto}
+        onSeleccionar={asignarDeudor}
+      />
     </Dialog>
   )
 }

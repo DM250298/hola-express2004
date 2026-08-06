@@ -18,6 +18,7 @@ import {
   ListChecks,
   ShieldCheck,
   TrendingUp,
+  Wallet,
   XCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -217,6 +218,24 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
             </p>
           </div>
         </div>
+
+        <Link
+          href="/rrhh/mi-cuenta"
+          className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all sm:col-span-2"
+        >
+          <div className="shrink-0 p-2.5 rounded-xl bg-[#f9d2a2]/50">
+            <Wallet className="h-5 w-5 text-[#9e6b15]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-[#c8a58a] font-semibold">
+              Mi cuenta
+            </p>
+            <p className="text-[#391511] font-bold mt-0.5">
+              Cuenta corriente y adelantos
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-[#c8a58a] group-hover:translate-x-0.5 group-hover:text-[#391511] transition-all" />
+        </Link>
       </div>
 
       <CalendarioAsistencia empleadoId={empleadoId} />

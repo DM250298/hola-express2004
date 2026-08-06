@@ -302,6 +302,52 @@ export async function deleteNovedad(id: number): Promise<void> {
   if (error) throw error
 }
 
+export interface RegistrarAdelantoPayload {
+  empleado_id: number
+  periodo: string
+  monto: number
+  /** Cuenta de tesorería de donde sale la plata. */
+  cuenta_id: number
+  usuario_id: string
+  fecha?: string | null
+  concepto?: string | null
+}
+
+/**
+ * Adelanto de sueldo con PLATA REAL (mig 142): debita la cuenta elegida,
+ * registra el movimiento de tesorería y el asiento DEBE 1.1.10 Anticipos.
+ * En la liquidación del período se descuenta solo (tipo='adelanto').
+ */
+export async function registrarAdelanto(
+  payload: RegistrarAdelantoPayload
+): Promise<NovedadEmpleadoRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_registrar_adelanto', {
+    p_empleado_id: payload.empleado_id,
+    p_periodo: payload.periodo,
+    p_monto: payload.monto,
+    p_cuenta_id: payload.cuenta_id,
+    p_usuario_id: payload.usuario_id,
+    p_fecha: payload.fecha ?? null,
+    p_concepto: payload.concepto ?? null,
+  })
+  if (error) throw error
+  return data as unknown as NovedadEmpleadoRow
+}
+
+/** Anula un adelanto con plata real: repone el saldo y borra la novedad. */
+export async function anularAdelanto(
+  novedadId: number,
+  usuarioId: string
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_anular_adelanto', {
+    p_novedad_id: novedadId,
+    p_usuario_id: usuarioId,
+  })
+  if (error) throw error
+}
+
 // ─── Liquidaciones (modelo nuevo · Sprint 4) ─────────────────────────────────
 //
 // Modelo por-empleado con snapshot inmutable. Una liquidación es un LOTE de un

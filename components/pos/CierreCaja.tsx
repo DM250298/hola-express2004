@@ -20,6 +20,7 @@ import { ContadorBilletes } from './ContadorBilletes'
 import { useCerrarTurno } from '@/lib/hooks/useTurno'
 import { useRegistrarSangria } from '@/lib/hooks/useCajaFuerte'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
+import { getCobrosFiadoTurno } from '@/lib/queries/ctaCte'
 import { createClient } from '@/lib/supabase/client'
 import { formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -54,12 +55,14 @@ interface ResumenTurno {
   productos: ProductoVendido[]
   gastos: number
   sangrias: number
+  /** Cobros de fiado en efectivo del turno (suman al esperado). */
+  cobros_fiado: number
 }
 
 async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
   const supabase = createClient()
 
-  const [resVentas, resPagos, resItems, resGastos, resSangrias] =
+  const [resVentas, resPagos, resItems, resGastos, resSangrias, cobrosFiado] =
     await Promise.all([
       supabase
         .from('ventas')
@@ -80,6 +83,7 @@ async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
         .eq('ventas.estado', 'completada'),
       supabase.from('egresos').select('monto').eq('turno_id', turnoId),
       supabase.from('sangrias').select('monto').eq('turno_id', turnoId),
+      getCobrosFiadoTurno(turnoId),
     ])
 
   if (resVentas.error) throw resVentas.error
@@ -152,6 +156,7 @@ async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
     productos,
     gastos,
     sangrias,
+    cobros_fiado: cobrosFiado,
   }
 }
 
@@ -233,7 +238,8 @@ export function CierreCaja({
     () =>
       resumen
         ? Number(montoApertura) +
-          resumen.total_ventas_efectivo -
+          resumen.total_ventas_efectivo +
+          resumen.cobros_fiado -
           resumen.gastos -
           resumen.sangrias
         : null,
@@ -421,6 +427,19 @@ export function CierreCaja({
                   </ul>
                 </div>
               </div>
+
+              {/* Cobros de fiado en efectivo: plata que entró al cajón sin
+                  ser una venta del turno — suma al esperado. */}
+              {(resumen?.cobros_fiado ?? 0) > 0.009 && (
+                <div className="rounded-xl border border-[#f9b44c]/40 bg-[#f9b44c]/10 px-3 py-2 flex items-center justify-between text-sm">
+                  <span className="text-[#6f3a2a] font-medium">
+                    Cobros de fiado (efectivo)
+                  </span>
+                  <span className="font-bold text-[#391511] tabular-nums">
+                    +{formatearMonto(resumen?.cobros_fiado ?? 0)}
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-3 gap-3">
                 <ResumenItem

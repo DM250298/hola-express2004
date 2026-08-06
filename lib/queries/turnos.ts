@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { getCobrosFiadoTurno } from '@/lib/queries/ctaCte'
 import type { CajaTurnoRow } from '@/types/database'
 
 export async function getTurnoActivo(
@@ -42,6 +43,8 @@ export interface ResultadoCierre {
   monto_esperado: number
   diferencia: number
   total_ventas_efectivo: number
+  /** Cobros de fiado en efectivo del turno (también suman al esperado). */
+  total_cobros_fiado: number
 }
 
 export async function cerrarTurno(
@@ -100,9 +103,15 @@ export async function cerrarTurno(
     0
   )
 
+  // Cobros de fiado en EFECTIVO del turno: plata que entró al cajón sin ser
+  // una venta (la venta fiada original no sumó efectivo). Si la migración
+  // 141 no corrió todavía, la query devuelve 0.
+  const totalCobrosFiado = await getCobrosFiadoTurno(turnoId)
+
   const montoEsperado =
     Number(turnoActual.monto_apertura) +
-    totalVentasEfectivo -
+    totalVentasEfectivo +
+    totalCobrosFiado -
     totalGastos -
     totalSangrias
   const diferencia = montoCierreReal - montoEsperado
@@ -128,5 +137,6 @@ export async function cerrarTurno(
     monto_esperado: montoEsperado,
     diferencia,
     total_ventas_efectivo: totalVentasEfectivo,
+    total_cobros_fiado: totalCobrosFiado,
   }
 }

@@ -46,9 +46,25 @@ export function useCrearVenta() {
       // Movimientos de cuenta generados automáticamente
       queryClient.invalidateQueries({ queryKey: ['cuentas'] })
       queryClient.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+      // Fiado: saldos de cuenta corriente (cartera, CRM y RRHH)
+      queryClient.invalidateQueries({ queryKey: ['cartera-fiado'] })
+      queryClient.invalidateQueries({ queryKey: ['movimientos-deudor'] })
+      queryClient.invalidateQueries({ queryKey: ['clientes'] })
+      queryClient.invalidateQueries({ queryKey: ['cta-cte-empleado'] })
+      queryClient.invalidateQueries({ queryKey: ['empleados-saldo'] })
       toast.success('Venta registrada')
     },
     onError: (error: Error) => {
+      // El tope de fiado rebota desde fn_crear_venta con el prefijo
+      // CTACTE_LIMITE: se muestra el detalle (quién, cuánto debe, su tope)
+      // sin el ruido de "No se pudo completar la venta: ...".
+      const idx = error.message.indexOf('CTACTE_LIMITE:')
+      if (idx >= 0) {
+        toast.error('No hay cupo para fiar', {
+          description: error.message.slice(idx + 'CTACTE_LIMITE:'.length).trim(),
+        })
+        return
+      }
       toast.error(`No se pudo completar la venta: ${error.message}`)
     },
   })

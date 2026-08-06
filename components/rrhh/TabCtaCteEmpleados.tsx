@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import {
   ChevronDown,
   ChevronRight,
+  HandCoins,
   Lock,
   Plus,
   Trash2,
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalMovimientoCtaCte } from './ModalMovimientoCtaCte'
+import { ModalCobrarCtaCte } from '@/components/finanzas/ModalCobrarCtaCte'
 import {
   useEliminarMovimientoCtaCte,
   useEmpleadosConSaldo,
@@ -45,6 +47,9 @@ export function TabCtaCteEmpleados() {
 
   const [abiertoId, setAbiertoId] = useState<number | null>(null)
   const [modalEmpleado, setModalEmpleado] = useState<EmpleadoConSaldo | null>(
+    null
+  )
+  const [cobroEmpleado, setCobroEmpleado] = useState<EmpleadoConSaldo | null>(
     null
   )
 
@@ -106,6 +111,7 @@ export function TabCtaCteEmpleados() {
                   setAbiertoId((prev) => (prev === e.id ? null : e.id))
                 }
                 onNuevoMovimiento={() => setModalEmpleado(e)}
+                onCobrar={() => setCobroEmpleado(e)}
               />
             ))}
         </ul>
@@ -119,6 +125,20 @@ export function TabCtaCteEmpleados() {
           empleadoNombre={modalEmpleado.nombre}
         />
       )}
+
+      <ModalCobrarCtaCte
+        abierto={cobroEmpleado !== null}
+        onCambioAbierto={(v) => !v && setCobroEmpleado(null)}
+        deudorTipo="empleado"
+        deudorId={cobroEmpleado?.id ?? null}
+        deudorNombre={
+          cobroEmpleado
+            ? `${cobroEmpleado.nombre}${cobroEmpleado.apellido ? ` ${cobroEmpleado.apellido}` : ''}`
+            : ''
+        }
+        saldo={cobroEmpleado?.saldo_cta_cte ?? 0}
+        contexto="finanzas"
+      />
     </div>
   )
 }
@@ -130,11 +150,13 @@ function FilaEmpleado({
   abierto,
   onToggle,
   onNuevoMovimiento,
+  onCobrar,
 }: {
   empleado: EmpleadoConSaldo
   abierto: boolean
   onToggle: () => void
   onNuevoMovimiento: () => void
+  onCobrar: () => void
 }) {
   const saldo = empleado.saldo_cta_cte
   const debe = saldo > 0.001
@@ -174,6 +196,18 @@ function FilaEmpleado({
             </p>
           </div>
         </button>
+        {debe && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onCobrar}
+            title="Registrar un pago (baja la deuda sin esperar al sueldo)"
+            className="border-[#e4c9b0] text-[#6f3a2a] gap-1"
+          >
+            <HandCoins className="h-3.5 w-3.5" />
+            Cobrar
+          </Button>
+        )}
         <Button
           size="sm"
           onClick={onNuevoMovimiento}

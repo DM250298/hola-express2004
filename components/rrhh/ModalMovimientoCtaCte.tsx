@@ -118,6 +118,13 @@ export function ModalMovimientoCtaCte({
         </DialogHeader>
 
         <div className="px-6 py-5 space-y-4">
+          {tipo === 'consumo' && (
+            <p className="text-[11px] text-[#6f3a2a] bg-[#f9b44c]/10 border border-[#f9b44c]/40 rounded-lg px-3 py-2">
+              💡 Si se lleva mercadería, cargá la venta por el <b>POS</b> con el
+              medio “Cuenta corriente”: descuenta stock y queda en la
+              contabilidad. Este alta manual es para regularizaciones.
+            </p>
+          )}
           <div className="space-y-1.5">
             <Label className="text-[#391511] font-medium text-sm">Tipo</Label>
             <Select

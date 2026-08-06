@@ -22,6 +22,7 @@ import { TabCuentas } from './TabCuentas'
 import { TabMovimientos } from './TabMovimientos'
 import { TabCajaFuerte } from './TabCajaFuerte'
 import { TabPorCobrar } from './TabPorCobrar'
+import { TabFiado } from './TabFiado'
 import {
   rangoDesdeFechas,
   rangoPredefinido,
@@ -35,6 +36,7 @@ const GRUPOS: { titulo: string; tabs: { value: string; label: string }[] }[] = [
     tabs: [
       { value: 'caja_fuerte', label: 'Caja fuerte' },
       { value: 'por_cobrar', label: 'Por cobrar' },
+      { value: 'fiado', label: 'Fiado' },
       { value: 'cuentas_bancarias', label: 'Cuentas' },
       { value: 'movimientos', label: 'Movimientos' },
       { value: 'egresos', label: 'Egresos' },
@@ -204,6 +206,7 @@ export function PantallaFinanzas() {
         )}
         {tab === 'caja_fuerte' && <TabCajaFuerte />}
         {tab === 'por_cobrar' && <TabPorCobrar />}
+        {tab === 'fiado' && <TabFiado />}
         {tab === 'cuentas_bancarias' && (
           <TabCuentas onVerMovimientos={verMovimientosDeCuenta} />
         )}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { tienePermiso } from '@/lib/permisos'
 import { TarjetaMisTareas } from './TarjetaMisTareas'
+import { TarjetaMiCuenta } from './TarjetaMiCuenta'
 
 interface ZonaConteoMovil {
   id: number
@@ -129,6 +130,8 @@ export function HubMovil({
         )}
 
         {empleadoId !== null && <TarjetaMisTareas empleadoId={empleadoId} />}
+
+        {empleadoId !== null && <TarjetaMiCuenta />}
 
         {puedeContar && (
           <Link

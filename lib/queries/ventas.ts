@@ -23,6 +23,9 @@ export interface PagoPayload {
   comision_monto?: number | null
   /** Retención de IIBB REAL en pesos (cobro con terminal MP). Override de la tabla. */
   iibb_monto?: number | null
+  /** Solo para medio_pago === 'cuenta_corriente': a quién se le fía. */
+  deudor_tipo?: 'cliente' | 'empleado' | null
+  deudor_id?: number | null
 }
 
 export interface CrearVentaPayload {
@@ -127,8 +130,20 @@ export async function crearVenta(
 
   const clienteUuid = payload.cliente_uuid ?? nuevoUuid()
 
+  // Una venta FIADA nunca se encola: el tope se valida en el server y sin
+  // conexión la deuda no existiría hasta sincronizar — si para entonces el
+  // cupo está lleno, la venta rebota con la mercadería ya entregada.
+  const tieneFiado = payload.pagos.some(
+    (p) => p.medio_pago === 'cuenta_corriente'
+  )
+
   // Sin conexión: encolar directamente, sin intentar la red.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    if (tieneFiado) {
+      throw new Error(
+        'Sin conexión no se puede fiar (no podemos verificar el cupo). Cobrá de otra forma.'
+      )
+    }
     await encolarVenta(
       {
         turno_id: payload.turno_id,
@@ -155,6 +170,8 @@ export async function crearVenta(
         nc_codigo: p.nc_codigo ?? null,
         comision_monto: p.comision_monto ?? null,
         iibb_monto: p.iibb_monto ?? null,
+        deudor_tipo: p.deudor_tipo ?? null,
+        deudor_id: p.deudor_id ?? null,
       })) as unknown as Json,
       p_items: payload.items.map((it) => ({
         producto_id: it.producto_id,
@@ -176,7 +193,13 @@ export async function crearVenta(
     }
   } catch (error) {
     // Se cayó la red a mitad de la operación: encolar para sincronizar luego.
+    // Nunca con fiado (mismo motivo que arriba: el tope se valida online).
     if (esErrorDeRed(error)) {
+      if (tieneFiado) {
+        throw new Error(
+          'Se cortó la conexión y la venta fiada no se registró. Cobrá de otra forma o reintentá.'
+        )
+      }
       await encolarVenta(
         {
           turno_id: payload.turno_id,

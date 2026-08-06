@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  anularAdelanto,
   confirmarLiquidacion,
   createEmpleado,
   createNovedad,
@@ -16,10 +17,12 @@ import {
   getLiquidacionLotes,
   getNovedades,
   pagarLiquidacion,
+  registrarAdelanto,
   subirDocumento,
   subirFotoEmpleado,
   toggleEmpleadoActivo,
   updateEmpleado,
+  type RegistrarAdelantoPayload,
   type SubirDocumentoArgs,
 } from '@/lib/queries/rrhh'
 import type {
@@ -175,6 +178,39 @@ export function useDeleteNovedad() {
       toast.success('Novedad eliminada')
     },
     onError: (e: Error) => toast.error(`No se pudo eliminar: ${e.message}`),
+  })
+}
+
+/** Adelanto con plata real: además de la novedad, mueve tesorería. */
+export function useRegistrarAdelanto() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: RegistrarAdelantoPayload) =>
+      registrarAdelanto(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: NOVEDADES_KEY })
+      qc.invalidateQueries({ queryKey: ['cuentas'] })
+      qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+      qc.invalidateQueries({ queryKey: ['asientos'] })
+      toast.success('Adelanto registrado (la plata salió de la cuenta)')
+    },
+    onError: (e: Error) => toast.error(`No se pudo registrar: ${e.message}`),
+  })
+}
+
+export function useAnularAdelanto() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (vars: { novedadId: number; usuarioId: string }) =>
+      anularAdelanto(vars.novedadId, vars.usuarioId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: NOVEDADES_KEY })
+      qc.invalidateQueries({ queryKey: ['cuentas'] })
+      qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+      qc.invalidateQueries({ queryKey: ['asientos'] })
+      toast.success('Adelanto anulado (la plata volvió a la cuenta)')
+    },
+    onError: (e: Error) => toast.error(`No se pudo anular: ${e.message}`),
   })
 }
 

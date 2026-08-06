@@ -1,6 +1,15 @@
 'use client'
 
-import { Mail, MapPin, Pencil, Phone, Receipt, ShoppingBag } from 'lucide-react'
+import { useState } from 'react'
+import {
+  HandCoins,
+  Mail,
+  MapPin,
+  Pencil,
+  Phone,
+  Receipt,
+  ShoppingBag,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -19,8 +28,11 @@ import {
 } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ModalCobrarCtaCte } from '@/components/finanzas/ModalCobrarCtaCte'
 import { useCliente, useHistorialCliente } from '@/lib/hooks/useClientes'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import { etiquetaMedioFallback } from '@/lib/utils/iconosMedioPago'
 import { formatearFecha, formatearFechaHora } from '@/lib/utils/formato'
 
@@ -41,6 +53,9 @@ export function ModalDetalleCliente({
   const { data: historial, isLoading: cargandoHistorial } =
     useHistorialCliente(clienteId ?? undefined)
   const { data: medios } = useMediosPago()
+  const { data: usuario } = useUsuario()
+  const [cobroAbierto, setCobroAbierto] = useState(false)
+  const puedeCobrar = tienePermiso(usuario?.permisos, 'cuenta_corriente')
 
   function etiquetaMedio(codigo: string): string {
     return (
@@ -133,6 +148,48 @@ export function ModalDetalleCliente({
                 </div>
               </div>
 
+              {/* Cuenta corriente (fiado) */}
+              {(cliente.saldo_cta_cte > 0.009 ||
+                (cliente.limite_credito ?? 0) > 0) && (
+                <div
+                  className={
+                    cliente.saldo_cta_cte > 0.009
+                      ? 'rounded-xl border-2 border-[#f9b44c]/40 bg-[#f9b44c]/10 p-3 flex items-center justify-between gap-2'
+                      : 'rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3 flex items-center justify-between gap-2'
+                  }
+                >
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      Cuenta corriente
+                    </div>
+                    <div className="text-lg font-extrabold text-[#391511] tabular-nums">
+                      {cliente.saldo_cta_cte > 0.009 ? (
+                        <>
+                          Debe <MontoARS monto={cliente.saldo_cta_cte} />
+                        </>
+                      ) : (
+                        'Al día'
+                      )}
+                    </div>
+                    {(cliente.limite_credito ?? 0) > 0 && (
+                      <div className="text-[11px] text-[#6f3a2a]">
+                        Tope <MontoARS monto={cliente.limite_credito ?? 0} />
+                      </div>
+                    )}
+                  </div>
+                  {puedeCobrar && cliente.saldo_cta_cte > 0.009 && (
+                    <Button
+                      size="sm"
+                      onClick={() => setCobroAbierto(true)}
+                      className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5 shrink-0"
+                    >
+                      <HandCoins className="h-3.5 w-3.5" />
+                      Cobrar
+                    </Button>
+                  )}
+                </div>
+              )}
+
               {/* Historial */}
               <div>
                 <h3 className="text-[#391511] font-bold text-sm mb-2">
@@ -207,6 +264,16 @@ export function ModalDetalleCliente({
           </Button>
         </div>
       </DialogContent>
+
+      <ModalCobrarCtaCte
+        abierto={cobroAbierto}
+        onCambioAbierto={setCobroAbierto}
+        deudorTipo="cliente"
+        deudorId={cliente?.id ?? null}
+        deudorNombre={cliente?.nombre ?? ''}
+        saldo={cliente?.saldo_cta_cte ?? 0}
+        contexto="finanzas"
+      />
     </Dialog>
   )
 }

@@ -177,6 +177,10 @@ export type VistaClienteRow = ClienteRow & {
   cantidad_compras: number
   total_gastado: number
   ultima_compra: string | null
+  /** Saldo de cuenta corriente (fiado): positivo = debe. Mig 139. */
+  saldo_cta_cte: number
+  /** Tope de fiado. null = sin fila en limite_credito (no se le fía). */
+  limite_credito: number | null
 }
 
 // ─── empleados (RR.HH.) ──────────────────────────────────────────────────────
@@ -486,6 +490,12 @@ export type NovedadEmpleadoRow = {
   tipo: string
   concepto: string | null
   monto: number
+  /** Fecha del hecho (mig 142). */
+  fecha: string
+  /** Cuenta debitada si el adelanto salió con plata real (mig 142). */
+  cuenta_id: number | null
+  movimiento_id: number | null
+  asiento_id: number | null
   usuario_id: string | null
   created_at: string
 }
@@ -496,6 +506,10 @@ export type NovedadEmpleadoInsert = {
   tipo: string
   concepto?: string | null
   monto: number
+  fecha?: string
+  cuenta_id?: number | null
+  movimiento_id?: number | null
+  asiento_id?: number | null
   usuario_id?: string | null
 }
 
@@ -554,6 +568,14 @@ export type CuentaCorrienteEmpleadoRow = {
   recibo_id: number | null
   /** Recibo del modelo nuevo (Sprint 4) que consumió el saldo. */
   liquidacion_recibo_id: number | null
+  /** Venta del POS que originó el consumo (fiado, mig 139). */
+  venta_id: number | null
+  /** Turno de caja si el movimiento nació en el POS (mig 139). */
+  turno_id: number | null
+  /** Cuenta de tesorería acreditada si el cobro entró por Finanzas. */
+  cuenta_id: number | null
+  movimiento_id: number | null
+  asiento_id: number | null
   usuario_id: string | null
   created_at: string
 }
@@ -567,11 +589,87 @@ export type CuentaCorrienteEmpleadoInsert = {
   monto: number
   recibo_id?: number | null
   liquidacion_recibo_id?: number | null
+  venta_id?: number | null
+  turno_id?: number | null
+  cuenta_id?: number | null
+  movimiento_id?: number | null
+  asiento_id?: number | null
   usuario_id?: string | null
 }
 
 export type EmpleadoConSaldo = EmpleadoRow & {
   saldo_cta_cte: number
+}
+
+// ─── cuenta corriente de clientes (fiado, mig 139) ───────────────────────────
+
+/** El cliente nunca tiene 'descuento_sueldo' (check en la tabla). */
+export type CuentaCorrienteClienteRow = {
+  id: number
+  cliente_id: number
+  fecha: string
+  tipo: TipoMovimientoCtaCte
+  concepto: string | null
+  /** Monto con signo: positivo aumenta deuda, negativo la cancela. */
+  monto: number
+  venta_id: number | null
+  turno_id: number | null
+  cuenta_id: number | null
+  movimiento_id: number | null
+  asiento_id: number | null
+  usuario_id: string | null
+  created_at: string
+}
+
+export type CuentaCorrienteClienteInsert = {
+  id?: number
+  cliente_id: number
+  fecha?: string
+  tipo: TipoMovimientoCtaCte
+  concepto?: string | null
+  monto: number
+  venta_id?: number | null
+  turno_id?: number | null
+  cuenta_id?: number | null
+  movimiento_id?: number | null
+  asiento_id?: number | null
+  usuario_id?: string | null
+}
+
+/** Tope de fiado por deudor (cliente XOR empleado). Sin fila o 0 = no se fía. */
+export type LimiteCreditoRow = {
+  id: number
+  cliente_id: number | null
+  empleado_id: number | null
+  monto: number
+  nota: string | null
+  usuario_id: string | null
+  updated_at: string
+}
+
+export type LimiteCreditoInsert = {
+  id?: number
+  cliente_id?: number | null
+  empleado_id?: number | null
+  monto: number
+  nota?: string | null
+  usuario_id?: string | null
+  updated_at?: string
+}
+
+export type TipoDeudorCtaCte = 'cliente' | 'empleado'
+
+/** Fila que devuelve fn_buscar_deudores (buscador unificado del POS). */
+export type DeudorBuscado = {
+  deudor_tipo: TipoDeudorCtaCte
+  deudor_id: number
+  nombre: string
+  documento: string | null
+  /** Saldo actual: positivo = debe. */
+  saldo: number
+  tiene_cupo: boolean
+  /** Crédito disponible. NULL para empleados (revelaría el sueldo). */
+  disponible: number | null
 }
 
 // ─── liquidaciones modelo nuevo (Sprint 4 · D5) ──────────────────────────────
@@ -3307,6 +3405,18 @@ export interface Database {
         Update: Partial<CuentaCorrienteEmpleadoRow>
         Relationships: []
       }
+      cuenta_corriente_cliente: {
+        Row: CuentaCorrienteClienteRow
+        Insert: CuentaCorrienteClienteInsert
+        Update: Partial<CuentaCorrienteClienteRow>
+        Relationships: []
+      }
+      limite_credito: {
+        Row: LimiteCreditoRow
+        Insert: LimiteCreditoInsert
+        Update: Partial<LimiteCreditoRow>
+        Relationships: []
+      }
       liquidacion_lote: {
         Row: LiquidacionLoteRow
         Insert: Partial<LiquidacionLoteRow>
@@ -3856,6 +3966,80 @@ export interface Database {
           p_cobro_id: string
         }
         Returns: VentaRow
+      }
+      fn_saldo_cta_cte_cliente: {
+        Args: { p_cliente_id: number }
+        Returns: number
+      }
+      fn_buscar_deudores: {
+        Args: { p_busqueda: string; p_limite?: number }
+        Returns: DeudorBuscado[]
+      }
+      fn_limite_sugerido_empleado: {
+        Args: { p_empleado_id: number }
+        Returns: number
+      }
+      fn_cobrar_cta_cte: {
+        Args: {
+          p_deudor_tipo: string
+          p_deudor_id: number
+          p_monto: number
+          p_usuario_id: string
+          p_cuenta_id?: number | null
+          p_turno_id?: number | null
+          p_fecha?: string | null
+          p_nota?: string | null
+        }
+        Returns: Json
+      }
+      fn_cobros_fiado_turno: {
+        Args: { p_turno_id: number }
+        Returns: number
+      }
+      fn_registrar_adelanto: {
+        Args: {
+          p_empleado_id: number
+          p_periodo: string
+          p_monto: number
+          p_cuenta_id: number
+          p_usuario_id: string
+          p_fecha?: string | null
+          p_concepto?: string | null
+        }
+        Returns: NovedadEmpleadoRow
+      }
+      fn_anular_adelanto: {
+        Args: { p_novedad_id: number; p_usuario_id: string }
+        Returns: undefined
+      }
+      fn_mi_empleado_id: {
+        Args: Record<string, never>
+        Returns: number | null
+      }
+      fn_mi_saldo_cta_cte: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      fn_mi_cta_cte: {
+        Args: { p_limite?: number }
+        Returns: {
+          id: number
+          fecha: string
+          tipo: string
+          concepto: string | null
+          monto: number
+        }[]
+      }
+      fn_mis_novedades: {
+        Args: { p_periodo?: string | null }
+        Returns: {
+          id: number
+          fecha: string
+          periodo: string
+          tipo: string
+          concepto: string | null
+          monto: number
+        }[]
       }
       fn_tiene_permiso: {
         Args: {

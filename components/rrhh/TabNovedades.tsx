@@ -16,8 +16,15 @@ import {
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalNovedad } from './ModalNovedad'
-import { useNovedades, useDeleteNovedad } from '@/lib/hooks/useRrhh'
+import {
+  useNovedades,
+  useDeleteNovedad,
+  useAnularAdelanto,
+} from '@/lib/hooks/useRrhh'
+import { useCuentas } from '@/lib/hooks/useCuentas'
+import { useUsuario } from '@/lib/hooks/useUsuario'
 import { cn } from '@/lib/utils'
+import type { NovedadConEmpleado } from '@/lib/queries/rrhh'
 
 function mesActual(): string {
   const d = new Date()
@@ -40,11 +47,32 @@ export function TabNovedades() {
   const [modalAbierto, setModalAbierto] = useState(false)
 
   const { data: novedades, isLoading, isError } = useNovedades(periodo)
+  const { data: cuentas } = useCuentas(false)
+  const { data: usuario } = useUsuario()
   const eliminar = useDeleteNovedad()
+  const anularAdelanto = useAnularAdelanto()
 
-  function handleEliminar(id: number) {
+  function nombreCuenta(id: number | null): string | null {
+    if (id == null) return null
+    return (cuentas ?? []).find((c) => c.id === id)?.nombre ?? `Cuenta #${id}`
+  }
+
+  function handleEliminar(n: NovedadConEmpleado) {
+    // Un adelanto con plata real se anula por la RPC: repone el saldo de la
+    // cuenta y borra el asiento. Borrarlo directo dejaría la plata afuera.
+    if (n.tipo === 'adelanto' && n.cuenta_id != null) {
+      if (
+        !confirm(
+          '¿Anular este adelanto? La plata vuelve a la cuenta de origen.'
+        )
+      )
+        return
+      if (!usuario?.id) return
+      anularAdelanto.mutate({ novedadId: n.id, usuarioId: usuario.id })
+      return
+    }
     if (!confirm('¿Eliminar esta novedad?')) return
-    eliminar.mutate(id)
+    eliminar.mutate(n.id)
   }
 
   return (
@@ -122,6 +150,11 @@ export function TabNovedades() {
                       </TableCell>
                       <TableCell className="text-[#6f3a2a] text-sm">
                         {ETIQUETA_TIPO[n.tipo] ?? n.tipo}
+                        {n.tipo === 'adelanto' && n.cuenta_id != null && (
+                          <div className="text-[10px] text-[#c8a58a]">
+                            salió de {nombreCuenta(n.cuenta_id)}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-[#6f3a2a] text-sm">
                         {n.concepto || '—'}
@@ -139,8 +172,8 @@ export function TabNovedades() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleEliminar(n.id)}
-                          disabled={eliminar.isPending}
+                          onClick={() => handleEliminar(n)}
+                          disabled={eliminar.isPending || anularAdelanto.isPending}
                           className="h-7 w-7 p-0 text-[#c8a58a] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
                           aria-label="Eliminar"
                         >
