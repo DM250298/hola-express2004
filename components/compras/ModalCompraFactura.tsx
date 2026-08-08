@@ -243,6 +243,14 @@ export function ModalCompraFactura({
   const avisarCuit = hayFicha && provCuit === '' && !cuitValido(cuit)
   const avisoFicha = faltaRazonSocial || avisarCuit
 
+  // Fecha de emisión de la factura. Como en el egreso de Finanzas
+  // (fn_crear_egreso v2), la misma fecha define el período fiscal y el
+  // momento en que el gasto pesa: por eso se avisa cuando no es hoy. Una
+  // factura no puede estar emitida en el futuro, y si cae en un mes contable
+  // cerrado el RPC la rechaza (fn_periodo_cerrado).
+  const fechaError = !fecha || fecha > hoyIso()
+  const fechaPasada = !!fecha && fecha < hoyIso()
+
   const cuentaSel = (cuentas ?? []).find((c) => String(c.id) === cuentaId)
   const saldoResultante =
     contexto === 'finanzas' && cuentaSel && total > 0
@@ -262,6 +270,7 @@ export function ModalCompraFactura({
     !!proveedorId &&
     !cuitError &&
     !esCuitPropio &&
+    !fechaError &&
     total > 0 &&
     (mueveStock ? lineasValidas : gastoValido) &&
     (contexto === 'pos' ? !!turnoId : !!cuentaId && !bloqueoBoveda)
@@ -567,35 +576,64 @@ export function ModalCompraFactura({
             </div>
           )}
 
-          {/* CUIT del comprobante — fila propia: no entra en el grid de 4 */}
-          <div className="space-y-1.5">
-            <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-              CUIT proveedor
-            </Label>
-            <Input
-              inputMode="numeric"
-              placeholder="30xxxxxxxxx"
-              value={cuit}
-              onChange={(e) => {
-                setCuit(e.target.value)
-                setCuitTocado(true)
-              }}
-              disabled={procesando}
-              className={cn(
-                'h-9 tabular-nums',
-                cuitError || esCuitPropio ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-              )}
-            />
-            {esCuitPropio ? (
-              <p className="text-[10px] text-[#c43e2c]">
-                Ese es el CUIT de Hola Express: cargá el del proveedor que
-                emite la factura.
-              </p>
-            ) : cuitError ? (
-              <p className="text-[10px] text-[#c43e2c]">
-                CUIT inválido (11 dígitos).
-              </p>
-            ) : null}
+          {/* CUIT + fecha de emisión — fila propia: no entran en el grid de 4 */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                CUIT proveedor
+              </Label>
+              <Input
+                inputMode="numeric"
+                placeholder="30xxxxxxxxx"
+                value={cuit}
+                onChange={(e) => {
+                  setCuit(e.target.value)
+                  setCuitTocado(true)
+                }}
+                disabled={procesando}
+                className={cn(
+                  'h-9 tabular-nums',
+                  cuitError || esCuitPropio
+                    ? 'border-[#c43e2c]'
+                    : 'border-[#e4c9b0]'
+                )}
+              />
+              {esCuitPropio ? (
+                <p className="text-[10px] text-[#c43e2c]">
+                  Ese es el CUIT de Hola Express: cargá el del proveedor que
+                  emite la factura.
+                </p>
+              ) : cuitError ? (
+                <p className="text-[10px] text-[#c43e2c]">
+                  CUIT inválido (11 dígitos).
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Fecha de emisión
+              </Label>
+              <Input
+                type="date"
+                value={fecha}
+                max={hoyIso()}
+                onChange={(e) => setFecha(e.target.value)}
+                disabled={procesando}
+                className={cn(
+                  'h-9 tabular-nums',
+                  fechaError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                )}
+              />
+              {fechaError ? (
+                <p className="text-[10px] text-[#c43e2c]">
+                  {fecha ? 'No puede ser posterior a hoy.' : 'Poné la fecha.'}
+                </p>
+              ) : fechaPasada ? (
+                <p className="text-[10px] text-[#9e6b15]">
+                  Va al Libro IVA y al resultado de ese día.
+                </p>
+              ) : null}
+            </div>
           </div>
 
           {/* Comprobante + IVA */}
