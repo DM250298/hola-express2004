@@ -1247,13 +1247,18 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <th className="p-1.5 font-medium">Desc. %</th>
                     <th className="p-1.5 font-medium">Subtotal</th>
                     <th className="p-1.5 font-medium">IVA %</th>
-                    <th className="p-1.5 font-medium">Costo c/IVA</th>
+                    <th
+                      className="p-1.5 font-medium"
+                      title="Unitario, informativo del comprobante: el IVA es crédito fiscal, no forma parte del costo"
+                    >
+                      Costo c/IVA
+                    </th>
                     {hayGastos && (
                       <th
                         className="p-1.5 font-medium bg-[#5a2f22]"
-                        title="Costo neto + gastos no debitables prorrateados (es el costo que se guarda)"
+                        title="Unitario: costo neto + gastos no debitables prorrateados (es el costo que se guarda). No incluye IVA porque es crédito fiscal — por eso puede ser menor que el Costo c/IVA"
                       >
-                        Costo final
+                        Costo final s/IVA
                       </th>
                     )}
                     <th className="p-1.5 font-medium">Margen %</th>
@@ -1523,8 +1528,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             <p className="text-[11px] text-[#9e6b15] text-right mb-3">
               Se prorratea al costo de cada producto (+
               {factorGastosPct.toFixed(1)}% sobre el neto). Ya está reflejado en
-              la columna <span className="font-semibold">Costo final</span> y en
-              el precio de venta.
+              la columna <span className="font-semibold">Costo final s/IVA</span>{' '}
+              y en el precio de venta. El IVA no entra al costo (es crédito
+              fiscal), por eso puede quedar debajo del Costo c/IVA.
             </p>
           )}
 
