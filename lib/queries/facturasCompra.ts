@@ -87,10 +87,11 @@ export interface PercepcionesPayload {
 }
 
 /**
- * Pago integrado al guardar la factura (mig 144): la deuda se paga en la MISMA
- * transacción del RPC (si el pago falla, la factura tampoco se guarda). El
- * monto es libre: menor al total → pago parcial (el resto queda a cuenta
- * corriente); mayor → el sobrante se registra como diferencia por redondeo
+ * Un pago integrado al guardar la factura (migs 144/145): la deuda se paga en
+ * la MISMA transacción del RPC (si un pago falla, la factura y los demás
+ * pagos tampoco se guardan). Pueden mandarse VARIOS (mig 145): se aplican en
+ * orden. La suma es libre: menor al total → el resto queda a cuenta
+ * corriente; mayor → el sobrante se registra como diferencia por redondeo
  * (5.2.10) y la deuda queda pagada.
  */
 export interface PagoFacturaPayload {
@@ -98,7 +99,7 @@ export interface PagoFacturaPayload {
   monto: number
   forma_pago: FormaPago
   comprobante?: string | null
-  /** Fecha del PAGO (la plata sale hoy, no la fecha de emisión de la factura). */
+  /** Fecha del PAGO (no la fecha de emisión de la factura). */
   fecha: string
   nota?: string | null
 }
@@ -118,8 +119,8 @@ export interface GuardarFacturaPayload {
   gastos_no_debitables?: number
   /** Datos formales del comprobante; si se omiten, no se tocan. */
   comprobante?: DatosComprobante
-  /** Pago en el mismo acto (mig 144); null/omitido = queda a cuenta corriente. */
-  pago?: PagoFacturaPayload | null
+  /** Pagos en el mismo acto (mig 145); vacío/omitido = queda a cuenta corriente. */
+  pagos?: PagoFacturaPayload[] | null
   /**
    * Vencimiento de la deuda ajustado desde el modal (yyyy-MM-dd). Si viene,
    * se actualiza en cuentas_a_pagar tras guardar (el RPC no lo toca: quedó
@@ -384,18 +385,19 @@ export async function guardarFacturaCompra(
     ...((payload.gastos_no_debitables ?? 0) > 0
       ? { p_gastos_no_debitables: payload.gastos_no_debitables }
       : {}),
-    // Solo se manda si hay pago: sin la key, la llamada sigue resolviendo
-    // contra la firma pre-144 hasta que se corra la migración.
-    ...(payload.pago
+    // Solo se manda si hay pagos: sin la key, la llamada sigue resolviendo
+    // contra la firma pre-144 hasta que se corra la migración. La LISTA
+    // requiere la v15 (mig 145); un solo pago también viaja como lista.
+    ...(payload.pagos && payload.pagos.length > 0
       ? {
-          p_pago: {
-            cuenta_origen_id: payload.pago.cuenta_origen_id,
-            monto: payload.pago.monto,
-            forma_pago: payload.pago.forma_pago,
-            comprobante: payload.pago.comprobante ?? null,
-            fecha: payload.pago.fecha,
-            nota: payload.pago.nota ?? null,
-          } as unknown as Json,
+          p_pago: payload.pagos.map((p) => ({
+            cuenta_origen_id: p.cuenta_origen_id,
+            monto: p.monto,
+            forma_pago: p.forma_pago,
+            comprobante: p.comprobante ?? null,
+            fecha: p.fecha,
+            nota: p.nota ?? null,
+          })) as unknown as Json,
         }
       : {}),
   })

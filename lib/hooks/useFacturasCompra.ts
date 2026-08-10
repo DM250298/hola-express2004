@@ -115,9 +115,11 @@ export function useGuardarFacturaCompra() {
       qc.invalidateQueries({ queryKey: ['asientos'] })
       qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
       toast.success(
-        vars.pago
-          ? 'Factura guardada y pago registrado'
-          : 'Factura guardada · stock, costos y precios actualizados'
+        vars.pagos && vars.pagos.length > 1
+          ? `Factura guardada y ${vars.pagos.length} pagos registrados`
+          : vars.pagos?.length
+            ? 'Factura guardada y pago registrado'
+            : 'Factura guardada · stock, costos y precios actualizados'
       )
     },
     onError: (error: Error) => {
