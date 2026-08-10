@@ -88,6 +88,10 @@ function invalidarTrasPago(qc: ReturnType<typeof useQueryClient>) {
   // El tablero directivo y los asientos también cambian.
   qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
   qc.invalidateQueries({ queryKey: ['asientos'] })
+  // El pago saca deuda de las semanas futuras del flujo proyectado.
+  qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
+  // El pago desde la bóveda mueve su saldo (banner de descuadre incluido).
+  qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
 }
 
 export function usePagarCuenta() {

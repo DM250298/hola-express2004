@@ -24,29 +24,17 @@ import { useCuentas } from '@/lib/hooks/useCuentas'
 import { usePagarCuenta } from '@/lib/hooks/useFinanzas'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { cn } from '@/lib/utils'
-import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
+import {
+  FORMAS_PAGO,
+  FORMA_PAGO_LABEL,
+  type FormaPago,
+  type CuentaAPagarConProveedor,
+} from '@/lib/queries/finanzas'
 
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   cuenta: CuentaAPagarConProveedor | null
-}
-
-const FORMAS_PAGO = [
-  { valor: 'efectivo', label: 'Efectivo' },
-  { valor: 'transferencia', label: 'Transferencia' },
-  { valor: 'cheque', label: 'Cheque' },
-  { valor: 'debito', label: 'Débito' },
-  { valor: 'otro', label: 'Otro' },
-] as const
-type FormaPago = (typeof FORMAS_PAGO)[number]['valor']
-
-const FORMA_LABEL: Record<FormaPago, string> = {
-  efectivo: 'Efectivo',
-  transferencia: 'Transferencia',
-  cheque: 'Cheque',
-  debito: 'Débito',
-  otro: 'Otro',
 }
 
 function hoyIso(): string {
@@ -112,11 +100,19 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
     if (c) setFormaPago(c.tipo === 'caja' ? 'efectivo' : 'transferencia')
   }
 
-  const excedePendiente = montoNum > pendiente + 0.009
+  // Sobrepago permitido (mig 144): lo que excede el pendiente se registra como
+  // diferencia por redondeo (5.2.10) y la deuda queda pagada. Solo se avisa.
+  const sobrante = montoNum > pendiente + 0.009 ? r2(montoNum - pendiente) : 0
+  const umbralSobrante = Math.max(1000, r2(pendiente * 0.01))
+  const sobranteGrande = sobrante > umbralSobrante
   const esParcial = montoNum > 0 && montoNum < pendiente - 0.009
   const saldoResultante =
     cuentaSel != null ? Number(cuentaSel.saldo_actual) - montoNum : null
   const saldoInsuficiente = saldoResultante != null && saldoResultante < -0.009
+  // La caja fuerte no puede quedar en negativo: el server lo rechaza
+  // (fn_pagar_cuenta v3), así que se bloquea acá igual que en ModalEditarFactura.
+  const bovedaNegativa =
+    saldoInsuficiente && (cuentaSel?.es_caja_fuerte ?? false)
 
   const labelComprobante =
     formaPago === 'transferencia'
@@ -131,17 +127,11 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
     !!usuario &&
     !!cuentaSel &&
     montoNum > 0 &&
-    !excedePendiente &&
+    !bovedaNegativa &&
     !pagar.isPending
 
   function handlePagar() {
     if (!cuenta || !usuario || !cuentaSel || !puedeGuardar) return
-    // La forma de pago y el comprobante se guardan dentro de la nota (todavía
-    // no hay columnas dedicadas). Quedan visibles en el historial del pago.
-    const partes = [FORMA_LABEL[formaPago]]
-    if (comprobante.trim()) partes.push(`Comp. ${comprobante.trim()}`)
-    if (nota.trim()) partes.push(nota.trim())
-    const notaFinal = partes.join(' · ')
     pagar.mutate(
       {
         cuenta_id: cuenta.id,
@@ -149,7 +139,9 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
         cuenta_origen_id: cuentaSel.id,
         monto: r2(montoNum),
         fecha,
-        nota: notaFinal,
+        nota: nota.trim() || null,
+        forma_pago: formaPago,
+        comprobante: comprobante.trim() || null,
       },
       { onSuccess: () => onCambioAbierto(false) }
     )
@@ -265,7 +257,11 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                   <span className="font-semibold tabular-nums">
                     <MontoARS monto={saldoResultante} />
                   </span>
-                  {saldoInsuficiente && ' (queda en negativo)'}
+                  {bovedaNegativa
+                    ? ' — la caja fuerte no puede quedar en negativo.'
+                    : saldoInsuficiente
+                      ? ' (queda en negativo)'
+                      : null}
                 </p>
               )}
             </div>
@@ -291,9 +287,20 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                     className="pl-7 h-11 text-lg font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                   />
                 </div>
-                {excedePendiente && (
-                  <p className="text-[11px] text-[#c43e2c]">
-                    No puede superar el pendiente.
+                {sobrante > 0 && !sobranteGrande && (
+                  <p className="text-[11px] text-[#b3821b]">
+                    Pagás <MontoARS monto={sobrante} /> de más: se registra
+                    como diferencia por redondeo y la deuda queda pagada.
+                  </p>
+                )}
+                {sobranteGrande && (
+                  <p className="text-[11px] text-[#c43e2c] flex items-start gap-1">
+                    <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                    <span>
+                      Estás pagando <MontoARS monto={sobrante} /> por encima
+                      del pendiente. ¿Es correcto? Se registra como diferencia
+                      por redondeo.
+                    </span>
                   </p>
                 )}
               </div>
@@ -346,13 +353,13 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
 
           {/* Footer */}
           <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 shrink-0 space-y-2.5">
-            {cuentaSel && montoNum > 0 && !excedePendiente && (
+            {cuentaSel && montoNum > 0 && (
               <p className="text-xs text-[#6f3a2a] text-center">
                 Pagás{' '}
                 <span className="font-bold text-[#391511]">
                   <MontoARS monto={montoNum} />
                 </span>{' '}
-                en {FORMA_LABEL[formaPago].toLowerCase()} desde{' '}
+                en {FORMA_PAGO_LABEL[formaPago].toLowerCase()} desde{' '}
                 <span className="font-bold text-[#391511]">
                   {cuentaSel.nombre}
                 </span>
@@ -364,6 +371,20 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                       <MontoARS monto={pendiente - montoNum} />
                     </span>{' '}
                     pendientes
+                  </>
+                ) : sobrante > 0 ? (
+                  <>
+                    {' '}
+                    · cancela la deuda ·{' '}
+                    <span
+                      className={cn(
+                        'font-bold',
+                        sobranteGrande ? 'text-[#c43e2c]' : 'text-[#b3821b]'
+                      )}
+                    >
+                      <MontoARS monto={sobrante} />
+                    </span>{' '}
+                    de más → diferencia por redondeo
                   </>
                 ) : (
                   ' · cancela la deuda'

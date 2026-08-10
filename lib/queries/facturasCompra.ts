@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { completarCuitProveedor } from '@/lib/queries/proveedores'
 import { soloDigitos } from '@/lib/utils/fiscal'
+import type { FormaPago } from '@/lib/queries/finanzas'
 import type {
   FacturaCompraRow,
   ItemFacturaCompraRow,
@@ -85,6 +86,23 @@ export interface PercepcionesPayload {
   otros: number
 }
 
+/**
+ * Pago integrado al guardar la factura (mig 144): la deuda se paga en la MISMA
+ * transacción del RPC (si el pago falla, la factura tampoco se guarda). El
+ * monto es libre: menor al total → pago parcial (el resto queda a cuenta
+ * corriente); mayor → el sobrante se registra como diferencia por redondeo
+ * (5.2.10) y la deuda queda pagada.
+ */
+export interface PagoFacturaPayload {
+  cuenta_origen_id: number
+  monto: number
+  forma_pago: FormaPago
+  comprobante?: string | null
+  /** Fecha del PAGO (la plata sale hoy, no la fecha de emisión de la factura). */
+  fecha: string
+  nota?: string | null
+}
+
 export interface GuardarFacturaPayload {
   cuenta_id: number
   pedido_id: number
@@ -100,6 +118,8 @@ export interface GuardarFacturaPayload {
   gastos_no_debitables?: number
   /** Datos formales del comprobante; si se omiten, no se tocan. */
   comprobante?: DatosComprobante
+  /** Pago en el mismo acto (mig 144); null/omitido = queda a cuenta corriente. */
+  pago?: PagoFacturaPayload | null
 }
 
 export interface FacturaCompraCompleta {
@@ -357,6 +377,20 @@ export async function guardarFacturaCompra(
     // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.
     ...((payload.gastos_no_debitables ?? 0) > 0
       ? { p_gastos_no_debitables: payload.gastos_no_debitables }
+      : {}),
+    // Solo se manda si hay pago: sin la key, la llamada sigue resolviendo
+    // contra la firma pre-144 hasta que se corra la migración.
+    ...(payload.pago
+      ? {
+          p_pago: {
+            cuenta_origen_id: payload.pago.cuenta_origen_id,
+            monto: payload.pago.monto,
+            forma_pago: payload.pago.forma_pago,
+            comprobante: payload.pago.comprobante ?? null,
+            fecha: payload.pago.fecha,
+            nota: payload.pago.nota ?? null,
+          } as unknown as Json,
+        }
       : {}),
   })
   if (error) throw error

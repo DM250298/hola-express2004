@@ -29,7 +29,11 @@ import {
   usePagosCuenta,
   useEditarCuentaAPagar,
 } from '@/lib/hooks/useFinanzas'
-import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
+import {
+  FORMA_PAGO_LABEL,
+  esFormaPago,
+  type CuentaAPagarConProveedor,
+} from '@/lib/queries/finanzas'
 
 interface Props {
   cuenta: CuentaAPagarConProveedor | null
@@ -222,12 +226,28 @@ export function DrawerCuentaPagar({
                     className="flex items-center justify-between gap-2 rounded-lg border border-[#e4c9b0]/40 bg-[#fdfaf6] px-3 py-2"
                   >
                     <div className="min-w-0">
-                      <div className="font-semibold text-[#391511] text-sm tabular-nums">
-                        <MontoARS monto={p.monto} />
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-[#391511] text-sm tabular-nums">
+                          <MontoARS monto={p.monto} />
+                        </span>
+                        {/* Forma de pago estructurada (mig 144). Pagos viejos:
+                            quedó dentro de la nota, sin chip. */}
+                        {esFormaPago(p.forma_pago) && (
+                          <span className="rounded-full bg-[#f9b44c]/15 border border-[#f9b44c]/50 px-1.5 py-px text-[10px] font-semibold text-[#9e6b15]">
+                            {FORMA_PAGO_LABEL[p.forma_pago]}
+                          </span>
+                        )}
+                        {p.sobrante > 0.009 && (
+                          <span className="text-[10px] text-[#b3821b]">
+                            (incluye <MontoARS monto={p.sobrante} /> de
+                            redondeo)
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-[#6f3a2a] truncate">
                         {formatearFechaCorta(p.fecha)} ·{' '}
                         {p.cuenta_origen_nombre ?? 'cuenta'}
+                        {p.comprobante ? ` · Comp. ${p.comprobante}` : ''}
                         {p.nota ? ` · ${p.nota}` : ''}
                       </div>
                     </div>

@@ -104,7 +104,21 @@ export function useGuardarFacturaCompra() {
       qc.invalidateQueries({ queryKey: ['historial-costos'] })
       // El CUIT tipeado puede haber completado la ficha del proveedor.
       qc.invalidateQueries({ queryKey: ['proveedores'] })
-      toast.success('Factura guardada · stock, costos y precios actualizados')
+      // El pago integrado (mig 144) mueve tesorería: mismas invalidaciones
+      // que usePagarCuenta (baratas; se refrescan siempre por simplicidad).
+      qc.invalidateQueries({ queryKey: ['cuentas'] })
+      qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
+      qc.invalidateQueries({ queryKey: ['pagos-cuenta'] })
+      qc.invalidateQueries({ queryKey: ['egresos'] })
+      qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
+      qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+      qc.invalidateQueries({ queryKey: ['asientos'] })
+      qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
+      toast.success(
+        vars.pago
+          ? 'Factura guardada y pago registrado'
+          : 'Factura guardada · stock, costos y precios actualizados'
+      )
     },
     onError: (error: Error) => {
       toast.error(`No se pudo guardar la factura: ${error.message}`)

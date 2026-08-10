@@ -99,13 +99,18 @@ export async function getResumenFinanciero(
 
   // 3. Egresos del período (paginado). `egresos.fecha` es DATE → comparar
   // contra fecha local, no contra el ISO (arrastra un día de más al final).
-  // Se excluye `compra_mercaderia` (compra directa con stock): esa plata ya
-  // impacta el resultado como CMV al vender; contarla acá la restaría dos veces.
+  // Se excluyen las categorías de MERCADERÍA: esa plata ya impacta el
+  // resultado como CMV al vender; contarla acá la restaría dos veces.
+  //  · compra_mercaderia — compra directa con stock.
+  //  · pago_proveedores — egreso que genera fn_pagar_cuenta por cada pago de
+  //    una cuenta a pagar (siempre mercadería de OC). Con el pago integrado
+  //    en la factura (mig 144) estos egresos se masifican: sin excluirlos, el
+  //    resultado restaba CMV + el pago de la misma mercadería.
   const egresosData = await traerTodo<{ monto: number; fecha: string }>(() =>
     supabase
       .from('egresos')
       .select('monto, fecha')
-      .neq('categoria', 'compra_mercaderia')
+      .not('categoria', 'in', '(compra_mercaderia,pago_proveedores)')
       .gte('fecha', fechaLocal(desde))
       .lte('fecha', fechaLocal(hasta))
       .order('id')
@@ -190,8 +195,15 @@ export interface CuentaAPagarConProveedor {
   pedido_id: number | null
   proveedor_id: number
   monto: number
+  /** Plata REAL que salió (incluye sobrepagos por redondeo, mig 144). */
   monto_pagado: number
-  /** Saldo que falta pagar = monto − monto_pagado. */
+  /**
+   * Lo que de verdad canceló deuda = monto_pagado − Σ sobrantes. Es la misma
+   * definición que usa fn_pagar_cuenta v3 en el server: contra esto se calcula
+   * el pendiente, no contra monto_pagado (que sobreestimaría con sobrepagos).
+   */
+  monto_aplicado: number
+  /** Saldo que falta pagar = max(0, monto − monto_aplicado). */
   saldo_pendiente: number
   fecha_vencimiento: string
   fecha_pago: string | null
@@ -234,7 +246,7 @@ export type FiltroEstadoCuentas = EstadoCuentaDerivado | 'abiertas' | null
 export const LIMITE_CUENTAS_PAGADAS = 500
 
 const SELECT_CUENTAS =
-  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre)'
+  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre), pagos_cuenta(sobrante)'
 
 type FilaCuentaCruda = {
   id: number
@@ -250,17 +262,29 @@ type FilaCuentaCruda = {
   numero_factura: string | null
   nota: string | null
   proveedores: { nombre: string } | null
+  pagos_cuenta: { sobrante: number | null }[] | null
 }
 
 function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
   const pagado = Number(f.monto_pagado ?? 0)
-  const saldo = Number(f.monto) - pagado
+  // Aplicado = pagado − sobrantes por redondeo (mig 144): la MISMA definición
+  // de pendiente que fn_pagar_cuenta v3 usa server-side. Contra monto_pagado
+  // (plata real, que incluye sobrepagos) el saldo quedaría subestimado cuando
+  // una cuenta sobrepagada se re-factura al alza.
+  const sobrantes = (f.pagos_cuenta ?? []).reduce(
+    (acc, p) => acc + Number(p.sobrante ?? 0),
+    0
+  )
+  const aplicado = Math.max(0, pagado - sobrantes)
+  // Clamp a 0: en una cuenta pagada el saldo nunca se muestra negativo.
+  const saldo = Math.max(0, Number(f.monto) - aplicado)
   return {
     id: f.id,
     pedido_id: f.pedido_id,
     proveedor_id: f.proveedor_id,
     monto: Number(f.monto),
     monto_pagado: pagado,
+    monto_aplicado: aplicado,
     saldo_pendiente: saldo,
     fecha_vencimiento: f.fecha_vencimiento,
     fecha_pago: f.fecha_pago,
@@ -368,6 +392,29 @@ export async function getCuentaAPagarPorId(
   return data ? mapearCuenta(data as unknown as FilaCuentaCruda) : null
 }
 
+// ─── Formas de pago (lista canónica, espejo del CHECK de pagos_cuenta) ───────
+
+export const FORMAS_PAGO = [
+  { valor: 'efectivo', label: 'Efectivo' },
+  { valor: 'transferencia', label: 'Transferencia' },
+  { valor: 'cheque', label: 'Cheque' },
+  { valor: 'debito', label: 'Débito' },
+  { valor: 'otro', label: 'Otro' },
+] as const
+export type FormaPago = (typeof FORMAS_PAGO)[number]['valor']
+
+export const FORMA_PAGO_LABEL: Record<FormaPago, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  cheque: 'Cheque',
+  debito: 'Débito',
+  otro: 'Otro',
+}
+
+export function esFormaPago(v: string | null): v is FormaPago {
+  return v != null && FORMAS_PAGO.some((f) => f.valor === v)
+}
+
 export interface PagarCuentaPayload {
   cuenta_id: number
   usuario_id: string
@@ -375,14 +422,18 @@ export interface PagarCuentaPayload {
   monto: number
   fecha: string
   nota?: string | null
+  forma_pago?: FormaPago | null
+  comprobante?: string | null
 }
 
 /**
- * Registra un pago (total o parcial) de una cuenta a pagar, de forma atómica
- * (`fn_pagar_cuenta`): descuenta del saldo de la cuenta de tesorería de
- * origen, deja el pago en el historial, genera el egreso y su asiento
- * (Debe Proveedores / Haber según el tipo de cuenta de origen). La cuenta
- * pasa a 'pagada' recién cuando se cubre el total.
+ * Registra un pago (total, parcial o con sobrante) de una cuenta a pagar, de
+ * forma atómica (`fn_pagar_cuenta` v3): descuenta del saldo de la cuenta de
+ * tesorería de origen, deja el pago en el historial (con forma de pago y
+ * comprobante estructurados), genera el egreso y su asiento (Debe Proveedores
+ * por lo aplicado + Debe Diferencias por el sobrante / Haber según el tipo de
+ * cuenta de origen). La cuenta pasa a 'pagada' cuando se cubre el total; si se
+ * paga de más (redondeo), el excedente va a 5.2.10 y la deuda queda saldada.
  */
 export async function pagarCuenta(payload: PagarCuentaPayload): Promise<void> {
   const supabase = createClient()
@@ -393,6 +444,8 @@ export async function pagarCuenta(payload: PagarCuentaPayload): Promise<void> {
     p_monto: payload.monto,
     p_fecha: payload.fecha,
     p_nota: payload.nota ?? null,
+    p_forma_pago: payload.forma_pago ?? null,
+    p_comprobante: payload.comprobante ?? null,
   })
   if (error) throw error
 }
@@ -402,6 +455,9 @@ export interface PagoConCuenta {
   monto: number
   fecha: string
   nota: string | null
+  forma_pago: string | null
+  comprobante: string | null
+  sobrante: number
   cuenta_origen_id: number | null
   cuenta_origen_nombre: string | null
 }
@@ -413,7 +469,9 @@ export async function getPagosCuenta(
   const supabase = createClient()
   const { data, error } = await supabase
     .from('pagos_cuenta')
-    .select('id, monto, fecha, nota, cuenta_origen_id, cuentas(nombre)')
+    .select(
+      'id, monto, fecha, nota, forma_pago, comprobante, sobrante, cuenta_origen_id, cuentas(nombre)'
+    )
     .eq('cuenta_a_pagar_id', cuentaAPagarId)
     .order('fecha', { ascending: false })
   if (error) throw error
@@ -423,6 +481,9 @@ export async function getPagosCuenta(
     monto: number
     fecha: string
     nota: string | null
+    forma_pago: string | null
+    comprobante: string | null
+    sobrante: number | null
     cuenta_origen_id: number | null
     cuentas: { nombre: string } | null
   }
@@ -432,6 +493,9 @@ export async function getPagosCuenta(
     monto: Number(p.monto),
     fecha: p.fecha,
     nota: p.nota,
+    forma_pago: p.forma_pago,
+    comprobante: p.comprobante,
+    sobrante: Number(p.sobrante ?? 0),
     cuenta_origen_id: p.cuenta_origen_id,
     cuenta_origen_nombre: p.cuentas?.nombre ?? null,
   }))
@@ -462,19 +526,45 @@ export async function editarCuentaAPagar(
   if (payload.monto !== undefined) {
     const { data: actual, error: errLeer } = await supabase
       .from('cuentas_a_pagar')
-      .select('monto_pagado, tiene_factura')
+      .select('monto_pagado, tiene_factura, estado, pagos_cuenta(sobrante)')
       .eq('id', payload.cuenta_id)
-      .single<{ monto_pagado: number | null; tiene_factura: boolean }>()
+      .single<{
+        monto_pagado: number | null
+        tiene_factura: boolean
+        estado: 'pendiente' | 'pagada' | 'vencida'
+        pagos_cuenta: { sobrante: number | null }[] | null
+      }>()
     if (errLeer) throw errLeer
     if (actual.tiene_factura) {
       throw new Error(
         'No se puede cambiar el monto: la cuenta ya tiene una factura cargada. Editá la factura en Comprobantes.'
       )
     }
-    if (payload.monto < Number(actual.monto_pagado ?? 0)) {
+    // Aplicado = pagado − sobrantes (misma definición que el server, mig 144).
+    const pagado = Number(actual.monto_pagado ?? 0)
+    const sobrantes = (actual.pagos_cuenta ?? []).reduce(
+      (acc, p) => acc + Number(p.sobrante ?? 0),
+      0
+    )
+    const aplicado = Math.max(0, pagado - sobrantes)
+    if (payload.monto < aplicado) {
       throw new Error('El monto no puede ser menor a lo ya pagado.')
     }
     patch.monto = payload.monto
+    // Re-derivar estado con la misma regla que fn_guardar_factura_compra v14:
+    // subir el monto de una cuenta pagada la REABRE (si no, quedaría 'pagada'
+    // con saldo, invisible en pendientes/flujo); bajarlo hasta lo ya aplicado
+    // la cierra.
+    if (aplicado > 0.009) {
+      const cubre = aplicado >= payload.monto - 0.009
+      if (cubre && actual.estado !== 'pagada') {
+        patch.estado = 'pagada'
+        patch.fecha_pago = new Date().toISOString()
+      } else if (!cubre && actual.estado === 'pagada') {
+        patch.estado = 'pendiente'
+        patch.fecha_pago = null
+      }
+    }
   }
 
   if (Object.keys(patch).length === 0) return

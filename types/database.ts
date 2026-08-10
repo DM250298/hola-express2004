@@ -1968,6 +1968,9 @@ export type PagoCuentaRow = {
   usuario_id: string | null
   movimiento_id: number | null
   egreso_id: number | null
+  forma_pago: string | null
+  comprobante: string | null
+  sobrante: number
   created_at: string
 }
 
@@ -1981,6 +1984,9 @@ export type PagoCuentaInsert = {
   usuario_id?: string | null
   movimiento_id?: number | null
   egreso_id?: number | null
+  forma_pago?: string | null
+  comprobante?: string | null
+  sobrante?: number
   created_at?: string
 }
 
@@ -4226,8 +4232,10 @@ export interface Database {
           costo_estimado: number
         }[]
       }
-      /** v12 (mig 132): reconcilia el stock por delta contra lo recibido.
-       *  p_lineas puede traer `fecha_vencimiento` (opcional) para corregir el lote. */
+      /** v14 (mig 144): + p_pago jsonb opcional { cuenta_origen_id, monto,
+       *  forma_pago?, comprobante?, fecha?, nota? } → paga la cuenta en la misma
+       *  transacción vía fn_pagar_cuenta. v12 (mig 132) reconcilia el stock por
+       *  delta; p_lineas puede traer `fecha_vencimiento` para corregir el lote. */
       fn_guardar_factura_compra: {
         Args: {
           p_cuenta_id: number
@@ -4239,6 +4247,7 @@ export interface Database {
           p_lineas: Json
           p_percepciones?: Json
           p_gastos_no_debitables?: number
+          p_pago?: Json
         }
         Returns: undefined
       }
@@ -4424,6 +4433,8 @@ export interface Database {
         }
         Returns: undefined
       }
+      /** v3 (mig 144): forma de pago/comprobante estructurados + sobrepago
+       *  (el excedente asienta Debe 5.2.10 y la deuda queda pagada). */
       fn_pagar_cuenta: {
         Args: {
           p_cuenta_id: number
@@ -4432,6 +4443,8 @@ export interface Database {
           p_monto: number
           p_fecha?: string | null
           p_nota?: string | null
+          p_forma_pago?: string | null
+          p_comprobante?: string | null
         }
         Returns: Json
       }

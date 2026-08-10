@@ -26,6 +26,7 @@ import { toast } from 'sonner'
 import {
   useBuscarCuentaAPagar,
   useCuentasAPagar,
+  useCuentasSinFactura,
 } from '@/lib/hooks/useFinanzas'
 import { useComprobantesCargados } from '@/lib/hooks/useFacturasCompra'
 import { useProveedores } from '@/lib/hooks/useProveedores'
@@ -59,6 +60,12 @@ interface Props {
 
 export function TabComprobantes({ desde, hasta }: Props) {
   const { data: cuentas, isLoading: cargandoCuentas } = useCuentasAPagar(null)
+  // Fuente ÚNICA de "pendientes de factura": tiene_factura=false server-side,
+  // la misma que usa Compras › Facturas → los contadores coinciden siempre.
+  // Incluye cuentas ya pagadas sin comprobante: el papel se debe igual (Libro
+  // IVA, IVA crédito, costos), por eso no se filtra por estado.
+  const { data: sinFactura, isLoading: cargandoSinFactura } =
+    useCuentasSinFactura()
   const { data: comprobantes, isLoading: cargandoComp } =
     useComprobantesCargados()
   const { data: proveedores } = useProveedores()
@@ -115,23 +122,8 @@ export function TabComprobantes({ desde, hasta }: Props) {
     return null
   }
 
-  // Cuentas que YA tienen comprobante cargado
-  const cuentasConFactura = useMemo(() => {
-    const s = new Set<number>()
-    for (const c of comprobantes ?? []) {
-      if (c.cuenta_id != null) s.add(c.cuenta_id)
-    }
-    return s
-  }, [comprobantes])
-
-  // Por cargar: cuentas no pagadas sin comprobante
-  const porCargar = useMemo(
-    () =>
-      (cuentas ?? []).filter(
-        (c) => c.estado !== 'pagada' && !cuentasConFactura.has(c.id)
-      ),
-    [cuentas, cuentasConFactura]
-  )
+  // Por cargar: criterio unificado con Compras (tiene_factura = false).
+  const porCargar = sinFactura ?? []
 
   // Compras directas del POS todavía sin controlar por el administrativo.
   const comprasAControlar = useMemo(
@@ -155,7 +147,7 @@ export function TabComprobantes({ desde, hasta }: Props) {
     )
   })
 
-  const cargando = cargandoCuentas || cargandoComp
+  const cargando = cargandoCuentas || cargandoSinFactura || cargandoComp
 
   return (
     <div className="space-y-5">
@@ -213,6 +205,11 @@ export function TabComprobantes({ desde, hasta }: Props) {
                     <div className="text-xs text-[#6f3a2a] font-mono">
                       Pedido #{c.pedido_id}
                     </div>
+                    {c.estado === 'pagada' && (
+                      <span className="mt-1 inline-block rounded-full bg-[#2f8f4e]/10 border border-[#2f8f4e]/30 px-2 py-0.5 text-[10px] font-semibold text-[#2f8f4e]">
+                        Pagada · falta la factura
+                      </span>
+                    )}
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-[10px] uppercase tracking-wider text-[#c8a58a] font-semibold">

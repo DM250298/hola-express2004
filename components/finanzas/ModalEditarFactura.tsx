@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  CheckCircle2,
   FileText,
   Loader2,
   Pencil,
   Plus,
   Search,
   Trash2,
+  Wallet,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -37,6 +39,7 @@ import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { useCuentas } from '@/lib/hooks/useCuentas'
 import {
   useAnularFacturaCompra,
   useFacturaCompra,
@@ -46,7 +49,12 @@ import { usePricing } from '@/lib/hooks/usePricing'
 import { calcularLinea } from '@/lib/queries/facturasCompra'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
-import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
+import {
+  FORMAS_PAGO,
+  FORMA_PAGO_LABEL,
+  type FormaPago,
+  type CuentaAPagarConProveedor,
+} from '@/lib/queries/finanzas'
 import type { ProveedorRow } from '@/types/database'
 
 interface Props {
@@ -108,6 +116,13 @@ interface CabeceraState {
 function hoyIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** dd/mm/aaaa desde un ISO (para mostrar vencimiento y fecha de pago). */
+function fechaCorta(iso: string | null): string {
+  if (!iso) return '—'
+  const [a, m, d] = iso.slice(0, 10).split('-')
+  return `${d}/${m}/${a}`
 }
 
 /** Redondeo a 2 decimales — mismo criterio que el RPC, para que el "Costo
@@ -275,6 +290,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   })
   // Gastos no debitables (flete, etc.): se prorratean al costo de los productos.
   const [gastosNoDebitables, setGastosNoDebitables] = useState('')
+  // ── Pago integrado (mig 144) ──────────────────────────────────────────
+  // 'cuenta_corriente' = comportamiento de siempre (la deuda queda con su
+  // vencimiento); 'pagar_ahora' = se paga desde una cuenta de tesorería en la
+  // misma transacción del guardado.
+  const [modoPago, setModoPago] = useState<'cuenta_corriente' | 'pagar_ahora'>(
+    'cuenta_corriente'
+  )
+  const [cuentaPago, setCuentaPago] = useState('')
+  const [formaPago, setFormaPago] = useState<FormaPago>('transferencia')
+  const [montoPago, setMontoPago] = useState('')
+  // Mientras no lo toquen, el monto sigue vivo al "Total a pagar" calculado;
+  // apenas tipean, lo tipeado manda.
+  const [montoPagoTocado, setMontoPagoTocado] = useState(false)
+  const [comprobantePago, setComprobantePago] = useState('')
+  const { data: cuentasTesoreria } = useCuentas(true)
 
   const { data: productosBusqueda } = useProductos({
     activo: true,
@@ -357,6 +387,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       })
       setPercepciones({ iibb: '', iva: '', otros: '' })
       setGastosNoDebitables('')
+      // Pago integrado: cada apertura arranca en cuenta corriente (default).
+      setModoPago('cuenta_corriente')
+      setCuentaPago('')
+      setFormaPago('transferencia')
+      setMontoPago('')
+      setMontoPagoTocado(false)
+      setComprobantePago('')
     }
 
     // ── (2) Líneas ────────────────────────────────────────────────────
@@ -680,6 +717,54 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const totalConIva =
     totales.neto + totales.iva + totalPercepciones + gastos
 
+  // ── Derivados del pago integrado (mig 144) ────────────────────────────
+  const cuentaPagada = cuenta?.estado === 'pagada'
+  const yaPagado = cuenta?.monto_pagado ?? 0
+  // Aplicado (pagado − sobrantes de redondeo): la definición de pendiente del
+  // server. Contra monto_pagado, un sobrepago histórico subestimaría el saldo.
+  const yaAplicado = cuenta?.monto_aplicado ?? yaPagado
+  // Lo que falta pagar contra el total que se está por guardar (vivo: sigue
+  // los cambios de líneas/percepciones/gastos mientras no toquen el monto).
+  const pendientePago = Math.max(0, r2(totalConIva - yaAplicado))
+  const montoPagoNum = montoPagoTocado
+    ? Number(montoPago) || 0
+    : pendientePago
+  const cuentaPagoSel = useMemo(
+    () =>
+      (cuentasTesoreria ?? []).find((c) => String(c.id) === cuentaPago) ?? null,
+    [cuentasTesoreria, cuentaPago]
+  )
+  // El Select de base-ui necesita `items` (value → label) para que el trigger
+  // muestre el nombre de la cuenta y no el id crudo.
+  const itemsCuentaPago = useMemo(() => {
+    const r: Record<string, string> = {}
+    for (const c of cuentasTesoreria ?? []) r[String(c.id)] = c.nombre
+    return r
+  }, [cuentasTesoreria])
+  const sobrantePago =
+    montoPagoNum > pendientePago + 0.009 ? r2(montoPagoNum - pendientePago) : 0
+  const sobrantePagoGrande =
+    sobrantePago > Math.max(1000, r2(pendientePago * 0.01))
+  const pagoParcial =
+    montoPagoNum > 0 && montoPagoNum < pendientePago - 0.009
+  const saldoDespuesPago =
+    cuentaPagoSel != null
+      ? Number(cuentaPagoSel.saldo_actual) - montoPagoNum
+      : null
+  const saldoPagoNegativo =
+    saldoDespuesPago != null && saldoDespuesPago < -0.009
+  const bovedaNegativa =
+    saldoPagoNegativo && (cuentaPagoSel?.es_caja_fuerte ?? false)
+  const pagoActivo = modoPago === 'pagar_ahora' && !cuentaPagada
+  // Con los pagos previos cubriendo el total no hay nada que pagar: el server
+  // rechazaría cualquier monto y abortaría también la factura.
+  const deudaCubierta = pagoActivo && pendientePago <= 0
+  // Bloquea el guardado: pagar sin cuenta o sin monto no tiene sentido, y la
+  // bóveda en negativo lo va a rechazar el server de todos modos.
+  const pagoInvalido =
+    pagoActivo &&
+    (deudaCubierta || !cuentaPagoSel || montoPagoNum <= 0 || bovedaNegativa)
+
   // Validación de los datos formales (solo si el usuario cargó algo).
   const cuitError =
     cab.cuit_proveedor.trim() !== '' && !cuitValido(cab.cuit_proveedor)
@@ -719,6 +804,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       )
       return
     }
+    if (pagoInvalido) {
+      toast.error(
+        bovedaNegativa
+          ? 'El pago deja la caja fuerte en negativo: bajá el monto o elegí otra cuenta.'
+          : 'Elegí desde qué cuenta se paga y el monto.'
+      )
+      return
+    }
     const limpio = (s: string) => {
       const t = s.trim()
       return t === '' ? null : t
@@ -754,6 +847,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           precio_venta:
             l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
         })),
+        // Pago en el mismo acto (mig 144). Fecha del pago = HOY, no la fecha
+        // de emisión: la plata sale hoy (y una factura retro-datada a un mes
+        // cerrado no debe arrastrar el pago a ese período).
+        pago:
+          pagoActivo && cuentaPagoSel
+            ? {
+                cuenta_origen_id: cuentaPagoSel.id,
+                monto: r2(montoPagoNum),
+                forma_pago: formaPago,
+                comprobante: comprobantePago.trim() || null,
+                fecha: hoyIso(),
+              }
+            : null,
       },
       { onSuccess: () => onCambioAbierto(false) }
     )
@@ -1570,6 +1676,251 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               </span>
             </span>
           </div>
+
+          {/* ── Pago (mig 144): en el acto o a cuenta corriente ─────────── */}
+          {cuenta &&
+            (cuentaPagada ? (
+              <div className="mb-3 flex items-center justify-end gap-1.5 text-xs font-semibold text-[#2f8f4e]">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                Deuda pagada el {fechaCorta(cuenta.fecha_pago)}
+              </div>
+            ) : (
+              <div className="mb-3 rounded-xl border border-[#e4c9b0]/60 bg-white p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1.5">
+                    <Wallet className="h-3.5 w-3.5 text-[#f9b44c]" />
+                    ¿Cómo se paga?
+                  </span>
+                  <div className="flex gap-1.5">
+                    {(
+                      [
+                        ['cuenta_corriente', 'Queda a cuenta corriente'],
+                        ['pagar_ahora', 'Pagada ahora'],
+                      ] as const
+                    ).map(([valor, etiqueta]) => (
+                      <button
+                        key={valor}
+                        type="button"
+                        onClick={() => setModoPago(valor)}
+                        className={cn(
+                          'rounded-lg border-2 px-3 py-1.5 text-xs font-semibold transition-all',
+                          modoPago === valor
+                            ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                            : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#c8a58a]'
+                        )}
+                      >
+                        {etiqueta}
+                      </button>
+                    ))}
+                  </div>
+                  {yaPagado > 0.009 && (
+                    <span className="rounded-full bg-[#f9b44c]/15 border border-[#f9b44c]/50 px-2 py-0.5 text-[10px] font-semibold text-[#9e6b15]">
+                      Ya tiene pagos por <MontoARS monto={yaPagado} />
+                    </span>
+                  )}
+                </div>
+
+                {modoPago === 'cuenta_corriente' ? (
+                  <p className="text-[11px] text-[#6f3a2a]">
+                    La deuda queda a cuenta corriente del proveedor · vence el{' '}
+                    <span className="font-semibold">
+                      {fechaCorta(cuenta.fecha_vencimiento)}
+                    </span>
+                    . Se paga después desde Finanzas › Cuentas a pagar.
+                  </p>
+                ) : deudaCubierta ? (
+                  <p className="text-[11px] text-[#b3821b]">
+                    Con este total{' '}
+                    {yaPagado > 0.009
+                      ? 'la deuda ya queda cubierta por los pagos registrados'
+                      : 'no hay nada que pagar'}
+                    : guardá la factura sin pago (queda a cuenta corriente y se
+                    cierra sola).
+                  </p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Pagar desde
+                        </Label>
+                        <Select
+                          items={itemsCuentaPago}
+                          value={cuentaPago}
+                          onValueChange={(v) => {
+                            const id = v ?? ''
+                            setCuentaPago(id)
+                            // Sugerir la forma de pago según el tipo de cuenta.
+                            const c = (cuentasTesoreria ?? []).find(
+                              (x) => String(x.id) === id
+                            )
+                            if (c)
+                              setFormaPago(
+                                c.tipo === 'caja' ? 'efectivo' : 'transferencia'
+                              )
+                          }}
+                        >
+                          <SelectTrigger className="w-full h-8 text-xs border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                            <SelectValue placeholder="Elegí la cuenta…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(cuentasTesoreria ?? []).map((c) => (
+                              <SelectItem key={c.id} value={String(c.id)}>
+                                {c.nombre} · saldo{' '}
+                                {new Intl.NumberFormat('es-AR', {
+                                  style: 'currency',
+                                  currency: 'ARS',
+                                  maximumFractionDigits: 0,
+                                }).format(Number(c.saldo_actual))}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Forma de pago
+                        </Label>
+                        <Select
+                          items={FORMA_PAGO_LABEL}
+                          value={formaPago}
+                          onValueChange={(v) =>
+                            v && setFormaPago(v as FormaPago)
+                          }
+                        >
+                          <SelectTrigger className="w-full h-8 text-xs border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FORMAS_PAGO.map((f) => (
+                              <SelectItem key={f.valor} value={f.valor}>
+                                {f.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Monto
+                        </Label>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            inputMode="decimal"
+                            value={
+                              montoPagoTocado
+                                ? montoPago
+                                : pendientePago > 0
+                                  ? String(pendientePago)
+                                  : ''
+                            }
+                            onChange={(e) => {
+                              setMontoPagoTocado(true)
+                              setMontoPago(e.target.value)
+                            }}
+                            className="pl-5 h-8 text-right text-xs font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          N° comprobante{' '}
+                          <span className="normal-case text-[#c8a58a] font-normal">
+                            (opcional)
+                          </span>
+                        </Label>
+                        <Input
+                          value={comprobantePago}
+                          onChange={(e) => setComprobantePago(e.target.value)}
+                          placeholder="Transferencia, cheque…"
+                          className="h-8 text-xs border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                      </div>
+                    </div>
+
+                    {cuentaPagoSel && saldoDespuesPago != null && (
+                      <p
+                        className={cn(
+                          'text-[11px] flex items-center gap-1',
+                          bovedaNegativa
+                            ? 'text-[#c43e2c] font-semibold'
+                            : saldoPagoNegativo
+                              ? 'text-[#b3821b]'
+                              : 'text-[#6f3a2a]'
+                        )}
+                      >
+                        {saldoPagoNegativo && (
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                        )}
+                        Saldo de {cuentaPagoSel.nombre} después:{' '}
+                        <span className="font-semibold tabular-nums">
+                          <MontoARS monto={saldoDespuesPago} />
+                        </span>
+                        {bovedaNegativa
+                          ? ' — la caja fuerte no puede quedar en negativo.'
+                          : saldoPagoNegativo
+                            ? ' (queda en negativo)'
+                            : null}
+                      </p>
+                    )}
+
+                    {montoPagoNum > 0 && (
+                      <p className="text-[11px] text-[#6f3a2a]">
+                        Pagás{' '}
+                        <span className="font-bold text-[#391511]">
+                          <MontoARS monto={montoPagoNum} />
+                        </span>{' '}
+                        en {FORMA_PAGO_LABEL[formaPago].toLowerCase()}
+                        {pagoParcial ? (
+                          <>
+                            {' '}
+                            · quedan{' '}
+                            <span className="font-bold text-[#c43e2c]">
+                              <MontoARS monto={pendientePago - montoPagoNum} />
+                            </span>{' '}
+                            a cuenta corriente (vence el{' '}
+                            {fechaCorta(cuenta.fecha_vencimiento)})
+                          </>
+                        ) : sobrantePago > 0 ? (
+                          <>
+                            {' '}
+                            · cancela la deuda ·{' '}
+                            <span
+                              className={cn(
+                                'font-bold',
+                                sobrantePagoGrande
+                                  ? 'text-[#c43e2c]'
+                                  : 'text-[#b3821b]'
+                              )}
+                            >
+                              <MontoARS monto={sobrantePago} />
+                            </span>{' '}
+                            de más → diferencia por redondeo
+                          </>
+                        ) : (
+                          ' · cancela la deuda'
+                        )}
+                      </p>
+                    )}
+                    {sobrantePagoGrande && (
+                      <p className="text-[11px] text-[#c43e2c] flex items-start gap-1">
+                        <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+                        Estás pagando bastante por encima del total. ¿Es
+                        correcto? El excedente queda registrado como diferencia
+                        por redondeo.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+
           <div className="flex gap-2">
             {facturaGuardada && (
               <Button
@@ -1601,7 +1952,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 anular.isPending ||
                 lineas.length === 0 ||
                 hayErroresCab ||
-                hayErrorPrecio
+                hayErrorPrecio ||
+                pagoInvalido
               }
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
@@ -1609,6 +1961,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Guardando…
+                </>
+              ) : pagoActivo && !deudaCubierta ? (
+                <>
+                  Guardar y pagar&nbsp;
+                  <MontoARS monto={montoPagoNum} />
                 </>
               ) : (
                 'Guardar factura'

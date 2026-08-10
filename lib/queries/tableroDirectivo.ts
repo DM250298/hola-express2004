@@ -62,10 +62,15 @@ export async function getTableroDirectivo(
     // Cálculo canónico (cuentas activas; la caja fuerte es saldo real desde
     // el candado de la mig 118), compartido con Cuentas y Flujo proyectado.
     getPosicionCaja(),
-    traerTodo<{ monto: number; fecha_vencimiento: string | null }>(() =>
+    traerTodo<{
+      monto: number
+      monto_pagado: number | null
+      fecha_vencimiento: string | null
+      pagos_cuenta: { sobrante: number | null }[] | null
+    }>(() =>
       supabase
         .from('cuentas_a_pagar')
-        .select('monto, fecha_vencimiento')
+        .select('monto, monto_pagado, fecha_vencimiento, pagos_cuenta(sobrante)')
         .eq('estado', 'pendiente')
         .order('id')
     ),
@@ -90,7 +95,20 @@ export async function getTableroDirectivo(
     vencidas: 0,
   }
   for (const d of pagarData) {
-    const monto = Number(d.monto) || 0
+    // Deuda VIVA = monto − aplicado (pagado − sobrantes por redondeo), igual
+    // que saldo_pendiente en finanzas.ts: los pagos parciales del flujo
+    // integrado (mig 144) dejaban el KPI sumando el total como si nada se
+    // hubiera pagado.
+    const pagado = Number(d.monto_pagado) || 0
+    const sobrantes = (d.pagos_cuenta ?? []).reduce(
+      (acc, p) => acc + Number(p.sobrante ?? 0),
+      0
+    )
+    const monto = Math.max(
+      0,
+      (Number(d.monto) || 0) - Math.max(0, pagado - sobrantes)
+    )
+    if (monto <= 0) continue
     por_pagar.total_pendiente += monto
     const dias = d.fecha_vencimiento ? diasHasta(d.fecha_vencimiento) : 999
     if (dias < 0) por_pagar.vencidas += monto
