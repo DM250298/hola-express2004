@@ -120,6 +120,12 @@ export interface GuardarFacturaPayload {
   comprobante?: DatosComprobante
   /** Pago en el mismo acto (mig 144); null/omitido = queda a cuenta corriente. */
   pago?: PagoFacturaPayload | null
+  /**
+   * Vencimiento de la deuda ajustado desde el modal (yyyy-MM-dd). Si viene,
+   * se actualiza en cuentas_a_pagar tras guardar (el RPC no lo toca: quedó
+   * el calculado en la recepción). Omitir = no se cambia.
+   */
+  fecha_vencimiento?: string | null
 }
 
 export interface FacturaCompraCompleta {
@@ -394,6 +400,16 @@ export async function guardarFacturaCompra(
       : {}),
   })
   if (error) throw error
+
+  // 2b. Vencimiento ajustado desde el modal (UPDATE aditivo, como la cabecera:
+  //     el RPC no toca fecha_vencimiento y acá la deuda ya quedó fijada).
+  if (payload.fecha_vencimiento) {
+    const { error: errVenc } = await supabase
+      .from('cuentas_a_pagar')
+      .update({ fecha_vencimiento: payload.fecha_vencimiento })
+      .eq('id', payload.cuenta_id)
+    if (errVenc) throw errVenc
+  }
 
   // 3. Cabecera formal del comprobante (UPDATE aditivo por cuenta_id).
   if (comp) {

@@ -304,6 +304,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   // apenas tipean, lo tipeado manda.
   const [montoPagoTocado, setMontoPagoTocado] = useState(false)
   const [comprobantePago, setComprobantePago] = useState('')
+  const [fechaPago, setFechaPago] = useState(hoyIso())
+  const [notaPago, setNotaPago] = useState('')
+  // Vencimiento de la deuda, editable acá (al cargar la factura se ve el
+  // vencimiento real del comprobante). Solo se guarda si lo cambian.
+  const [vencimientoCC, setVencimientoCC] = useState('')
   const { data: cuentasTesoreria } = useCuentas(true)
 
   const { data: productosBusqueda } = useProductos({
@@ -394,6 +399,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setMontoPago('')
       setMontoPagoTocado(false)
       setComprobantePago('')
+      setFechaPago(hoyIso())
+      setNotaPago('')
+      setVencimientoCC(cuenta?.fecha_vencimiento?.slice(0, 10) ?? '')
     }
 
     // ── (2) Líneas ────────────────────────────────────────────────────
@@ -847,9 +855,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           precio_venta:
             l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
         })),
-        // Pago en el mismo acto (mig 144). Fecha del pago = HOY, no la fecha
-        // de emisión: la plata sale hoy (y una factura retro-datada a un mes
-        // cerrado no debe arrastrar el pago a ese período).
+        // Pago en el mismo acto (mig 144). La fecha del pago es la elegida
+        // (default hoy, nunca futura) — independiente de la fecha de emisión
+        // del comprobante; el guard de período cerrado del server la valida.
         pago:
           pagoActivo && cuentaPagoSel
             ? {
@@ -857,9 +865,18 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 monto: r2(montoPagoNum),
                 forma_pago: formaPago,
                 comprobante: comprobantePago.trim() || null,
-                fecha: hoyIso(),
+                fecha: fechaPago || hoyIso(),
+                nota: notaPago.trim() || null,
               }
             : null,
+        // Vencimiento ajustado desde el modal: solo viaja si lo cambiaron
+        // (y la deuda sigue viva).
+        fecha_vencimiento:
+          !cuentaPagada &&
+          vencimientoCC &&
+          vencimientoCC !== (cuenta.fecha_vencimiento ?? '').slice(0, 10)
+            ? vencimientoCC
+            : undefined,
       },
       { onSuccess: () => onCambioAbierto(false) }
     )
@@ -1721,13 +1738,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 </div>
 
                 {modoPago === 'cuenta_corriente' ? (
-                  <p className="text-[11px] text-[#6f3a2a]">
-                    La deuda queda a cuenta corriente del proveedor · vence el{' '}
-                    <span className="font-semibold">
-                      {fechaCorta(cuenta.fecha_vencimiento)}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
+                    <span>
+                      La deuda queda a cuenta corriente del proveedor · vence
+                      el
                     </span>
-                    . Se paga después desde Finanzas › Cuentas a pagar.
-                  </p>
+                    <Input
+                      type="date"
+                      value={vencimientoCC}
+                      onChange={(e) => setVencimientoCC(e.target.value)}
+                      className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                    <span>
+                      · se paga después desde Finanzas › Cuentas a pagar.
+                    </span>
+                  </div>
                 ) : deudaCubierta ? (
                   <p className="text-[11px] text-[#b3821b]">
                     Con este total{' '}
@@ -1739,7 +1764,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </p>
                 ) : (
                   <>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                           Pagar desde
@@ -1830,6 +1855,18 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       </div>
                       <div className="space-y-1">
                         <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Fecha del pago
+                        </Label>
+                        <Input
+                          type="date"
+                          value={fechaPago}
+                          max={hoyIso()}
+                          onChange={(e) => setFechaPago(e.target.value)}
+                          className="h-8 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                           N° comprobante{' '}
                           <span className="normal-case text-[#c8a58a] font-normal">
                             (opcional)
@@ -1839,6 +1876,20 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           value={comprobantePago}
                           onChange={(e) => setComprobantePago(e.target.value)}
                           placeholder="Transferencia, cheque…"
+                          className="h-8 text-xs border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                          Nota{' '}
+                          <span className="normal-case text-[#c8a58a] font-normal">
+                            (opcional)
+                          </span>
+                        </Label>
+                        <Input
+                          value={notaPago}
+                          onChange={(e) => setNotaPago(e.target.value)}
+                          placeholder="Cualquier observación"
                           className="h-8 text-xs border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                         />
                       </div>
@@ -1885,7 +1936,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                               <MontoARS monto={pendientePago - montoPagoNum} />
                             </span>{' '}
                             a cuenta corriente (vence el{' '}
-                            {fechaCorta(cuenta.fecha_vencimiento)})
+                            {fechaCorta(vencimientoCC || cuenta.fecha_vencimiento)})
                           </>
                         ) : sobrantePago > 0 ? (
                           <>
@@ -1915,6 +1966,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         correcto? El excedente queda registrado como diferencia
                         por redondeo.
                       </p>
+                    )}
+                    {pagoParcial && (
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
+                        <span>El saldo restante vence el</span>
+                        <Input
+                          type="date"
+                          value={vencimientoCC}
+                          onChange={(e) => setVencimientoCC(e.target.value)}
+                          className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                      </div>
                     )}
                   </>
                 )}
