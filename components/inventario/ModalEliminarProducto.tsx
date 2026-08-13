@@ -176,8 +176,8 @@ export function ModalEliminarProducto({
                 tiene ventas o movimientos vinculados, así que no se puede borrar
                 sin perder ese historial.
                 {producto.activo
-                  ? ' Podés desactivarlo: deja de aparecer en el POS y en las listas operativas, pero se conserva todo el historial. Lo encontrás cuando quieras en Configuración › Productos con el filtro Estado → Solo inactivos, desde donde podés reactivarlo o editarlo.'
-                  : ' El producto ya está desactivado: no aparece en el POS. Lo encontrás en Configuración › Productos con el filtro Estado → Solo inactivos, desde donde podés reactivarlo o editarlo.'}
+                  ? ' Podés desactivarlo: deja de aparecer en el POS y en las listas operativas, pero se conserva todo el historial. Lo encontrás cuando quieras en Stock con el filtro Estado → Inactivos, desde donde podés reactivarlo.'
+                  : ' El producto ya está desactivado: no aparece en el POS. Lo encontrás en Stock con el filtro Estado → Inactivos, desde donde podés reactivarlo o editarlo.'}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

@@ -48,6 +48,12 @@ export interface FiltrosInventario {
   estado_stock?: EstadoStock | null
   orden?: 'nombre' | 'stock_asc' | 'stock_desc' | 'categoria'
   solo_activos?: boolean
+  /**
+   * Filtro EXACTO por estado del producto (true = solo activos, false = solo
+   * inactivos). Si está definido, manda sobre `solo_activos` — que solo sabe
+   * "activos" o "todos" y no puede aislar los dados de baja.
+   */
+  activo?: boolean
 }
 
 export function calcularEstadoStock(
@@ -134,7 +140,8 @@ export async function getProductosConStock(
         .select(
           'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, margen, stock_actual, stock_minimo, activo, pendiente_precio, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
         )
-      if (filtros.solo_activos !== false) q = q.eq('activo', true)
+      if (filtros.activo !== undefined) q = q.eq('activo', filtros.activo)
+      else if (filtros.solo_activos !== false) q = q.eq('activo', true)
       if (patron) q = q.or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
       if (filtros.categoria_id != null) q = q.eq('categoria_id', filtros.categoria_id)
       if (filtros.proveedor_id != null) q = q.eq('proveedor_id', filtros.proveedor_id)

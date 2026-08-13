@@ -40,6 +40,15 @@ const ORDEN_ITEMS: Record<OrdenInv, string> = {
   categoria: 'Categoría',
 }
 
+/** Estado del producto: la vista operativa arranca en solo activos. */
+type EstadoProducto = 'activos' | 'inactivos' | 'todos'
+
+const ESTADO_PRODUCTO_ITEMS: Record<EstadoProducto, string> = {
+  activos: 'Activos',
+  inactivos: 'Inactivos',
+  todos: 'Activos + inactivos',
+}
+
 export function TabStockInventario() {
   const [busquedaInput, setBusquedaInput] = useState('')
   const [busqueda, setBusqueda] = useState('')
@@ -47,6 +56,9 @@ export function TabStockInventario() {
   const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS_PROV)
   const [ubicacionFiltro, setUbicacionFiltro] = useState<string>(TODAS_UBIC)
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoStock | null>(null)
+  // Activos / inactivos / todos: permite encontrar productos dados de baja
+  // para reactivarlos sin salir de Stock.
+  const [estadoProducto, setEstadoProducto] = useState<EstadoProducto>('activos')
   const [orden, setOrden] = useState<OrdenInv>('nombre')
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(50)
@@ -66,9 +78,11 @@ export function TabStockInventario() {
       ubicacion: ubicacionFiltro === TODAS_UBIC ? undefined : ubicacionFiltro,
       estado_stock: estadoFiltro,
       orden,
-      solo_activos: true,
+      solo_activos: estadoProducto === 'activos',
+      // 'inactivos' aísla los dados de baja (manda sobre solo_activos).
+      activo: estadoProducto === 'inactivos' ? false : undefined,
     }),
-    [busqueda, categoriaFiltro, proveedorFiltro, ubicacionFiltro, estadoFiltro, orden]
+    [busqueda, categoriaFiltro, proveedorFiltro, ubicacionFiltro, estadoFiltro, estadoProducto, orden]
   )
 
   const { data: productos, isLoading, isError } = useProductosConStock(filtros)
@@ -118,7 +132,8 @@ export function TabStockInventario() {
     categoriaFiltro !== TODAS_CAT ||
     proveedorFiltro !== TODOS_PROV ||
     ubicacionFiltro !== TODAS_UBIC ||
-    estadoFiltro !== null
+    estadoFiltro !== null ||
+    estadoProducto !== 'activos'
 
   return (
     <div className="space-y-5">
@@ -194,6 +209,26 @@ export function TabStockInventario() {
             </SelectContent>
           </Select>
         )}
+
+        <Select
+          items={ESTADO_PRODUCTO_ITEMS}
+          value={estadoProducto}
+          onValueChange={(v) =>
+            setEstadoProducto((v ?? 'activos') as EstadoProducto)
+          }
+        >
+          <SelectTrigger
+            className="w-[170px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white"
+            title="Estado del producto: los inactivos no se venden en el POS, pero podés verlos acá para reactivarlos"
+          >
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="activos">Activos</SelectItem>
+            <SelectItem value="inactivos">Inactivos</SelectItem>
+            <SelectItem value="todos">Activos + inactivos</SelectItem>
+          </SelectContent>
+        </Select>
 
         <Select
           items={ORDEN_ITEMS}

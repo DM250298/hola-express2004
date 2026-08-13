@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowUpDown, CalendarClock, Package, Eye } from 'lucide-react'
-import { buttonVariants } from '@/components/ui/button'
+import { ArrowUpDown, CalendarClock, Package, Eye, Power } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import {
   Table,
   TableBody,
@@ -42,6 +43,9 @@ export function TablaStock({
   idsPorVencer,
   puedeVerCosto,
 }: Props) {
+  // Reactivar desde la fila (solo se ofrece en productos inactivos; el
+  // detalle sigue teniendo el toggle completo activar/desactivar).
+  const toggleActivo = useToggleProductoActivo()
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
       {isLoading ? (
@@ -128,7 +132,8 @@ export function TablaStock({
                     className={cn(
                       'border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]',
                       destacar &&
-                        'bg-[#c43e2c]/[0.03] hover:bg-[#c43e2c]/[0.06]'
+                        'bg-[#c43e2c]/[0.03] hover:bg-[#c43e2c]/[0.06]',
+                      !p.activo && 'opacity-60'
                     )}
                   >
                     <TableCell>
@@ -165,6 +170,14 @@ export function TablaStock({
                               title="Producto sin precio: no se puede vender hasta cargar la factura o completar el precio"
                             >
                               Sin precio
+                            </span>
+                          )}
+                          {!p.activo && (
+                            <span
+                              className="inline-flex items-center rounded-full bg-[#c8a58a]/30 text-[#6f3a2a] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
+                              title="Producto desactivado: no aparece en el POS ni en las vistas operativas"
+                            >
+                              Inactivo
                             </span>
                           )}
                         </span>
@@ -215,6 +228,20 @@ export function TablaStock({
                     )}
                     <TableCell>
                       <div className="flex justify-end gap-1">
+                        {!p.activo && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              toggleActivo.mutate({ id: p.id, activo: true })
+                            }
+                            disabled={toggleActivo.isPending}
+                            title="Reactivar producto (vuelve al POS y a las listas)"
+                            className="text-[#2f8f4e] hover:bg-[#2f8f4e]/10 hover:text-[#2f8f4e]"
+                          >
+                            <Power className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Link
                           href={`/inventario/${p.id}`}
                           title="Ver detalle"

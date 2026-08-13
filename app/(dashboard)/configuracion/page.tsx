@@ -5,10 +5,19 @@ import {
   ChevronRight,
   Users,
   Landmark,
+  Package,
   ShoppingCart,
 } from 'lucide-react'
 
 const SECCIONES = [
+  {
+    href: '/configuracion/productos',
+    titulo: 'Productos',
+    descripcion:
+      'Catálogo completo: precios, códigos, combos y productos inactivos.',
+    icono: Package,
+    color: '#e4a42a',
+  },
   {
     href: '/configuracion/ventas',
     titulo: 'Ventas y stock',
