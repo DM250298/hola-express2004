@@ -60,6 +60,10 @@ export function TablaProductos() {
   const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODAS)
   const [tipoFiltro, setTipoFiltro] = useState<string>(TODAS)
   const [unidadFiltro, setUnidadFiltro] = useState<string>(TODAS)
+  // Estado del producto: TODAS | 'activos' | 'inactivos'. Permite aislar los
+  // desactivados para reactivarlos o editarlos (si no, quedan enterrados
+  // entre miles de activos).
+  const [estadoFiltro, setEstadoFiltro] = useState<string>(TODAS)
   const [drawerAbierto, setDrawerAbierto] = useState(false)
   const [modalVencMinAbierto, setModalVencMinAbierto] = useState(false)
   const [productoEditar, setProductoEditar] =
@@ -82,8 +86,9 @@ export function TablaProductos() {
         proveedorFiltro === TODAS ? undefined : Number(proveedorFiltro),
       tipo: tipoFiltro === TODAS ? undefined : tipoFiltro,
       unidad: unidadFiltro === TODAS ? undefined : unidadFiltro,
+      activo: estadoFiltro === TODAS ? undefined : estadoFiltro === 'activos',
     }),
-    [busqueda, categoriaFiltro, proveedorFiltro, tipoFiltro, unidadFiltro]
+    [busqueda, categoriaFiltro, proveedorFiltro, tipoFiltro, unidadFiltro, estadoFiltro]
   )
 
   const { data: productos, isLoading, isError } = useProductos(filtros)
@@ -95,7 +100,7 @@ export function TablaProductos() {
   // Resetear a primera página cuando cambian los filtros
   useEffect(() => {
     setPagina(0)
-  }, [busqueda, categoriaFiltro, proveedorFiltro, tipoFiltro, unidadFiltro])
+  }, [busqueda, categoriaFiltro, proveedorFiltro, tipoFiltro, unidadFiltro, estadoFiltro])
 
   const productosPagina = useMemo(
     () => paginarArreglo(productos ?? [], pagina, porPagina),
@@ -121,7 +126,8 @@ export function TablaProductos() {
     categoriaFiltro !== TODAS ||
     proveedorFiltro !== TODAS ||
     tipoFiltro !== TODAS ||
-    unidadFiltro !== TODAS
+    unidadFiltro !== TODAS ||
+    estadoFiltro !== TODAS
 
   function limpiarFiltros() {
     setBusquedaInput('')
@@ -130,6 +136,7 @@ export function TablaProductos() {
     setProveedorFiltro(TODAS)
     setTipoFiltro(TODAS)
     setUnidadFiltro(TODAS)
+    setEstadoFiltro(TODAS)
   }
 
   return (
@@ -181,9 +188,9 @@ export function TablaProductos() {
         />
       </div>
 
-      {/* Grid de 4 filtros */}
+      {/* Grid de 5 filtros */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-4 shadow-sm">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {/* Tipo */}
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
@@ -275,6 +282,26 @@ export function TablaProductos() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Estado (activos / inactivos) */}
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+              Estado
+            </label>
+            <Select
+              value={estadoFiltro}
+              onValueChange={(v) => setEstadoFiltro(v ?? TODAS)}
+            >
+              <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODAS}>Todos</SelectItem>
+                <SelectItem value="activos">Solo activos</SelectItem>
+                <SelectItem value="inactivos">Solo inactivos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {hayFiltrosActivos && (
@@ -351,7 +378,9 @@ export function TablaProductos() {
                   return (
                     <TableRow
                       key={p.id}
-                      className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
+                      className={`border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6] ${
+                        p.activo ? '' : 'opacity-60'
+                      }`}
                     >
                       <TableCell>
                         <div className="flex flex-col leading-tight">
