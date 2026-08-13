@@ -322,7 +322,23 @@ export function ModalCompraFactura({
   }
 
   return (
-    <Dialog open={abierto} onOpenChange={(v) => !procesando && onCambioAbierto(v)}>
+    <Dialog
+      open={abierto}
+      onOpenChange={(v, detalles) => {
+        // Ni Escape ni el click afuera cierran: es un form largo y un cierre
+        // accidental tira toda la carga. Cerrar = X o Cancelar.
+        if (
+          !v &&
+          (procesando ||
+            detalles.reason === 'escape-key' ||
+            detalles.reason === 'outside-press')
+        ) {
+          detalles.cancel()
+          return
+        }
+        onCambioAbierto(v)
+      }}
+    >
       <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col">
         <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0">
           <DialogTitle className="text-[#391511] text-lg flex items-center gap-2">

@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   FileText,
+  History,
   Loader2,
   Pencil,
   Plus,
@@ -47,6 +48,12 @@ import {
 } from '@/lib/hooks/useFacturasCompra'
 import { usePricing } from '@/lib/hooks/usePricing'
 import { calcularLinea } from '@/lib/queries/facturasCompra'
+import {
+  borrarBorrador,
+  guardarBorrador,
+  leerBorrador,
+  purgarBorradoresVencidos,
+} from '@/lib/utils/borradores'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import {
@@ -121,6 +128,32 @@ interface PagoLinea {
   cuenta_id: string
   comprobante: string
   nota: string
+}
+
+/**
+ * Pre-guardado: foto completa del form que se autoguarda como borrador local
+ * (localStorage) mientras se carga la factura. Un cierre accidental, un F5 o
+ * un corte de luz no tiran el trabajo — al reabrir la misma cuenta el
+ * borrador se restaura, y se descarta solo al guardar la factura.
+ */
+interface BorradorFactura {
+  v: number
+  afectaVenta: boolean
+  lineas: LineaFactura[]
+  cab: CabeceraState
+  percepciones: { iibb: string; iva: string; otros: string }
+  gastosNoDebitables: string
+  redondeo: string
+  pagosLineas: PagoLinea[]
+  fechaPago: string
+  vencimientoCC: string
+}
+
+/** Versión del formato del borrador: si cambia la forma, los viejos se ignoran. */
+const BORRADOR_V = 1
+
+function claveBorrador(cuentaId: number): string {
+  return `factura-c${cuentaId}`
 }
 
 function hoyIso(): string {
@@ -374,10 +407,30 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   //      query que resuelve tarde pise lo ya tipeado en los renglones.
   const initRef = useRef<string | null>(null)
   const cabRef = useRef<string | null>(null)
+  // ── Pre-guardado (borrador local) ──────────────────────────────────
+  // Se restauró un borrador en esta apertura → banner con "Descartar".
+  const [borradorRestaurado, setBorradorRestaurado] = useState(false)
+  // Bump manual para re-correr la init tras descartar el borrador.
+  const [reinitTick, setReinitTick] = useState(0)
+  // Última foto del form: el flush sincrónico del cierre la escribe a
+  // localStorage para no perder lo tipeado que el debounce aún no guardó.
+  const snapshotRef = useRef<BorradorFactura | null>(null)
+  // JSON del estado "virgen" post-init: mientras el form no difiera de cómo
+  // arrancó, no se escribe borrador (abrir y mirar no deja rastro).
+  const pristineRef = useRef<string | null>(null)
+  // Gate del autoguardado. Es STATE (no ref) a propósito: se setea batcheado
+  // con los sets de la init, así el effect de autoguardado recién pasa en el
+  // commit donde los valores iniciales YA están aplicados — leyendo el ref
+  // pasaría un commit antes, con el closure viejo, y grabaría como "virgen"
+  // el estado de la apertura anterior (borrador fantasma al reabrir).
+  const [initListo, setInitListo] = useState<string | null>(null)
   useEffect(() => {
     if (!abierto) {
       initRef.current = null
       cabRef.current = null
+      snapshotRef.current = null
+      pristineRef.current = null
+      setInitListo(null)
       return
     }
     const claveInit = `c${cuenta?.id ?? 0}`
@@ -389,6 +442,45 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     // de relleno de más abajo.
     if (cabRef.current !== claveInit) {
       cabRef.current = claveInit
+      purgarBorradoresVencidos()
+      // ¿Quedó un borrador de ESTA cuenta (cierre accidental, F5, corte)?
+      // Se restaura entero acá —sincrónico, sin esperar queries— y se marca
+      // la init de líneas como hecha para que nada lo pise al resolver.
+      const borrador = cuenta
+        ? leerBorrador<BorradorFactura>(claveBorrador(cuenta.id))
+        : null
+      if (
+        borrador &&
+        borrador.v === BORRADOR_V &&
+        Array.isArray(borrador.lineas) &&
+        Array.isArray(borrador.pagosLineas) &&
+        borrador.cab != null &&
+        borrador.percepciones != null
+      ) {
+        setCab(borrador.cab)
+        setPercepciones(borrador.percepciones)
+        setGastosNoDebitables(borrador.gastosNoDebitables)
+        setRedondeo(borrador.redondeo)
+        setPagosLineas(borrador.pagosLineas)
+        // Que las filas de pago nuevas no repitan keys de las restauradas.
+        pagoKeyRef.current = borrador.pagosLineas.reduce(
+          (max, p) => Math.max(max, Number(p.key.slice(1)) || 0),
+          pagoKeyRef.current
+        )
+        setFechaPago(borrador.fechaPago || hoyIso())
+        setVencimientoCC(borrador.vencimientoCC)
+        setAfectaVenta(borrador.afectaVenta)
+        setLineas(borrador.lineas)
+        setBusqueda('')
+        setBorradorRestaurado(true)
+        initRef.current = claveInit
+        setInitListo(claveInit)
+        // Centinela: con borrador restaurado, TODO cambio cuenta como
+        // borrador (nunca se compara contra un estado virgen que no hubo).
+        pristineRef.current = ''
+        return
+      }
+      setBorradorRestaurado(false)
       setCab({
         ...CABECERA_DEFAULT,
         cuit_proveedor: proveedorCuenta?.cuit ?? '',
@@ -410,6 +502,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (cargando || pricing.cargando) return
     if (initRef.current === claveInit) return
     initRef.current = claveInit
+    setInitListo(claveInit)
     let nuevas: LineaFactura[]
     if (facturaGuardada && facturaGuardada.items.length > 0) {
       // Factor de gastos con el que se guardó esta factura: hace falta para
@@ -535,7 +628,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setRedondeo(f.redondeo ? String(f.redondeo) : '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierto, cargando, pricing.cargando, facturaGuardada, cuenta?.id])
+  }, [abierto, cargando, pricing.cargando, facturaGuardada, cuenta?.id, reinitTick])
 
   // Rellena la cabecera con la ficha del proveedor cuando la lista resuelve
   // DESPUÉS de la init. Solo completa lo VACÍO: nunca pisa lo tipeado ni lo
@@ -550,6 +643,84 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         prev.tipo_comprobante || tipoDesdeCondicionIva(provCondIva),
     }))
   }, [abierto, hayFicha, provCuit, provCondIva])
+
+  // Autoguardado del borrador: cada cambio del form (con la init ya hecha)
+  // queda en localStorage a los 600 ms. La primera foto tras la init es el
+  // estado virgen (no se guarda); si el form vuelve a ese estado, el borrador
+  // que hubiera se borra (deshacer todo = no dejar rastro).
+  useEffect(() => {
+    const id = cuenta?.id
+    if (!abierto || id == null || initListo !== `c${id}`) return
+    const foto: BorradorFactura = {
+      v: BORRADOR_V,
+      afectaVenta,
+      lineas,
+      cab,
+      percepciones,
+      gastosNoDebitables,
+      redondeo,
+      pagosLineas,
+      fechaPago,
+      vencimientoCC,
+    }
+    const json = JSON.stringify(foto)
+    if (pristineRef.current === null) {
+      pristineRef.current = json
+      return
+    }
+    if (json === pristineRef.current) {
+      snapshotRef.current = null
+      const timer = setTimeout(() => borrarBorrador(claveBorrador(id)), 600)
+      return () => clearTimeout(timer)
+    }
+    snapshotRef.current = foto
+    const timer = setTimeout(() => guardarBorrador(claveBorrador(id), foto), 600)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    abierto,
+    cuenta?.id,
+    initListo,
+    afectaVenta,
+    lineas,
+    cab,
+    percepciones,
+    gastosNoDebitables,
+    redondeo,
+    pagosLineas,
+    fechaPago,
+    vencimientoCC,
+  ])
+
+  // Flush del borrador al cerrar (como sea que se cierre): lo tipeado en los
+  // últimos 600 ms —que el debounce todavía no escribió— también se guarda.
+  // Tras guardar/anular con éxito, snapshotRef ya está en null y no escribe.
+  useEffect(() => {
+    const id = cuenta?.id
+    if (!abierto || id == null) return
+    return () => {
+      if (snapshotRef.current) {
+        guardarBorrador(claveBorrador(id), snapshotRef.current)
+      }
+    }
+  }, [abierto, cuenta?.id])
+
+  /** Tira el borrador restaurado y rearma el modal desde los datos reales. */
+  function descartarBorrador() {
+    if (cuenta) borrarBorrador(claveBorrador(cuenta.id))
+    snapshotRef.current = null
+    pristineRef.current = null
+    initRef.current = null
+    cabRef.current = null
+    setBorradorRestaurado(false)
+    setReinitTick((t) => t + 1)
+  }
+
+  /** Borra el borrador de esta cuenta (la factura ya quedó guardada/anulada). */
+  function limpiarBorrador() {
+    if (cuenta) borrarBorrador(claveBorrador(cuenta.id))
+    snapshotRef.current = null
+  }
 
   function setLineaCampo(key: string, campo: CampoEditable, valor: string) {
     setLineas((prev) =>
@@ -976,7 +1147,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             ? vencimientoCC
             : undefined,
       },
-      { onSuccess: () => onCambioAbierto(false) }
+      {
+        onSuccess: () => {
+          limpiarBorrador()
+          onCambioAbierto(false)
+        },
+      }
     )
   }
 
@@ -989,7 +1165,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (!ok) return
     anular.mutate(
       { cuentaId: cuenta.id, usuarioId: usuario.id },
-      { onSuccess: () => onCambioAbierto(false) }
+      {
+        onSuccess: () => {
+          limpiarBorrador()
+          onCambioAbierto(false)
+        },
+      }
     )
   }
 
@@ -1000,9 +1181,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     <>
     <Dialog
       open={abierto}
-      onOpenChange={(v) =>
-        !guardar.isPending && !anular.isPending && onCambioAbierto(v)
-      }
+      onOpenChange={(v, detalles) => {
+        // Ni Escape ni el click afuera cierran: acá hay mucho trabajo tipeado
+        // a mano y un cierre accidental lo tiraba todo. Cerrar = X o Cancelar.
+        // Tampoco se cierra mientras está guardando/anulando.
+        if (
+          !v &&
+          (guardar.isPending ||
+            anular.isPending ||
+            detalles.reason === 'escape-key' ||
+            detalles.reason === 'outside-press')
+        ) {
+          detalles.cancel()
+          return
+        }
+        onCambioAbierto(v)
+      }}
     >
       <DialogContent className="sm:max-w-6xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col">
         <DialogHeader className="px-6 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0">
@@ -1020,6 +1214,29 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         </DialogHeader>
 
         <div className="flex-1 overflow-auto px-6 py-5 space-y-4">
+          {/* Pre-guardado: se recuperó un borrador de esta cuenta */}
+          {borradorRestaurado && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f9b44c]/60 bg-[#f9b44c]/15 px-3 py-2">
+              <div className="flex items-center gap-2 text-xs text-[#6f3a2a]">
+                <History className="h-4 w-4 shrink-0 text-[#9e6b15]" />
+                <span>
+                  <span className="font-semibold text-[#391511]">
+                    Borrador restaurado:
+                  </span>{' '}
+                  volvió el trabajo que tenías a medias en esta factura (se
+                  guarda solo mientras cargás).
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={descartarBorrador}
+                className="shrink-0 rounded-lg border border-[#e4c9b0] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#6f3a2a] transition-colors hover:border-[#c43e2c]/40 hover:text-[#c43e2c]"
+              >
+                Descartar y empezar de nuevo
+              </button>
+            </div>
+          )}
+
           {/* Ficha del proveedor: lo que va a salir en el comprobante y en el
               Libro IVA. Read-only a propósito — la fuente de verdad es
               Configuración › Proveedores. */}
