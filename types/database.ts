@@ -1992,6 +1992,43 @@ export type PagoCuentaInsert = {
 
 export type PagoCuentaUpdate = Partial<PagoCuentaInsert>
 
+// ─── pagos_programados (pagos a futuro sin ejecutar, mig 146) ────────────────
+
+export type PagoProgramadoRow = {
+  id: number
+  cuenta_a_pagar_id: number
+  cuenta_origen_id: number | null
+  monto: number
+  forma_pago: string | null
+  comprobante: string | null
+  nota: string | null
+  fecha_programada: string
+  estado: 'pendiente' | 'ejecutado' | 'cancelado'
+  /** Fila de pagos_cuenta creada al ejecutar. */
+  pago_id: number | null
+  usuario_id: string | null
+  ejecutado_at: string | null
+  created_at: string
+}
+
+export type PagoProgramadoInsert = {
+  id?: number
+  cuenta_a_pagar_id: number
+  cuenta_origen_id?: number | null
+  monto: number
+  forma_pago?: string | null
+  comprobante?: string | null
+  nota?: string | null
+  fecha_programada: string
+  estado?: 'pendiente' | 'ejecutado' | 'cancelado'
+  pago_id?: number | null
+  usuario_id?: string | null
+  ejecutado_at?: string | null
+  created_at?: string
+}
+
+export type PagoProgramadoUpdate = Partial<PagoProgramadoInsert>
+
 // ─── periodos_contables (cierre de mes) ──────────────────────────────────────
 
 export type EstadoPeriodo = 'abierto' | 'cerrado'
@@ -2739,6 +2776,8 @@ export type FacturaCompraRow = {
   percepcion_iibb: number
   percepcion_otros: number
   gastos_no_debitables: number
+  /** Ajuste (+/−) para que el total dé exacto como el papel (mig 146). */
+  redondeo: number
   /** Compra directa (pagada al instante, sin orden de compra). */
   es_directa: boolean
   /** Egreso del pago (para poder anular). */
@@ -2769,6 +2808,7 @@ export type FacturaCompraInsert = {
   percepcion_iibb?: number
   percepcion_otros?: number
   gastos_no_debitables?: number
+  redondeo?: number
   es_directa?: boolean
   egreso_id?: number | null
   controlada?: boolean
@@ -3313,6 +3353,12 @@ export interface Database {
         Row: PagoCuentaRow
         Insert: PagoCuentaInsert
         Update: PagoCuentaUpdate
+        Relationships: []
+      }
+      pagos_programados: {
+        Row: PagoProgramadoRow
+        Insert: PagoProgramadoInsert
+        Update: PagoProgramadoUpdate
         Relationships: []
       }
       clientes: {
@@ -4232,10 +4278,13 @@ export interface Database {
           costo_estimado: number
         }[]
       }
-      /** v14 (mig 144): + p_pago jsonb opcional { cuenta_origen_id, monto,
-       *  forma_pago?, comprobante?, fecha?, nota? } → paga la cuenta en la misma
-       *  transacción vía fn_pagar_cuenta. v12 (mig 132) reconcilia el stock por
-       *  delta; p_lineas puede traer `fecha_vencimiento` para corregir el lote. */
+      /** v16 (mig 146): + p_redondeo (ajuste +/− para que el total dé exacto
+       *  como el papel; asienta contra 5.2.10). p_pago acepta objeto o LISTA
+       *  (mig 145) de { cuenta_origen_id, monto, forma_pago?, comprobante?,
+       *  fecha?, nota? }: fecha ≤ hoy paga en la misma transacción vía
+       *  fn_pagar_cuenta; fecha FUTURA queda en pagos_programados sin debitar.
+       *  v12 (mig 132) reconcilia el stock por delta; p_lineas puede traer
+       *  `fecha_vencimiento` para corregir el lote. */
       fn_guardar_factura_compra: {
         Args: {
           p_cuenta_id: number
@@ -4248,8 +4297,18 @@ export interface Database {
           p_percepciones?: Json
           p_gastos_no_debitables?: number
           p_pago?: Json
+          p_redondeo?: number
         }
         Returns: undefined
+      }
+      /** Ejecuta un pago programado (mig 146): debita HOY vía fn_pagar_cuenta
+       *  y marca la fila como 'ejecutado'. */
+      fn_ejecutar_pago_programado: {
+        Args: {
+          p_programado_id: number
+          p_usuario_id: string
+        }
+        Returns: Json
       }
       /** Anula una factura de compra de orden (mig 133): revierte el stock a lo
        *  recibido, reabre la deuda como provisoria y borra el asiento. */

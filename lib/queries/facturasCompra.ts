@@ -119,8 +119,11 @@ export interface GuardarFacturaPayload {
   gastos_no_debitables?: number
   /** Datos formales del comprobante; si se omiten, no se tocan. */
   comprobante?: DatosComprobante
-  /** Pagos en el mismo acto (mig 145); vacío/omitido = queda a cuenta corriente. */
+  /** Pagos en el mismo acto (mig 145); vacío/omitido = queda a cuenta corriente.
+   *  Con fecha FUTURA quedan PROGRAMADOS (mig 146): no debitan hasta ejecutarlos. */
   pagos?: PagoFacturaPayload[] | null
+  /** Ajuste (+/−) para que el total dé EXACTO como el papel (mig 146, → 5.2.10). */
+  redondeo?: number
   /**
    * Vencimiento de la deuda ajustado desde el modal (yyyy-MM-dd). Si viene,
    * se actualiza en cuentas_a_pagar tras guardar (el RPC no lo toca: quedó
@@ -385,6 +388,8 @@ export async function guardarFacturaCompra(
     ...((payload.gastos_no_debitables ?? 0) > 0
       ? { p_gastos_no_debitables: payload.gastos_no_debitables }
       : {}),
+    // Redondeo del comprobante (mig 146): solo viaja si es ≠ 0 (mismo patrón).
+    ...(payload.redondeo ? { p_redondeo: payload.redondeo } : {}),
     // Solo se manda si hay pagos: sin la key, la llamada sigue resolviendo
     // contra la firma pre-144 hasta que se corra la migración. La LISTA
     // requiere la v15 (mig 145); un solo pago también viaja como lista.

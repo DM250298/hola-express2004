@@ -27,6 +27,7 @@ import { BadgeEstadoCuenta } from '@/components/shared/BadgeEstadoCuenta'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import {
   usePagosCuenta,
+  usePagosProgramados,
   useEditarCuentaAPagar,
 } from '@/lib/hooks/useFinanzas'
 import {
@@ -52,6 +53,12 @@ export function DrawerCuentaPagar({
   const editar = useEditarCuentaAPagar()
   const { data: pagos, isLoading: cargandoPagos } = usePagosCuenta(
     abierto ? (cuenta?.id ?? null) : null
+  )
+  // Pagos agendados a futuro para ESTA deuda (mig 146): informativos acá,
+  // se ejecutan/cancelan desde la sección de la tab.
+  const { data: programados } = usePagosProgramados()
+  const programadosCuenta = (programados ?? []).filter(
+    (p) => p.cuenta_a_pagar_id === (cuenta?.id ?? -1)
   )
 
   const [vencimiento, setVencimiento] = useState('')
@@ -212,13 +219,41 @@ export function DrawerCuentaPagar({
                 Historial de pagos
               </h3>
             </div>
+            {programadosCuenta.length > 0 && (
+              <div className="space-y-1.5">
+                {programadosCuenta.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-dashed border-[#f9b44c]/70 bg-[#f9b44c]/5 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-[#391511] text-sm tabular-nums">
+                          <MontoARS monto={p.monto} />
+                        </span>
+                        <span className="rounded-full bg-[#f9b44c]/20 border border-[#f9b44c]/60 px-1.5 py-px text-[10px] font-semibold text-[#9e6b15]">
+                          Programado {formatearFechaCorta(p.fecha_programada)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#6f3a2a] truncate">
+                        {p.cuenta_origen_nombre ?? 'cuenta'}
+                        {esFormaPago(p.forma_pago)
+                          ? ` · ${FORMA_PAGO_LABEL[p.forma_pago]}`
+                          : ''}{' '}
+                        · se ejecuta desde Cuentas a pagar
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {cargandoPagos ? (
               <Skeleton className="h-16 rounded-xl bg-[#f9d2a2]/30" />
-            ) : (pagos ?? []).length === 0 ? (
+            ) : (pagos ?? []).length === 0 && programadosCuenta.length === 0 ? (
               <p className="text-xs text-[#6f3a2a]">
                 Todavía no se registraron pagos.
               </p>
-            ) : (
+            ) : (pagos ?? []).length === 0 ? null : (
               <div className="space-y-1.5">
                 {(pagos ?? []).map((p) => (
                   <div

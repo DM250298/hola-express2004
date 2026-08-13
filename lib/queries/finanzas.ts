@@ -501,6 +501,95 @@ export async function getPagosCuenta(
   }))
 }
 
+// ─── Pagos programados (mig 146): "lo pago el viernes" sin debitar hoy ───────
+
+export interface PagoProgramadoConDatos {
+  id: number
+  cuenta_a_pagar_id: number
+  cuenta_origen_id: number | null
+  cuenta_origen_nombre: string | null
+  monto: number
+  forma_pago: string | null
+  comprobante: string | null
+  nota: string | null
+  fecha_programada: string
+  proveedor_nombre: string | null
+  pedido_id: number | null
+  numero_factura: string | null
+}
+
+/** Pagos programados PENDIENTES (los ejecutados/cancelados no se listan). */
+export async function getPagosProgramados(): Promise<PagoProgramadoConDatos[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('pagos_programados')
+    .select(
+      'id, cuenta_a_pagar_id, cuenta_origen_id, monto, forma_pago, comprobante, nota, fecha_programada, cuentas(nombre), cuentas_a_pagar(pedido_id, numero_factura, proveedores(nombre))'
+    )
+    .eq('estado', 'pendiente')
+    .order('fecha_programada', { ascending: true })
+    .order('id', { ascending: true })
+  if (error) throw error
+
+  type FilaCruda = {
+    id: number
+    cuenta_a_pagar_id: number
+    cuenta_origen_id: number | null
+    monto: number
+    forma_pago: string | null
+    comprobante: string | null
+    nota: string | null
+    fecha_programada: string
+    cuentas: { nombre: string } | null
+    cuentas_a_pagar: {
+      pedido_id: number | null
+      numero_factura: string | null
+      proveedores: { nombre: string } | null
+    } | null
+  }
+
+  return ((data ?? []) as unknown as FilaCruda[]).map((p) => ({
+    id: p.id,
+    cuenta_a_pagar_id: p.cuenta_a_pagar_id,
+    cuenta_origen_id: p.cuenta_origen_id,
+    cuenta_origen_nombre: p.cuentas?.nombre ?? null,
+    monto: Number(p.monto),
+    forma_pago: p.forma_pago,
+    comprobante: p.comprobante,
+    nota: p.nota,
+    fecha_programada: p.fecha_programada,
+    proveedor_nombre: p.cuentas_a_pagar?.proveedores?.nombre ?? null,
+    pedido_id: p.cuentas_a_pagar?.pedido_id ?? null,
+    numero_factura: p.cuentas_a_pagar?.numero_factura ?? null,
+  }))
+}
+
+/** Ejecuta el pago programado: debita HOY vía fn_pagar_cuenta (atómico). */
+export async function ejecutarPagoProgramado(
+  programadoId: number,
+  usuarioId: string
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_ejecutar_pago_programado', {
+    p_programado_id: programadoId,
+    p_usuario_id: usuarioId,
+  })
+  if (error) throw error
+}
+
+/** Cancela un pago programado pendiente (no toca nada más). */
+export async function cancelarPagoProgramado(
+  programadoId: number
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('pagos_programados')
+    .update({ estado: 'cancelado' })
+    .eq('id', programadoId)
+    .eq('estado', 'pendiente')
+  if (error) throw error
+}
+
 export interface EditarCuentaPayload {
   cuenta_id: number
   fecha_vencimiento?: string

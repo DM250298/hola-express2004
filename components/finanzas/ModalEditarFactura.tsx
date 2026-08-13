@@ -300,6 +300,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   })
   // Gastos no debitables (flete, etc.): se prorratean al costo de los productos.
   const [gastosNoDebitables, setGastosNoDebitables] = useState('')
+  // Redondeo del comprobante (+/−): para que el total dé EXACTO como el papel.
+  const [redondeo, setRedondeo] = useState('')
   // ── Pago integrado (migs 144/145): lista de pagos ─────────────────────
   // Sin filas = la deuda queda a cuenta corriente (comportamiento clásico).
   // Cada fila es un pago independiente (importe, método, cuenta, comprobante,
@@ -394,6 +396,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       })
       setPercepciones({ iibb: '', iva: '', otros: '' })
       setGastosNoDebitables('')
+      setRedondeo('')
       // Pago integrado: cada apertura arranca sin pagos (cuenta corriente).
       setPagosLineas([])
       setFechaPago(hoyIso())
@@ -529,6 +532,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setGastosNoDebitables(
         f.gastos_no_debitables ? String(f.gastos_no_debitables) : ''
       )
+      setRedondeo(f.redondeo ? String(f.redondeo) : '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cargando, pricing.cargando, facturaGuardada, cuenta?.id])
@@ -718,8 +722,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const percIva = Number(percepciones.iva) || 0
   const percOtros = Number(percepciones.otros) || 0
   const totalPercepciones = percIibb + percIva + percOtros
+  // Redondeo del comprobante (mig 146): ajusta el total para que coincida
+  // EXACTO con el impreso; asienta contra 5.2.10 y no toca costos ni IVA.
+  const redondeoNum = r2(Number(redondeo) || 0)
   const totalConIva =
-    totales.neto + totales.iva + totalPercepciones + gastos
+    totales.neto + totales.iva + totalPercepciones + gastos + redondeoNum
 
   // ── Derivados del pago integrado (migs 144/145) ───────────────────────
   const cuentaPagada = cuenta?.estado === 'pagada'
@@ -787,14 +794,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const filaIncompleta = pagosLineas.some(
     (f) => !f.cuenta_id || (Number(f.monto) || 0) <= 0
   )
+  // Fecha FUTURA = pagos PROGRAMADOS (mig 146): no debitan nada al guardar,
+  // quedan agendados y se ejecutan desde Finanzas › Cuentas a pagar.
+  const pagoProgramado = hayPagos && fechaPago > hoyIso()
   // Con los pagos previos cubriendo el total no hay nada que pagar: el server
   // rechazaría cualquier monto y abortaría también la factura.
   const deudaCubierta = !cuentaPagada && pendientePago <= 0 && yaPagado > 0.009
-  // Bloquea el guardado: filas incompletas, bóveda en negativo o una fila
-  // intermedia que ya cubre el total.
+  // Bloquea el guardado: filas incompletas, una fila intermedia que ya cubre
+  // el total, o bóveda en negativo (solo para pagos que debitan HOY: los
+  // programados se validan recién al ejecutarse).
   const pagoInvalido =
     hayPagos &&
-    (filaIncompleta || bovedaNegativa || ordenInvalido || deudaCubierta)
+    (filaIncompleta ||
+      ordenInvalido ||
+      deudaCubierta ||
+      (!pagoProgramado && bovedaNegativa))
 
   function agregarPagoLinea() {
     pagoKeyRef.current += 1
@@ -917,6 +931,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         usuario_id: usuario.id,
         percepciones: { iva: percIva, iibb: percIibb, otros: percOtros },
         gastos_no_debitables: gastos,
+        redondeo: redondeoNum,
         comprobante: {
           tipo_comprobante: cab.tipo_comprobante || null,
           punto_venta: limpio(cab.punto_venta),
@@ -1730,6 +1745,24 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               className="h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs"
             />
           </div>
+
+          {/* Redondeo (+/−): para que el total dé EXACTO como el papel */}
+          <div className="flex flex-wrap items-center justify-end gap-2 mb-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mr-1">
+              Redondeo
+            </span>
+            <span className="text-[11px] text-[#c8a58a]">
+              (+/− para que el total dé igual al papel · va a Diferencias)
+            </span>
+            <Input
+              type="number"
+              step="0.01"
+              value={redondeo}
+              onChange={(e) => setRedondeo(e.target.value)}
+              placeholder="0"
+              className="h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs"
+            />
+          </div>
           {hayGastos && (
             <p className="text-[11px] text-[#9e6b15] text-right mb-3">
               Se prorratea al costo de cada producto (+
@@ -1769,6 +1802,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 </span>
               </span>
             )}
+            {redondeoNum !== 0 && (
+              <span className="text-[#6f3a2a]">
+                Redondeo:{' '}
+                <span className="font-semibold text-[#391511] tabular-nums">
+                  {redondeoNum > 0 ? '+' : ''}
+                  <MontoARS monto={redondeoNum} />
+                </span>
+              </span>
+            )}
             <span className="text-[#391511] font-bold">
               Total a pagar:{' '}
               <span className="text-xl font-extrabold tabular-nums">
@@ -1803,9 +1845,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <Input
                           type="date"
                           value={fechaPago}
-                          max={hoyIso()}
                           onChange={(e) => setFechaPago(e.target.value)}
-                          className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          className={cn(
+                            'h-8 w-36 text-xs tabular-nums focus-visible:ring-[#f9b44c]',
+                            pagoProgramado
+                              ? 'border-[#f9b44c] bg-[#f9b44c]/10'
+                              : 'border-[#e4c9b0]'
+                          )}
                         />
                       </div>
                     )}
@@ -1950,13 +1996,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 )}
 
                 {/* Avisos */}
+                {pagoProgramado && (
+                  <p className="text-[11px] text-[#9e6b15] bg-[#f9b44c]/10 border border-[#f9b44c]/40 rounded-lg px-2.5 py-1.5">
+                    Pagos <span className="font-bold">PROGRAMADOS</span> para
+                    el {fechaCorta(fechaPago)}: no descuentan plata hoy. Se
+                    ejecutan (o cancelan) desde Finanzas › Cuentas a pagar.
+                  </p>
+                )}
                 {deudaCubierta && (
                   <p className="text-[11px] text-[#b3821b]">
                     Con este total la deuda ya queda cubierta por los pagos
                     registrados: guardá la factura sin pagos (se cierra sola).
                   </p>
                 )}
-                {avisosCuentas.map((a) => (
+                {!pagoProgramado &&
+                  avisosCuentas.map((a) => (
                   <p
                     key={a.nombre}
                     className={cn(
@@ -2000,9 +2054,25 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 {/* Saldo (lo que queda a cuenta corriente) */}
                 <div className="pt-2 border-t border-[#e4c9b0]/40 text-center space-y-1.5">
                   <div className="text-sm font-extrabold text-[#391511] tabular-nums">
-                    Saldo: <MontoARS monto={Math.max(0, saldoRestante)} />
+                    Saldo{pagoProgramado ? ' (al ejecutar los programados)' : ''}
+                    : <MontoARS monto={Math.max(0, saldoRestante)} />
                   </div>
-                  {!deudaCubierta && saldoRestante > 0.009 ? (
+                  {pagoProgramado ? (
+                    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
+                      <span>
+                        La deuda queda a cuenta corriente (vence el
+                      </span>
+                      <Input
+                        type="date"
+                        value={vencimientoCC}
+                        onChange={(e) => setVencimientoCC(e.target.value)}
+                        className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      />
+                      <span>
+                        ) hasta ejecutar los pagos programados.
+                      </span>
+                    </div>
+                  ) : !deudaCubierta && saldoRestante > 0.009 ? (
                     <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
                       <span>
                         {hayPagos ? 'El saldo queda' : 'La deuda queda'} a
@@ -2080,7 +2150,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 </>
               ) : hayPagos ? (
                 <>
-                  Guardar y pagar&nbsp;
+                  {pagoProgramado ? 'Guardar y programar' : 'Guardar y pagar'}
+                  &nbsp;
                   <MontoARS monto={totalPagos} />
                 </>
               ) : (

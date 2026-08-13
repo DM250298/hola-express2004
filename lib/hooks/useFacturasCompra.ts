@@ -114,12 +114,19 @@ export function useGuardarFacturaCompra() {
       qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
       qc.invalidateQueries({ queryKey: ['asientos'] })
       qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
+      qc.invalidateQueries({ queryKey: ['pagos-programados'] })
+      const hoy = new Date()
+      const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+      const programados =
+        vars.pagos?.some((p) => p.fecha > hoyIso) ?? false
       toast.success(
-        vars.pagos && vars.pagos.length > 1
-          ? `Factura guardada y ${vars.pagos.length} pagos registrados`
-          : vars.pagos?.length
-            ? 'Factura guardada y pago registrado'
-            : 'Factura guardada · stock, costos y precios actualizados'
+        vars.pagos && vars.pagos.length > 0
+          ? programados
+            ? `Factura guardada · ${vars.pagos.length > 1 ? `${vars.pagos.length} pagos programados` : 'pago programado'}`
+            : vars.pagos.length > 1
+              ? `Factura guardada y ${vars.pagos.length} pagos registrados`
+              : 'Factura guardada y pago registrado'
+          : 'Factura guardada · stock, costos y precios actualizados'
       )
     },
     onError: (error: Error) => {

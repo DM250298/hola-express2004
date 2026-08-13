@@ -5,13 +5,16 @@ import { toast } from 'sonner'
 import {
   actualizarEgreso,
   anularEgreso,
+  cancelarPagoProgramado,
   crearEgreso,
   editarCuentaAPagar,
+  ejecutarPagoProgramado,
   getCuentaAPagarPorId,
   getCuentasAPagar,
   getCuentasSinFactura,
   getEgresos,
   getPagosCuenta,
+  getPagosProgramados,
   getResumenFinanciero,
   pagarCuenta,
   type ActualizarEgresoPayload,
@@ -104,6 +107,54 @@ export function usePagarCuenta() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo registrar el pago: ${error.message}`)
+    },
+  })
+}
+
+// ─── Pagos programados (mig 146) ─────────────────────────────────────────────
+
+export const PAGOS_PROGRAMADOS_KEY = ['pagos-programados'] as const
+
+export function usePagosProgramados() {
+  return useQuery({
+    queryKey: PAGOS_PROGRAMADOS_KEY,
+    queryFn: getPagosProgramados,
+    staleTime: 30 * 1000,
+  })
+}
+
+export function useEjecutarPagoProgramado() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      programadoId,
+      usuarioId,
+    }: {
+      programadoId: number
+      usuarioId: string
+    }) => ejecutarPagoProgramado(programadoId, usuarioId),
+    onSuccess: () => {
+      // Ejecutar = un pago real: invalida todo lo de un pago + la lista.
+      invalidarTrasPago(qc)
+      qc.invalidateQueries({ queryKey: PAGOS_PROGRAMADOS_KEY })
+      toast.success('Pago ejecutado')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo ejecutar el pago: ${error.message}`)
+    },
+  })
+}
+
+export function useCancelarPagoProgramado() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (programadoId: number) => cancelarPagoProgramado(programadoId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PAGOS_PROGRAMADOS_KEY })
+      toast.success('Pago programado cancelado')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo cancelar: ${error.message}`)
     },
   })
 }
