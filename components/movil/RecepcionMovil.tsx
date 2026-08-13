@@ -42,6 +42,7 @@ import {
   formatearCantidad,
   formatearFechaCorta,
   formatearNumero,
+  pareceGramosEnKg,
 } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
@@ -899,11 +900,33 @@ export function RecepcionMovil({ pedidoId }: Props) {
                       </button>
                     )}
                   </div>
-                  {it.venta_por_peso && cantNum > 0 && (
-                    <p className="mt-0.5 text-[10px] text-[#6f3a2a]">
-                      = {formatearNumero(Math.round(cantNum * 1000))} g
-                    </p>
-                  )}
+                  {it.venta_por_peso &&
+                    cantNum > 0 &&
+                    (pareceGramosEnKg(it.cantidad_recibida) ? (
+                      <div className="mt-1 rounded-lg border-2 border-[#c43e2c]/60 bg-[#c43e2c]/10 p-2 space-y-1.5">
+                        <p className="text-[11px] text-[#c43e2c] font-bold flex items-start gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          ¿{formatearNumero(cantNum)} KILOS? Parece un peso en
+                          gramos de la balanza.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            actualizarItem(it.item_id, {
+                              cantidad_recibida: String(cantNum / 1000),
+                            })
+                          }
+                          className="w-full rounded-md border border-[#c43e2c]/50 bg-white px-2 py-1.5 text-xs font-bold text-[#c43e2c] active:bg-[#c43e2c]/10"
+                        >
+                          Eran gramos → usar{' '}
+                          {formatearCantidad(cantNum / 1000, true)}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-0.5 text-[10px] text-[#6f3a2a]">
+                        = {formatearNumero(Math.round(cantNum * 1000))} g
+                      </p>
+                    ))}
                   {diferencia !== 0 && !Number.isNaN(diferencia) && cantNum > 0 && (
                     <p
                       className={
@@ -1023,6 +1046,14 @@ export function RecepcionMovil({ pedidoId }: Props) {
         abierto={modalSupervisorAbierto}
         onCambioAbierto={setModalSupervisorAbierto}
         motivo={`Se está recibiendo más cantidad de la pedida en ${itemsConExceso.length} producto(s). Un encargado debe autorizarlo.`}
+        detalle={itemsConExceso.map((it) => {
+          const rec =
+            it.ya_recibido +
+            (recibidoLocal.get(it.item_id) ?? 0) +
+            (Number(it.cantidad_recibida) || 0)
+          // Sin importes: el móvil lo usa el mostrador, que no ve costos.
+          return `${it.nombre}: pedido ${formatearCantidad(it.cantidad_pedida, it.venta_por_peso)} → recibiendo ${formatearCantidad(rec, it.venta_por_peso)}`
+        })}
         onAutorizado={(nombre) => {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)

@@ -19,6 +19,12 @@ interface Props {
   onCambioAbierto: (v: boolean) => void
   /** Motivo de la autorización (se muestra al supervisor). */
   motivo: string
+  /**
+   * Detalle renglón por renglón de LO QUE se está autorizando (producto,
+   * cantidades, importe). Sin esto, la clave se tipea a ciegas — así se
+   * autorizaron $99 millones de queso sin que nadie lo viera.
+   */
+  detalle?: string[]
   /** Se llama cuando un supervisor válido autoriza. */
   onAutorizado: (nombre: string) => void
 }
@@ -27,6 +33,7 @@ export function ModalClaveSupervisor({
   abierto,
   onCambioAbierto,
   motivo,
+  detalle,
   onAutorizado,
 }: Props) {
   const [email, setEmail] = useState('')
@@ -75,6 +82,18 @@ export function ModalClaveSupervisor({
         </DialogHeader>
 
         <div className="px-6 py-5 space-y-4">
+          {detalle && detalle.length > 0 && (
+            <div className="rounded-xl border-2 border-[#c43e2c]/40 bg-[#c43e2c]/5 p-3 space-y-1 max-h-40 overflow-y-auto">
+              <p className="text-[10px] uppercase tracking-wider font-bold text-[#c43e2c]">
+                Estás autorizando esto — revisalo:
+              </p>
+              {detalle.map((linea, i) => (
+                <p key={i} className="text-xs text-[#391511]">
+                  • {linea}
+                </p>
+              ))}
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="sup-email" className="text-[#391511] font-medium">
               Email del supervisor

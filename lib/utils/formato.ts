@@ -53,3 +53,15 @@ export function formatearCantidad(cantidad: number, porPeso: boolean): string {
   if (porPeso) return `${formateadorKg.format(cantidad)} kg`
   return `${formatearNumero(cantidad)} u.`
 }
+
+/**
+ * Heurística anti-desastre de la carga por peso: un valor ENTERO grande
+ * (≥ 100) tipeado en un campo de KILOS es casi seguro un peso leído en
+ * GRAMOS de la balanza (ej: "3805" por 3,805 kg → $53 millones de deuda).
+ * Solo aplica a enteros: "150.5" son 150,5 kg legítimos.
+ */
+export function pareceGramosEnKg(valor: string): boolean {
+  const limpio = valor.trim()
+  if (!/^\d+$/.test(limpio)) return false
+  return Number(limpio) >= 100
+}

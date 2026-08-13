@@ -37,6 +37,7 @@ import {
   formatearCantidad,
   formatearFechaCorta,
   formatearMonto,
+  pareceGramosEnKg,
   formatearNumero,
 } from '@/lib/utils/formato'
 import {
@@ -657,11 +658,33 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         disabled={recibir.isPending}
                         className="h-10 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
-                      {it.venta_por_peso && cantNum > 0 && (
-                        <p className="text-[10px] text-[#6f3a2a]">
-                          = {formatearNumero(Math.round(cantNum * 1000))} g
-                        </p>
-                      )}
+                      {it.venta_por_peso &&
+                        cantNum > 0 &&
+                        (pareceGramosEnKg(it.cantidad_recibida) ? (
+                          <div className="rounded-lg border-2 border-[#c43e2c]/60 bg-[#c43e2c]/10 p-2 space-y-1.5">
+                            <p className="text-[11px] text-[#c43e2c] font-bold flex items-start gap-1">
+                              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                              ¿{formatearNumero(cantNum)} KILOS? Parece un peso
+                              en gramos de la balanza.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                actualizarItem(it.item_id, {
+                                  cantidad_recibida: String(cantNum / 1000),
+                                })
+                              }
+                              className="w-full rounded-md border border-[#c43e2c]/50 bg-white px-2 py-1 text-[11px] font-bold text-[#c43e2c] hover:bg-[#c43e2c]/10 transition-colors"
+                            >
+                              Eran gramos → usar{' '}
+                              {formatearCantidad(cantNum / 1000, true)}
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-[#6f3a2a]">
+                            = {formatearNumero(Math.round(cantNum * 1000))} g
+                          </p>
+                        ))}
                       {!it.no_pedido &&
                         diferencia !== 0 &&
                         !Number.isNaN(diferencia) && (
@@ -767,9 +790,23 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                 <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                   {hayRecepcionPrevia ? 'Total de esta entrega' : 'Total a pagar'}
                 </div>
-                <div className="text-2xl font-extrabold text-[#391511] tabular-nums">
+                <div
+                  className={
+                    pedido.total > 0 && totalRecibido > pedido.total * 2
+                      ? 'text-2xl font-extrabold text-[#c43e2c] tabular-nums'
+                      : 'text-2xl font-extrabold text-[#391511] tabular-nums'
+                  }
+                >
                   <MontoARS monto={totalRecibido} />
                 </div>
+                {pedido.total > 0 && totalRecibido > pedido.total * 2 && (
+                  <p className="text-[11px] text-[#c43e2c] font-bold mt-0.5 max-w-md flex items-start gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    Esta entrega vale {formatearMonto(totalRecibido)} y la
+                    orden era de {formatearMonto(pedido.total)}: revisá las
+                    cantidades (¿gramos en vez de kilos?).
+                  </p>
+                )}
               </>
             )}
             {ordenIncompleta && totalRecibido > 0 && (
@@ -837,6 +874,14 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         abierto={modalSupervisorAbierto}
         onCambioAbierto={setModalSupervisorAbierto}
         motivo={`Se está recibiendo más cantidad de la pedida en ${itemsConExceso.length} producto(s). Un encargado debe autorizarlo.`}
+        detalle={itemsConExceso.map((it) => {
+          const rec = it.ya_recibido + (Number(it.cantidad_recibida) || 0)
+          const base = `${it.nombre}: pedido ${formatearCantidad(it.cantidad_pedida, it.venta_por_peso)} → recibiendo ${formatearCantidad(rec, it.venta_por_peso)}`
+          // El importe solo si quien mira puede ver costos (mostrador no).
+          return puedeVerCosto
+            ? `${base} (${formatearMonto(rec * it.precio_costo)})`
+            : base
+        })}
         onAutorizado={(nombre) => {
           setExcesoAutorizado(true)
           setAutorizadoPor(nombre)
