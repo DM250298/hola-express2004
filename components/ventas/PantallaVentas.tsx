@@ -256,7 +256,7 @@ export function PantallaVentas() {
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
         {isLoading ? (
           <div className="p-6">
-            <SkeletonTabla filas={8} columnas={6} />
+            <SkeletonTabla filas={8} columnas={7} />
           </div>
         ) : isError ? (
           <div className="p-10 text-center text-[#c43e2c] text-sm">
@@ -282,6 +282,9 @@ export function PantallaVentas() {
                   </TableHead>
                   <TableHead className="text-[#391511] font-semibold">
                     Fecha
+                  </TableHead>
+                  <TableHead className="text-[#391511] font-semibold">
+                    Cliente
                   </TableHead>
                   <TableHead className="text-[#391511] font-semibold">
                     Cajero
@@ -318,6 +321,22 @@ export function PantallaVentas() {
                       </TableCell>
                       <TableCell className="text-[#6f3a2a] text-xs tabular-nums whitespace-nowrap">
                         {formatearFechaHora(v.fecha)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {v.cliente_nombre ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-[#391511]">
+                              {v.cliente_nombre}
+                            </span>
+                            {v.cliente_tipo === 'empleado' && (
+                              <span className="text-[9px] uppercase tracking-wider font-bold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
+                                Empleado
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-[#c8a58a] italic">Mostrador</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-[#391511] text-sm">
                         {v.cajero_nombre ?? (

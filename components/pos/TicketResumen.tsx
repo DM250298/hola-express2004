@@ -84,6 +84,11 @@ export function TicketResumen({
             <p className="text-[#6f3a2a] text-[10px]">
               {formatearFechaHora(venta.venta.fecha)}
             </p>
+            {venta.cliente && !venta.cliente.fiado && (
+              <p className="text-[#391511] text-xs font-semibold mt-1">
+                Cliente: {venta.cliente.nombre}
+              </p>
+            )}
           </div>
 
           <ul className="space-y-1.5 text-sm">
@@ -145,6 +150,28 @@ export function TicketResumen({
                 <span className="text-[#c43e2c] font-bold tabular-nums">
                   <MontoARS monto={vuelto} />
                 </span>
+              </div>
+            )}
+
+            {/* Fiado: a quién y cuánto queda debiendo */}
+            {venta.cliente?.fiado && (
+              <div className="mt-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/[0.06] px-3 py-2">
+                <div className="text-[10px] uppercase tracking-wider text-[#c43e2c] font-bold">
+                  Fiado a
+                </div>
+                <div className="text-[#391511] font-extrabold leading-tight">
+                  {venta.cliente.nombre}
+                </div>
+                {venta.cliente.deudaTotal != null && (
+                  <div className="flex justify-between items-baseline mt-1 pt-1 border-t border-dashed border-[#c43e2c]/30 text-sm">
+                    <span className="text-[#6f3a2a] font-semibold">
+                      Deuda total
+                    </span>
+                    <span className="text-[#c43e2c] font-extrabold tabular-nums">
+                      <MontoARS monto={venta.cliente.deudaTotal} />
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

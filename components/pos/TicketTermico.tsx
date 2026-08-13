@@ -50,6 +50,9 @@ export function TicketTermico({ venta, vuelto, nombreCajero }: Props) {
           )}
           <div>{formatearFechaHora(venta.venta.fecha)}</div>
           <div>Atendió: {nombreCajero}</div>
+          {venta.cliente && !venta.cliente.fiado && (
+            <div>Cliente: {venta.cliente.nombre}</div>
+          )}
         </div>
 
         <hr className="ticket-sep" />
@@ -100,6 +103,23 @@ export function TicketTermico({ venta, vuelto, nombreCajero }: Props) {
           <div className="ticket-fila ticket-fila-fuerte">
             <span>Vuelto</span>
             <span>{formatearMonto(vuelto)}</span>
+          </div>
+        )}
+
+        {/* Fiado: el ticket es la constancia de quién se llevó la mercadería
+            y de cuánto queda debiendo en total. */}
+        {venta.cliente?.fiado && (
+          <div className="ticket-fiado">
+            <div className="ticket-fiado-nombre">
+              FIADO A: {venta.cliente.nombre}
+            </div>
+            {venta.cliente.deudaTotal != null && (
+              <div className="ticket-fila ticket-fila-fuerte">
+                <span>Deuda total</span>
+                <span>{formatearMonto(venta.cliente.deudaTotal)}</span>
+              </div>
+            )}
+            <div className="ticket-fiado-firma">Firma: ________________</div>
           </div>
         )}
 

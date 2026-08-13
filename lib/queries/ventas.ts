@@ -26,6 +26,13 @@ export interface PagoPayload {
   /** Solo para medio_pago === 'cuenta_corriente': a quién se le fía. */
   deudor_tipo?: 'cliente' | 'empleado' | null
   deudor_id?: number | null
+  /**
+   * Nombre y saldo del deudor al momento de fiar. Son SOLO para el ticket
+   * (constancia de quién se llevó la mercadería y cuánto queda debiendo): no
+   * viajan al RPC, que resuelve el deudor por `deudor_id`.
+   */
+  deudor_nombre?: string | null
+  deudor_saldo?: number | null
 }
 
 export interface CrearVentaPayload {
@@ -37,6 +44,12 @@ export interface CrearVentaPayload {
   /** Cliente del CRM (FASE 3). Opcional — null = venta al mostrador. */
   cliente_id?: number | null
   /**
+   * Nombre del cliente elegido, solo para imprimirlo en el ticket. No viaja al
+   * RPC (que ya tiene el `cliente_id`); evita una consulta extra justo cuando
+   * el POS necesita mostrar el comprobante.
+   */
+  cliente_nombre?: string | null
+  /**
    * UUID de idempotencia de la venta. Si viene, se usa como `cliente_uuid` en
    * `fn_crear_venta` (que ya deduplica por ese campo). Lo aprovecha el cobro con
    * terminal: el POS y el webhook usan el MISMO uuid (el id del intento de
@@ -44,6 +57,15 @@ export interface CrearVentaPayload {
    * viene, se genera uno como siempre.
    */
   cliente_uuid?: string
+}
+
+/** Quién se llevó la mercadería, para el ticket. */
+export interface ClienteVenta {
+  nombre: string
+  /** true = la venta se fió: el ticket es la constancia de la deuda. */
+  fiado: boolean
+  /** Deuda TOTAL que queda tras esta venta (solo en fiado). */
+  deudaTotal: number | null
 }
 
 export interface VentaCompleta {
@@ -59,6 +81,34 @@ export interface VentaCompleta {
   total: number
   /** true si la venta se cobró offline y quedó en cola para sincronizar. */
   pendiente?: boolean
+  /** Cliente a imprimir. null = venta al mostrador (el ticket no lo menciona). */
+  cliente?: ClienteVenta | null
+}
+
+/**
+ * Resuelve el cliente que va al ticket a partir del payload.
+ *
+ * El fiado MANDA sobre el cliente del CRM: es quien queda debiendo, y el
+ * ticket es su constancia. `deudor_saldo` es la deuda ANTES de esta venta
+ * (saldo positivo = debe), así que la deuda final suma el monto fiado.
+ */
+function resolverClienteVenta(payload: CrearVentaPayload): ClienteVenta | null {
+  const fiado = payload.pagos.find(
+    (p) => p.medio_pago === 'cuenta_corriente' && p.deudor_nombre
+  )
+  if (fiado?.deudor_nombre) {
+    return {
+      nombre: fiado.deudor_nombre,
+      fiado: true,
+      deudaTotal:
+        fiado.deudor_saldo != null
+          ? Math.round((fiado.deudor_saldo + fiado.monto) * 100) / 100
+          : null,
+    }
+  }
+  const nombre = payload.cliente_nombre?.trim()
+  if (nombre) return { nombre, fiado: false, deudaTotal: null }
+  return null
 }
 
 function detalleItems(items: ItemVentaPayload[]) {
@@ -100,6 +150,7 @@ function ventaPendienteCompleta(
     pagos: payload.pagos,
     total,
     pendiente: true,
+    cliente: resolverClienteVenta(payload),
   }
 }
 
@@ -190,6 +241,7 @@ export async function crearVenta(
       items: detalleItems(payload.items),
       pagos: payload.pagos,
       total,
+      cliente: resolverClienteVenta(payload),
     }
   } catch (error) {
     // Se cayó la red a mitad de la operación: encolar para sincronizar luego.

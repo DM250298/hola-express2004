@@ -392,6 +392,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         turno_id: turno.id,
         usuario_id: usuarioId,
         cliente_id: ordenActiva?.clienteId ?? null,
+        // Viaja solo para imprimirlo en el ticket (no llega al RPC).
+        cliente_nombre: ordenActiva?.clienteNombre ?? null,
         pagos,
         items,
       },
@@ -447,6 +449,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         turno_id: turno.id,
         usuario_id: usuarioId,
         cliente_id: ordenActiva?.clienteId ?? null,
+        cliente_nombre: ordenActiva?.clienteNombre ?? null,
         // Mismo uuid que usaría el webhook (id del intento de cobro) → si el
         // webhook ya registró la venta, esto la devuelve sin duplicar.
         cliente_uuid: cobroId ?? undefined,

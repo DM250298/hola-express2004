@@ -1,6 +1,6 @@
 'use client'
 
-import { Calendar, Receipt, User } from 'lucide-react'
+import { Calendar, Receipt, User, UserRound } from 'lucide-react'
 import {
   Sheet,
   SheetContent,
@@ -76,6 +76,24 @@ export function DrawerDetalleVenta({ ventaId, onCambioAbierto }: Props) {
                     {data.cajero_nombre ?? '—'} · Turno #{data.venta.turno_id}
                   </span>
                 </div>
+                {data.cliente_nombre && (
+                  <div className="flex items-center gap-1.5 text-[#6f3a2a]">
+                    <UserRound className="h-3.5 w-3.5 text-[#c8a58a]" />
+                    <span>
+                      <span className="text-[#c8a58a]">
+                        {data.fiada ? 'Fiado a: ' : 'Cliente: '}
+                      </span>
+                      <span className="font-semibold text-[#391511]">
+                        {data.cliente_nombre}
+                      </span>
+                      {data.cliente_tipo === 'empleado' && (
+                        <span className="ml-1.5 text-[9px] uppercase tracking-wider font-bold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
+                          Empleado
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 {data.venta.estado === 'anulada' && (
                   <div className="text-[10px] uppercase tracking-wider font-bold text-[#c43e2c] mt-1">
                     Anulada

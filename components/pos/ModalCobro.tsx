@@ -324,6 +324,9 @@ export function ModalCobro({
         monto: Number(p.monto),
         deudor_tipo: p.ccDeudor?.deudor_tipo ?? null,
         deudor_id: p.ccDeudor?.deudor_id ?? null,
+        // Solo para el ticket: quién se lo llevó y cuánto debía antes.
+        deudor_nombre: p.ccDeudor?.nombre ?? null,
+        deudor_saldo: p.ccDeudor?.saldo ?? null,
       }
     }
     return { medio_pago: p.medio, monto: Number(p.monto) }
