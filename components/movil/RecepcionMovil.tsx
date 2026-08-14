@@ -70,23 +70,33 @@ interface ItemEstado {
   dias_vencimiento_minimo: number | null
 }
 
+/** Carga de un renglón dentro de UNA factura (borrador editable). */
+interface CargaRenglon {
+  cantidad: string
+  fecha_vencimiento: string
+}
+
 /**
- * Una factura cerrada LOCALMENTE en esta entrega. Nada viaja a la base hasta
- * el Confirmar final: la orden se recibe completa o no se recibe (política de
- * la empresa, sin recepción parcial).
+ * Una factura de la entrega. TODAS son borradores editables hasta el Confirmar
+ * final: nada viaja a la base antes (la orden se recibe completa o no se
+ * recibe, política de la empresa, sin recepción parcial).
  */
-interface PasadaFactura {
-  ref: string
+interface FacturaEntrega {
+  /** Key estable de la pestaña ('t1','t2',…) — NO es el factura_ref final. */
+  id: string
+  /** N° del papel. Puede quedar vacío hasta el Confirmar. */
   numero: string
-  unidades: number
-  items: {
-    item_id: number
-    producto_id: number
-    cantidad: number
-    precio_costo: number
-    fecha_vencimiento: string
-    orden: number | null
-  }[]
+  /** Cargas por item_id. Autoritativo SOLO para las pestañas NO activas: la
+   *  activa vive en los inputs de `itemsEstado` y se snapshotea al salir. */
+  cargas: Record<number, CargaRenglon>
+}
+
+/** Total de unidades cargadas en una factura (desde sus cargas). */
+function unidadesDeCargas(cargas: Record<number, CargaRenglon>): number {
+  return Object.values(cargas).reduce(
+    (acc, c) => acc + (Number(c.cantidad) || 0),
+    0
+  )
 }
 
 /** Datos mínimos de un producto para sumarlo a la recepción (buscado o creado). */
@@ -154,12 +164,15 @@ interface Props {
  * Permite agregar un producto que no estaba en la orden (creándolo si hace
  * falta).
  *
- * Multi-factura: UNA FACTURA POR VEZ. Se carga el número del papel que se
- * tiene en la mano, se escanea todo lo suyo, y "Otra factura" cierra esa
- * tanda EN EL TELÉFONO y deja la pantalla limpia para la siguiente. Nada se
- * graba hasta el Confirmar final: ahí viajan todas las facturas juntas en una
- * sola llamada a `fn_recibir_pedido` (una cuenta a pagar por factura, vía
+ * Multi-factura: PESTAÑAS NAVEGABLES. Cada factura de la entrega es una tab;
+ * "+" abre la siguiente y se puede VOLVER a cualquiera para controlarla o
+ * corregirla (cantidades, fechas, N°) — todas son borradores en el teléfono.
+ * Los inputs muestran siempre la factura ACTIVA; al cambiar de tab se hace un
+ * snapshot de la actual en `facturas[].cargas` y se hidratan los inputs de la
+ * destino. Nada se graba hasta el Confirmar final: ahí viajan todas juntas en
+ * una sola llamada a `fn_recibir_pedido` (una cuenta a pagar por factura, vía
  * `factura_ref` por renglón — el RPC acumula filas repetidas del mismo item).
+ * El N° es obligatorio recién al Confirmar (para navegar no hace falta).
  *
  * POLÍTICA DE LA EMPRESA (2026-08-04): la orden se recibe COMPLETA o no se
  * recibe. Si al confirmar hay renglones por debajo de lo pedido, el diálogo
@@ -182,9 +195,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const recibir = useRecibirPedido()
 
   const [itemsEstado, setItemsEstado] = useState<ItemEstado[]>([])
-  // Factura que se está cargando ahora (una por vez) + las cerradas localmente.
-  const [numeroFactura, setNumeroFactura] = useState('')
-  const [pasadas, setPasadas] = useState<PasadaFactura[]>([])
+  // Facturas de la entrega (pestañas). Los inputs de itemsEstado son la ACTIVA;
+  // las demás guardan sus cargas en `cargas` y se rehidratan al volver.
+  const [facturas, setFacturas] = useState<FacturaEntrega[]>([
+    { id: 't1', numero: '', cargas: {} },
+  ])
+  const [activaIdx, setActivaIdx] = useState(0)
+  const proximaTabRef = useRef(2)
   const numeroFacturaInputRef = useRef<HTMLInputElement | null>(null)
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
   const [excesoAutorizado, setExcesoAutorizado] = useState(false)
@@ -224,8 +241,16 @@ export function RecepcionMovil({ pedidoId }: Props) {
   const [productoSeleccionado, setProductoSeleccionado] =
     useState<ProdParaAgregar | null>(null)
 
+  // Una inicialización por pedido: un refetch de TanStack (reconexión,
+  // remount) NO debe pisar los borradores de facturas ni el orden armado.
+  const inicializadoRef = useRef<number | null>(null)
   useEffect(() => {
     if (!pedido) return
+    if (inicializadoRef.current === pedido.id) return
+    inicializadoRef.current = pedido.id
+    setFacturas([{ id: 't1', numero: '', cargas: {} }])
+    setActivaIdx(0)
+    proximaTabRef.current = 2
     setItemsEstado(
       pedido.items.map((it) => ({
         item_id: it.id,
@@ -370,12 +395,21 @@ export function RecepcionMovil({ pedidoId }: Props) {
   )
 
   /**
-   * Renglones ya numerados en las facturas cerradas de esta entrega: la
+   * Renglones ya numerados en las pestañas ANTERIORES a la activa: la
    * numeración del papel arranca donde terminó la factura anterior.
    */
   const ordenBase = useMemo(
-    () => pasadas.reduce((acc, p) => acc + p.items.length, 0),
-    [pasadas]
+    () =>
+      facturas
+        .slice(0, activaIdx)
+        .reduce(
+          (acc, f) =>
+            acc +
+            Object.values(f.cargas).filter((c) => (Number(c.cantidad) || 0) > 0)
+              .length,
+          0
+        ),
+    [facturas, activaIdx]
   )
 
   /**
@@ -391,14 +425,18 @@ export function RecepcionMovil({ pedidoId }: Props) {
     return m
   }, [itemsEstado, ordenBase])
 
-  /** Acumulado por item de las facturas cerradas localmente en esta entrega. */
-  const recibidoLocal = useMemo(() => {
+  /** Acumulado por item de las OTRAS facturas de la entrega (no la activa). */
+  const recibidoOtras = useMemo(() => {
     const m = new Map<number, number>()
-    for (const p of pasadas)
-      for (const it of p.items)
-        m.set(it.item_id, (m.get(it.item_id) ?? 0) + it.cantidad)
+    facturas.forEach((f, i) => {
+      if (i === activaIdx) return
+      for (const [id, c] of Object.entries(f.cargas)) {
+        const cant = Number(c.cantidad) || 0
+        if (cant > 0) m.set(Number(id), (m.get(Number(id)) ?? 0) + cant)
+      }
+    })
     return m
-  }, [pasadas])
+  }, [facturas, activaIdx])
 
   // Solo cuenta como exceso lo que ESTA entrega agrega por encima del pedido:
   // un exceso ya autorizado en una recepción anterior no vuelve a pedir clave
@@ -407,11 +445,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
     () =>
       itemsEstado.filter((it) => {
         const nuevo =
-          (recibidoLocal.get(it.item_id) ?? 0) +
+          (recibidoOtras.get(it.item_id) ?? 0) +
           (Number(it.cantidad_recibida) || 0)
         return nuevo > 0 && it.ya_recibido + nuevo > it.cantidad_pedida
       }),
-    [itemsEstado, recibidoLocal]
+    [itemsEstado, recibidoOtras]
   )
   const requiereSupervisor = itemsConExceso.length > 0 && !excesoAutorizado
 
@@ -425,107 +463,160 @@ export function RecepcionMovil({ pedidoId }: Props) {
       itemsEstado.flatMap((it) => {
         const total =
           it.ya_recibido +
-          (recibidoLocal.get(it.item_id) ?? 0) +
+          (recibidoOtras.get(it.item_id) ?? 0) +
           (Number(it.cantidad_recibida) || 0)
         const falta = it.cantidad_pedida - total
         return falta > 0 ? [{ ...it, falta }] : []
       }),
-    [itemsEstado, recibidoLocal]
+    [itemsEstado, recibidoOtras]
   )
   const unidadesFaltantes = itemsFaltantes.reduce((a, it) => a + it.falta, 0)
 
+  // Mira la factura activa (inputs) Y las cargas de las otras pestañas: una
+  // fecha corta no se vuelve invisible por cambiar de factura.
   const itemsPorDebajoMinimo = useMemo(() => {
+    const hoy = new Date()
+    hoy.setHours(0, 0, 0, 0)
+    const diasDesdeHoy = (fecha: string) =>
+      Math.floor(
+        (new Date(`${fecha}T00:00:00`).getTime() - hoy.getTime()) /
+          (1000 * 60 * 60 * 24)
+      )
     return itemsEstado.flatMap((it) => {
       const min = it.dias_vencimiento_minimo
-      if (min == null || !it.fecha_vencimiento) return []
-      const cant = Number(it.cantidad_recibida) || 0
-      if (cant <= 0) return []
-      const hoy = new Date()
-      hoy.setHours(0, 0, 0, 0)
-      const venc = new Date(`${it.fecha_vencimiento}T00:00:00`)
-      const dias = Math.floor(
-        (venc.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24)
-      )
-      if (dias >= min) return []
-      return [{ ...it, diasReales: dias, diasMinimo: min }]
+      if (min == null) return []
+      const cargasItem: CargaRenglon[] = [
+        {
+          cantidad: it.cantidad_recibida,
+          fecha_vencimiento: it.fecha_vencimiento,
+        },
+        ...facturas
+          .filter((_, i) => i !== activaIdx)
+          .map((f) => f.cargas[it.item_id])
+          .filter((c): c is CargaRenglon => c != null),
+      ]
+      const cortos = cargasItem
+        .filter((c) => (Number(c.cantidad) || 0) > 0 && c.fecha_vencimiento)
+        .map((c) => diasDesdeHoy(c.fecha_vencimiento))
+        .filter((d) => d < min)
+      if (cortos.length === 0) return []
+      return [{ ...it, diasReales: Math.min(...cortos), diasMinimo: min }]
     })
-  }, [itemsEstado])
+  }, [itemsEstado, facturas, activaIdx])
 
   const requiereAceptacion =
     itemsPorDebajoMinimo.length > 0 && !aceptaPorDebajoMin
 
+  /** Total de la entrega: la activa (inputs) + las otras pestañas. */
+  const totalEntrega = useMemo(
+    () =>
+      totalUnidades +
+      facturas.reduce(
+        (acc, f, i) =>
+          i === activaIdx ? acc : acc + unidadesDeCargas(f.cargas),
+        0
+      ),
+    [totalUnidades, facturas, activaIdx]
+  )
+
   const procesando = recibir.isPending
-  const accionDeshabilitada =
-    procesando || hayErrores || totalUnidades <= 0 || requiereAceptacion
-  // "Confirmar" se habilita con 0 u. tipeadas si hay facturas locales
-  // cerradas (son ellas las que viajan al confirmar).
   const terminarDeshabilitado =
-    procesando ||
-    hayErrores ||
-    requiereAceptacion ||
-    (totalUnidades <= 0 && pasadas.length === 0)
+    procesando || hayErrores || requiereAceptacion || totalEntrega <= 0
+
+  /** Cargas actuales de los inputs (= la factura activa), para snapshot. */
+  function cargasDesdeInputs(): Record<number, CargaRenglon> {
+    const cargas: Record<number, CargaRenglon> = {}
+    for (const it of itemsEstado) {
+      if (it.cantidad_recibida !== '' || it.fecha_vencimiento !== '') {
+        cargas[it.item_id] = {
+          cantidad: it.cantidad_recibida,
+          fecha_vencimiento: it.fecha_vencimiento,
+        }
+      }
+    }
+    return cargas
+  }
+
+  /**
+   * Las facturas con la ACTIVA sincronizada desde los inputs. Fuente única
+   * para cambiar de pestaña y para armar el payload al confirmar.
+   */
+  function facturasSincronizadas(): FacturaEntrega[] {
+    return facturas.map((f, i) =>
+      i === activaIdx ? { ...f, cargas: cargasDesdeInputs() } : f
+    )
+  }
+
+  /** Activa la pestaña `idx` de `sync`: hidrata los inputs con sus cargas. */
+  function activarFactura(sync: FacturaEntrega[], idx: number) {
+    setFacturas(sync)
+    const destino = sync[idx]
+    setItemsEstado((prev) =>
+      prev.map((it) => ({
+        ...it,
+        cantidad_recibida: destino.cargas[it.item_id]?.cantidad ?? '',
+        fecha_vencimiento: destino.cargas[it.item_id]?.fecha_vencimiento ?? '',
+      }))
+    )
+    setActivaIdx(idx)
+    // El resaltado del escaneo no cruza facturas.
+    setActivoId(null)
+  }
+
+  /**
+   * Cambia de pestaña con autosave: lo tipeado en la actual queda guardado en
+   * su borrador. No pide el N° — es obligatorio recién al Confirmar.
+   */
+  function cambiarDeFactura(idx: number) {
+    if (idx === activaIdx || procesando) return
+    activarFactura(facturasSincronizadas(), idx)
+  }
+
+  /** "Otra factura": abre una pestaña nueva vacía y salta a ella. */
+  function agregarFactura() {
+    if (procesando) return
+    const sync = facturasSincronizadas()
+    const nueva: FacturaEntrega = {
+      id: `t${proximaTabRef.current++}`,
+      numero: '',
+      cargas: {},
+    }
+    activarFactura([...sync, nueva], sync.length)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    numeroFacturaInputRef.current?.focus()
+  }
 
   /**
    * El N° de factura es OBLIGATORIO en toda factura con mercadería: por
    * política de la empresa no quedan facturas a medias (deudas sin
-   * identificar que después no se pueden matchear con el papel).
+   * identificar que después no se pueden matchear con el papel). Las pestañas
+   * vacías se ignoran. Ante un problema salta a la pestaña ofensora.
    */
-  function validarNumeroFactura(): boolean {
-    const num = numeroFactura.trim()
-    if (!num) {
-      toast.error('Poné el N° de la factura para registrar la recepción.')
-      numeroFacturaInputRef.current?.focus()
-      return false
-    }
-    if (pasadas.some((p) => p.numero === num)) {
-      toast.error(`La factura ${num} ya se cargó en esta entrega.`)
-      return false
+  function validarFacturas(sync: FacturaEntrega[]): boolean {
+    const vistos = new Map<string, number>()
+    for (let i = 0; i < sync.length; i++) {
+      if (unidadesDeCargas(sync[i].cargas) <= 0) continue
+      const num = sync[i].numero.trim()
+      if (!num) {
+        toast.error(`Poné el N° de la factura ${i + 1} para confirmar.`)
+        activarFactura(sync, i)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        numeroFacturaInputRef.current?.focus()
+        return false
+      }
+      const previo = vistos.get(num)
+      if (previo != null) {
+        toast.error(
+          `La factura ${num} está repetida (pestañas ${previo + 1} y ${i + 1}).`
+        )
+        activarFactura(sync, i)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        numeroFacturaInputRef.current?.focus()
+        return false
+      }
+      vistos.set(num, i)
     }
     return true
-  }
-
-  /**
-   * "Otra factura": cierra la factura actual EN EL TELÉFONO (todavía no se
-   * graba nada) y deja la pantalla limpia para la siguiente. Todo viaja junto
-   * en el Confirmar final.
-   */
-  function cerrarFacturaLocal() {
-    if (hayErrores || totalUnidades <= 0) return
-    if (!validarNumeroFactura()) return
-    const numero = numeroFactura.trim()
-    const items = itemsEstado
-      .filter(estaCargado)
-      .map((it, i) => ({
-        item_id: it.item_id,
-        producto_id: it.producto_id,
-        cantidad: Number(it.cantidad_recibida),
-        precio_costo: it.precio_costo,
-        fecha_vencimiento: it.fecha_vencimiento,
-        // El orden del papel = la posición en pantalla. La numeración sigue
-        // corriendo entre las facturas de la misma entrega.
-        orden: ordenBase + i + 1,
-      }))
-    setPasadas((prev) => [
-      ...prev,
-      { ref: `f${prev.length + 1}`, numero, unidades: totalUnidades, items },
-    ])
-    setNumeroFactura('')
-    setActivoId(null)
-    setAceptaPorDebajoMin(false)
-    setItemsEstado((prev) =>
-      prev.map((it) => ({
-        ...it,
-        cantidad_recibida: '',
-        fecha_vencimiento: '',
-      }))
-    )
-    toast.success(
-      `Factura ${numero} lista (${formatearNumero(
-        Math.round(totalUnidades * 1000) / 1000
-      )} u.). Cargá la siguiente — se confirma todo al final.`
-    )
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-    numeroFacturaInputRef.current?.focus()
   }
 
   /**
@@ -536,7 +627,10 @@ export function RecepcionMovil({ pedidoId }: Props) {
    */
   function confirmarTodo() {
     if (!usuario || hayErrores || !pedido?.proveedor) return
-    if (totalUnidades > 0 && !validarNumeroFactura()) return
+    // Snapshot de la activa: desde acá todo se calcula sobre `facturas`.
+    const sync = facturasSincronizadas()
+    setFacturas(sync)
+    if (!validarFacturas(sync)) return
     if (itemsFaltantes.length > 0) {
       setDialogFaltanteAbierto(true)
       return
@@ -568,35 +662,29 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   function ejecutarRecepcion(noVino: number[] = []) {
     if (!usuario || !pedido?.proveedor) return
-    const refActual = `f${pasadas.length + 1}`
-    const numeroActual = numeroFactura.trim()
-    // Una fila por (factura, renglón con cantidad): el RPC acumula filas
-    // repetidas del mismo item y arma una cuenta a pagar por factura_ref.
-    const items = [
-      ...pasadas.flatMap((p) =>
-        p.items.map((it) => ({
+    // Facturas en orden de pestañas (las vacías se descartan solas); dentro de
+    // cada una, sus renglones en el orden visual de la lista = el orden del
+    // papel. El `orden` corre entre facturas. Una fila por (factura, renglón
+    // con cantidad): el RPC acumula filas repetidas del mismo item y arma una
+    // cuenta a pagar por factura_ref.
+    const conCarga = facturasSincronizadas().filter(
+      (f) => unidadesDeCargas(f.cargas) > 0
+    )
+    let orden = 0
+    const items = conCarga.flatMap((f, idx) =>
+      itemsEstado
+        .filter((it) => (Number(f.cargas[it.item_id]?.cantidad) || 0) > 0)
+        .map((it) => ({
           item_id: it.item_id,
           producto_id: it.producto_id,
-          cantidad_recibida: it.cantidad,
+          cantidad_recibida: Number(f.cargas[it.item_id].cantidad),
           precio_costo: it.precio_costo,
-          fecha_vencimiento: it.fecha_vencimiento || null,
-          factura_ref: p.ref,
-          numero_factura: p.numero,
-          orden: it.orden,
+          fecha_vencimiento: f.cargas[it.item_id].fecha_vencimiento || null,
+          factura_ref: `f${idx + 1}`,
+          numero_factura: f.numero.trim() || null,
+          orden: ++orden,
         }))
-      ),
-      ...itemsEstado.filter(estaCargado).map((it, i) => ({
-        item_id: it.item_id,
-        producto_id: it.producto_id,
-        cantidad_recibida: Number(it.cantidad_recibida),
-        precio_costo: it.precio_costo,
-        fecha_vencimiento: it.fecha_vencimiento || null,
-        factura_ref: refActual,
-        numero_factura: numeroActual || null,
-        // El orden del papel = la posición en pantalla (ver cerrarFacturaLocal).
-        orden: ordenBase + i + 1,
-      })),
-    ]
+    )
     if (items.length === 0) return
     recibir.mutate(
       {
@@ -838,45 +926,82 @@ export function RecepcionMovil({ pedidoId }: Props) {
         )}
       </div>
 
-      {/* Factura que se está cargando (una por vez) + las cerradas localmente */}
+      {/* Pestañas de facturas: todas son borradores editables hasta el final */}
       <div className="mb-4">
-        {pasadas.length > 0 && (
-          <ul className="mb-2 space-y-1">
-            {pasadas.map((p) => (
-              <li
-                key={p.ref}
-                className="flex items-center gap-2 rounded-lg border border-[#f9b44c]/50 bg-[#f9b44c]/10 px-3 py-1.5 text-xs text-[#6f3a2a]"
-              >
-                <Check className="h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
-                <span className="min-w-0 truncate font-semibold text-[#391511]">
-                  Factura {p.numero}
-                </span>
-                <span className="ml-auto shrink-0 tabular-nums">
-                  {formatearNumero(Math.round(p.unidades * 1000) / 1000)} u. ·
-                  lista
-                </span>
-              </li>
-            ))}
-          </ul>
+        {facturas.length > 1 && (
+          <div className="-mx-4 mb-2 flex gap-1.5 overflow-x-auto px-4 pb-1">
+            {facturas.map((f, i) => {
+              const activa = i === activaIdx
+              const unidades =
+                activa ? totalUnidades : unidadesDeCargas(f.cargas)
+              const numero = f.numero.trim()
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => cambiarDeFactura(i)}
+                  className={cn(
+                    'flex h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition active:scale-95',
+                    activa
+                      ? 'border-[#e4a42a] bg-[#f9b44c] text-[#391511]'
+                      : 'border-[#e4c9b0] bg-white text-[#6f3a2a]'
+                  )}
+                >
+                  {numero ? (
+                    <Check
+                      className={cn(
+                        'h-3.5 w-3.5 shrink-0',
+                        activa ? 'text-[#391511]' : 'text-[#9e6b15]'
+                      )}
+                    />
+                  ) : unidades > 0 ? (
+                    // Tiene mercadería pero le falta el N° (obligatorio al final).
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[#e4a42a]" />
+                  ) : null}
+                  <span className="max-w-28 truncate">
+                    {numero ? `Fact. ${numero}` : `Factura ${i + 1}`}
+                  </span>
+                  <span className="shrink-0 tabular-nums opacity-80">
+                    {formatearNumero(Math.round(unidades * 1000) / 1000)} u.
+                  </span>
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              onClick={agregarFactura}
+              disabled={procesando}
+              aria-label="Otra factura"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-dashed border-[#e4c9b0] bg-white/60 text-[#9e6b15] active:scale-95"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
         )}
 
         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
-          {pasadas.length > 0
-            ? `Factura ${pasadas.length + 1} de esta entrega`
+          {facturas.length > 1
+            ? `Factura ${activaIdx + 1} de ${facturas.length}`
             : 'Factura de esta entrega'}
         </p>
         <Input
           ref={numeroFacturaInputRef}
-          value={numeroFactura}
-          onChange={(e) => setNumeroFactura(e.target.value)}
+          value={facturas[activaIdx]?.numero ?? ''}
+          onChange={(e) =>
+            setFacturas((prev) =>
+              prev.map((f, i) =>
+                i === activaIdx ? { ...f, numero: e.target.value } : f
+              )
+            )
+          }
           placeholder="N° de la factura (obligatorio)"
           className="h-11 border-[#e4c9b0] text-sm focus-visible:ring-[#f9b44c]"
         />
         <p className="mt-1.5 text-[11px] leading-snug text-[#6f3a2a]">
-          ¿Vinieron varias facturas? Cargá los productos de <strong>una</strong>,
-          tocá <strong>Otra factura</strong> abajo, y seguí con la siguiente.
-          Nada se guarda hasta el <strong>Confirmar</strong> final, con la orden
-          completa.
+          ¿Vinieron varias facturas? Tocá <strong>Otra factura</strong> para
+          abrir una pestaña nueva. Podés volver a cualquiera para controlarla o
+          corregirla — nada se guarda hasta el <strong>Confirmar</strong> final,
+          con la orden completa.
         </p>
       </div>
 
@@ -892,7 +1017,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
           const cantNum = Number(it.cantidad_recibida) || 0
           const renglon = numeroRenglon.get(it.item_id)
           // "Ya recibido" junta lo de la base con las facturas locales.
-          const yaTotal = it.ya_recibido + (recibidoLocal.get(it.item_id) ?? 0)
+          const yaTotal = it.ya_recibido + (recibidoOtras.get(it.item_id) ?? 0)
           const diferencia = yaTotal + cantNum - it.cantidad_pedida
           const activo = it.item_id === activoId
           return (
@@ -1133,7 +1258,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         <div className="mx-auto flex max-w-md items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
-              {pasadas.length > 0
+              {facturas.length > 1
                 ? 'Esta factura'
                 : itemsEstado.some((it) => it.ya_recibido > 0)
                   ? 'Esta entrega'
@@ -1142,13 +1267,19 @@ export function RecepcionMovil({ pedidoId }: Props) {
             <div className="text-xl font-extrabold tabular-nums text-[#391511]">
               {formatearNumero(Math.round(totalUnidades * 1000) / 1000)} u.
             </div>
+            {totalEntrega !== totalUnidades && (
+              <div className="text-[10px] tabular-nums text-[#6f3a2a]">
+                Entrega:{' '}
+                {formatearNumero(Math.round(totalEntrega * 1000) / 1000)} u.
+              </div>
+            )}
           </div>
           <div className="flex shrink-0 gap-2">
             <Button
               type="button"
               variant="outline"
-              onClick={cerrarFacturaLocal}
-              disabled={accionDeshabilitada}
+              onClick={agregarFactura}
+              disabled={procesando}
               className="h-12 border-[#e4a42a]/60 px-3 text-[#9e6b15]"
             >
               <Plus className="mr-1 h-4 w-4" />
@@ -1165,7 +1296,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   …
                 </>
-              ) : pasadas.length > 0 ? (
+              ) : facturas.length > 1 ? (
                 'Confirmar todo'
               ) : (
                 'Confirmar'
@@ -1201,7 +1332,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
         detalle={itemsConExceso.map((it) => {
           const rec =
             it.ya_recibido +
-            (recibidoLocal.get(it.item_id) ?? 0) +
+            (recibidoOtras.get(it.item_id) ?? 0) +
             (Number(it.cantidad_recibida) || 0)
           // Sin importes: el móvil lo usa el mostrador, que no ve costos.
           return `${it.nombre}: pedido ${formatearCantidad(it.cantidad_pedida, it.venta_por_peso)} → recibiendo ${formatearCantidad(rec, it.venta_por_peso)}`
