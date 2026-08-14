@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  asignarCodigoBarras,
   getOpcionesTipoUnidad,
   getProductos,
   createProducto,
@@ -76,6 +77,37 @@ export function useUpdateProducto() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo actualizar el producto: ${error.message}`)
+    },
+  })
+}
+
+/**
+ * Asigna/corrige el código de barras de un producto desde la recepción móvil.
+ * No reusa `useUpdateProducto` para poder traducir el choque contra el índice
+ * único (23505) a un mensaje que se entienda en el mostrador.
+ *
+ * OJO: no invalida `['pedido-detalle', …]` a propósito — la recepción móvil
+ * reconstruye su estado con cada cambio del pedido y un refetch le borraría al
+ * usuario las cantidades tipeadas.
+ */
+export function useAsignarCodigoBarras() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, codigo }: { id: number; codigo: string }) =>
+      asignarCodigoBarras(id, codigo),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      toast.success('Código de barras guardado')
+    },
+    onError: (error: Error) => {
+      const codigoPg = (error as { code?: string }).code
+      toast.error(
+        codigoPg === '23505'
+          ? 'Ese código ya lo tiene otro producto.'
+          : error.message
+      )
     },
   })
 }

@@ -397,6 +397,27 @@ export async function updateProducto(
   return { ...data, precio_costo: precio_costo ?? 0 }
 }
 
+/**
+ * Asigna o corrige el código de barras de un producto (recepción móvil).
+ *
+ * `codigo_barras` es `not null` y único (schema.sql + mig 065, que además le
+ * puso el default `HEX-000123`), así que acá se valida antes de escribir:
+ * vacío se rechaza, y si el código ya es de OTRO producto se corta con un
+ * mensaje entendible en vez de dejar que salte el 23505 de Postgres.
+ */
+export async function asignarCodigoBarras(
+  id: number,
+  codigo: string
+): Promise<ProductoRow> {
+  const cod = codigo.trim()
+  if (!cod) throw new Error('Poné el código de barras.')
+  const existente = await getProductoByBarcode(cod)
+  if (existente && existente.id !== id) {
+    throw new Error(`Ese código ya lo tiene "${existente.nombre}".`)
+  }
+  return updateProducto(id, { codigo_barras: cod })
+}
+
 export async function toggleProductoActivo(
   id: number,
   activo: boolean

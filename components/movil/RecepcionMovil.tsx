@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
+  Barcode,
   Calendar,
   Check,
+  ChevronDown,
   ChevronLeft,
+  ChevronUp,
   Loader2,
   PackageCheck,
   Plus,
@@ -28,6 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { EscanerCamara } from './EscanerCamara'
+import { ModalCodigoBarras } from './ModalCodigoBarras'
 import { usePedidoDetalle, useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useCategorias } from '@/lib/hooks/useCategorias'
@@ -44,6 +48,8 @@ import {
   formatearNumero,
   pareceGramosEnKg,
 } from '@/lib/utils/formato'
+import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
+import { tienePermiso } from '@/lib/permisos'
 import { cn } from '@/lib/utils'
 
 interface ItemEstado {
@@ -62,8 +68,6 @@ interface ItemEstado {
   venta_por_peso: boolean
   fecha_vencimiento: string
   dias_vencimiento_minimo: number | null
-  /** Secuencia de escaneo/carga en esta entrega (orden del papel de la factura). */
-  orden: number | null
 }
 
 /**
@@ -114,6 +118,31 @@ function aProdParaAgregar(p: {
   }
 }
 
+/** `true` si el renglón ya tiene cantidad cargada en la factura en curso. */
+function estaCargado(it: ItemEstado): boolean {
+  return (Number(it.cantidad_recibida) || 0) > 0
+}
+
+/**
+ * Acomoda un renglón justo detrás del último que ya tiene cantidad, para que la
+ * lista se arme de arriba hacia abajo en el orden en que se descarga (= el
+ * orden del papel). Un renglón que ya tiene cantidad no se toca: su lugar en la
+ * factura ya está definido.
+ */
+function moverAlFinalDeCargados(
+  items: ItemEstado[],
+  item_id: number
+): ItemEstado[] {
+  const i = items.findIndex((it) => it.item_id === item_id)
+  if (i < 0 || estaCargado(items[i])) return items
+  const resto = items.filter((_, idx) => idx !== i)
+  let destino = 0
+  resto.forEach((it, idx) => {
+    if (estaCargado(it)) destino = idx + 1
+  })
+  return [...resto.slice(0, destino), items[i], ...resto.slice(destino)]
+}
+
 interface Props {
   pedidoId: number
 }
@@ -138,9 +167,12 @@ interface Props {
  * misma transacción (0 recibido → el renglón se elimina; incompleto → la
  * pedida baja a lo recibido) y se recibe completa. Queda en auditoría.
  *
- * Además cada renglón guarda la SECUENCIA en que se escaneó/cargó
- * (`orden_recepcion`, mig 137) — el orden del papel de la factura — para que
- * administración cargue los precios en ese mismo orden.
+ * ORDEN DEL PAPEL: el orden de las tarjetas ES el orden de la factura. Lo que
+ * se escanea se acomoda al final de los renglones ya cargados (la lista se arma
+ * de arriba hacia abajo, como se descarga), y las flechas ↑↓ corrigen a mano.
+ * Al enviar, cada renglón con cantidad recibe su posición como `orden`
+ * (`orden_recepcion`, mig 137), así administración carga los precios en el
+ * mismo orden en que están en el papel.
  */
 export function RecepcionMovil({ pedidoId }: Props) {
   const router = useRouter()
@@ -162,10 +194,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
   // Faltantes confirmados como "no vino" a la espera de la clave de
   // supervisor (solo cuando además hay exceso).
   const [noVinoPendiente, setNoVinoPendiente] = useState<number[]>([])
-  // Secuencia de escaneo de la entrega (orden del papel). Se resetea solo al
-  // cambiar de pedido, no en cada refetch.
-  const ordenSiguiente = useRef(1)
-  const pedidoIdVisto = useRef<number | null>(null)
+  // Producto cuyo código de barras se está editando (solo con permiso compras).
+  const [productoCodigo, setProductoCodigo] = useState<{
+    id: number
+    nombre: string
+    codigo_barras: string | null
+  } | null>(null)
+  const puedeEditarCodigo = tienePermiso(usuario?.permisos, 'compras')
 
   // Producto activo (último escaneado): se resalta y se enfoca su campo para
   // cargar la cantidad total. El escaneo deja de ser un "+1" como protagonista.
@@ -191,10 +226,6 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   useEffect(() => {
     if (!pedido) return
-    if (pedidoIdVisto.current !== pedido.id) {
-      pedidoIdVisto.current = pedido.id
-      ordenSiguiente.current = 1
-    }
     setItemsEstado(
       pedido.items.map((it) => ({
         item_id: it.id,
@@ -208,7 +239,6 @@ export function RecepcionMovil({ pedidoId }: Props) {
         venta_por_peso: it.producto?.venta_por_peso ?? false,
         fecha_vencimiento: '',
         dias_vencimiento_minimo: it.producto?.dias_vencimiento_minimo ?? null,
-        orden: null,
       }))
     )
     setAceptaPorDebajoMin(false)
@@ -221,23 +251,30 @@ export function RecepcionMovil({ pedidoId }: Props) {
     item_id: number,
     cambios: Partial<Pick<ItemEstado, 'cantidad_recibida' | 'fecha_vencimiento'>>
   ) {
-    // La primera vez que el renglón queda con cantidad se le asigna la
-    // secuencia de escaneo (= orden del papel de la factura).
-    let orden: number | null = null
-    if (
-      cambios.cantidad_recibida !== undefined &&
-      (Number(cambios.cantidad_recibida) || 0) > 0
-    ) {
-      const it = itemsEstado.find((i) => i.item_id === item_id)
-      if (it && it.orden == null) orden = ordenSiguiente.current++
-    }
+    // Nunca reordena la lista: mover en el DOM un input con foco le cierra el
+    // teclado al usuario. El orden lo mueven el escaneo y las flechas.
     setItemsEstado((prev) =>
-      prev.map((it) =>
-        it.item_id === item_id
-          ? { ...it, ...cambios, ...(orden != null ? { orden } : {}) }
-          : it
-      )
+      prev.map((it) => (it.item_id === item_id ? { ...it, ...cambios } : it))
     )
+  }
+
+  /**
+   * Mueve un renglón un lugar arriba o abajo en el papel de la factura: lo
+   * intercambia con el renglón CARGADO más cercano en esa dirección (los que
+   * todavía no se cargaron no ocupan lugar en la factura). El orden que ve el
+   * usuario es el que después viaja al RPC.
+   */
+  function moverItem(item_id: number, direccion: -1 | 1) {
+    setItemsEstado((prev) => {
+      const i = prev.findIndex((it) => it.item_id === item_id)
+      if (i < 0) return prev
+      let j = i + direccion
+      while (j >= 0 && j < prev.length && !estaCargado(prev[j])) j += direccion
+      if (j < 0 || j >= prev.length) return prev
+      const copia = [...prev]
+      ;[copia[i], copia[j]] = [copia[j], copia[i]]
+      return copia
+    })
   }
 
   /** Botón secundario: suma 1 unidad al producto (para los que prefieren tallar). */
@@ -282,12 +319,14 @@ export function RecepcionMovil({ pedidoId }: Props) {
   })
 
   /**
-   * Escaneo: trae el producto al tope de la lista, lo resalta y enfoca su campo
-   * para cargar la cantidad TOTAL (no suma de a 1). El "+1" queda como botón.
+   * Escaneo: acomoda el producto detrás del último renglón ya cargado (la lista
+   * se arma en el orden en que se descarga = el orden del papel), lo resalta y
+   * enfoca su campo para cargar la cantidad TOTAL (no suma de a 1). El "+1"
+   * queda como botón.
    */
   function alEscanear(codigo: string) {
-    // Con el buscador abierto ignoramos lecturas (evita re-disparos de la cámara).
-    if (modalNuevoAbierto) return
+    // Con un modal abierto ignoramos lecturas (evita re-disparos de la cámara).
+    if (modalNuevoAbierto || productoCodigo) return
     const item = itemsEstado.find((it) => it.codigo_barras === codigo)
     if (!item) {
       // No está en el pedido: abrimos el buscador con el código cargado. Si el
@@ -300,11 +339,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
     // Si ya es el activo, ignorar (evita que la cámara lo re-dispare al tipear).
     if (activoId === item.item_id) return
     setActivoId(item.item_id)
-    setItemsEstado((prev) => {
-      const sel = prev.find((it) => it.item_id === item.item_id)
-      if (!sel) return prev
-      return [sel, ...prev.filter((it) => it.item_id !== item.item_id)]
-    })
+    setItemsEstado((prev) => moverAlFinalDeCargados(prev, item.item_id))
     toast.success(`${item.nombre} — cargá la cantidad`)
   }
 
@@ -333,6 +368,28 @@ export function RecepcionMovil({ pedidoId }: Props) {
       (Number.isNaN(Number(it.cantidad_recibida)) ||
         Number(it.cantidad_recibida) < 0)
   )
+
+  /**
+   * Renglones ya numerados en las facturas cerradas de esta entrega: la
+   * numeración del papel arranca donde terminó la factura anterior.
+   */
+  const ordenBase = useMemo(
+    () => pasadas.reduce((acc, p) => acc + p.items.length, 0),
+    [pasadas]
+  )
+
+  /**
+   * N° de renglón en el papel de cada producto ya cargado: su posición en la
+   * lista, continuando la numeración de las facturas anteriores.
+   */
+  const numeroRenglon = useMemo(() => {
+    const m = new Map<number, number>()
+    let n = ordenBase
+    itemsEstado.forEach((it) => {
+      if (estaCargado(it)) m.set(it.item_id, ++n)
+    })
+    return m
+  }, [itemsEstado, ordenBase])
 
   /** Acumulado por item de las facturas cerradas localmente en esta entrega. */
   const recibidoLocal = useMemo(() => {
@@ -437,14 +494,16 @@ export function RecepcionMovil({ pedidoId }: Props) {
     if (!validarNumeroFactura()) return
     const numero = numeroFactura.trim()
     const items = itemsEstado
-      .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
-      .map((it) => ({
+      .filter(estaCargado)
+      .map((it, i) => ({
         item_id: it.item_id,
         producto_id: it.producto_id,
         cantidad: Number(it.cantidad_recibida),
         precio_costo: it.precio_costo,
         fecha_vencimiento: it.fecha_vencimiento,
-        orden: it.orden,
+        // El orden del papel = la posición en pantalla. La numeración sigue
+        // corriendo entre las facturas de la misma entrega.
+        orden: ordenBase + i + 1,
       }))
     setPasadas((prev) => [
       ...prev,
@@ -526,18 +585,17 @@ export function RecepcionMovil({ pedidoId }: Props) {
           orden: it.orden,
         }))
       ),
-      ...itemsEstado
-        .filter((it) => (Number(it.cantidad_recibida) || 0) > 0)
-        .map((it) => ({
-          item_id: it.item_id,
-          producto_id: it.producto_id,
-          cantidad_recibida: Number(it.cantidad_recibida),
-          precio_costo: it.precio_costo,
-          fecha_vencimiento: it.fecha_vencimiento || null,
-          factura_ref: refActual,
-          numero_factura: numeroActual || null,
-          orden: it.orden,
-        })),
+      ...itemsEstado.filter(estaCargado).map((it, i) => ({
+        item_id: it.item_id,
+        producto_id: it.producto_id,
+        cantidad_recibida: Number(it.cantidad_recibida),
+        precio_costo: it.precio_costo,
+        fecha_vencimiento: it.fecha_vencimiento || null,
+        factura_ref: refActual,
+        numero_factura: numeroActual || null,
+        // El orden del papel = la posición en pantalla (ver cerrarFacturaLocal).
+        orden: ordenBase + i + 1,
+      })),
     ]
     if (items.length === 0) return
     recibir.mutate(
@@ -564,16 +622,15 @@ export function RecepcionMovil({ pedidoId }: Props) {
     const yaEnLista = itemsEstado.find((it) => it.producto_id === prod.id)
     if (yaEnLista) {
       // Ya estaba en la lista: en vez de descartar la cantidad tipeada, la
-      // aplicamos al ítem existente y lo resaltamos.
-      const orden = yaEnLista.orden ?? ordenSiguiente.current++
+      // aplicamos al ítem existente, lo acomodamos detrás de lo ya cargado
+      // (orden del papel) y lo resaltamos.
       setItemsEstado((prev) =>
-        prev.map((it) =>
+        moverAlFinalDeCargados(prev, yaEnLista.item_id).map((it) =>
           it.producto_id === prod.id
             ? {
                 ...it,
                 cantidad_recibida: String(cant),
                 fecha_vencimiento: venc || it.fecha_vencimiento,
-                orden,
               }
             : it
         )
@@ -597,23 +654,28 @@ export function RecepcionMovil({ pedidoId }: Props) {
       cantidad: cant,
       precio_costo: 0,
     })
-    setItemsEstado((prev) => [
-      ...prev,
-      {
-        item_id: nuevoItem.id,
-        producto_id: prod.id,
-        nombre: prod.nombre,
-        codigo_barras: prod.codigo_barras,
-        cantidad_pedida: cant,
-        ya_recibido: 0,
-        precio_costo: 0,
-        cantidad_recibida: String(cant),
-        venta_por_peso: prod.venta_por_peso,
-        fecha_vencimiento: venc,
-        dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
-        orden: ordenSiguiente.current++,
-      },
-    ])
+    const nuevo: ItemEstado = {
+      item_id: nuevoItem.id,
+      producto_id: prod.id,
+      nombre: prod.nombre,
+      codigo_barras: prod.codigo_barras,
+      cantidad_pedida: cant,
+      ya_recibido: 0,
+      precio_costo: 0,
+      cantidad_recibida: String(cant),
+      venta_por_peso: prod.venta_por_peso,
+      fecha_vencimiento: venc,
+      dias_vencimiento_minimo: prod.dias_vencimiento_minimo,
+    }
+    // Entra detrás de lo ya cargado, no al fondo de la lista: acaba de bajar
+    // del camión, así que va en ese lugar del papel.
+    setItemsEstado((prev) => {
+      let destino = 0
+      prev.forEach((it, i) => {
+        if (estaCargado(it)) destino = i + 1
+      })
+      return [...prev.slice(0, destino), nuevo, ...prev.slice(destino)]
+    })
     setActivoId(nuevoItem.id)
     toast.success(`${prod.nombre} agregado al pedido`)
   }
@@ -761,11 +823,19 @@ export function RecepcionMovil({ pedidoId }: Props) {
         </p>
       </header>
 
+      {/* Se desmonta mientras se edita un código: el modal usa la cámara y el
+          teléfono no da dos streams a la vez. */}
       <div className="mb-4">
-        <EscanerCamara
-          onDetectado={alEscanear}
-          ayuda="Escaneá un producto y cargá cuántas llegaron"
-        />
+        {productoCodigo ? (
+          <div className="rounded-2xl border border-dashed border-[#e4c9b0] bg-white/60 p-4 text-center text-xs text-[#6f3a2a]">
+            Cámara en uso por el código de barras…
+          </div>
+        ) : (
+          <EscanerCamara
+            onDetectado={alEscanear}
+            ayuda="Escaneá un producto y cargá cuántas llegaron"
+          />
+        )}
       </div>
 
       {/* Factura que se está cargando (una por vez) + las cerradas localmente */}
@@ -820,6 +890,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
       <ul className="space-y-2">
         {itemsEstado.map((it) => {
           const cantNum = Number(it.cantidad_recibida) || 0
+          const renglon = numeroRenglon.get(it.item_id)
           // "Ya recibido" junta lo de la base con las facturas locales.
           const yaTotal = it.ya_recibido + (recibidoLocal.get(it.item_id) ?? 0)
           const diferencia = yaTotal + cantNum - it.cantidad_pedida
@@ -837,6 +908,11 @@ export function RecepcionMovil({ pedidoId }: Props) {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-medium text-[#391511]">
+                    {renglon != null && (
+                      <span className="mr-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#f9b44c] px-1 text-[10px] font-bold tabular-nums text-[#391511]">
+                        {renglon}
+                      </span>
+                    )}
                     {it.nombre}
                     {it.venta_por_peso && (
                       <span className="ml-1.5 rounded bg-[#f9b44c]/20 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
@@ -859,7 +935,64 @@ export function RecepcionMovil({ pedidoId }: Props) {
                       </>
                     )}
                   </p>
+                  {/* Código de barras: el encargado lo ve y lo corrige acá
+                      mismo (un producto dado de alta al vuelo queda con el
+                      HEX-… autogenerado y no se puede escanear). */}
+                  <div className="mt-0.5 flex items-center gap-1.5">
+                    {esCodigoAutogenerado(it.codigo_barras) ? (
+                      <span className="rounded bg-[#c43e2c]/10 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#c43e2c]">
+                        Sin código
+                      </span>
+                    ) : (
+                      <span className="truncate font-mono text-[10px] text-[#c8a58a]">
+                        {it.codigo_barras}
+                      </span>
+                    )}
+                    {puedeEditarCodigo && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProductoCodigo({
+                            id: it.producto_id,
+                            nombre: it.nombre,
+                            codigo_barras: it.codigo_barras,
+                          })
+                        }
+                        className="flex h-6 items-center gap-1 rounded-md border border-[#e4c9b0] px-1.5 text-[10px] font-semibold text-[#9e6b15] active:scale-95"
+                      >
+                        <Barcode className="h-3 w-3" />
+                        {esCodigoAutogenerado(it.codigo_barras)
+                          ? 'Agregar'
+                          : 'Editar'}
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Flechas del orden del papel: solo en los renglones cargados,
+                    que son los que se envían y numeran. */}
+                {renglon != null && (
+                  <div className="flex shrink-0 flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moverItem(it.item_id, -1)}
+                      disabled={renglon === ordenBase + 1}
+                      aria-label="Subir un lugar"
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e4c9b0] bg-[#fdfaf6] text-[#9e6b15] active:scale-95 disabled:opacity-30"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moverItem(it.item_id, 1)}
+                      disabled={renglon === ordenBase + numeroRenglon.size}
+                      aria-label="Bajar un lugar"
+                      className="flex h-8 w-8 items-center justify-center rounded-md border border-[#e4c9b0] bg-[#fdfaf6] text-[#9e6b15] active:scale-95 disabled:opacity-30"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1041,6 +1174,25 @@ export function RecepcionMovil({ pedidoId }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Editar / asignar el código de barras (solo permiso `compras`). No se
+          invalida el pedido: un refetch borraría lo ya tipeado. */}
+      <ModalCodigoBarras
+        abierto={productoCodigo != null}
+        onCambioAbierto={(v) => {
+          if (!v) setProductoCodigo(null)
+        }}
+        producto={productoCodigo}
+        onGuardado={(productoId, codigo) =>
+          setItemsEstado((prev) =>
+            prev.map((it) =>
+              it.producto_id === productoId
+                ? { ...it, codigo_barras: codigo }
+                : it
+            )
+          )
+        }
+      />
 
       <ModalClaveSupervisor
         abierto={modalSupervisorAbierto}
