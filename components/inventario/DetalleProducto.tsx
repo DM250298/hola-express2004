@@ -5,6 +5,7 @@ import Link from 'next/link'
 import {
   ArrowDown,
   ArrowUp,
+  Barcode,
   Box,
   ChevronLeft,
   ChevronRight,
@@ -45,6 +46,8 @@ import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalEliminarProducto } from './ModalEliminarProducto'
+import { ModalCodigoBarras } from '@/components/movil/ModalCodigoBarras'
+import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
 import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
@@ -122,6 +125,7 @@ export function DetalleProducto({ productoId }: Props) {
   const [modalAjusteAbierto, setModalAjusteAbierto] = useState(false)
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
+  const [modalCodigoAbierto, setModalCodigoAbierto] = useState(false)
   const toggleActivo = useToggleProductoActivo()
 
   const { data: historial, isLoading: cargandoHist } = useHistorialMovimientos(
@@ -164,6 +168,10 @@ export function DetalleProducto({ productoId }: Props) {
   // permiso (cajero, fiambrero, roles nuevos) no ve el costo.
   const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const puedeEditar = tienePermiso(usuario?.permisos, 'configuracion')
+  // El código de barras lo corrige también el encargado (mismo gate que en la
+  // recepción móvil): un producto con el HEX-… autogenerado no se puede
+  // escanear en la caja hasta que alguien le cargue el EAN real.
+  const puedeEditarCodigo = tienePermiso(usuario?.permisos, 'compras')
 
   // Ganancia = MARGEN NETO ASEGURADO: el mismo `producto.margen` que muestra y
   // con el que pricea el Drawer (la ganancia LIMPIA sobre el costo, ya
@@ -208,10 +216,26 @@ export function DetalleProducto({ productoId }: Props) {
               {producto.nombre}
             </h1>
             <div className="flex items-center gap-3 mt-1 text-sm text-[#6f3a2a]">
-              {producto.codigo_barras && (
+              {esCodigoAutogenerado(producto.codigo_barras) ? (
+                <span className="rounded bg-[#c43e2c]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#c43e2c]">
+                  Sin código
+                </span>
+              ) : (
                 <span className="font-mono text-[#c8a58a]">
                   {producto.codigo_barras}
                 </span>
+              )}
+              {puedeEditarCodigo && (
+                <button
+                  type="button"
+                  onClick={() => setModalCodigoAbierto(true)}
+                  className="inline-flex h-6 items-center gap-1 rounded-md border border-[#e4c9b0] px-1.5 text-[11px] font-semibold text-[#9e6b15] transition-colors hover:bg-[#f9d2a2]/40"
+                >
+                  <Barcode className="h-3 w-3" />
+                  {esCodigoAutogenerado(producto.codigo_barras)
+                    ? 'Agregar código'
+                    : 'Editar'}
+                </button>
               )}
               {!producto.activo && (
                 <span className="text-[10px] uppercase tracking-wider bg-[#c8a58a]/30 text-[#6f3a2a] px-2 py-0.5 rounded-full font-semibold">
@@ -497,6 +521,20 @@ export function DetalleProducto({ productoId }: Props) {
           </>
         )}
       </div>
+
+      {/* Editar / asignar código de barras (permiso `compras`; también sirve
+          con lector USB o tipeando — la cámara es opcional). El refetch lo
+          hace la invalidación del hook. */}
+      <ModalCodigoBarras
+        abierto={modalCodigoAbierto}
+        onCambioAbierto={setModalCodigoAbierto}
+        producto={{
+          id: producto.id,
+          nombre: producto.nombre,
+          codigo_barras: producto.codigo_barras,
+        }}
+        onGuardado={() => setModalCodigoAbierto(false)}
+      />
 
       <ModalAjusteStock
         abierto={modalAjusteAbierto}

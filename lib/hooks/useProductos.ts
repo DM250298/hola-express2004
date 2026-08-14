@@ -96,9 +96,12 @@ export function useAsignarCodigoBarras() {
   return useMutation({
     mutationFn: ({ id, codigo }: { id: number; codigo: string }) =>
       asignarCodigoBarras(id, codigo),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
       queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({
+        queryKey: ['producto-detalle', variables.id],
+      })
       toast.success('Código de barras guardado')
     },
     onError: (error: Error) => {

@@ -42,14 +42,15 @@ export function ModalCodigoBarras({
 
   // Precarga en cada apertura (y en cada cambio de producto): el código real
   // se edita, el autogenerado arranca vacío porque no sirve de nada.
+  // Deps PRIMITIVAS a propósito: si el caller recrea el objeto `producto` en
+  // cada render (detalle de inventario), un refetch de fondo no debe pisar lo
+  // que se está tipeando.
+  const codigoActual = producto?.codigo_barras ?? null
   useEffect(() => {
-    if (!abierto || !producto) return
-    setCodigo(
-      esCodigoAutogenerado(producto.codigo_barras)
-        ? ''
-        : (producto.codigo_barras ?? '')
-    )
-  }, [abierto, producto])
+    if (!abierto) return
+    setCodigo(esCodigoAutogenerado(codigoActual) ? '' : (codigoActual ?? ''))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, producto?.id])
 
   if (!producto) return null
 
