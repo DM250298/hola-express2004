@@ -130,6 +130,8 @@ export interface ConteoItemDetalle extends ConteoItemRow {
   producto_nombre: string
   producto_codigo: string | null
   precio_costo: number
+  /** true = se cuenta en kg: la cantidad admite hasta 3 decimales. */
+  venta_por_peso: boolean
 }
 
 export interface ConteoDetalle {
@@ -146,7 +148,9 @@ export async function getConteoDetalle(
     supabase.from('conteos').select('*').eq('id', id).maybeSingle<ConteoRow>(),
     supabase
       .from('conteos_items')
-      .select('*, productos(nombre, codigo_barras, costos_producto(precio_costo))')
+      .select(
+        '*, productos(nombre, codigo_barras, venta_por_peso, costos_producto(precio_costo))'
+      )
       .eq('conteo_id', id)
       .order('id', { ascending: true }),
   ])
@@ -159,6 +163,7 @@ export async function getConteoDetalle(
     productos: {
       nombre: string
       codigo_barras: string | null
+      venta_por_peso: boolean
       costos_producto: CostoEmbed
     } | null
   }
@@ -170,6 +175,7 @@ export async function getConteoDetalle(
     producto_nombre: productos?.nombre ?? 'Producto eliminado',
     producto_codigo: productos?.codigo_barras ?? null,
     precio_costo: costoDesdeEmbed(productos?.costos_producto ?? null),
+    venta_por_peso: productos?.venta_por_peso ?? false,
   }))
 
   return { conteo: resConteo.data, items }

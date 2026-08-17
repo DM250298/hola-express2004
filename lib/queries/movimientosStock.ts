@@ -8,6 +8,8 @@ export type Turno = 'mañana' | 'tarde' | 'noche'
 export interface MovimientoCompleto extends MovimientoStockRow {
   producto_nombre: string
   producto_codigo_barras: string | null
+  /** true = las cantidades del movimiento están en kg, no en unidades. */
+  producto_por_peso: boolean
   categoria_nombre: string | null
   usuario_nombre: string | null
   turno: Turno
@@ -88,7 +90,7 @@ export async function getMovimientosStock(
   let query = supabase
     .from('movimientos_stock')
     .select(
-      `*, ${embed}(nombre, codigo_barras, categoria_id, categorias(nombre)), usuarios(nombre)`,
+      `*, ${embed}(nombre, codigo_barras, categoria_id, venta_por_peso, categorias(nombre)), usuarios(nombre)`,
       { count: 'exact' }
     )
     .order('created_at', { ascending: false })
@@ -138,6 +140,7 @@ export async function getMovimientosStock(
       nombre: string
       codigo_barras: string | null
       categoria_id: number | null
+      venta_por_peso: boolean
       categorias: { nombre: string } | null
     } | null
     usuarios: { nombre: string } | null
@@ -149,6 +152,7 @@ export async function getMovimientosStock(
     ...f,
     producto_nombre: f.productos?.nombre ?? 'Producto eliminado',
     producto_codigo_barras: f.productos?.codigo_barras ?? null,
+    producto_por_peso: f.productos?.venta_por_peso ?? false,
     categoria_nombre: f.productos?.categorias?.nombre ?? null,
     usuario_nombre: f.usuarios?.nombre ?? null,
     turno: inferirTurno(f.created_at),

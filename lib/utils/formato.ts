@@ -65,3 +65,25 @@ export function pareceGramosEnKg(valor: string): boolean {
   if (!/^\d+$/.test(limpio)) return false
   return Number(limpio) >= 100
 }
+
+/**
+ * Redondea una cantidad a lo que la columna puede guardar: 3 decimales
+ * (gramos) si el producto es por peso, entero si es por unidad. Las columnas
+ * de stock son numeric(12,3), así que Postgres redondearía igual; se hace acá
+ * para que el preview en pantalla ("Stock resultante") muestre el número que
+ * realmente va a quedar y no el ruido del float (25.499999999 en vez de 25,5).
+ */
+export function redondearCantidad(cantidad: number, porPeso: boolean): number {
+  if (!porPeso) return Math.round(cantidad)
+  return Math.round(cantidad * 1000) / 1000
+}
+
+/**
+ * Dos cantidades son iguales si difieren en menos de 1 gramo. Las cantidades
+ * fraccionadas se comparan así y nunca con `===`: restar kilos arrastra error
+ * de float (3 − 1,5 − 1,5 puede dar 2,2e-16) y una comparación exacta deja el
+ * lote sin cerrar o inventa una diferencia de conteo que no existe.
+ */
+export function cantidadesIguales(a: number, b: number): boolean {
+  return Math.abs(a - b) < 0.0005
+}

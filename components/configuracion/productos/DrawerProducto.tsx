@@ -43,6 +43,12 @@ import {
 } from '@/components/ui/sheet'
 import { MontoARS } from '@/components/shared/MontoARS'
 import {
+  formatearCantidad,
+  formatearNumero,
+  pareceGramosEnKg,
+  redondearCantidad,
+} from '@/lib/utils/formato'
+import {
   useBuscarProductos,
   useComponentesCombo,
   useCreateProducto,
@@ -97,11 +103,11 @@ const esquemaProducto = z.object({
   stock_actual: z
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
-    .pipe(z.number().int('Solo enteros').min(0, 'No puede ser negativo')),
+    .pipe(z.number().min(0, 'No puede ser negativo')),
   stock_minimo: z
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
-    .pipe(z.number().int('Solo enteros').min(0, 'No puede ser negativo')),
+    .pipe(z.number().min(0, 'No puede ser negativo')),
   venta_por_peso: z.boolean().default(false),
   visible_tienda: z.boolean().default(true),
   controlar_stock: z.boolean().default(true),
@@ -122,6 +128,22 @@ const esquemaProducto = z.object({
   unidad: z.string().trim().min(1, 'Requerido'),
   activo: z.boolean(),
 })
+  // El stock fraccionado solo tiene sentido si el producto se vende por kg;
+  // para uno por unidad un "12,5" es un typo, no media unidad. La regla mira
+  // dos campos del mismo objeto, así que va como refinement y no en el campo.
+  .superRefine((d, ctx) => {
+    if (d.tipo === 'combo') return // el combo no lleva stock propio
+    if (d.venta_por_peso) return // kg: hasta 3 decimales
+    for (const campo of ['stock_actual', 'stock_minimo'] as const) {
+      if (!Number.isInteger(d[campo])) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [campo],
+          message: 'Solo enteros: activá "Venta por kg" si se vende fraccionado',
+        })
+      }
+    }
+  })
 
 type EntradaFormulario = z.input<typeof esquemaProducto>
 
@@ -374,6 +396,11 @@ export function DrawerProducto({
   // Tipo elegido en vivo (para mostrar/ocultar la sección de combo).
   const tipoSel = useWatch({ control, name: 'tipo' })
   const esCombo = tipoSel === 'combo'
+  // "Venta por kg" en vivo: habilita los decimales en los campos de stock.
+  const porPeso = useWatch({ control, name: 'venta_por_peso' }) === true
+  const stockActualCrudo = String(
+    useWatch({ control, name: 'stock_actual' }) ?? ''
+  )
 
   // Componentes guardados del combo (solo al editar un combo existente).
   const { data: componentesGuardados } = useComponentesCombo(
@@ -682,8 +709,15 @@ export function DrawerProducto({
       costos_adicionales: costosAdicionales,
       // Un combo no maneja stock propio: el stock sale de los componentes
       // (el "stock" que se ve es el virtual, calculado en las queries).
-      stock_actual: esComboFinal ? 0 : validado.stock_actual,
-      stock_minimo: esComboFinal ? 0 : validado.stock_minimo,
+      // Por peso van hasta 3 decimales (kg); por unidad, enteros. Las columnas
+      // son numeric(12,3) — stock_minimo desde la migración 150, que hay que
+      // correr ANTES de deployar esto o un mínimo fraccionado da error 400.
+      stock_actual: esComboFinal
+        ? 0
+        : redondearCantidad(validado.stock_actual, validado.venta_por_peso),
+      stock_minimo: esComboFinal
+        ? 0
+        : redondearCantidad(validado.stock_minimo, validado.venta_por_peso),
       dias_vencimiento_minimo: esComboFinal
         ? null
         : validado.dias_vencimiento_minimo,
@@ -1662,12 +1696,15 @@ export function DrawerProducto({
                       <div className="space-y-1.5">
                         <Label htmlFor="stock_actual" className="text-[#391511] font-medium">
                           Stock actual
+                          {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}
                         </Label>
                         <Input
                           id="stock_actual"
                           type="number"
                           min="0"
-                          step="1"
+                          step={porPeso ? '0.001' : '1'}
+                          inputMode={porPeso ? 'decimal' : 'numeric'}
+                          placeholder={porPeso ? '0,000' : '0'}
                           {...register('stock_actual')}
                           disabled={guardando}
                           className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
@@ -1677,17 +1714,42 @@ export function DrawerProducto({
                             {errors.stock_actual.message}
                           </p>
                         )}
+                        {/* Un entero grande en un campo de KILOS suele ser el
+                            peso en gramos leído de la balanza. */}
+                        {porPeso && pareceGramosEnKg(stockActualCrudo) && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setValue(
+                                'stock_actual',
+                                String(Number(stockActualCrudo) / 1000),
+                                { shouldValidate: true }
+                              )
+                            }
+                            className="mt-1 w-full rounded-md border border-[#c43e2c]/50 bg-[#c43e2c]/10 px-2 py-1 text-[11px] font-bold text-[#c43e2c] transition-colors hover:bg-[#c43e2c]/20"
+                          >
+                            ¿{formatearNumero(Number(stockActualCrudo))} kg? Eran
+                            gramos → usar{' '}
+                            {formatearCantidad(
+                              Number(stockActualCrudo) / 1000,
+                              true
+                            )}
+                          </button>
+                        )}
                       </div>
 
                       <div className="space-y-1.5">
                         <Label htmlFor="stock_minimo" className="text-[#391511] font-medium">
                           Stock mínimo
+                          {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}
                         </Label>
                         <Input
                           id="stock_minimo"
                           type="number"
                           min="0"
-                          step="1"
+                          step={porPeso ? '0.001' : '1'}
+                          inputMode={porPeso ? 'decimal' : 'numeric'}
+                          placeholder={porPeso ? '0,000' : '0'}
                           {...register('stock_minimo')}
                           disabled={guardando}
                           className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"

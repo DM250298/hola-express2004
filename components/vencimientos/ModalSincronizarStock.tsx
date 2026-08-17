@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatearNumero } from '@/lib/utils/formato'
+import { formatearCantidad, formatearNumero } from '@/lib/utils/formato'
 import {
   usePlanSincronizacionStock,
   useSincronizarStockConLotes,
@@ -132,7 +132,7 @@ export function ModalSincronizarStock({ abierto, onCambioAbierto }: Props) {
                   </div>
                   <div className="rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60 px-3 py-2">
                     <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                      Unidades cubiertas
+                      Cantidad cubierta (u. + kg)
                     </div>
                     <div className="text-2xl font-extrabold text-[#391511] tabular-nums">
                       {formatearNumero(plan.total_unidades)}
@@ -154,11 +154,16 @@ export function ModalSincronizarStock({ abierto, onCambioAbierto }: Props) {
                         <span className="text-[#6f3a2a] tabular-nums shrink-0">
                           {p.cubierto_por_lotes > 0 && (
                             <span className="text-[#c8a58a] mr-1">
-                              {formatearNumero(p.cubierto_por_lotes)} ya en lotes,
+                              {formatearCantidad(
+                                p.cubierto_por_lotes,
+                                p.venta_por_peso
+                              )}{' '}
+                              ya en lotes,
                             </span>
                           )}
                           <span className="font-bold text-[#391511]">
-                            +{formatearNumero(p.faltante)}
+                            +
+                            {formatearCantidad(p.faltante, p.venta_por_peso)}
                           </span>
                         </span>
                       </li>

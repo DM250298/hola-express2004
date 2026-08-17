@@ -3,7 +3,7 @@
 import { Calendar, Package, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Semaforo } from '@/components/shared/Semaforo'
-import { formatearFechaCorta, formatearNumero } from '@/lib/utils/formato'
+import { formatearCantidad, formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 import type { LoteConProducto } from '@/lib/queries/vencimientos'
 
@@ -75,9 +75,18 @@ export function CardLote({ lote, onDarDeBaja }: Props) {
         <div className="flex items-center gap-1.5 text-[#391511]">
           <Package className="h-3.5 w-3.5 text-[#c8a58a]" />
           <span className="text-2xl font-extrabold tabular-nums leading-none">
-            {formatearNumero(lote.cantidad_actual)}
+            {formatearCantidad(
+              lote.cantidad_actual,
+              lote.producto.venta_por_peso
+            )}
           </span>
-          <span className="text-xs text-[#6f3a2a]">/ {formatearNumero(lote.cantidad_inicial)}</span>
+          <span className="text-xs text-[#6f3a2a]">
+            /{' '}
+            {formatearCantidad(
+              lote.cantidad_inicial,
+              lote.producto.venta_por_peso
+            )}
+          </span>
         </div>
 
         {necesitaAccion && (

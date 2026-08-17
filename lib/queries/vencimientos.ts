@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
+import { cantidadesIguales, redondearCantidad } from '@/lib/utils/formato'
 import type { EstadoLote, LoteRow } from '@/types/database'
 
 export type ClaseVencimiento = 'vencido' | 'rojo' | 'amarillo' | 'verde'
@@ -12,6 +13,8 @@ export interface LoteConProducto extends LoteRow {
     codigo_barras: string | null
     precio_costo: number
     stock_actual: number
+    /** true = el lote se mide en kg: las cantidades llevan hasta 3 decimales. */
+    venta_por_peso: boolean
   }
   dias_restantes: number
   clase: ClaseVencimiento
@@ -42,7 +45,7 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
   const { data, error } = await supabase
     .from('lotes')
     .select(
-      `*, productos(id, nombre, codigo_barras, stock_actual, costos_producto(precio_costo))`
+      `*, productos(id, nombre, codigo_barras, stock_actual, venta_por_peso, costos_producto(precio_costo))`
     )
     .in('estado', ['activo', 'vencido'])
     .gt('cantidad_actual', 0)
@@ -56,6 +59,7 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
       nombre: string
       codigo_barras: string | null
       stock_actual: number
+      venta_por_peso: boolean
       costos_producto: CostoEmbed
     } | null
   }
@@ -75,9 +79,15 @@ export async function getLotesActivos(): Promise<LoteConProducto[]> {
 }
 
 export interface ResumenVencimientos {
-  unidades_por_vencer: number // total cantidad_actual de lotes con dias < 7 (redondeado a entero)
+  /** Total cantidad_actual de lotes con dias < 7. Mezcla unidades y kilos. */
+  unidades_por_vencer: number
   mermas_mes_unidades: number
   mermas_mes_monto: number
+}
+
+/** Corta el ruido de punto flotante de una suma de cantidades (a gramos). */
+function limpiarSuma(n: number): number {
+  return Math.round(n * 1000) / 1000
 }
 
 export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
@@ -85,10 +95,9 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
 
   // Lotes próximos a vencer (<7 días, todavía con stock)
   const lotes = await getLotesActivos()
-  // Math.round: la suma de cantidades (numeric en BD) puede arrastrar ruido de
-  // punto flotante (ej: 10.995000000000001) y el KPI se muestra en unidades
-  // enteras.
-  const unidades_por_vencer = Math.round(
+  // Se limpia el ruido de punto flotante de la suma pero NO se redondea a
+  // entero: un lote de 2,5 kg por vencer no puede desaparecer del KPI.
+  const unidades_por_vencer = limpiarSuma(
     lotes
       .filter((l) => l.dias_restantes < 7)
       .reduce((acc, l) => acc + l.cantidad_actual, 0)
@@ -113,9 +122,9 @@ export async function getResumenVencimientos(): Promise<ResumenVencimientos> {
   }
 
   const lista = (mermas ?? []) as unknown as FilaMerma[]
-  // Mismas precauciones que arriba: redondeo para evitar el ruido de punto
-  // flotante de las sumas (unidades a entero, monto a 2 decimales).
-  const mermas_mes_unidades = Math.round(
+  // Mismas precauciones que arriba: se limpia el ruido de punto flotante de
+  // las sumas (cantidades a gramos, monto a 2 decimales).
+  const mermas_mes_unidades = limpiarSuma(
     lista.reduce((acc, m) => acc + m.cantidad, 0)
   )
   const mermas_mes_monto =
@@ -178,7 +187,8 @@ export async function crearLote(
   if (errProd) throw errProd
 
   const stockAnterior = producto.stock_actual
-  const stockNuevo = stockAnterior + payload.cantidad
+  // Suma de cantidades fraccionadas: se limpia el ruido de float (numeric(12,3)).
+  const stockNuevo = redondearCantidad(stockAnterior + payload.cantidad, true)
 
   // 2. INSERT lote
   const { data: lote, error: errLote } = await supabase
@@ -275,21 +285,31 @@ export async function darDeBajaLote(
   if (payload.cantidad <= 0) {
     throw new Error('La cantidad a dar de baja debe ser mayor a 0.')
   }
-  if (payload.cantidad > loteData.cantidad_actual) {
+  // Los topes se comparan con tolerancia de 1 g: dar de baja el lote COMPLETO
+  // es el caso más común y no puede rebotar por el ruido de float de un kilo.
+  if (payload.cantidad > loteData.cantidad_actual + 0.0005) {
     throw new Error(
-      `El lote tiene ${loteData.cantidad_actual} unidades, no se pueden dar de baja ${payload.cantidad}.`
+      `El lote tiene ${loteData.cantidad_actual}, no se pueden dar de baja ${payload.cantidad}.`
     )
   }
-  if (payload.cantidad > loteData.productos.stock_actual) {
+  if (payload.cantidad > loteData.productos.stock_actual + 0.0005) {
     throw new Error(
       `El stock del producto (${loteData.productos.stock_actual}) es menor que la cantidad a dar de baja.`
     )
   }
 
-  const nuevaCantidadLote = loteData.cantidad_actual - payload.cantidad
-  const nuevoEstadoLote = nuevaCantidadLote === 0 ? 'dado_de_baja' : loteData.estado
+  const nuevaCantidadLote = redondearCantidad(
+    Math.max(0, loteData.cantidad_actual - payload.cantidad),
+    true
+  )
+  // Se compara con tolerancia y NO con `=== 0`: restar kilos arrastra error de
+  // float (3 − 1,5 − 1,5 puede dar 2,2e-16) y el lote quedaría abierto para
+  // siempre, con un remanente invisible que el FEFO sigue intentando usar.
+  const nuevoEstadoLote = cantidadesIguales(nuevaCantidadLote, 0)
+    ? 'dado_de_baja'
+    : loteData.estado
   const stockAnterior = loteData.productos.stock_actual
-  const stockNuevo = stockAnterior - payload.cantidad
+  const stockNuevo = redondearCantidad(stockAnterior - payload.cantidad, true)
 
   // 2. UPDATE lote
   const { error: errUpdateLote } = await supabase
@@ -343,8 +363,11 @@ export interface PlanSincronizacion {
     stock_actual: number
     cubierto_por_lotes: number
     faltante: number
+    /** true = las cantidades de la fila están en kg. */
+    venta_por_peso: boolean
   }>
   total_productos: number
+  /** Mezcla unidades y kilos: es un total indicativo, no una sola unidad. */
   total_unidades: number
 }
 
@@ -361,10 +384,15 @@ export async function obtenerPlanSincronizacionStock(): Promise<PlanSincronizaci
   const supabase = createClient()
 
   const [productos, lotes] = await Promise.all([
-    traerTodo<{ id: number; nombre: string; stock_actual: number }>(() =>
+    traerTodo<{
+      id: number
+      nombre: string
+      stock_actual: number
+      venta_por_peso: boolean
+    }>(() =>
       supabase
         .from('productos')
-        .select('id, nombre, stock_actual')
+        .select('id, nombre, stock_actual, venta_por_peso')
         .eq('activo', true)
         .gt('stock_actual', 0)
     ),
@@ -387,14 +415,17 @@ export async function obtenerPlanSincronizacionStock(): Promise<PlanSincronizaci
 
   const planItems = productos
     .map((p) => {
-      const cubierto = cubiertoPorLote.get(p.id) ?? 0
-      const faltante = p.stock_actual - cubierto
+      const cubierto = limpiarSuma(cubiertoPorLote.get(p.id) ?? 0)
+      // Resta de cantidades fraccionadas: se limpia el ruido de float, si no
+      // un producto ya cubierto puede quedar con un "faltante" de 1e-13 kg.
+      const faltante = limpiarSuma(p.stock_actual - cubierto)
       return {
         producto_id: p.id,
         nombre: p.nombre,
         stock_actual: p.stock_actual,
         cubierto_por_lotes: cubierto,
         faltante,
+        venta_por_peso: p.venta_por_peso,
       }
     })
     .filter((p) => p.faltante > 0)
@@ -403,7 +434,9 @@ export async function obtenerPlanSincronizacionStock(): Promise<PlanSincronizaci
   return {
     productos: planItems,
     total_productos: planItems.length,
-    total_unidades: planItems.reduce((s, p) => s + p.faltante, 0),
+    total_unidades: limpiarSuma(
+      planItems.reduce((s, p) => s + p.faltante, 0)
+    ),
   }
 }
 

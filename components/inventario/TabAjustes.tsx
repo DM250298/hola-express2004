@@ -36,7 +36,12 @@ import {
   type ItemAjustePayload,
   type TipoAjuste,
 } from '@/lib/queries/ajustesStock'
-import { formatearFechaHora } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaHora,
+  formatearNumero,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
 interface LineaAjuste {
@@ -48,6 +53,8 @@ interface LineaAjuste {
   precio_costo: number
   tipo: TipoAjuste
   cantidad: string
+  /** true = el stock se mide en kg: la cantidad admite hasta 3 decimales. */
+  venta_por_peso: boolean
 }
 
 const RAZON_ITEMS: Record<string, string> = Object.fromEntries(
@@ -83,7 +90,16 @@ export function TabAjustes() {
     codigo_barras: string | null
     stock_actual: number
     precio_costo: number
+    venta_por_peso: boolean
   }) {
+    // Los pesables no se cuentan de a 1: se pesa la mercadería y se carga el
+    // total en kg a mano, así que re-escanear no suma nada. El aviso va acá
+    // afuera: un toast dentro del updater se dispararía dos veces en dev.
+    const yaEsta = lineas.find((l) => l.producto_id === p.id)
+    if (yaEsta?.venta_por_peso) {
+      toast.info(`${p.nombre} se ajusta por peso: cargá los kg a mano.`)
+      return
+    }
     setLineas((prev) => {
       const existe = prev.find((l) => l.producto_id === p.id)
       if (existe) {
@@ -103,7 +119,10 @@ export function TabAjustes() {
           stock_actual: p.stock_actual,
           precio_costo: p.precio_costo,
           tipo: 'salida',
-          cantidad: '1',
+          // Un pesable arranca vacío (línea inválida a propósito) para forzar
+          // que se tipeen los kg; el resto arranca en 1 unidad.
+          cantidad: p.venta_por_peso ? '' : '1',
+          venta_por_peso: p.venta_por_peso,
         },
       ]
     })
@@ -125,6 +144,7 @@ export function TabAjustes() {
         codigo_barras: prod.codigo_barras,
         stock_actual: prod.stock_actual,
         precio_costo: prod.precio_costo,
+        venta_por_peso: prod.venta_por_peso,
       })
       setCodigo('')
     } catch {
@@ -149,7 +169,10 @@ export function TabAjustes() {
       lineas.reduce((acc, l) => {
         const { subtotal } = calcularAjuste({
           tipo: l.tipo,
-          cantidad: Number(l.cantidad) || 0,
+          cantidad: redondearCantidad(
+            Number(l.cantidad) || 0,
+            l.venta_por_peso
+          ),
           stock_actual: l.stock_actual,
           precio_costo: l.precio_costo,
         })
@@ -162,9 +185,11 @@ export function TabAjustes() {
     const cant = Number(l.cantidad)
     if (!Number.isFinite(cant) || cant < 0) return true
     if (l.tipo !== 'ajuste' && cant <= 0) return true
+    // Un producto por unidad no admite fracciones (12,5 u. es un typo).
+    if (!l.venta_por_peso && !Number.isInteger(cant)) return true
     const { stockFinal } = calcularAjuste({
       tipo: l.tipo,
-      cantidad: cant || 0,
+      cantidad: redondearCantidad(cant || 0, l.venta_por_peso),
       stock_actual: l.stock_actual,
       precio_costo: l.precio_costo,
     })
@@ -180,7 +205,7 @@ export function TabAjustes() {
       producto_id: l.producto_id,
       nombre: l.nombre,
       tipo: l.tipo,
-      cantidad: Number(l.cantidad) || 0,
+      cantidad: redondearCantidad(Number(l.cantidad) || 0, l.venta_por_peso),
       stock_actual: l.stock_actual,
       precio_costo: l.precio_costo,
     }))
@@ -321,7 +346,10 @@ export function TabAjustes() {
                   </TableRow>
                 ) : (
                   lineas.map((l) => {
-                    const cant = Number(l.cantidad) || 0
+                    const cant = redondearCantidad(
+                      Number(l.cantidad) || 0,
+                      l.venta_por_peso
+                    )
                     const { stockFinal, subtotal } = calcularAjuste({
                       tipo: l.tipo,
                       cantidad: cant,
@@ -337,9 +365,15 @@ export function TabAjustes() {
                         <TableCell>
                           <div className="font-medium text-[#391511] text-sm">
                             {l.nombre}
+                            {l.venta_por_peso && (
+                              <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                                Por kg
+                              </span>
+                            )}
                           </div>
                           <div className="text-[#c8a58a] text-xs">
-                            {l.codigo_barras ?? '—'} · stock {l.stock_actual}
+                            {l.codigo_barras ?? '—'} · stock{' '}
+                            {formatearCantidad(l.stock_actual, l.venta_por_peso)}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -370,12 +404,20 @@ export function TabAjustes() {
                           <Input
                             type="number"
                             min="0"
+                            step={l.venta_por_peso ? '0.001' : '1'}
+                            inputMode={l.venta_por_peso ? 'decimal' : 'numeric'}
+                            placeholder={l.venta_por_peso ? '0,000' : '0'}
                             value={l.cantidad}
                             onChange={(e) =>
                               cambiarLinea(l.uid, { cantidad: e.target.value })
                             }
-                            className="h-8 w-20 text-center tabular-nums border-[#e4c9b0]"
+                            className="h-8 w-24 text-center tabular-nums border-[#e4c9b0]"
                           />
+                          {l.venta_por_peso && cant > 0 && (
+                            <div className="mt-0.5 text-center text-[10px] text-[#6f3a2a]">
+                              = {formatearNumero(Math.round(cant * 1000))} g
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell
                           className={cn(
@@ -383,7 +425,7 @@ export function TabAjustes() {
                             negativo ? 'text-[#c43e2c]' : 'text-[#391511]'
                           )}
                         >
-                          {stockFinal}
+                          {formatearCantidad(stockFinal, l.venta_por_peso)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-[#6f3a2a]">
                           {puedeVerCosto ? (

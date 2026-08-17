@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -19,18 +19,55 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useDarDeBajaLote } from '@/lib/hooks/useVencimientos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { formatearFechaCorta, formatearNumero } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaCorta,
+  formatearNumero,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import type { LoteConProducto } from '@/lib/queries/vencimientos'
 import { cn } from '@/lib/utils'
 
-const esquema = z.object({
+const esquemaBase = z.object({
   cantidad: z
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
-    .pipe(z.number().int('Solo enteros').min(1, 'Debe ser al menos 1')),
+    .pipe(z.number().positive('Debe ser mayor a 0')),
 })
 
-type DatosForm = z.input<typeof esquema>
+/**
+ * La baja de un lote por peso se carga en kg (mínimo 1 g); la de uno por
+ * unidad, en unidades enteras (mínimo 1).
+ */
+function crearEsquemaBaja(porPeso: boolean) {
+  return esquemaBase.superRefine((datos, ctx) => {
+    if (porPeso) {
+      if (datos.cantidad < 0.001) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['cantidad'],
+          message: 'Debe ser al menos 1 g (0,001 kg)',
+        })
+      }
+      return
+    }
+    if (!Number.isInteger(datos.cantidad)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cantidad'],
+        message: 'Solo enteros: este producto se vende por unidad',
+      })
+    } else if (datos.cantidad < 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cantidad'],
+        message: 'Debe ser al menos 1',
+      })
+    }
+  })
+}
+
+type DatosForm = z.input<typeof esquemaBase>
 
 interface Props {
   abierto: boolean
@@ -41,6 +78,9 @@ interface Props {
 export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
   const { data: usuario } = useUsuario()
   const dardeBaja = useDarDeBajaLote()
+
+  const porPeso = lote?.producto.venta_por_peso ?? false
+  const esquema = useMemo(() => crearEsquemaBaja(porPeso), [porPeso])
 
   const {
     register,
@@ -62,7 +102,9 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
 
   const cantidadActual = Number(watch('cantidad')) || 0
   const valorMerma = lote ? cantidadActual * lote.producto.precio_costo : 0
-  const excede = lote ? cantidadActual > lote.cantidad_actual : false
+  // Tolerancia de 1 g: dar de baja el lote COMPLETO es el caso más común y no
+  // puede marcarse como exceso por el ruido de float de un decimal precargado.
+  const excede = lote ? cantidadActual > lote.cantidad_actual + 0.0005 : false
 
   function onSubmit(datos: DatosForm) {
     if (!usuario || !lote) return
@@ -70,7 +112,7 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
     dardeBaja.mutate(
       {
         lote_id: lote.id,
-        cantidad: validado.cantidad,
+        cantidad: redondearCantidad(validado.cantidad, porPeso),
         usuario_id: usuario.id,
       },
       {
@@ -117,7 +159,7 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
               <span>
                 Disponible{' '}
                 <span className="font-bold text-[#391511] tabular-nums">
-                  {formatearNumero(lote.cantidad_actual)}
+                  {formatearCantidad(lote.cantidad_actual, porPeso)}
                 </span>
               </span>
             </div>
@@ -128,15 +170,17 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
               htmlFor="cantidad"
               className="text-[#391511] font-medium text-sm"
             >
-              Cantidad a dar de baja <span className="text-[#c43e2c]">*</span>
+              Cantidad a dar de baja
+              {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}{' '}
+              <span className="text-[#c43e2c]">*</span>
             </Label>
             <Input
               id="cantidad"
               type="number"
-              inputMode="numeric"
-              min="1"
+              inputMode={porPeso ? 'decimal' : 'numeric'}
+              min={porPeso ? '0.001' : '1'}
               max={lote.cantidad_actual}
-              step="1"
+              step={porPeso ? '0.001' : '1'}
               {...register('cantidad')}
               disabled={dardeBaja.isPending}
               autoFocus
@@ -147,9 +191,14 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
                 {errors.cantidad.message}
               </p>
             )}
+            {porPeso && cantidadActual > 0 && !excede && (
+              <p className="text-[10px] text-[#6f3a2a]">
+                = {formatearNumero(Math.round(cantidadActual * 1000))} g
+              </p>
+            )}
             {excede && (
               <p className="text-[#c43e2c] text-xs">
-                No podés dar de baja más unidades que las disponibles en el lote.
+                No podés dar de baja más de lo disponible en el lote.
               </p>
             )}
           </div>
@@ -171,8 +220,8 @@ export function ModalBajaLote({ abierto, onCambioAbierto, lote }: Props) {
                 </span>
               </div>
               <p className="text-[10px] text-[#6f3a2a] mt-1">
-                {formatearNumero(cantidadActual)} × precio costo · queda registrado para reportes
-                de finanzas.
+                {formatearCantidad(cantidadActual, porPeso)} × precio costo ·
+                queda registrado para reportes de finanzas.
               </p>
             </div>
           )}

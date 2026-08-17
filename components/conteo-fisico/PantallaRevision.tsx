@@ -17,7 +17,12 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { EstadoError } from '@/components/shared/EstadoError'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
-import { formatearMonto, formatearNumero } from '@/lib/utils/formato'
+import {
+  cantidadesIguales,
+  formatearCantidad,
+  formatearMonto,
+  formatearNumero,
+} from '@/lib/utils/formato'
 import { tienePermiso } from '@/lib/permisos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useUsuariosActivos } from '@/lib/hooks/useConteos'
@@ -328,7 +333,7 @@ export function PantallaRevision({ sesionId }: Props) {
                 <th className="px-3 py-2.5">Producto</th>
                 <th className="px-3 py-2.5 text-right">Teórico esperado</th>
                 <th className="px-3 py-2.5 text-right">Contado</th>
-                <th className="px-3 py-2.5 text-right">Dif. unidades</th>
+                <th className="px-3 py-2.5 text-right">Dif. cantidad</th>
                 <th className="px-3 py-2.5 text-right">Dif. $ costo</th>
                 <th className="px-3 py-2.5">Estado</th>
               </tr>
@@ -365,7 +370,14 @@ export function PantallaRevision({ sesionId }: Props) {
                       </td>
                     )}
                     <td className="px-3 py-2.5">
-                      <p className="font-medium text-[#391511]">{d.nombre}</p>
+                      <p className="font-medium text-[#391511]">
+                        {d.nombre}
+                        {d.venta_por_peso && (
+                          <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                            Por kg
+                          </span>
+                        )}
+                      </p>
                       {d.observaciones.length > 0 && (
                         <p className="text-xs text-[#c43e2c]">
                           {d.observaciones.join(' · ')}
@@ -374,18 +386,18 @@ export function PantallaRevision({ sesionId }: Props) {
                     </td>
                     <td
                       className="px-3 py-2.5 text-right tabular-nums text-[#6f3a2a]"
-                      title={`Snapshot ${formatearNumero(d.stock_teorico)} − ventas ${formatearNumero(d.ventas_rango)} + ingresos ${formatearNumero(d.ingresos_rango)} ± otros ${formatearNumero(d.otros_rango)}`}
+                      title={`Snapshot ${formatearCantidad(d.stock_teorico, d.venta_por_peso)} − ventas ${formatearCantidad(d.ventas_rango, d.venta_por_peso)} + ingresos ${formatearCantidad(d.ingresos_rango, d.venta_por_peso)} ± otros ${formatearCantidad(d.otros_rango, d.venta_por_peso)}`}
                     >
-                      {formatearNumero(d.teorico_esperado)}
+                      {formatearCantidad(d.teorico_esperado, d.venta_por_peso)}
                     </td>
                     <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-[#391511]">
                       {d.total_contado === null
                         ? '—'
-                        : formatearNumero(d.total_contado)}
+                        : formatearCantidad(d.total_contado, d.venta_por_peso)}
                     </td>
                     <td
                       className={`px-3 py-2.5 text-right font-bold tabular-nums ${
-                        d.diferencia === null || d.diferencia === 0
+                        d.diferencia === null || cantidadesIguales(d.diferencia, 0)
                           ? 'text-[#6f3a2a]'
                           : d.diferencia > 0
                             ? 'text-[#2f7d4f]'
@@ -394,7 +406,7 @@ export function PantallaRevision({ sesionId }: Props) {
                     >
                       {d.diferencia === null
                         ? '—'
-                        : `${d.diferencia > 0 ? '+' : ''}${formatearNumero(d.diferencia)}`}
+                        : `${d.diferencia > 0 ? '+' : ''}${formatearCantidad(d.diferencia, d.venta_por_peso)}`}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular-nums">
                       {d.diferencia_pesos === null ? (

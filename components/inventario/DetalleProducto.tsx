@@ -43,7 +43,7 @@ import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { calcularEstadoStock } from '@/lib/queries/inventario'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
-import { formatearFechaHora } from '@/lib/utils/formato'
+import { formatearCantidad, formatearFechaHora } from '@/lib/utils/formato'
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalEliminarProducto } from './ModalEliminarProducto'
 import { ModalCodigoBarras } from '@/components/movil/ModalCodigoBarras'
@@ -163,6 +163,9 @@ export function DetalleProducto({ productoId }: Props) {
     producto.stock_actual,
     producto.stock_minimo
   )
+  // Producto por peso: el stock se mide en kg y se muestra con decimales. Sin
+  // esto un stock de -4,777 kg se renderiza "-4.777" y se lee como -4777.
+  const porPeso = producto.venta_por_peso
   // El costo se gatea por el PERMISO 'costos' (consistente con la RLS de
   // costos_producto), no por el nombre del rol: así cualquier rol sin ese
   // permiso (cajero, fiambrero, roles nuevos) no ve el costo.
@@ -305,13 +308,13 @@ export function DetalleProducto({ productoId }: Props) {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <StatBlock
             etiqueta="Stock actual"
-            valor={String(producto.stock_actual)}
+            valor={formatearCantidad(producto.stock_actual, porPeso)}
             destacar={estadoStock !== 'normal'}
             badge={<BadgeEstadoStock estado={estadoStock} />}
           />
           <StatBlock
             etiqueta="Stock mínimo"
-            valor={String(producto.stock_minimo)}
+            valor={formatearCantidad(producto.stock_minimo, porPeso)}
           />
           <StatBlock
             etiqueta="Precio venta"
@@ -463,13 +466,15 @@ export function DetalleProducto({ productoId }: Props) {
                           )}
                         >
                           {esSuma ? '+' : '−'}
-                          {m.cantidad}
+                          {formatearCantidad(m.cantidad, porPeso)}
                         </TableCell>
                         <TableCell className="text-right text-[#391511] tabular-nums">
                           <span className="text-[#c8a58a] text-xs">
-                            {m.stock_anterior} →{' '}
+                            {formatearCantidad(m.stock_anterior, porPeso)} →{' '}
                           </span>
-                          <span className="font-semibold">{m.stock_nuevo}</span>
+                          <span className="font-semibold">
+                            {formatearCantidad(m.stock_nuevo, porPeso)}
+                          </span>
                         </TableCell>
                         <TableCell className="text-[#6f3a2a] text-xs">
                           <div className="font-medium text-[#391511]">
@@ -543,6 +548,7 @@ export function DetalleProducto({ productoId }: Props) {
           id: producto.id,
           nombre: producto.nombre,
           stock_actual: producto.stock_actual,
+          venta_por_peso: producto.venta_por_peso,
         }}
       />
 

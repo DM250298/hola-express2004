@@ -3216,6 +3216,8 @@ export type ConteoDiferenciaRow = {
   relevante: boolean
   reconteo_pendiente: boolean
   observaciones: string[]
+  /** true = las cantidades de la fila están en kg (migración 150). */
+  venta_por_peso: boolean
 }
 
 /** Resumen que devuelve fn_cerrar_sesion_conteo. */
@@ -4206,6 +4208,8 @@ export interface Database {
           stock_minimo: number
           proveedor_id: number | null
           proveedor_nombre: string | null
+          /** Agregado por la migración 129 (faltaba en estos tipos). */
+          venta_por_peso: boolean
         }[]
       }
       fn_costo_receta: {

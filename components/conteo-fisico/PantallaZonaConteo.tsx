@@ -26,6 +26,11 @@ import {
   type ProductoConteo,
 } from '@/lib/queries/conteoFisico'
 import {
+  formatearCantidad,
+  formatearNumero,
+  redondearCantidad,
+} from '@/lib/utils/formato'
+import {
   useCerrarZona,
   useConteosZona,
   useIniciarZona,
@@ -157,6 +162,9 @@ export function PantallaZonaConteo({ zonaId }: Props) {
     if (resultados.length === 1) elegirProducto(resultados[0], false)
   }
 
+  // El producto seleccionado manda la unidad: kg con decimales o unidades.
+  const porPeso = seleccionado?.venta_por_peso ?? false
+
   function guardar() {
     if (!zona || !seleccionado) return
     const valor = Number(cantidad)
@@ -164,11 +172,17 @@ export function PantallaZonaConteo({ zonaId }: Props) {
       toast.error('Cargá la cantidad contada (0 o más).')
       return
     }
+    // Un producto por unidad no admite fracciones: 12,5 u. es un typo, y
+    // redondearlo en silencio escondería un error de conteo.
+    if (!porPeso && !Number.isInteger(valor)) {
+      toast.error('Este producto se cuenta por unidad: cargá un número entero.')
+      return
+    }
     registrar.mutate(
       {
         zona_id: zona.id,
         producto_id: seleccionado.id,
-        cantidad: valor,
+        cantidad: redondearCantidad(valor, porPeso),
         observacion: observacion.trim() === '' ? null : observacion.trim(),
         es_reconteo: modoReconteo,
         nombre_producto: seleccionado.nombre,
@@ -300,10 +314,19 @@ export function PantallaZonaConteo({ zonaId }: Props) {
                     >
                       <span className="min-w-0 truncate text-sm font-medium text-[#391511]">
                         {prod.nombre}
+                        {prod.venta_por_peso && (
+                          <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                            Por kg
+                          </span>
+                        )}
                       </span>
                       {yaContado && (
                         <span className="shrink-0 rounded-lg bg-[#2f7d4f]/12 px-2 py-0.5 text-xs font-semibold text-[#2f7d4f]">
-                          ya: {yaContado.cantidad_contada}
+                          ya:{' '}
+                          {formatearCantidad(
+                            yaContado.cantidad_contada,
+                            prod.venta_por_peso
+                          )}
                         </span>
                       )}
                     </button>
@@ -325,41 +348,63 @@ export function PantallaZonaConteo({ zonaId }: Props) {
           )}
           <p className="text-lg font-bold leading-snug text-[#391511]">
             {seleccionado.nombre}
+            {porPeso && (
+              <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 align-middle text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                Por kg
+              </span>
+            )}
           </p>
           <div>
             <label className="text-[10px] font-semibold uppercase text-[#6f3a2a]">
-              ¿Cuántas unidades contaste en esta zona?
+              {porPeso
+                ? '¿Cuántos kg contaste en esta zona?'
+                : '¿Cuántas unidades contaste en esta zona?'}
             </label>
             <div className="mt-1 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => ajustarCantidad(-1)}
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511]"
-                aria-label="Restar uno"
-              >
-                <Minus className="h-5 w-5" />
-              </button>
+              {/* Los pesables no se cuentan de a 1: se pesa la mercadería y se
+                  carga el total en kg, así que los ± no aplican. */}
+              {!porPeso && (
+                <button
+                  type="button"
+                  onClick={() => ajustarCantidad(-1)}
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511]"
+                  aria-label="Restar uno"
+                >
+                  <Minus className="h-5 w-5" />
+                </button>
+              )}
               <Input
                 ref={inputCantidadRef}
                 type="number"
                 min="0"
-                step="any"
-                inputMode="decimal"
+                step={porPeso ? '0.001' : '1'}
+                inputMode={porPeso ? 'decimal' : 'numeric'}
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && guardar()}
-                placeholder="0"
+                placeholder={porPeso ? '0,000' : '0'}
                 className="h-14 border-[#e4c9b0] text-center text-2xl font-bold tabular-nums"
               />
-              <button
-                type="button"
-                onClick={() => ajustarCantidad(1)}
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511]"
-                aria-label="Sumar uno"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
+              {porPeso ? (
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15]">
+                  kg
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => ajustarCantidad(1)}
+                  className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511]"
+                  aria-label="Sumar uno"
+                >
+                  <Plus className="h-5 w-5" />
+                </button>
+              )}
             </div>
+            {porPeso && Number(cantidad) > 0 && (
+              <p className="mt-1 text-[10px] text-[#6f3a2a]">
+                = {formatearNumero(Math.round(Number(cantidad) * 1000))} g
+              </p>
+            )}
           </div>
           <div>
             <label className="text-[10px] font-semibold uppercase text-[#6f3a2a]">
@@ -448,6 +493,7 @@ export function PantallaZonaConteo({ zonaId }: Props) {
                         id: p.producto_id,
                         nombre: p.productos?.nombre ?? `Producto #${p.producto_id}`,
                         codigo_barras: null,
+                        venta_por_peso: p.productos?.venta_por_peso ?? false,
                       },
                       true
                     )
@@ -506,6 +552,7 @@ export function PantallaZonaConteo({ zonaId }: Props) {
                           id: o.producto_id,
                           nombre: o.productos?.nombre ?? `Producto #${o.producto_id}`,
                           codigo_barras: null,
+                          venta_por_peso: o.productos?.venta_por_peso ?? false,
                         },
                         false
                       )
@@ -521,7 +568,10 @@ export function PantallaZonaConteo({ zonaId }: Props) {
                       )}
                     </span>
                     <span className="shrink-0 font-bold tabular-nums text-[#391511]">
-                      {o.cantidad_contada}
+                      {formatearCantidad(
+                        o.cantidad_contada,
+                        o.productos?.venta_por_peso ?? false
+                      )}
                     </span>
                   </button>
                 </li>

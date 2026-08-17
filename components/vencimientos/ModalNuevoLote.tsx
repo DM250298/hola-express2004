@@ -31,8 +31,14 @@ import {
   clasificarVencimiento,
   diasHastaVencimiento,
 } from '@/lib/queries/vencimientos'
+import {
+  formatearCantidad,
+  formatearNumero,
+  pareceGramosEnKg,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 
-const esquema = z.object({
+const esquemaBase = z.object({
   producto_id: z
     .union([z.string(), z.number()])
     .transform((v) => Number(v))
@@ -44,10 +50,43 @@ const esquema = z.object({
   cantidad: z
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
-    .pipe(z.number().int('Solo enteros').min(1, 'Debe ser al menos 1')),
+    .pipe(z.number().positive('Debe ser mayor a 0')),
 })
 
-type DatosForm = z.input<typeof esquema>
+/**
+ * Un lote de producto por peso se carga en kg (mínimo 1 g); uno por unidad,
+ * en unidades enteras (mínimo 1). El flag sale del producto elegido, así que
+ * la regla va como refinement sobre el objeto ya parseado.
+ */
+function crearEsquemaLote(porPeso: boolean) {
+  return esquemaBase.superRefine((datos, ctx) => {
+    if (porPeso) {
+      if (datos.cantidad < 0.001) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['cantidad'],
+          message: 'Debe ser al menos 1 g (0,001 kg)',
+        })
+      }
+      return
+    }
+    if (!Number.isInteger(datos.cantidad)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cantidad'],
+        message: 'Solo enteros: este producto se vende por unidad',
+      })
+    } else if (datos.cantidad < 1) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cantidad'],
+        message: 'Debe ser al menos 1',
+      })
+    }
+  })
+}
+
+type DatosForm = z.input<typeof esquemaBase>
 
 interface Props {
   abierto: boolean
@@ -63,6 +102,16 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
   })
   const crear = useCrearLote()
   const [busqueda, setBusqueda] = useState('')
+  // Se espeja el producto elegido en estado propio (además del form) porque el
+  // esquema de validación depende de él y se arma ANTES del useForm.
+  const [productoSel, setProductoSel] = useState<string>(SIN_VALOR)
+
+  const productoElegido = useMemo(
+    () => (productos ?? []).find((p) => String(p.id) === productoSel) ?? null,
+    [productos, productoSel]
+  )
+  const porPeso = productoElegido?.venta_por_peso ?? false
+  const esquemaActual = useMemo(() => crearEsquemaLote(porPeso), [porPeso])
 
   const {
     register,
@@ -70,9 +119,10 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<DatosForm>({
-    resolver: zodResolver(esquema),
+    resolver: zodResolver(esquemaActual),
     defaultValues: {
       producto_id: SIN_VALOR,
       fecha_vencimiento: '',
@@ -88,6 +138,7 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
         cantidad: '',
       })
       setBusqueda('')
+      setProductoSel(SIN_VALOR)
     }
   }, [abierto, reset])
 
@@ -104,6 +155,9 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
       .slice(0, 50)
   }, [productos, busqueda])
 
+  const cantidadCruda = String(watch('cantidad') ?? '')
+  const cantidadNum = Number(cantidadCruda) || 0
+
   const fechaVisible = watch('fecha_vencimiento')
   const previewClase = useMemo(() => {
     if (!fechaVisible || !/^\d{4}-\d{2}-\d{2}$/.test(fechaVisible)) return null
@@ -117,12 +171,12 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
 
   function onSubmit(datos: DatosForm) {
     if (!usuario) return
-    const validado = esquema.parse(datos)
+    const validado = esquemaActual.parse(datos)
     crear.mutate(
       {
         producto_id: validado.producto_id,
         fecha_vencimiento: validado.fecha_vencimiento,
-        cantidad: validado.cantidad,
+        cantidad: redondearCantidad(validado.cantidad, porPeso),
         usuario_id: usuario.id,
       },
       {
@@ -172,7 +226,10 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
                       ? SIN_VALOR
                       : String(field.value)
                   }
-                  onValueChange={field.onChange}
+                  onValueChange={(v) => {
+                    field.onChange(v)
+                    setProductoSel(v ?? SIN_VALOR)
+                  }}
                   disabled={crear.isPending || cargandoProductos}
                 >
                   <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
@@ -242,16 +299,23 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
               htmlFor="cantidad"
               className="text-[#391511] font-medium text-sm"
             >
-              Cantidad <span className="text-[#c43e2c]">*</span>
+              Cantidad
+              {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}{' '}
+              <span className="text-[#c43e2c]">*</span>
+              {porPeso && (
+                <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                  Por kg
+                </span>
+              )}
             </Label>
             <Input
               id="cantidad"
               type="number"
-              inputMode="numeric"
-              min="1"
-              step="1"
+              inputMode={porPeso ? 'decimal' : 'numeric'}
+              min={porPeso ? '0.001' : '1'}
+              step={porPeso ? '0.001' : '1'}
               {...register('cantidad')}
-              placeholder="Ej: 24"
+              placeholder={porPeso ? '0,000' : 'Ej: 24'}
               disabled={crear.isPending}
               className="h-12 text-xl font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
@@ -259,6 +323,28 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
               <p className="text-[#c43e2c] text-xs">
                 {errors.cantidad.message}
               </p>
+            )}
+            {/* Un entero grande en un campo de KILOS suele ser el peso en
+                gramos leído de la balanza. */}
+            {porPeso && cantidadNum > 0 && (
+              pareceGramosEnKg(cantidadCruda) ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setValue('cantidad', String(cantidadNum / 1000), {
+                      shouldValidate: true,
+                    })
+                  }
+                  className="w-full rounded-md border border-[#c43e2c]/50 bg-[#c43e2c]/10 px-2 py-1 text-[11px] font-bold text-[#c43e2c] transition-colors hover:bg-[#c43e2c]/20"
+                >
+                  ¿{formatearNumero(cantidadNum)} KILOS? Eran gramos → usar{' '}
+                  {formatearCantidad(cantidadNum / 1000, true)}
+                </button>
+              ) : (
+                <p className="text-[10px] text-[#6f3a2a]">
+                  = {formatearNumero(Math.round(cantidadNum * 1000))} g
+                </p>
+              )
             )}
             <p className="text-[#6f3a2a] text-xs">
               Se sumará al stock del producto y queda registrado el movimiento.

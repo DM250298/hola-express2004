@@ -25,10 +25,12 @@ export function ResumenVencimientos() {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* El total mezcla productos por unidad y por kilo: el sufijo lo dice en
+          vez de mentir con "unidades". */}
       <CardKPI
         etiqueta="Próximas a vencer (<7 días)"
         valor={formatearNumero(resumen?.unidades_por_vencer ?? 0)}
-        sufijo={resumen?.unidades_por_vencer === 1 ? 'unidad' : 'unidades'}
+        sufijo="u. + kg"
         icono={AlertTriangle}
         color="#e4a42a"
         bgColor="bg-[#e4a42a]/10"
@@ -37,7 +39,7 @@ export function ResumenVencimientos() {
       <CardKPI
         etiqueta={`Mermas de ${mesEnCurso}`}
         valor={formatearNumero(resumen?.mermas_mes_unidades ?? 0)}
-        sufijo={resumen?.mermas_mes_unidades === 1 ? 'unidad' : 'unidades'}
+        sufijo="u. + kg"
         icono={Package}
         color="#6f3a2a"
         bgColor="bg-white"

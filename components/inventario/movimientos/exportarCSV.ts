@@ -1,8 +1,12 @@
-import { formatearFechaHora } from '@/lib/utils/formato'
+import { formatearFechaHora, formatearNumero } from '@/lib/utils/formato'
 import type { MovimientoCompleto } from '@/lib/queries/movimientosStock'
 
 /**
  * Exporta la lista de movimientos a un archivo CSV y lo descarga.
+ *
+ * Las cantidades van con `formatearNumero` (es-AR) y no con `String()`: los
+ * productos por peso guardan decimales, y `String(4.777)` da "4.777", que
+ * Excel en es-AR lee como cuatro mil setecientos setenta y siete kilos.
  */
 export function exportarMovimientosCSV(movimientos: MovimientoCompleto[]) {
   const encabezados = [
@@ -12,6 +16,7 @@ export function exportarMovimientosCSV(movimientos: MovimientoCompleto[]) {
     'Categoría',
     'Tipo',
     'Cantidad',
+    'Unidad',
     'Stock anterior',
     'Stock nuevo',
     'Origen',
@@ -25,9 +30,10 @@ export function exportarMovimientosCSV(movimientos: MovimientoCompleto[]) {
     m.producto_codigo_barras ?? '',
     m.categoria_nombre ?? '',
     m.tipo,
-    String(m.cantidad),
-    String(m.stock_anterior),
-    String(m.stock_nuevo),
+    formatearNumero(m.cantidad),
+    m.producto_por_peso ? 'kg' : 'u.',
+    formatearNumero(m.stock_anterior),
+    formatearNumero(m.stock_nuevo),
     m.origen_label,
     m.turno,
     m.usuario_nombre ?? '',

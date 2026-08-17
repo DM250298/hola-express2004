@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { formatearCantidad } from '@/lib/utils/formato'
 import type {
   FiltrosInventario,
   ProductoConStock,
@@ -164,6 +165,14 @@ export function TablaStock({
                               por vencer
                             </span>
                           )}
+                          {p.venta_por_peso && (
+                            <span
+                              className="inline-flex items-center rounded-full bg-[#f9b44c]/20 text-[#9e6b15] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
+                              title="Se vende por peso: el stock está en kilos"
+                            >
+                              Por kg
+                            </span>
+                          )}
                           {p.pendiente_precio && (
                             <span
                               className="inline-flex items-center gap-0.5 rounded-full bg-[#c43e2c]/12 text-[#c43e2c] text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
@@ -189,10 +198,10 @@ export function TablaStock({
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-semibold text-[#391511] text-base">
-                      {p.stock_actual}
+                      {formatearCantidad(p.stock_actual, p.venta_por_peso)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                      {p.stock_minimo}
+                      {formatearCantidad(p.stock_minimo, p.venta_por_peso)}
                     </TableCell>
                     {puedeVerCosto && (
                       <TableCell className="text-right tabular-nums text-[#6f3a2a]">

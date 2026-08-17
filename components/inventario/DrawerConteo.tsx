@@ -27,6 +27,11 @@ import {
   useConteoDetalle,
   useGuardarConteoEmpleado,
 } from '@/lib/hooks/useConteos'
+import {
+  cantidadesIguales,
+  formatearCantidad,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -70,9 +75,15 @@ export function DrawerConteo({ conteoId, onCambioAbierto }: Props) {
 
   function enviarConteo() {
     if (!conteo) return
+    // Un producto por unidad se redondea a entero; uno por peso conserva los
+    // kg (el Math.floor de antes truncaba 1,5 kg a 1 kg SIN AVISAR y generaba
+    // un ajuste fantasma de −0,5 kg al aprobar el conteo).
     const payload = items.map((it) => ({
       itemId: it.id,
-      cantidad: Math.max(0, Math.floor(Number(conteos[it.id]) || 0)),
+      cantidad: Math.max(
+        0,
+        redondearCantidad(Number(conteos[it.id]) || 0, it.venta_por_peso)
+      ),
     }))
     guardar.mutate(
       { conteoId: conteo.id, conteos: payload },
@@ -140,6 +151,11 @@ export function DrawerConteo({ conteoId, onCambioAbierto }: Props) {
                     <TableCell>
                       <div className="font-medium text-[#391511] text-sm">
                         {it.producto_nombre}
+                        {it.venta_por_peso && (
+                          <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                            Por kg
+                          </span>
+                        )}
                       </div>
                       {it.producto_codigo && (
                         <div className="text-[#c8a58a] text-xs font-mono">
@@ -151,7 +167,8 @@ export function DrawerConteo({ conteoId, onCambioAbierto }: Props) {
                       <Input
                         type="number"
                         min="0"
-                        inputMode="numeric"
+                        step={it.venta_por_peso ? '0.001' : '1'}
+                        inputMode={it.venta_por_peso ? 'decimal' : 'numeric'}
                         value={conteos[it.id] ?? ''}
                         onChange={(e) =>
                           setConteos((prev) => ({
@@ -159,7 +176,7 @@ export function DrawerConteo({ conteoId, onCambioAbierto }: Props) {
                             [it.id]: e.target.value,
                           }))
                         }
-                        placeholder="0"
+                        placeholder={it.venta_por_peso ? '0,000' : '0'}
                         className="h-9 w-24 text-center tabular-nums border-[#e4c9b0] ml-auto"
                       />
                     </TableCell>
@@ -190,12 +207,26 @@ export function DrawerConteo({ conteoId, onCambioAbierto }: Props) {
                 {items.map((it) => {
                   const contado = it.cantidad_contada
                   const dif =
-                    contado != null ? contado - it.stock_sistema : null
+                    contado != null
+                      ? redondearCantidad(
+                          contado - it.stock_sistema,
+                          it.venta_por_peso
+                        )
+                      : null
+                  // Con kilos la diferencia se compara con tolerancia: restar
+                  // decimales arrastra ruido de float y un 1e-16 pintaría de
+                  // rojo un conteo que en realidad dio exacto.
+                  const sinDiferencia = dif != null && cantidadesIguales(dif, 0)
                   return (
                     <TableRow key={it.id} className="border-b-[#e4c9b0]/40">
                       <TableCell>
                         <div className="font-medium text-[#391511] text-sm">
                           {it.producto_nombre}
+                          {it.venta_por_peso && (
+                            <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                              Por kg
+                            </span>
+                          )}
                         </div>
                         {it.producto_codigo && (
                           <div className="text-[#c8a58a] text-xs font-mono">
@@ -204,24 +235,28 @@ export function DrawerConteo({ conteoId, onCambioAbierto }: Props) {
                         )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                        {it.stock_sistema}
+                        {formatearCantidad(it.stock_sistema, it.venta_por_peso)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-semibold text-[#391511]">
-                        {contado ?? '—'}
+                        {contado == null
+                          ? '—'
+                          : formatearCantidad(contado, it.venta_por_peso)}
                       </TableCell>
                       <TableCell
                         className={cn(
                           'text-right tabular-nums font-bold',
                           dif == null
                             ? 'text-[#c8a58a]'
-                            : dif === 0
+                            : sinDiferencia
                               ? 'text-[#6f3a2a]'
                               : dif > 0
                                 ? 'text-[#2f8f4e]'
                                 : 'text-[#c43e2c]'
                         )}
                       >
-                        {dif == null ? '—' : dif > 0 ? `+${dif}` : dif}
+                        {dif == null
+                          ? '—'
+                          : `${dif > 0 ? '+' : ''}${formatearCantidad(dif, it.venta_por_peso)}`}
                       </TableCell>
                     </TableRow>
                   )

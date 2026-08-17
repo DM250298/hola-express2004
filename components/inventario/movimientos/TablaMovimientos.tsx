@@ -2,7 +2,7 @@
 
 import { Badge } from '@/components/ui/badge'
 import { formatearFechaHora } from '@/lib/utils/formato'
-import { formatearNumero } from '@/lib/utils/formato'
+import { formatearCantidad } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 import type { TipoMovimiento } from '@/types/database'
 import type { MovimientoCompleto, Turno } from '@/lib/queries/movimientosStock'
@@ -70,7 +70,7 @@ function cantidadConSigno(mov: MovimientoCompleto): {
 
   const signo = esPositivo ? '+' : '−'
   return {
-    texto: `${signo}${formatearNumero(mov.cantidad)}`,
+    texto: `${signo}${formatearCantidad(mov.cantidad, mov.producto_por_peso)}`,
     positivo: esPositivo,
   }
 }
@@ -162,9 +162,10 @@ export function TablaMovimientos({ movimientos }: Props) {
                     {cantTexto}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-[#6f3a2a] text-xs">
-                    {formatearNumero(mov.stock_anterior)} →{' '}
+                    {formatearCantidad(mov.stock_anterior, mov.producto_por_peso)}{' '}
+                    →{' '}
                     <span className="font-bold text-[#391511]">
-                      {formatearNumero(mov.stock_nuevo)}
+                      {formatearCantidad(mov.stock_nuevo, mov.producto_por_peso)}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-[#6f3a2a] text-xs max-w-[200px] truncate">

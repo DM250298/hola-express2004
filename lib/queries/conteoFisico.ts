@@ -88,7 +88,7 @@ export async function getZonaConteo(zonaId: number): Promise<ZonaConSesion | nul
 }
 
 export type ConteoDetalleConProducto = ConteoDetalleRow & {
-  productos: { nombre: string } | null
+  productos: { nombre: string; venta_por_peso: boolean } | null
 }
 
 export async function getConteosZona(
@@ -102,7 +102,7 @@ export async function getConteosZona(
   for (let desde = 0; ; desde += PAGINA) {
     const { data, error } = await supabase
       .from('conteo_detalle')
-      .select('*, productos(nombre)')
+      .select('*, productos(nombre, venta_por_peso)')
       .eq('zona_id', zonaId)
       .order('ts', { ascending: false })
       .order('id', { ascending: false })
@@ -145,12 +145,15 @@ export async function getItemsPorZona(
 
 // ─── Búsqueda de productos para la pantalla de conteo ────────────────────────
 // Selección mínima a propósito: la pantalla del empleado es CIEGA, acá no se
-// pide stock ni precios — solo lo necesario para identificar el producto.
+// pide stock ni precios — solo lo necesario para identificar el producto y
+// saber en qué unidad se cuenta (kg o unidades).
 
 export interface ProductoConteo {
   id: number
   nombre: string
   codigo_barras: string | null
+  /** true = se cuenta en kg: la cantidad admite hasta 3 decimales. */
+  venta_por_peso: boolean
 }
 
 export async function buscarProductosParaConteo(
@@ -162,7 +165,7 @@ export async function buscarProductosParaConteo(
   const patron = `%${q.replaceAll(',', ' ')}%`
   const { data, error } = await supabase
     .from('productos')
-    .select('id, nombre, codigo_barras')
+    .select('id, nombre, codigo_barras, venta_por_peso')
     .eq('activo', true)
     .eq('controlar_stock', true)
     .or(`nombre.ilike.${patron},codigo_barras.ilike.${patron}`)
@@ -180,7 +183,7 @@ export async function getProductoConteoPorCodigo(
   if (!cod) return null
   const { data, error } = await supabase
     .from('productos')
-    .select('id, nombre, codigo_barras')
+    .select('id, nombre, codigo_barras, venta_por_peso')
     .eq('activo', true)
     .or(`codigo_barras.eq.${cod},codigo_barras_2.eq.${cod}`)
     .limit(1)

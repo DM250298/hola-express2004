@@ -27,6 +27,8 @@ export interface ProductoConStock {
   stock_actual: number
   stock_minimo: number
   activo: boolean
+  /** true = el stock se mide en kg (se muestra con decimales, no en unidades). */
+  venta_por_peso: boolean
   /** Alta al vuelo sin precio: visible pero no vendible hasta completarlo. */
   pendiente_precio: boolean
   categoria_nombre: string | null
@@ -126,6 +128,7 @@ export async function getProductosConStock(
     stock_actual: number
     stock_minimo: number
     activo: boolean
+    venta_por_peso: boolean
     pendiente_precio: boolean
     categorias: { nombre: string } | null
     proveedores: { nombre: string } | null
@@ -138,7 +141,7 @@ export async function getProductosConStock(
       let q = supabase
         .from('productos')
         .select(
-          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, margen, stock_actual, stock_minimo, activo, pendiente_precio, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
+          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, margen, stock_actual, stock_minimo, activo, venta_por_peso, pendiente_precio, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
         )
       if (filtros.activo !== undefined) q = q.eq('activo', filtros.activo)
       else if (filtros.solo_activos !== false) q = q.eq('activo', true)
@@ -168,6 +171,7 @@ export async function getProductosConStock(
       stock_actual: p.stock_actual,
       stock_minimo: p.stock_minimo,
       activo: p.activo,
+      venta_por_peso: p.venta_por_peso,
       pendiente_precio: p.pendiente_precio,
       categoria_nombre: p.categorias?.nombre ?? null,
       proveedor_nombre: p.proveedores?.nombre ?? null,

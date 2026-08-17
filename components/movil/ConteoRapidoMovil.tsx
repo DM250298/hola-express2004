@@ -8,6 +8,11 @@ import { Input } from '@/components/ui/input'
 import { getProductoByBarcode } from '@/lib/queries/productos'
 import { useCrearAjusteStock } from '@/lib/hooks/useAjustesStock'
 import type { ItemAjustePayload } from '@/lib/queries/ajustesStock'
+import {
+  cantidadesIguales,
+  formatearCantidad,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import { EscanerCamara } from './EscanerCamara'
 
 interface ItemConteo {
@@ -18,6 +23,8 @@ interface ItemConteo {
   precio_costo: number
   /** Lo que la encargada cuenta en góndola (input controlado). */
   contado: string
+  /** true = se cuenta en kg: la cantidad admite hasta 3 decimales. */
+  venta_por_peso: boolean
 }
 
 interface Props {
@@ -40,6 +47,16 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
    * sube arriba (ej: contó una góndola y encontró más unidades en otra).
    */
   function sumarEscaneado(item: ItemConteo) {
+    // Los pesables no se cuentan de a 1: se pesa la mercadería y se carga el
+    // total en kg, así que re-escanear solo lo sube arriba de la lista.
+    if (item.venta_por_peso) {
+      setItems((prev) => [
+        item,
+        ...prev.filter((it) => it.producto_id !== item.producto_id),
+      ])
+      toast.info(`${item.nombre} se cuenta por peso: cargá los kg a mano.`)
+      return
+    }
     const nuevoValor = (Number(item.contado) || 0) + 1
     setItems((prev) => [
       { ...item, contado: String(nuevoValor) },
@@ -75,6 +92,7 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
           stock_sistema: Number(prod.stock_actual),
           precio_costo: Number(prod.precio_costo ?? 0),
           contado: '',
+          venta_por_peso: prod.venta_por_peso,
         },
         ...prev,
       ])
@@ -110,12 +128,15 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
   }
 
   // Items con un conteo válido que difiere del sistema (los que se ajustan).
+  // La diferencia se mide con tolerancia de 1 g y no con `!==`: restar kilos
+  // arrastra ruido de float y un pesable contado EXACTO se colaría como ajuste.
   const itemsConDiferencia = items.filter(
     (it) =>
       it.contado.trim() !== '' &&
       !Number.isNaN(Number(it.contado)) &&
       Number(it.contado) >= 0 &&
-      Number(it.contado) !== it.stock_sistema
+      (it.venta_por_peso || Number.isInteger(Number(it.contado))) &&
+      !cantidadesIguales(Number(it.contado), it.stock_sistema)
   )
 
   function confirmar() {
@@ -131,7 +152,7 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
       producto_id: it.producto_id,
       nombre: it.nombre,
       tipo: 'ajuste',
-      cantidad: Number(it.contado),
+      cantidad: redondearCantidad(Number(it.contado), it.venta_por_peso),
       stock_actual: it.stock_sistema,
       precio_costo: it.precio_costo,
     }))
@@ -164,15 +185,18 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-[#e4c9b0] bg-white/60 p-6 text-center text-sm text-[#6f3a2a]">
           Todavía no escaneaste nada. El primer escaneo agrega el producto y ahí
-          cargás cuántas unidades contaste. Si lo volvés a escanear (por ejemplo
-          porque encontraste más en otra góndola), suma +1.
+          cargás cuánto contaste. Si lo volvés a escanear (por ejemplo porque
+          encontraste más en otra góndola), suma +1 — salvo los productos por
+          peso, donde los kg se cargan a mano.
         </p>
       ) : (
         <ul className="space-y-2">
           {items.map((it) => {
             const cont = it.contado.trim() === '' ? null : Number(it.contado)
             const dif =
-              cont != null && !Number.isNaN(cont) ? cont - it.stock_sistema : null
+              cont != null && !Number.isNaN(cont)
+                ? redondearCantidad(cont - it.stock_sistema, it.venta_por_peso)
+                : null
             return (
               <li
                 key={it.producto_id}
@@ -182,11 +206,16 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold text-[#391511]">
                       {it.nombre}
+                      {it.venta_por_peso && (
+                        <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                          Por kg
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-[#6f3a2a]">
                       Sistema:{' '}
                       <span className="font-semibold tabular-nums">
-                        {it.stock_sistema}
+                        {formatearCantidad(it.stock_sistema, it.venta_por_peso)}
                       </span>
                     </p>
                   </div>
@@ -203,40 +232,52 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
                   <div className="flex-1">
                     <label className="text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
                       Conté en góndola
+                      {it.venta_por_peso && (
+                        <span className="text-[#9e6b15]"> (kg)</span>
+                      )}
                     </label>
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => ajustarContado(it.producto_id, -1)}
-                        disabled={cont == null || cont <= 0}
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511] transition active:scale-95 disabled:opacity-40"
-                        aria-label="Restar 1"
-                      >
-                        <Minus className="h-5 w-5" />
-                      </button>
+                      {/* Los pesables se pesan y se carga el total: ±1 no aplica. */}
+                      {!it.venta_por_peso && (
+                        <button
+                          type="button"
+                          onClick={() => ajustarContado(it.producto_id, -1)}
+                          disabled={cont == null || cont <= 0}
+                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511] transition active:scale-95 disabled:opacity-40"
+                          aria-label="Restar 1"
+                        >
+                          <Minus className="h-5 w-5" />
+                        </button>
+                      )}
                       <Input
                         type="number"
                         min="0"
-                        step="1"
-                        inputMode="numeric"
+                        step={it.venta_por_peso ? '0.001' : '1'}
+                        inputMode={it.venta_por_peso ? 'decimal' : 'numeric'}
                         value={it.contado}
                         onChange={(e) =>
                           actualizarContado(it.producto_id, e.target.value)
                         }
-                        placeholder="0"
+                        placeholder={it.venta_por_peso ? '0,000' : '0'}
                         className="h-12 border-[#e4c9b0] text-center text-lg tabular-nums focus-visible:ring-[#f9b44c]"
                       />
-                      <button
-                        type="button"
-                        onClick={() => ajustarContado(it.producto_id, 1)}
-                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511] transition active:scale-95"
-                        aria-label="Sumar 1"
-                      >
-                        <Plus className="h-5 w-5" />
-                      </button>
+                      {it.venta_por_peso ? (
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15]">
+                          kg
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => ajustarContado(it.producto_id, 1)}
+                          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-white text-[#391511] transition active:scale-95"
+                          aria-label="Sumar 1"
+                        >
+                          <Plus className="h-5 w-5" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                  {dif != null && dif !== 0 && (
+                  {dif != null && !cantidadesIguales(dif, 0) && (
                     <span
                       className={
                         dif > 0
@@ -245,7 +286,7 @@ export function ConteoRapidoMovil({ usuarioId }: Props) {
                       }
                     >
                       {dif > 0 ? '+' : ''}
-                      {dif}
+                      {formatearCantidad(dif, it.venta_por_peso)}
                     </span>
                   )}
                 </div>

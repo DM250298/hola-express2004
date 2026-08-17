@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowDown, ArrowUp, Loader2, RefreshCcw } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Loader2, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,14 +18,20 @@ import {
 } from '@/components/ui/dialog'
 import { useAjustarStock } from '@/lib/hooks/useInventario'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import {
+  formatearCantidad,
+  formatearNumero,
+  pareceGramosEnKg,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
-const esquema = z.object({
+const esquemaBase = z.object({
   tipo: z.enum(['entrada', 'salida', 'ajuste']),
   cantidad: z
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
-    .pipe(z.number().int('Solo enteros').min(0, 'No puede ser negativo')),
+    .pipe(z.number().min(0, 'No puede ser negativo')),
   nota: z
     .string()
     .trim()
@@ -33,7 +39,25 @@ const esquema = z.object({
     .max(300, 'Máximo 300 caracteres'),
 })
 
-type DatosForm = z.input<typeof esquema>
+/**
+ * El producto por unidad sigue exigiendo enteros; el que se vende por peso
+ * acepta kilos con decimales (la columna es numeric(12,3) y el RPC opera en
+ * numeric). Como `venta_por_peso` llega por prop y no es un campo del form, la
+ * regla va como refinement sobre el objeto ya parseado.
+ */
+function crearEsquemaAjuste(porPeso: boolean) {
+  return esquemaBase.superRefine((datos, ctx) => {
+    if (!porPeso && !Number.isInteger(datos.cantidad)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['cantidad'],
+        message: 'Solo enteros: este producto se vende por unidad',
+      })
+    }
+  })
+}
+
+type DatosForm = z.input<typeof esquemaBase>
 
 interface Props {
   abierto: boolean
@@ -42,6 +66,8 @@ interface Props {
     id: number
     nombre: string
     stock_actual: number
+    /** true = el stock se mide en kg: la cantidad admite hasta 3 decimales. */
+    venta_por_peso: boolean
   } | null
 }
 
@@ -79,12 +105,16 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
   const { data: usuario } = useUsuario()
   const ajustar = useAjustarStock()
 
+  const porPeso = producto?.venta_por_peso ?? false
+  const esquema = useMemo(() => crearEsquemaAjuste(porPeso), [porPeso])
+
   const {
     register,
     control,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<DatosForm>({
     resolver: zodResolver(esquema),
@@ -98,17 +128,18 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
   }, [abierto, reset])
 
   const tipoActual = watch('tipo')
-  const cantidadActual = Number(watch('cantidad')) || 0
+  const cantidadCruda = String(watch('cantidad') ?? '')
+  const cantidadActual = Number(cantidadCruda) || 0
 
   function calcularStockResultante(): number | null {
     if (!producto || !cantidadActual) return null
     switch (tipoActual) {
       case 'entrada':
-        return producto.stock_actual + cantidadActual
+        return redondearCantidad(producto.stock_actual + cantidadActual, porPeso)
       case 'salida':
-        return producto.stock_actual - cantidadActual
+        return redondearCantidad(producto.stock_actual - cantidadActual, porPeso)
       case 'ajuste':
-        return cantidadActual
+        return redondearCantidad(cantidadActual, porPeso)
     }
   }
 
@@ -121,7 +152,7 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
       {
         producto_id: producto.id,
         tipo: validado.tipo,
-        cantidad: validado.cantidad,
+        cantidad: redondearCantidad(validado.cantidad, porPeso),
         nota: validado.nota,
         usuario_id: usuario.id,
       },
@@ -145,10 +176,15 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
             <span className="font-medium text-[#391511]">{producto.nombre}</span>
+            {porPeso && (
+              <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                Por kg
+              </span>
+            )}
             {' · '}
             Stock actual:{' '}
             <span className="font-bold text-[#391511] tabular-nums">
-              {producto.stock_actual}
+              {formatearCantidad(producto.stock_actual, porPeso)}
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -202,23 +238,53 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
           {/* Cantidad */}
           <div className="space-y-1.5">
             <Label htmlFor="cantidad" className="text-[#391511] font-medium text-sm">
-              {tipoActual === 'ajuste' ? 'Nuevo stock total' : 'Cantidad'}{' '}
+              {tipoActual === 'ajuste' ? 'Nuevo stock total' : 'Cantidad'}
+              {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}{' '}
               <span className="text-[#c43e2c]">*</span>
             </Label>
             <Input
               id="cantidad"
               type="number"
-              inputMode="numeric"
+              inputMode={porPeso ? 'decimal' : 'numeric'}
               min="0"
-              step="1"
+              step={porPeso ? '0.001' : '1'}
               {...register('cantidad')}
-              placeholder="0"
+              placeholder={porPeso ? '0,000' : '0'}
               disabled={ajustar.isPending}
               autoFocus
               className="h-12 text-xl font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
             {errors.cantidad && (
               <p className="text-[#c43e2c] text-xs">{errors.cantidad.message}</p>
+            )}
+            {/* Un entero grande tipeado en un campo de KILOS suele ser el peso
+                en gramos leído de la balanza (3805 por 3,805 kg). */}
+            {porPeso && cantidadActual > 0 && (
+              pareceGramosEnKg(cantidadCruda) ? (
+                <div className="rounded-lg border-2 border-[#c43e2c]/60 bg-[#c43e2c]/10 p-2 space-y-1.5">
+                  <p className="text-[11px] font-bold text-[#c43e2c] flex items-start gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    ¿{formatearNumero(cantidadActual)} KILOS? Parece un peso en
+                    gramos de la balanza.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setValue('cantidad', String(cantidadActual / 1000), {
+                        shouldValidate: true,
+                      })
+                    }
+                    className="w-full rounded-md border border-[#c43e2c]/50 bg-white px-2 py-1 text-[11px] font-bold text-[#c43e2c] transition-colors hover:bg-[#c43e2c]/10"
+                  >
+                    Eran gramos → usar{' '}
+                    {formatearCantidad(cantidadActual / 1000, true)}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[10px] text-[#6f3a2a]">
+                  = {formatearNumero(Math.round(cantidadActual * 1000))} g
+                </p>
+              )
             )}
             {stockResultante !== null && (
               <div
@@ -231,7 +297,7 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
               >
                 <span className="font-medium">Stock resultante</span>
                 <span className="font-extrabold text-base tabular-nums">
-                  {stockResultante}
+                  {formatearCantidad(stockResultante, porPeso)}
                 </span>
               </div>
             )}
