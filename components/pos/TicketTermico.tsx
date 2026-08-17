@@ -2,7 +2,11 @@
 
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { etiquetaMedioFallback } from '@/lib/utils/iconosMedioPago'
-import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaHora,
+  formatearMonto,
+} from '@/lib/utils/formato'
 import type { VentaCompleta } from '@/lib/queries/ventas'
 
 interface Props {
@@ -59,22 +63,34 @@ export function TicketTermico({ venta, vuelto, nombreCajero }: Props) {
 
         {/* Detalle de productos */}
         <div>
-          {venta.items.map((it) => (
-            <div className="ticket-item" key={it.producto_id}>
-              <span className="ticket-item-cant">{it.cantidad}×</span>
-              <span className="ticket-item-nombre">
-                {it.nombre}
-                {it.cantidad > 1 && (
-                  <span className="ticket-item-unit">
-                    {formatearMonto(it.precio_unitario)} c/u
-                  </span>
-                )}
-              </span>
-              <span className="ticket-item-precio">
-                {formatearMonto(it.subtotal)}
-              </span>
-            </div>
-          ))}
+          {venta.items.map((it) => {
+            const porPeso = it.venta_por_peso ?? false
+            return (
+              <div className="ticket-item" key={it.producto_id}>
+                <span className="ticket-item-cant">
+                  {porPeso
+                    ? formatearCantidad(it.cantidad, true)
+                    : `${it.cantidad}×`}
+                </span>
+                <span className="ticket-item-nombre">
+                  {it.nombre}
+                  {/* En un producto por peso el precio por kilo va SIEMPRE:
+                      es lo que le permite al cliente verificar el subtotal
+                      contra lo que marcó la balanza. Por unidad solo se
+                      aclara si se llevó más de una. */}
+                  {(porPeso || it.cantidad > 1) && (
+                    <span className="ticket-item-unit">
+                      {formatearMonto(it.precio_unitario)}{' '}
+                      {porPeso ? '/kg' : 'c/u'}
+                    </span>
+                  )}
+                </span>
+                <span className="ticket-item-precio">
+                  {formatearMonto(it.subtotal)}
+                </span>
+              </div>
+            )
+          })}
         </div>
 
         <hr className="ticket-sep ticket-sep-fuerte" />

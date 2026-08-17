@@ -385,6 +385,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       precio_unitario: it.precio_unitario,
       stock_actual: it.stock_disponible,
       nombre: it.nombre,
+      venta_por_peso: it.venta_por_peso,
     }))
 
     crearVenta.mutate(
@@ -429,6 +430,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       precio_unitario: it.precio_unitario,
       stock_actual: it.stock_disponible,
       nombre: it.nombre,
+      venta_por_peso: it.venta_por_peso,
     }))
     // Si hay un cobro parcial pre-cargado (modo "mixto"), combinamos los
     // pagos no-maquinita con la línea de la maquinita aprobada.

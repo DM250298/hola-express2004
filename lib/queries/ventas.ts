@@ -5,10 +5,14 @@ import type { Json, MedioPago, VentaRow } from '@/types/database'
 
 export interface ItemVentaPayload {
   producto_id: number
+  /** Unidades, o kilos con hasta 3 decimales si `venta_por_peso`. */
   cantidad: number
+  /** Precio por unidad, o por kilo si `venta_por_peso`. */
   precio_unitario: number
   stock_actual: number
   nombre: string
+  /** true = se vendió por peso: el ticket imprime kg y el precio por kilo. */
+  venta_por_peso: boolean
 }
 
 export interface PagoPayload {
@@ -76,6 +80,8 @@ export interface VentaCompleta {
     cantidad: number
     precio_unitario: number
     subtotal: number
+    /** true = cantidad en kg y precio_unitario por kilo. */
+    venta_por_peso: boolean
   }>
   pagos: PagoPayload[]
   total: number
@@ -118,6 +124,9 @@ function detalleItems(items: ItemVentaPayload[]) {
     cantidad: it.cantidad,
     precio_unitario: it.precio_unitario,
     subtotal: it.precio_unitario * it.cantidad,
+    // `?? false` por las ventas que quedaron encoladas en IndexedDB con una
+    // versión anterior del payload, que no traía el flag.
+    venta_por_peso: it.venta_por_peso ?? false,
   }))
 }
 
