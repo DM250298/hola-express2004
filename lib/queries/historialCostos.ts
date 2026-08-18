@@ -64,19 +64,38 @@ export async function getHistorialCostos(
 export interface ConfigCompras {
   umbral_variacion_costo: number
   exige_factura: boolean
+  /** Defaults de reposición por cobertura (mig 151). */
+  dias_cobertura_objetivo_default: number
+  dias_seguridad_default: number
+  frecuencia_reposicion_default: number
+  /** Umbral fijo de sobrestock en días; null = 2 × cobertura objetivo. */
+  umbral_sobrestock_dias: number | null
 }
 
 export async function getConfigCompras(): Promise<ConfigCompras> {
   const supabase = createClient()
+  // select('*') a propósito: si la migración 151 todavía no corrió, las
+  // columnas nuevas no existen y un select explícito rompería toda la tab.
   const { data, error } = await supabase
     .from('config_compras')
-    .select('umbral_variacion_costo, exige_factura')
+    .select('*')
     .eq('id', 1)
     .maybeSingle()
   if (error) throw error
   return {
     umbral_variacion_costo: Number(data?.umbral_variacion_costo ?? 10),
     exige_factura: data?.exige_factura ?? true,
+    dias_cobertura_objetivo_default: Number(
+      data?.dias_cobertura_objetivo_default ?? 14
+    ),
+    dias_seguridad_default: Number(data?.dias_seguridad_default ?? 2),
+    frecuencia_reposicion_default: Number(
+      data?.frecuencia_reposicion_default ?? 7
+    ),
+    umbral_sobrestock_dias:
+      data?.umbral_sobrestock_dias != null
+        ? Number(data.umbral_sobrestock_dias)
+        : null,
   }
 }
 

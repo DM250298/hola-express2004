@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Package, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -65,6 +65,27 @@ export function ModalCatalogoProveedor({
     const n = Number(raw)
     if (Number.isNaN(n) || n < 0 || n === valorActual) return
     actualizar.mutate({ id, datos: { costo: n } })
+  }
+
+  // Edición local de la presentación de compra (unidades por bulto, mig 151)
+  const [multiplos, setMultiplos] = useState<Record<number, string>>({})
+
+  // Los buffers locales se limpian en cada apertura/cambio de proveedor:
+  // sin esto, un valor tipeado en una sesión anterior (p.ej. cerrada con
+  // Escape, que desmonta sin blur) quedaría colgado y un simple focus+blur
+  // posterior lo escribiría en la DB sin que el usuario lo vea.
+  useEffect(() => {
+    setCostos({})
+    setMultiplos({})
+  }, [abierto, proveedorId])
+
+  function guardarMultiplo(id: number, valorActual: number | null) {
+    const raw = multiplos[id]
+    if (raw === undefined) return
+    const n = raw.trim() === '' ? null : Number(raw.replace(',', '.'))
+    if (n !== null && (Number.isNaN(n) || n <= 0)) return
+    if (n === valorActual) return
+    actualizar.mutate({ id, datos: { multiplo_compra: n } })
   }
 
   return (
@@ -175,6 +196,28 @@ export function ModalCatalogoProveedor({
                         className="h-8 w-28 pl-5 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                       />
                     </div>
+                  </div>
+                  {/* Presentación de compra: la sugerencia redondea a este múltiplo */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a]">
+                      Bulto x
+                    </span>
+                    <Input
+                      type="number"
+                      min="0.001"
+                      step="any"
+                      defaultValue={c.multiplo_compra ?? ''}
+                      placeholder="—"
+                      onChange={(e) =>
+                        setMultiplos((prev) => ({
+                          ...prev,
+                          [c.id]: e.target.value,
+                        }))
+                      }
+                      onBlur={() => guardarMultiplo(c.id, c.multiplo_compra)}
+                      className="h-8 w-16 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      aria-label="Unidades por bulto"
+                    />
                   </div>
                   <Button
                     variant="ghost"

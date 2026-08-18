@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { traerTodo } from '@/lib/supabase/paginacion'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import type {
   EstadoPedido,
@@ -147,15 +148,93 @@ export interface ProductoSugerido {
   precio_costo: number
   stock_actual: number
   stock_minimo: number
+  /** Prefill del pedido: la sugerencia ya redondeada por presentación. */
   cantidad_sugerida: number
   venta_por_peso: boolean
+  // ── Métricas de cobertura (mig 151) — undefined si vino del fallback legacy ──
+  /** Necesidad calculada antes del redondeo por presentación. */
+  necesidad_calculada?: number
+  venta_diaria?: number
+  /** null = sin ventas recientes. */
+  dias_stock?: number | null
+  stock_en_transito?: number
+  /** Unidades en OC en borrador (avisan, no descuentan). */
+  borrador_pendiente?: number
+  /** Unidades por bulto del proveedor (caja x6 = 6). */
+  multiplo_compra?: number | null
+  /** Bultos sugeridos si hay múltiplo ("2 cajas"). */
+  paquetes?: number | null
+  clase_abc?: string | null
 }
 
-/** Productos del proveedor con stock < mínimo. Sugiere cantidad para llegar al mínimo (×2 para colchón). */
+/** Fila que devuelve la RPC fn_sugerencias_compra (migración 151). */
+type FilaSugerenciaCompra = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  stock_actual: number
+  stock_minimo: number
+  venta_diaria: number
+  dias_stock: number | null
+  stock_en_transito: number
+  borrador_pendiente: number
+  requiere_compra: boolean
+  cantidad_sugerida: number
+  multiplo_compra: number | null
+  cantidad_sugerida_redondeada: number
+  clase_abc: string | null
+  precio_costo: number
+}
+
+/**
+ * Productos del proveedor que requieren compra según cobertura (mig 151):
+ * venta promedio 30 días + días de stock + tránsito + punto de reposición.
+ * La cantidad sugerida llega hasta el stock objetivo, neta de lo que ya
+ * viene en camino, redondeada por la presentación del proveedor.
+ *
+ * La RPC va paginada con traerTodo (el Max Rows de PostgREST corta también
+ * a las funciones set-returning). Si la migración 151 todavía no corrió
+ * (PGRST202), cae al criterio legacy stock < mínimo para no romper.
+ */
 export async function getProductosSugeridos(
   proveedor_id: number
 ): Promise<ProductoSugerido[]> {
   const supabase = createClient()
+
+  try {
+    const filas = await traerTodo<FilaSugerenciaCompra>(() =>
+      supabase.rpc('fn_sugerencias_compra', { p_proveedor_id: proveedor_id })
+    )
+    return filas
+      .filter((f) => f.requiere_compra && f.cantidad_sugerida_redondeada > 0)
+      .map((f) => ({
+        id: f.producto_id,
+        nombre: f.nombre,
+        codigo_barras: f.codigo_barras,
+        precio_costo: f.precio_costo,
+        stock_actual: f.stock_actual,
+        stock_minimo: f.stock_minimo,
+        cantidad_sugerida: f.cantidad_sugerida_redondeada,
+        venta_por_peso: f.venta_por_peso,
+        necesidad_calculada: f.cantidad_sugerida,
+        venta_diaria: f.venta_diaria,
+        dias_stock: f.dias_stock,
+        stock_en_transito: f.stock_en_transito,
+        borrador_pendiente: f.borrador_pendiente,
+        multiplo_compra: f.multiplo_compra,
+        paquetes:
+          f.multiplo_compra != null && f.multiplo_compra > 0
+            ? Math.round(f.cantidad_sugerida_redondeada / f.multiplo_compra)
+            : null,
+        clase_abc: f.clase_abc,
+      }))
+  } catch (e) {
+    // PGRST202: la función no está en el schema cache (migración sin correr).
+    if ((e as { code?: string })?.code !== 'PGRST202') throw e
+  }
+
+  // ── Fallback legacy: stock < mínimo, sugerido = 2×mínimo − stock ──
   const { data, error } = await supabase
     .from('productos')
     .select(

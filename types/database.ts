@@ -104,6 +104,10 @@ export type ProveedorRow = {
   razon_social: string | null
   condicion_iva: string | null
   domicilio: string | null
+  /** Reposición (mig 151): null = usa el default global de config_compras. */
+  dias_cobertura_objetivo: number | null
+  dias_seguridad: number | null
+  frecuencia_reposicion_dias: number | null
   created_at: string
 }
 
@@ -118,6 +122,9 @@ export type ProveedorInsert = {
   razon_social?: string | null
   condicion_iva?: string | null
   domicilio?: string | null
+  dias_cobertura_objetivo?: number | null
+  dias_seguridad?: number | null
+  frecuencia_reposicion_dias?: number | null
   created_at?: string
 }
 
@@ -131,6 +138,9 @@ export type ProveedorUpdate = {
   razon_social?: string | null
   condicion_iva?: string | null
   domicilio?: string | null
+  dias_cobertura_objetivo?: number | null
+  dias_seguridad?: number | null
+  frecuencia_reposicion_dias?: number | null
 }
 
 // ─── clientes (FASE 3 — CRM) ─────────────────────────────────────────────────
@@ -1088,6 +1098,8 @@ export type ProductoRow = {
   no_ofrecer_ventas: boolean
   /** Alta al vuelo sin precio: visible en el POS pero bloqueado para vender. */
   pendiente_precio: boolean
+  /** No puede faltar (mig 151): sugiere compra aun sin ventas recientes. */
+  es_critico: boolean
   notas: string | null
   imagen_url: string | null
   created_at: string
@@ -1124,6 +1136,7 @@ export type ProductoInsert = {
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean
   pendiente_precio?: boolean
+  es_critico?: boolean
   notas?: string | null
   imagen_url?: string | null
   created_at?: string
@@ -1158,6 +1171,7 @@ export type ProductoUpdate = {
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean
   pendiente_precio?: boolean
+  es_critico?: boolean
   notas?: string | null
   imagen_url?: string | null
   updated_at?: string
@@ -2029,6 +2043,32 @@ export type PagoProgramadoInsert = {
 
 export type PagoProgramadoUpdate = Partial<PagoProgramadoInsert>
 
+// ─── cuotas_cuenta_pagar (plan de cuotas de una deuda, mig 148) ──────────────
+// Sin columna de estado: pagada/parcial/pendiente/vencida se DERIVA repartiendo
+// el aplicado de la deuda por FIFO (ver derivarCuotas en lib/queries/finanzas.ts).
+
+export type CuotaCuentaPagarRow = {
+  id: number
+  cuenta_a_pagar_id: number
+  numero: number
+  monto: number
+  fecha_vencimiento: string
+  usuario_id: string | null
+  created_at: string
+}
+
+export type CuotaCuentaPagarInsert = {
+  id?: number
+  cuenta_a_pagar_id: number
+  numero: number
+  monto: number
+  fecha_vencimiento: string
+  usuario_id?: string | null
+  created_at?: string
+}
+
+export type CuotaCuentaPagarUpdate = Partial<CuotaCuentaPagarInsert>
+
 // ─── periodos_contables (cierre de mes) ──────────────────────────────────────
 
 export type EstadoPeriodo = 'abierto' | 'cerrado'
@@ -2113,6 +2153,8 @@ export type ProveedorProductoRow = {
   costo: number
   codigo_proveedor: string | null
   es_principal: boolean
+  /** Unidades por bulto del proveedor (caja x6 = 6, mig 151). null = suelto. */
+  multiplo_compra: number | null
   created_at: string
   updated_at: string
 }
@@ -2124,6 +2166,7 @@ export type ProveedorProductoInsert = {
   costo?: number
   codigo_proveedor?: string | null
   es_principal?: boolean
+  multiplo_compra?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -2132,6 +2175,7 @@ export type ProveedorProductoUpdate = {
   costo?: number
   codigo_proveedor?: string | null
   es_principal?: boolean
+  multiplo_compra?: number | null
   updated_at?: string
 }
 
@@ -2223,17 +2267,31 @@ export type ConfigComprasRow = {
   id: number
   umbral_variacion_costo: number
   exige_factura: boolean
+  /** Defaults de reposición por cobertura (mig 151). */
+  dias_cobertura_objetivo_default: number
+  dias_seguridad_default: number
+  frecuencia_reposicion_default: number
+  /** Umbral fijo de sobrestock en días; null = 2 × cobertura objetivo. */
+  umbral_sobrestock_dias: number | null
 }
 
 export type ConfigComprasInsert = {
   id?: number
   umbral_variacion_costo?: number
   exige_factura?: boolean
+  dias_cobertura_objetivo_default?: number
+  dias_seguridad_default?: number
+  frecuencia_reposicion_default?: number
+  umbral_sobrestock_dias?: number | null
 }
 
 export type ConfigComprasUpdate = {
   umbral_variacion_costo?: number
   exige_factura?: boolean
+  dias_cobertura_objetivo_default?: number
+  dias_seguridad_default?: number
+  frecuencia_reposicion_default?: number
+  umbral_sobrestock_dias?: number | null
 }
 
 // ─── config_ventas (singleton) ───────────────────────────────────────────────
@@ -3363,6 +3421,12 @@ export interface Database {
         Update: PagoProgramadoUpdate
         Relationships: []
       }
+      cuotas_cuenta_pagar: {
+        Row: CuotaCuentaPagarRow
+        Insert: CuotaCuentaPagarInsert
+        Update: CuotaCuentaPagarUpdate
+        Relationships: []
+      }
       clientes: {
         Row: ClienteRow
         Insert: ClienteInsert
@@ -4212,6 +4276,44 @@ export interface Database {
           venta_por_peso: boolean
         }[]
       }
+      /** Compras por cobertura (mig 151): velocity 30d + tránsito + sugerido. */
+      fn_sugerencias_compra: {
+        Args: { p_proveedor_id: number | null }
+        Returns: {
+          producto_id: number
+          nombre: string
+          codigo_barras: string | null
+          proveedor_id: number | null
+          proveedor_nombre: string | null
+          venta_por_peso: boolean
+          es_critico: boolean
+          producto_nuevo: boolean
+          stock_actual: number
+          stock_minimo: number
+          venta_30d: number
+          venta_diaria: number
+          /** null = sin ventas recientes. */
+          dias_stock: number | null
+          stock_en_transito: number
+          borrador_pendiente: number
+          dias_cobertura_objetivo: number
+          dias_seguridad: number
+          frecuencia_reposicion_dias: number
+          punto_reposicion: number
+          stock_objetivo: number
+          requiere_compra: boolean
+          cantidad_sugerida: number
+          multiplo_compra: number | null
+          cantidad_sugerida_redondeada: number
+          clase_abc: string | null
+          /** Gateado por permiso 'costos' (0/null para cajeros). */
+          precio_costo: number
+          ultimo_costo: number | null
+          variacion_costo_pct: number | null
+          precio_venta: number
+          margen_pct: number | null
+        }[]
+      }
       fn_costo_receta: {
         Args: {
           p_producto_id: number
@@ -4282,7 +4384,9 @@ export interface Database {
           costo_estimado: number
         }[]
       }
-      /** v16 (mig 146): + p_redondeo (ajuste +/− para que el total dé exacto
+      /** v18 (mig 148): + p_cuotas (plan de cuotas del saldo: null = no tocar,
+       *  [] = quitarlo, [..] = redefinirlo con Σ = saldo post-pagos).
+       *  v16 (mig 146): + p_redondeo (ajuste +/− para que el total dé exacto
        *  como el papel; asienta contra 5.2.10). p_pago acepta objeto o LISTA
        *  (mig 145) de { cuenta_origen_id, monto, forma_pago?, comprobante?,
        *  fecha?, nota? }: fecha ≤ hoy paga en la misma transacción vía
@@ -4302,6 +4406,18 @@ export interface Database {
           p_gastos_no_debitables?: number
           p_pago?: Json
           p_redondeo?: number
+          p_cuotas?: Json
+        }
+        Returns: undefined
+      }
+      /** Define/reemplaza/quita el plan de cuotas de una deuda (mig 148).
+       *  [] quita el plan; la suma debe coincidir con el saldo pendiente.
+       *  Sincroniza cuentas_a_pagar.fecha_vencimiento = 1ª cuota impaga. */
+      fn_definir_cuotas_cuenta: {
+        Args: {
+          p_cuenta_id: number
+          p_usuario_id: string
+          p_cuotas: Json
         }
         Returns: undefined
       }
@@ -4463,6 +4579,10 @@ export interface Database {
         }
         Returns: undefined
       }
+      /** v2 (mig 149): el pago puede ser parcial o nulo (p_pago.monto opcional,
+       *  origen 'ninguno'); el saldo queda como deuda (cuentas_a_pagar.monto =
+       *  SALDO impago) con vencimiento p_cta_cte o dividido en p_cuotas.
+       *  Devuelve además pagado/saldo/cuenta_a_pagar_id. */
       fn_registrar_compra_directa: {
         Args: {
           p_usuario_id: string
@@ -4474,6 +4594,8 @@ export interface Database {
           p_mueve_stock: boolean
           p_afecta_precio_venta: boolean
           p_pago: Json
+          p_cta_cte?: Json
+          p_cuotas?: Json
         }
         Returns: Json
       }

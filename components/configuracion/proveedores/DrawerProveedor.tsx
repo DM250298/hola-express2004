@@ -20,7 +20,22 @@ import {
   useCreateProveedor,
   useUpdateProveedor,
 } from '@/lib/hooks/useProveedores'
+import { useConfigCompras } from '@/lib/hooks/useHistorialCostos'
 import type { ProveedorRow } from '@/types/database'
+
+/** Días con hasta 1 decimal, acepta coma (es-AR). Vacío = usar default global. */
+function validarDias(v: string, minimoExclusivo: boolean): boolean {
+  if (v === '') return true
+  const n = Number(v.replace(',', '.'))
+  if (!Number.isFinite(n) || n > 365) return false
+  return minimoExclusivo ? n > 0 : n >= 0
+}
+
+/** Parsea el campo de días a número (o null si quedó vacío). */
+function diasANumero(v: string): number | null {
+  if (v === '') return null
+  return Number(v.replace(',', '.'))
+}
 
 const esquemaProveedor = z.object({
   nombre: z
@@ -46,6 +61,15 @@ const esquemaProveedor = z.object({
     { message: 'Entero entre 0 y 365' }
   ),
   condicion_pago: z.string().trim().max(80, 'Máximo 80 caracteres'),
+  dias_cobertura_objetivo: z
+    .string()
+    .refine((v) => validarDias(v, true), { message: 'Mayor a 0, hasta 365' }),
+  dias_seguridad: z
+    .string()
+    .refine((v) => validarDias(v, false), { message: 'Entre 0 y 365' }),
+  frecuencia_reposicion_dias: z
+    .string()
+    .refine((v) => validarDias(v, true), { message: 'Mayor a 0, hasta 365' }),
   cuit: z
     .string()
     .trim()
@@ -76,6 +100,9 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
   const esEdicion = proveedor !== null
   const crear = useCreateProveedor()
   const actualizar = useUpdateProveedor()
+  // Defaults globales de reposición: se muestran como placeholder para que se
+  // vea qué valor rige cuando el campo queda vacío.
+  const { data: configCompras } = useConfigCompras()
 
   const {
     register,
@@ -90,6 +117,9 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
       email: '',
       dias_entrega: '',
       condicion_pago: '',
+      dias_cobertura_objetivo: '',
+      dias_seguridad: '',
+      frecuencia_reposicion_dias: '',
       cuit: '',
       razon_social: '',
       condicion_iva: '',
@@ -106,6 +136,18 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
         dias_entrega:
           proveedor?.dias_entrega != null ? String(proveedor.dias_entrega) : '',
         condicion_pago: proveedor?.condicion_pago ?? '',
+        dias_cobertura_objetivo:
+          proveedor?.dias_cobertura_objetivo != null
+            ? String(proveedor.dias_cobertura_objetivo)
+            : '',
+        dias_seguridad:
+          proveedor?.dias_seguridad != null
+            ? String(proveedor.dias_seguridad)
+            : '',
+        frecuencia_reposicion_dias:
+          proveedor?.frecuencia_reposicion_dias != null
+            ? String(proveedor.frecuencia_reposicion_dias)
+            : '',
         cuit: proveedor?.cuit ?? '',
         razon_social: proveedor?.razon_social ?? '',
         condicion_iva: proveedor?.condicion_iva ?? '',
@@ -126,6 +168,9 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
       condicion_pago: datos.condicion_pago.trim()
         ? datos.condicion_pago.trim()
         : null,
+      dias_cobertura_objetivo: diasANumero(datos.dias_cobertura_objetivo),
+      dias_seguridad: diasANumero(datos.dias_seguridad),
+      frecuencia_reposicion_dias: diasANumero(datos.frecuencia_reposicion_dias),
       cuit: cuitDigitos ? cuitDigitos : null,
       razon_social: datos.razon_social.trim() ? datos.razon_social.trim() : null,
       condicion_iva: datos.condicion_iva ? datos.condicion_iva : null,
@@ -240,6 +285,98 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
               disabled={guardando}
               className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
+          </div>
+
+          {/* Reposición por cobertura (mig 151) */}
+          <div className="pt-3 border-t border-[#e4c9b0]/60 space-y-5">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Reposición
+              </p>
+              <p className="text-xs text-[#6f3a2a] mt-1">
+                Vacío = usa el default global. &quot;Días entrega&quot; (arriba)
+                es cuánto tarda en llegar la orden; la frecuencia es cada
+                cuántos días se le pide.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="dias_cobertura_objetivo"
+                  className="text-[#391511] font-medium"
+                >
+                  Cobertura obj.
+                </Label>
+                <Input
+                  id="dias_cobertura_objetivo"
+                  inputMode="decimal"
+                  {...register('dias_cobertura_objetivo')}
+                  placeholder={
+                    configCompras
+                      ? `${configCompras.dias_cobertura_objetivo_default} días`
+                      : 'días'
+                  }
+                  disabled={guardando}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+                />
+                {errors.dias_cobertura_objetivo && (
+                  <p className="text-[#c43e2c] text-xs mt-1">
+                    {errors.dias_cobertura_objetivo.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="dias_seguridad"
+                  className="text-[#391511] font-medium"
+                >
+                  Seguridad
+                </Label>
+                <Input
+                  id="dias_seguridad"
+                  inputMode="decimal"
+                  {...register('dias_seguridad')}
+                  placeholder={
+                    configCompras
+                      ? `${configCompras.dias_seguridad_default} días`
+                      : 'días'
+                  }
+                  disabled={guardando}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+                />
+                {errors.dias_seguridad && (
+                  <p className="text-[#c43e2c] text-xs mt-1">
+                    {errors.dias_seguridad.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="frecuencia_reposicion_dias"
+                  className="text-[#391511] font-medium"
+                >
+                  Frecuencia
+                </Label>
+                <Input
+                  id="frecuencia_reposicion_dias"
+                  inputMode="decimal"
+                  {...register('frecuencia_reposicion_dias')}
+                  placeholder={
+                    configCompras
+                      ? `${configCompras.frecuencia_reposicion_default} días`
+                      : 'días'
+                  }
+                  disabled={guardando}
+                  className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+                />
+                {errors.frecuencia_reposicion_dias && (
+                  <p className="text-[#c43e2c] text-xs mt-1">
+                    {errors.frecuencia_reposicion_dias.message}
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Datos fiscales (AFIP) */}

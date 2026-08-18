@@ -783,7 +783,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
                 Sugeridos del proveedor
               </h3>
               <span className="text-xs text-[#6f3a2a]">
-                · {sugeridos.length} bajo stock mínimo
+                · {sugeridos.length} para reponer
               </span>
             </div>
             <Button
@@ -817,17 +817,50 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
                     <div className="font-medium text-[#391511] text-sm truncate">
                       {s.nombre}
                     </div>
-                    <div className="text-xs text-[#6f3a2a] mt-0.5 inline-flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3 text-[#e4a42a]" />
-                      Stock {s.stock_actual} / mín {s.stock_minimo}
-                    </div>
+                    {s.venta_diaria !== undefined ? (
+                      // Métricas de cobertura (mig 151): velocity, días y tránsito
+                      <div className="text-xs text-[#6f3a2a] mt-0.5 inline-flex items-center gap-1 flex-wrap">
+                        <AlertTriangle className="h-3 w-3 text-[#e4a42a]" />
+                        Stock {formatearCantidad(s.stock_actual, s.venta_por_peso)}
+                        {s.venta_diaria > 0 && (
+                          <>
+                            {' '}· {formatearNumero(s.venta_diaria)}/día
+                            {s.dias_stock != null && (
+                              <> · {formatearNumero(s.dias_stock)} días</>
+                            )}
+                          </>
+                        )}
+                        {s.venta_diaria === 0 && <> · sin ventas 30d</>}
+                        {(s.stock_en_transito ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[#2f6f4f]">
+                            <Truck className="h-3 w-3" />
+                            {formatearCantidad(s.stock_en_transito ?? 0, s.venta_por_peso)}{' '}
+                            en camino
+                          </span>
+                        )}
+                        {(s.borrador_pendiente ?? 0) > 0 && (
+                          <span className="text-[#a15c2f]">
+                            · borrador con{' '}
+                            {formatearCantidad(s.borrador_pendiente ?? 0, s.venta_por_peso)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      // Fallback legacy (migración 151 sin correr)
+                      <div className="text-xs text-[#6f3a2a] mt-0.5 inline-flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3 text-[#e4a42a]" />
+                        Stock {s.stock_actual} / mín {s.stock_minimo}
+                      </div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right">
                     <div className="text-xs text-[#6f3a2a]">
                       {yaEnPedido ? 'En el pedido' : 'Sugerido'}
                     </div>
                     <div className="font-bold text-[#391511] tabular-nums">
-                      {formatearCantidad(s.cantidad_sugerida, s.venta_por_peso)}
+                      {s.paquetes != null && s.paquetes > 0
+                        ? `${s.paquetes} × ${formatearNumero(s.multiplo_compra ?? 0)} (${formatearCantidad(s.cantidad_sugerida, s.venta_por_peso)})`
+                        : formatearCantidad(s.cantidad_sugerida, s.venta_por_peso)}
                     </div>
                   </div>
                 </button>

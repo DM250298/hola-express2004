@@ -12,6 +12,8 @@ export interface CatalogoItem {
   costo: number
   codigo_proveedor: string | null
   es_principal: boolean
+  /** Unidades por bulto del proveedor (caja x6 = 6, mig 151). null = suelto. */
+  multiplo_compra: number | null
   producto_nombre: string
   codigo_barras: string | null
   stock_actual: number
@@ -31,6 +33,7 @@ export async function getCatalogoProveedor(
     costo: number
     codigo_proveedor: string | null
     es_principal: boolean
+    multiplo_compra: number | null
     productos: {
       nombre: string
       codigo_barras: string | null
@@ -43,7 +46,7 @@ export async function getCatalogoProveedor(
     supabase
       .from('proveedor_producto')
       .select(
-        'id, proveedor_id, producto_id, costo, codigo_proveedor, es_principal, productos(nombre, codigo_barras, stock_actual, stock_minimo)'
+        'id, proveedor_id, producto_id, costo, codigo_proveedor, es_principal, multiplo_compra, productos(nombre, codigo_barras, stock_actual, stock_minimo)'
       )
       .eq('proveedor_id', proveedor_id)
   )
@@ -56,6 +59,7 @@ export async function getCatalogoProveedor(
       costo: Number(f.costo),
       codigo_proveedor: f.codigo_proveedor,
       es_principal: f.es_principal,
+      multiplo_compra: f.multiplo_compra != null ? Number(f.multiplo_compra) : null,
       producto_nombre: f.productos?.nombre ?? 'Producto eliminado',
       codigo_barras: f.productos?.codigo_barras ?? null,
       stock_actual: f.productos?.stock_actual ?? 0,

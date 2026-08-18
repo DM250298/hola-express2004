@@ -59,6 +59,10 @@ export function useCrearPedido() {
     mutationFn: (payload: NuevoPedidoPayload) => crearPedido(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
+      // Una orden enviada es tránsito nuevo: las sugerencias por cobertura
+      // quedan viejas si no se invalidan (riesgo de pedir dos veces).
+      qc.invalidateQueries({ queryKey: ['sugerencias-compra'] })
+      qc.invalidateQueries({ queryKey: ['productos-sugeridos'] })
       toast.success('Pedido creado')
     },
     onError: (error: Error) => {
@@ -74,6 +78,8 @@ export function useActualizarPedido() {
     onSuccess: (_d, variables) => {
       qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
       qc.invalidateQueries({ queryKey: ['pedido-detalle', variables.pedido_id] })
+      qc.invalidateQueries({ queryKey: ['sugerencias-compra'] })
+      qc.invalidateQueries({ queryKey: ['productos-sugeridos'] })
       toast.success('Orden actualizada')
     },
     onError: (error: Error) => {
@@ -90,6 +96,8 @@ export function useActualizarEstadoPedido() {
     onSuccess: (_d, variables) => {
       qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
       qc.invalidateQueries({ queryKey: ['pedido-detalle', variables.id] })
+      qc.invalidateQueries({ queryKey: ['sugerencias-compra'] })
+      qc.invalidateQueries({ queryKey: ['productos-sugeridos'] })
       toast.success('Estado del pedido actualizado')
     },
     onError: (error: Error) => {
@@ -113,6 +121,8 @@ export function useRecibirPedido() {
       qc.invalidateQueries({ queryKey: ['lotes-activos'] })
       qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
       qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      qc.invalidateQueries({ queryKey: ['sugerencias-compra'] })
+      qc.invalidateQueries({ queryKey: ['productos-sugeridos'] })
       if (variables.silenciarToasts) return
       if (_d.es_parcial) {
         toast.warning(
@@ -141,6 +151,8 @@ export function useRevertirRecepcion() {
       qc.invalidateQueries({ queryKey: ['lotes-activos'] })
       qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
       qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      qc.invalidateQueries({ queryKey: ['sugerencias-compra'] })
+      qc.invalidateQueries({ queryKey: ['productos-sugeridos'] })
       toast.success('Recepción revertida · el pedido volvió a "Por recibir"')
     },
     onError: (error: Error) => {
@@ -172,6 +184,8 @@ export function useCancelarPedido() {
       qc.invalidateQueries({ queryKey: ['resumen-fiscal'] })
       qc.invalidateQueries({ queryKey: ['resumen-financiero'] })
       qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+      qc.invalidateQueries({ queryKey: ['sugerencias-compra'] })
+      qc.invalidateQueries({ queryKey: ['productos-sugeridos'] })
       toast.success('Orden borrada · quedó cancelada y se revirtió todo')
     },
     onError: (error: Error) => {

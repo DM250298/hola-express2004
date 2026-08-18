@@ -10,10 +10,11 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-// TabReposicion se sacó del hub por decisión del negocio (se controla todo
-// desde Órdenes, que ya trae sugeridos + cotización). El componente queda en
-// el repo por si se reactiva. Ver TabComprarInsumos (Producción) que usa el
+// El viejo TabReposicion (stock < mínimo) quedó reemplazado por el Centro de
+// Compras (cobertura en días, mig 151); el componente sigue en el repo solo
+// como referencia histórica. Ver TabComprarInsumos (Producción) que usa el
 // mismo handoff hacia el editor de orden, independiente de este tab.
+import { CentroCompras } from './centroCompras/CentroCompras'
 import { TabMonitorCostos } from './TabMonitorCostos'
 import { TabFacturas, BadgePendientesFactura } from './TabFacturas'
 import { TabSugerencias, BadgeSugerenciasPendientes } from './TabSugerencias'
@@ -30,6 +31,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { value: 'reposicion', etiqueta: 'Centro de Compras', icono: ShoppingBag, permiso: 'compras' },
   { value: 'ordenes', etiqueta: 'Órdenes', icono: ClipboardList, permiso: 'pedidos' },
   { value: 'recepcion', etiqueta: 'Recepción', icono: PackageCheck, permiso: 'recepcion' },
   { value: 'facturas', etiqueta: 'Facturas', icono: FileText, permiso: 'finanzas' },
@@ -94,6 +96,11 @@ export function PantallaCompras({ tabInicial }: Props) {
           ))}
         </TabsList>
 
+        {tabsAMostrar.some((t) => t.value === 'reposicion') && (
+          <TabsContent value="reposicion">
+            <CentroCompras />
+          </TabsContent>
+        )}
         {tabsAMostrar.some((t) => t.value === 'ordenes') && (
           <TabsContent value="ordenes">
             <PantallaPedidos />

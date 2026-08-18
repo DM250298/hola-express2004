@@ -2,6 +2,60 @@ import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 
+// ─── Centro de Compras (mig 151): sugerencias por cobertura ─────────────────
+
+/** Fila completa de fn_sugerencias_compra. Costos gateados por permiso. */
+export interface SugerenciaCompra {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  proveedor_id: number | null
+  proveedor_nombre: string | null
+  venta_por_peso: boolean
+  es_critico: boolean
+  producto_nuevo: boolean
+  stock_actual: number
+  stock_minimo: number
+  venta_30d: number
+  venta_diaria: number
+  /** null = sin ventas recientes. */
+  dias_stock: number | null
+  stock_en_transito: number
+  borrador_pendiente: number
+  dias_cobertura_objetivo: number
+  dias_seguridad: number
+  frecuencia_reposicion_dias: number
+  punto_reposicion: number
+  stock_objetivo: number
+  requiere_compra: boolean
+  cantidad_sugerida: number
+  multiplo_compra: number | null
+  cantidad_sugerida_redondeada: number
+  clase_abc: string | null
+  precio_costo: number
+  ultimo_costo: number | null
+  variacion_costo_pct: number | null
+  precio_venta: number
+  margen_pct: number | null
+}
+
+/**
+ * Todas las sugerencias de compra (todos los proveedores) en una sola pasada.
+ * El agrupado por proveedor se hace en el cliente: ~4000 filas en memoria es
+ * trivial y evita un segundo RPC de resumen. Paginada con traerTodo (el Max
+ * Rows de PostgREST corta también a las funciones set-returning).
+ *
+ * Si la migración 151 no corrió, PostgREST devuelve PGRST202: acá NO hay
+ * fallback (el Centro de Compras existe recién a partir de la 151) — la UI
+ * muestra el aviso de migración pendiente.
+ */
+export async function getSugerenciasCompra(): Promise<SugerenciaCompra[]> {
+  const supabase = createClient()
+  return traerTodo<SugerenciaCompra>(() =>
+    supabase.rpc('fn_sugerencias_compra', { p_proveedor_id: null })
+  )
+}
+
 export interface ProductoAReponer {
   id: number
   nombre: string

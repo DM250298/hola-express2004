@@ -112,6 +112,7 @@ const esquemaProducto = z.object({
   visible_tienda: z.boolean().default(true),
   controlar_stock: z.boolean().default(true),
   no_ofrecer_ventas: z.boolean().default(false),
+  es_critico: z.boolean().default(false),
   notas: z.string().trim().max(500).optional().or(z.literal('')),
   dias_vencimiento_minimo: z
     .union([z.string(), z.number(), z.null()])
@@ -170,6 +171,7 @@ const OPCIONES_VENTA: {
     | 'visible_tienda'
     | 'controlar_stock'
     | 'no_ofrecer_ventas'
+    | 'es_critico'
     | 'activo'
   etiqueta: string
   descripcion: string
@@ -191,6 +193,12 @@ const OPCIONES_VENTA: {
     etiqueta: 'Controlar stock',
     descripcion:
       'Si lo apagás, se vende sin descontar stock (servicios, granel sin control).',
+  },
+  {
+    campo: 'es_critico',
+    etiqueta: 'Producto crítico',
+    descripcion:
+      'No puede faltar (independiente del ABC): Compras lo sugiere aunque no haya vendido en 30 días, usando el stock mínimo como piso.',
   },
   {
     campo: 'no_ofrecer_ventas',
@@ -389,6 +397,7 @@ export function DrawerProducto({
       visible_tienda: true,
       controlar_stock: true,
       no_ofrecer_ventas: false,
+      es_critico: false,
       notas: '',
     },
   })
@@ -469,6 +478,7 @@ export function DrawerProducto({
       visible_tienda: producto?.visible_tienda ?? true,
       controlar_stock: producto?.controlar_stock ?? true,
       no_ofrecer_ventas: producto?.no_ofrecer_ventas ?? false,
+      es_critico: producto?.es_critico ?? false,
       notas: producto?.notas ?? '',
     })
 
@@ -728,6 +738,7 @@ export function DrawerProducto({
       visible_tienda: validado.visible_tienda,
       controlar_stock: validado.controlar_stock,
       no_ofrecer_ventas: validado.no_ofrecer_ventas,
+      es_critico: validado.es_critico,
       // Sin precio de venta cargado → queda "pendiente de precio": visible en
       // el POS pero bloqueado para vender hasta que se complete (factura o
       // carga manual). Con precio > 0 se habilita.
