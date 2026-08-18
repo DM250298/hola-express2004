@@ -197,10 +197,13 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
     })
   }
 
-  // La selección abarca todo el listado del proveedor (no solo lo visible).
+  // La selección RESPETA el filtro activo (estado + clase + búsqueda): lo que
+  // se ve y está tildado es lo que se pide. Filtrar "Clase A" y armar la orden
+  // pide solo los A marcados, no todo el proveedor. El contador del pie
+  // muestra siempre exactamente cuántos van.
   const itemsSel = useMemo(
     () =>
-      grupo.filas
+      filtrados
         .map((f) => ({
           f,
           cantidad:
@@ -212,7 +215,7 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
             ) || 0,
         }))
         .filter(({ f, cantidad }) => marcado(f) && cantidad > 0),
-    [grupo.filas, cantidades, marcado]
+    [filtrados, cantidades, marcado]
   )
 
   const totalSeleccion = useMemo(
@@ -512,6 +515,11 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
             {formatearNumero(itemsSel.length)}
           </span>{' '}
           producto(s) seleccionados
+          {(filtroEstado !== 'todos' ||
+            filtroClase !== 'todas' ||
+            busqueda.trim() !== '') && (
+            <span className="text-xs text-[#a15c2f]"> (del filtro actual)</span>
+          )}
           {mostrarCostos && totalSeleccion > 0 && (
             <span>
               {' '}
