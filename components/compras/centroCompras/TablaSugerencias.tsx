@@ -49,6 +49,7 @@ import {
 import { guardarHandoffReposicion } from '@/lib/compras/handoffReposicion'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { formatearMontoEntero, formatearNumero } from '@/lib/utils/formato'
+import { cn } from '@/lib/utils'
 import type { GrupoProveedor, SugerenciaFila } from './CentroCompras'
 import { FilaSugerencia } from './FilaSugerencia'
 
@@ -61,13 +62,6 @@ const FILTROS_ESTADO: Record<string, string> = {
   sin_ventas: 'Sin ventas 30d',
   transito: 'Con tránsito',
   criticos: 'Críticos',
-}
-
-const FILTROS_CLASE: Record<string, string> = {
-  todas: 'ABC: todas',
-  A: 'Clase A',
-  B: 'Clase B',
-  C: 'Clase C',
 }
 
 function pasaFiltroEstado(f: SugerenciaFila, filtro: string): boolean {
@@ -108,7 +102,8 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
   const [busquedaInput, setBusquedaInput] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('todos')
-  const [filtroClase, setFiltroClase] = useState('todas')
+  // Clases ABC COMBINABLES (chips): vacío = todas (incluye productos sin clase).
+  const [clasesSel, setClasesSel] = useState<Set<string>>(new Set())
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(50)
   // Selección dispersa: marcado = override ?? requiere_compra.
@@ -124,7 +119,16 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
 
   useEffect(() => {
     setPagina(0)
-  }, [busqueda, filtroEstado, filtroClase])
+  }, [busqueda, filtroEstado, clasesSel])
+
+  function toggleClase(clase: string) {
+    setClasesSel((prev) => {
+      const s = new Set(prev)
+      if (s.has(clase)) s.delete(clase)
+      else s.add(clase)
+      return s
+    })
+  }
 
   const mostrarCostos = useMemo(
     () => grupo.filas.some((f) => f.precio_costo > 0),
@@ -136,7 +140,14 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
     return grupo.filas
       .filter((f) => {
         if (!pasaFiltroEstado(f, filtroEstado)) return false
-        if (filtroClase !== 'todas' && f.clase_abc !== filtroClase) return false
+        // Chips combinables: con alguno activo, la fila necesita una clase
+        // que esté en el set (los "—" sin clase quedan afuera).
+        if (
+          clasesSel.size > 0 &&
+          (f.clase_abc == null || !clasesSel.has(f.clase_abc))
+        ) {
+          return false
+        }
         if (!q) return true
         return (
           f.nombre.toLowerCase().includes(q) ||
@@ -148,7 +159,7 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
           a.urgencia - b.urgencia ||
           a.nombre.localeCompare(b.nombre, 'es-AR')
       )
-  }, [grupo.filas, busqueda, filtroEstado, filtroClase])
+  }, [grupo.filas, busqueda, filtroEstado, clasesSel])
 
   const paginaEfectiva =
     porPagina < 0
@@ -355,24 +366,39 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
         </div>
         <div className="space-y-1">
           <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-            Clase
+            Clase (combinables)
           </Label>
-          <Select
-            items={FILTROS_CLASE}
-            value={filtroClase}
-            onValueChange={(v) => setFiltroClase(v ?? 'todas')}
-          >
-            <SelectTrigger className="w-[130px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(FILTROS_CLASE).map(([v, etiqueta]) => (
-                <SelectItem key={v} value={v}>
-                  {etiqueta}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-1.5 h-9">
+            {(['A', 'B', 'C'] as const).map((clase) => {
+              const activo = clasesSel.has(clase)
+              return (
+                <button
+                  key={clase}
+                  type="button"
+                  onClick={() => toggleClase(clase)}
+                  className={cn(
+                    'h-8 w-9 rounded-md text-xs font-bold border transition-colors',
+                    activo
+                      ? 'bg-[#391511] text-white border-[#391511]'
+                      : 'bg-white border-[#e4c9b0] text-[#6f3a2a] hover:border-[#f9b44c]'
+                  )}
+                  aria-pressed={activo}
+                  aria-label={`Filtrar clase ${clase}`}
+                >
+                  {clase}
+                </button>
+              )
+            })}
+            {clasesSel.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setClasesSel(new Set())}
+                className="text-xs text-[#6f3a2a] underline underline-offset-2 hover:text-[#391511] ml-1"
+              >
+                Todas
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-sm text-[#6f3a2a] pb-2">
           <span className="font-semibold text-[#391511]">
@@ -516,7 +542,7 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
           </span>{' '}
           producto(s) seleccionados
           {(filtroEstado !== 'todos' ||
-            filtroClase !== 'todas' ||
+            clasesSel.size > 0 ||
             busqueda.trim() !== '') && (
             <span className="text-xs text-[#a15c2f]"> (del filtro actual)</span>
           )}
