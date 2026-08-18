@@ -1,17 +1,21 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ArrowUpDown, Search } from 'lucide-react'
+import { ArrowUpDown, FileSpreadsheet, FileText, Search } from 'lucide-react'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { formatearNumero } from '@/lib/utils/formato'
+import { generarAbcExcel, generarAbcPDF } from '@/lib/utils/exportarAbc'
 import { cn } from '@/lib/utils'
 import type { ClaseABC, ProductoABC } from '@/lib/queries/clasificacionAbc'
 
 interface Props {
   productos: ProductoABC[]
+  /** Ventana del ranking en días (30/60/90); figura en el archivo exportado. */
+  dias?: number
 }
 
 type OrdenCol =
@@ -43,7 +47,7 @@ const BADGE_CLASE: Record<
   },
 }
 
-export function TablaABC({ productos }: Props) {
+export function TablaABC({ productos, dias = 30 }: Props) {
   const [busqueda, setBusqueda] = useState('')
   const [filtroClase, setFiltroClase] = useState<ClaseABC | 'todas'>(
     'todas'
@@ -109,6 +113,31 @@ export function TablaABC({ productos }: Props) {
     }
   }
 
+  // Exporta EXACTAMENTE lo que la tabla muestra: filtro de clase, búsqueda
+  // y orden actual incluidos.
+  async function exportar(tipo: 'excel' | 'pdf') {
+    if (filtrados.length === 0) return
+    const filas = filtrados.map((p) => ({
+      clase: p.clase,
+      nombre: p.nombre,
+      codigo_barras: p.codigo_barras,
+      categoria_nombre: p.categoria_nombre,
+      ingresos: p.ingresos,
+      unidades_vendidas: p.unidades_vendidas,
+      porcentaje_ingreso: p.porcentaje_ingreso,
+      porcentaje_acumulado: p.porcentaje_acumulado,
+      stock_actual: p.stock_actual,
+    }))
+    try {
+      if (tipo === 'excel') await generarAbcExcel(filas, filtroClase, dias)
+      else await generarAbcPDF(filas, filtroClase, dias)
+    } catch {
+      toast.error(
+        `No se pudo generar el ${tipo === 'excel' ? 'Excel' : 'PDF'}.`
+      )
+    }
+  }
+
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden">
       {/* Filtros */}
@@ -145,6 +174,29 @@ export function TablaABC({ productos }: Props) {
         <span className="text-xs text-[#6f3a2a]">
           {formatearNumero(filtrados.length)} productos
         </span>
+
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportar('excel')}
+            disabled={filtrados.length === 0}
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Excel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportar('pdf')}
+            disabled={filtrados.length === 0}
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            PDF
+          </Button>
+        </div>
       </div>
 
       {/* Tabla */}

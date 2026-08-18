@@ -142,7 +142,7 @@ export function PantallaABC({ embebido = false }: Props) {
         <>
           <CardsKPIsABC resumen={data} />
           <GraficoABC productos={data.productos} />
-          <TablaABC productos={data.productos} />
+          <TablaABC productos={data.productos} dias={dias} />
         </>
       )}
     </div>
