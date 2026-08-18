@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -21,6 +21,8 @@ import {
   useUpdateProveedor,
 } from '@/lib/hooks/useProveedores'
 import { useConfigCompras } from '@/lib/hooks/useHistorialCostos'
+import { calcularDiasHastaEntrega } from '@/lib/compras/cobertura'
+import { cn } from '@/lib/utils'
 import type { ProveedorRow } from '@/types/database'
 
 /** Días con hasta 1 decimal, acepta coma (es-AR). Vacío = usar default global. */
@@ -83,6 +85,63 @@ const esquemaProveedor = z.object({
 
 type DatosFormulario = z.infer<typeof esquemaProveedor>
 
+/** Semana lunes-primero para mostrar; el valor es el de Date.getDay() (0=dom). */
+const DIAS_SEMANA: { valor: number; etiqueta: string }[] = [
+  { valor: 1, etiqueta: 'L' },
+  { valor: 2, etiqueta: 'M' },
+  { valor: 3, etiqueta: 'X' },
+  { valor: 4, etiqueta: 'J' },
+  { valor: 5, etiqueta: 'V' },
+  { valor: 6, etiqueta: 'S' },
+  { valor: 0, etiqueta: 'D' },
+]
+
+/** Fila de chips de días de la semana (calendario de reposición, mig 152). */
+function SelectorDias({
+  valor,
+  onCambio,
+  deshabilitado,
+  etiqueta,
+}: {
+  valor: number[]
+  onCambio: (dias: number[]) => void
+  deshabilitado: boolean
+  etiqueta: string
+}) {
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <span className="text-xs text-[#6f3a2a] w-20">{etiqueta}</span>
+      {DIAS_SEMANA.map((d) => {
+        const activo = valor.includes(d.valor)
+        return (
+          <button
+            key={d.valor}
+            type="button"
+            disabled={deshabilitado}
+            onClick={() =>
+              onCambio(
+                activo
+                  ? valor.filter((v) => v !== d.valor)
+                  : [...valor, d.valor]
+              )
+            }
+            className={cn(
+              'h-7 w-7 rounded-full text-xs font-semibold transition-colors',
+              activo
+                ? 'bg-[#f9b44c] text-[#391511]'
+                : 'bg-white border border-[#e4c9b0] text-[#c8a58a] hover:border-[#f9b44c]'
+            )}
+            aria-pressed={activo}
+            aria-label={`${etiqueta} ${d.etiqueta}`}
+          >
+            {d.etiqueta}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 const CONDICIONES_IVA = [
   { valor: 'responsable_inscripto', etiqueta: 'Responsable Inscripto' },
   { valor: 'monotributo', etiqueta: 'Monotributo' },
@@ -103,6 +162,11 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
   // Defaults globales de reposición: se muestran como placeholder para que se
   // vea qué valor rige cuando el campo queda vacío.
   const { data: configCompras } = useConfigCompras()
+
+  // Calendario semanal (mig 152) fuera de react-hook-form: son arrays que se
+  // togglean con chips, no inputs registrables.
+  const [diasToma, setDiasToma] = useState<number[]>([])
+  const [diasEntrega, setDiasEntrega] = useState<number[]>([])
 
   const {
     register,
@@ -153,6 +217,8 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
         condicion_iva: proveedor?.condicion_iva ?? '',
         domicilio: proveedor?.domicilio ?? '',
       })
+      setDiasToma(proveedor?.dias_toma_pedido ?? [])
+      setDiasEntrega(proveedor?.dias_entrega_semana ?? [])
     }
   }, [abierto, proveedor, reset])
 
@@ -171,6 +237,10 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
       dias_cobertura_objetivo: diasANumero(datos.dias_cobertura_objetivo),
       dias_seguridad: diasANumero(datos.dias_seguridad),
       frecuencia_reposicion_dias: diasANumero(datos.frecuencia_reposicion_dias),
+      dias_toma_pedido:
+        diasToma.length > 0 ? [...diasToma].sort((a, b) => a - b) : null,
+      dias_entrega_semana:
+        diasEntrega.length > 0 ? [...diasEntrega].sort((a, b) => a - b) : null,
       cuit: cuitDigitos ? cuitDigitos : null,
       razon_social: datos.razon_social.trim() ? datos.razon_social.trim() : null,
       condicion_iva: datos.condicion_iva ? datos.condicion_iva : null,
@@ -376,6 +446,44 @@ export function DrawerProveedor({ abierto, onCambioAbierto, proveedor }: Props) 
                   </p>
                 )}
               </div>
+            </div>
+
+            {/* Calendario real (mig 152): si se cargan AMBAS filas, el punto
+                de reposición usa los días hasta la próxima entrega posible
+                en lugar de la frecuencia fija. */}
+            <div className="space-y-2">
+              <SelectorDias
+                etiqueta="Toma pedidos"
+                valor={diasToma}
+                onCambio={setDiasToma}
+                deshabilitado={guardando}
+              />
+              <SelectorDias
+                etiqueta="Entrega"
+                valor={diasEntrega}
+                onCambio={setDiasEntrega}
+                deshabilitado={guardando}
+              />
+              {diasToma.length > 0 && diasEntrega.length > 0 ? (
+                <p className="text-xs text-[#2f6f4f]">
+                  Con este calendario, la próxima entrega posible desde hoy es
+                  en{' '}
+                  <span className="font-bold">
+                    {calcularDiasHastaEntrega(diasToma, diasEntrega, new Date()) ??
+                      '—'}
+                  </span>{' '}
+                  día(s); ese valor reemplaza a la frecuencia en el punto de
+                  reposición.
+                </p>
+              ) : (
+                (diasToma.length > 0 || diasEntrega.length > 0) && (
+                  <p className="text-xs text-[#a15c2f]">
+                    Cargá las dos filas (toma de pedidos Y entrega) para que el
+                    calendario se use; con una sola, sigue rigiendo la
+                    frecuencia fija.
+                  </p>
+                )
+              )}
             </div>
           </div>
 

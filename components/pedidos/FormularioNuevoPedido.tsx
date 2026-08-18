@@ -76,6 +76,10 @@ interface ItemFormulario {
   precio_costo: number
   /** true = se pide por peso (kg): la cantidad es un peso decimal, no unidades. */
   venta_por_peso: boolean
+  /** Lo que sugirió el motor de cobertura (mig 152). null = carga manual. */
+  cantidad_sugerida?: number | null
+  /** Motivo capturado ante un ajuste fuerte (viene del Centro de Compras). */
+  motivo_ajuste?: string | null
 }
 
 interface Props {
@@ -224,6 +228,8 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
       handoff.items.map((it) => ({
         ...it,
         venta_por_peso: it.venta_por_peso ?? false,
+        cantidad_sugerida: it.cantidad_sugerida ?? null,
+        motivo_ajuste: it.motivo_ajuste ?? null,
       }))
     )
     autoFillProveedor.current = true
@@ -256,6 +262,10 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
         cantidad_pedida: it.cantidad_pedida,
         precio_costo: it.precio_costo,
         venta_por_peso: it.producto?.venta_por_peso ?? false,
+        // Preservar el sugerido/motivo guardados: la edición reescribe los
+        // items vía fn_actualizar_pedido y sin esto se perderían.
+        cantidad_sugerida: it.cantidad_sugerida ?? null,
+        motivo_ajuste: it.motivo_ajuste ?? null,
       }))
     )
   }, [esEdicion, pedidoEdicion])
@@ -302,6 +312,8 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
       codigo_barras: string | null
       precio_costo: number
       venta_por_peso?: boolean
+      /** Presente cuando viene del panel de sugeridos (mig 152). */
+      cantidad_sugerida?: number | null
     },
     cantidad = 1
   ) {
@@ -323,6 +335,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
           cantidad_pedida: cantidad,
           precio_costo: producto.precio_costo,
           venta_por_peso: producto.venta_por_peso ?? false,
+          cantidad_sugerida: producto.cantidad_sugerida ?? null,
         },
       ]
     })
@@ -342,6 +355,7 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
           cantidad_pedida: s.cantidad_sugerida,
           precio_costo: s.precio_costo,
           venta_por_peso: s.venta_por_peso,
+          cantidad_sugerida: s.cantidad_sugerida,
         }))
       return [...prev, ...nuevos]
     })
@@ -374,6 +388,8 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
         ? Math.max(0.001, it.cantidad_pedida || 0)
         : Math.max(1, Math.floor(it.cantidad_pedida) || 1),
       precio_costo: it.precio_costo,
+      cantidad_sugerida: it.cantidad_sugerida ?? null,
+      motivo_ajuste: it.motivo_ajuste ?? null,
     }))
 
     if (esEdicion && pedidoId != null) {

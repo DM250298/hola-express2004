@@ -1,8 +1,8 @@
 -- ╔════════════════════════════════════════════════════════════════════╗
--- ║  TEST · Compras por cobertura (migración 151)                       ║
+-- ║  TEST · Compras por cobertura (migraciones 151 + 152)               ║
 -- ║                                                                     ║
 -- ║  Correr COMPLETO en el SQL Editor de Supabase, DESPUÉS de aplicar   ║
--- ║  la 151. Todo corre dentro de una transacción que termina en        ║
+-- ║  la 151 y la 152. Todo corre dentro de una transacción que termina  ║
 -- ║  ROLLBACK: no deja usuarios, productos, ventas ni pedidos.          ║
 -- ║  Es seguro correrlo contra la base de producción.                   ║
 -- ║                                                                     ║
@@ -322,6 +322,82 @@ begin
       v_num, v_num2, v_num3;
   end if;
   raise notice 'OK · Borrador: avisa 7 u sin descontar la sugerencia ✔';
+
+  raise notice '━━ V2 (mig 152) ━━';
+
+  -- Calendario · fn_dias_hasta_entrega (fechas fijas: 17/8/2026 es lunes)
+  select public.fn_dias_hasta_entrega(
+    array[1,3,5]::smallint[], array[2,4,6]::smallint[], date '2026-08-17')
+    into v_num;
+  if v_num <> 1 then
+    raise exception 'TEST FALLÓ: lunes con toma L/X/V y entrega M/J/S esperaba 1 día; dio %', v_num;
+  end if;
+  select public.fn_dias_hasta_entrega(
+    array[1,3,5]::smallint[], array[2,4,6]::smallint[], date '2026-08-18')
+    into v_num;
+  if v_num <> 2 then
+    raise exception 'TEST FALLÓ: martes esperaba 2 días (pide miércoles, entrega jueves); dio %', v_num;
+  end if;
+  select public.fn_dias_hasta_entrega(
+    array[1]::smallint[], array[1]::smallint[], date '2026-08-17')
+    into v_num;
+  if v_num <> 7 then
+    raise exception 'TEST FALLÓ: toma y entrega el mismo día esperaba 7; dio %', v_num;
+  end if;
+  select public.fn_dias_hasta_entrega(null, array[2]::smallint[], date '2026-08-17')
+    into v_num;
+  if v_num is not null then
+    raise exception 'TEST FALLÓ: sin días de toma esperaba NULL; dio %', v_num;
+  end if;
+  raise notice 'OK · Calendario: 1 / 2 / 7 días y NULL sin calendario ✔';
+
+  -- Calendario · manda sobre la frecuencia fija en fn_sugerencias_compra
+  update public.proveedores
+     set dias_toma_pedido = array[1,3,5]::smallint[],
+         dias_entrega_semana = array[2,4,6]::smallint[]
+   where id = v_prov;
+  select f.frecuencia_reposicion_dias into v_num
+    from public.fn_sugerencias_compra(v_prov) f where f.producto_id = v_p2;
+  select public.fn_dias_hasta_entrega(
+    array[1,3,5]::smallint[], array[2,4,6]::smallint[], current_date)
+    into v_num2;
+  if v_num is distinct from v_num2 then
+    raise exception 'TEST FALLÓ: con calendario cargado esperaba frecuencia=% (días hasta entrega); dio %',
+      v_num2, v_num;
+  end if;
+  update public.proveedores
+     set dias_toma_pedido = null, dias_entrega_semana = null
+   where id = v_prov;
+  raise notice 'OK · El calendario reemplaza a la frecuencia fija (% días) ✔', v_num2;
+
+  -- Sugerido persistido · fn_actualizar_pedido conserva las columnas nuevas
+  insert into public.pedidos (proveedor_id, usuario_id, estado, total)
+  values (v_prov, v_user, 'borrador', 0) returning id into v_ped;
+  perform public.fn_actualizar_pedido(
+    v_ped, v_prov, null, null, 'enviado',
+    jsonb_build_array(jsonb_build_object(
+      'producto_id', v_p1,
+      'cantidad_pedida', 12,
+      'precio_costo', 100,
+      'cantidad_sugerida', 10,
+      'motivo_ajuste', 'Bonificación 3x2')));
+  select ip.cantidad_sugerida, ip.motivo_ajuste into v_num, v_txt
+    from public.items_pedido ip where ip.pedido_id = v_ped;
+  if v_num <> 10 or v_txt <> 'Bonificación 3x2' then
+    raise exception 'TEST FALLÓ: fn_actualizar_pedido esperaba sugerida=10 y motivo; dio sugerida=% motivo=%',
+      v_num, v_txt;
+  end if;
+  -- Segunda edición SIN los campos: quedan NULL (no inventa datos viejos)
+  perform public.fn_actualizar_pedido(
+    v_ped, v_prov, null, null, 'enviado',
+    jsonb_build_array(jsonb_build_object(
+      'producto_id', v_p1, 'cantidad_pedida', 15, 'precio_costo', 100)));
+  select ip.cantidad_sugerida into v_num
+    from public.items_pedido ip where ip.pedido_id = v_ped;
+  if v_num is not null then
+    raise exception 'TEST FALLÓ: edición sin sugerida esperaba NULL; dio %', v_num;
+  end if;
+  raise notice 'OK · fn_actualizar_pedido persiste sugerido + motivo ✔';
 
 end $$;
 

@@ -108,6 +108,9 @@ export type ProveedorRow = {
   dias_cobertura_objetivo: number | null
   dias_seguridad: number | null
   frecuencia_reposicion_dias: number | null
+  /** Calendario real (mig 152): días de la semana 0=dom…6=sáb. null = usa frecuencia fija. */
+  dias_toma_pedido: number[] | null
+  dias_entrega_semana: number[] | null
   created_at: string
 }
 
@@ -125,6 +128,8 @@ export type ProveedorInsert = {
   dias_cobertura_objetivo?: number | null
   dias_seguridad?: number | null
   frecuencia_reposicion_dias?: number | null
+  dias_toma_pedido?: number[] | null
+  dias_entrega_semana?: number[] | null
   created_at?: string
 }
 
@@ -141,6 +146,8 @@ export type ProveedorUpdate = {
   dias_cobertura_objetivo?: number | null
   dias_seguridad?: number | null
   frecuencia_reposicion_dias?: number | null
+  dias_toma_pedido?: number[] | null
+  dias_entrega_semana?: number[] | null
 }
 
 // ─── clientes (FASE 3 — CRM) ─────────────────────────────────────────────────
@@ -1543,6 +1550,10 @@ export type ItemPedidoRow = {
   cantidad_facturada: number | null
   /** Secuencia de escaneo en la recepción (orden del papel de la factura). Migración 137. */
   orden_recepcion: number | null
+  /** Lo que sugirió el motor de cobertura al armar la orden (mig 152). NULL = carga manual. */
+  cantidad_sugerida: number | null
+  /** Motivo opcional cuando el comprador se apartó fuerte de la sugerencia. Mig 152. */
+  motivo_ajuste: string | null
 }
 
 export type ItemPedidoInsert = {
@@ -1556,6 +1567,8 @@ export type ItemPedidoInsert = {
   cuenta_a_pagar_id?: number | null
   cantidad_facturada?: number | null
   orden_recepcion?: number | null
+  cantidad_sugerida?: number | null
+  motivo_ajuste?: string | null
 }
 
 export type ItemPedidoUpdate = {
@@ -1566,6 +1579,8 @@ export type ItemPedidoUpdate = {
   cuenta_a_pagar_id?: number | null
   cantidad_facturada?: number | null
   orden_recepcion?: number | null
+  cantidad_sugerida?: number | null
+  motivo_ajuste?: string | null
 }
 
 // ─── producción (recetas, órdenes) ────────────────────────────────────────────

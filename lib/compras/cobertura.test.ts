@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   calcularCobertura,
+  calcularDiasHastaEntrega,
   calcularDiasStock,
   calcularVentaDiaria,
   cuentaComoTransito,
@@ -211,6 +212,23 @@ test('Config incoherente — objetivo se clampa al punto (no hay rojo con sugeri
   assert.equal(r.stockObjetivo, 18) // clampeado (crudo sería 14)
   assert.equal(r.requiereCompra, true)
   assert.equal(r.cantidadSugerida, 2) // 18 − 16: nunca rojo con sugerido 0
+})
+
+test('calcularDiasHastaEntrega — calendario real del proveedor (mig 152)', () => {
+  const lunes = new Date(2026, 7, 17) // lunes 17/8/2026
+  const martes = new Date(2026, 7, 18)
+  // Toma L/X/V y entrega M/J/S: pide hoy lunes → entrega mañana martes.
+  assert.equal(calcularDiasHastaEntrega([1, 3, 5], [2, 4, 6], lunes), 1)
+  // Desde martes: próxima toma miércoles (1), entrega jueves (2).
+  assert.equal(calcularDiasHastaEntrega([1, 3, 5], [2, 4, 6], martes), 2)
+  // Toma y entrega el mismo día de la semana → la entrega es a los 7 días
+  // (la entrega tiene que ser estrictamente posterior al día del pedido).
+  assert.equal(calcularDiasHastaEntrega([1], [1], lunes), 7)
+  // Sin calendario (o incompleto) → null: rige la frecuencia fija.
+  assert.equal(calcularDiasHastaEntrega(null, [2], lunes), null)
+  assert.equal(calcularDiasHastaEntrega([], [2], lunes), null)
+  assert.equal(calcularDiasHastaEntrega([1], [], lunes), null)
+  assert.equal(calcularDiasHastaEntrega([1], undefined, lunes), null)
 })
 
 test('calcularVentaDiaria y calcularDiasStock — bordes', () => {

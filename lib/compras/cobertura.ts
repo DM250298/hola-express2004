@@ -178,6 +178,38 @@ export function esSobrestock(
   return diasStock > umbral + TOLERANCIA
 }
 
+// ─── Calendario del proveedor (espejo de fn_dias_hasta_entrega, mig 152) ──
+
+/**
+ * Días hasta la próxima entrega posible según el calendario semanal del
+ * proveedor (0 = domingo … 6 = sábado, convención de Date.getDay() y de
+ * extract(dow) en Postgres). Busca el primer día de toma de pedido desde
+ * `desde` (inclusive) y después la primera entrega ESTRICTAMENTE posterior.
+ * null si el calendario no está cargado — el llamador cae a la frecuencia
+ * fija, igual que el SQL.
+ */
+export function calcularDiasHastaEntrega(
+  diasToma: readonly number[] | null | undefined,
+  diasEntrega: readonly number[] | null | undefined,
+  desde: Date
+): number | null {
+  if (!diasToma || diasToma.length === 0) return null
+  if (!diasEntrega || diasEntrega.length === 0) return null
+  const dowDesde = desde.getDay()
+  let offsetPedido = -1
+  for (let o = 0; o <= 6; o++) {
+    if (diasToma.includes((dowDesde + o) % 7)) {
+      offsetPedido = o
+      break
+    }
+  }
+  if (offsetPedido < 0) return null
+  for (let e = offsetPedido + 1; e <= offsetPedido + 7; e++) {
+    if (diasEntrega.includes((dowDesde + e) % 7)) return e
+  }
+  return null
+}
+
 // ─── Tránsito (espejo del CTE de la migración 151) ────────────────────────
 
 /** Estados de OC que cuentan como mercadería en camino. */

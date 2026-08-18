@@ -19,6 +19,10 @@ export interface ItemHandoffReposicion {
   /** Opcional: Reposición lo provee; el insumo de Producción (otro modelo de
    *  unidad) lo omite. El editor lo resuelve con `?? false`. */
   venta_por_peso?: boolean
+  /** Lo que sugirió el motor de cobertura (mig 152); viaja hasta items_pedido. */
+  cantidad_sugerida?: number | null
+  /** Motivo capturado en el Centro de Compras ante un ajuste fuerte. */
+  motivo_ajuste?: string | null
 }
 
 export interface HandoffReposicion {

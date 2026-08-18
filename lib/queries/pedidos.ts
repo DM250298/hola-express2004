@@ -269,6 +269,10 @@ export interface ItemNuevoPedido {
   producto_id: number
   cantidad_pedida: number
   precio_costo: number
+  /** Lo que sugirió el motor de cobertura (mig 152). null/omitido = carga manual. */
+  cantidad_sugerida?: number | null
+  /** Motivo opcional cuando la cantidad final se aparta fuerte de la sugerida. */
+  motivo_ajuste?: string | null
 }
 
 export interface NuevoPedidoPayload {
@@ -314,6 +318,8 @@ export async function crearPedido(
     cantidad_recibida: null,
     precio_costo: it.precio_costo,
     subtotal: it.cantidad_pedida * it.precio_costo,
+    cantidad_sugerida: it.cantidad_sugerida ?? null,
+    motivo_ajuste: it.motivo_ajuste?.trim() ? it.motivo_ajuste.trim() : null,
   }))
 
   const { error: errItems } = await supabase
@@ -361,6 +367,8 @@ export async function actualizarPedido(
       producto_id: it.producto_id,
       cantidad_pedida: it.cantidad_pedida,
       precio_costo: it.precio_costo,
+      cantidad_sugerida: it.cantidad_sugerida ?? null,
+      motivo_ajuste: it.motivo_ajuste?.trim() ? it.motivo_ajuste.trim() : null,
     })) as unknown as Json,
   })
 

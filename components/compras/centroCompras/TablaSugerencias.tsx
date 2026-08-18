@@ -114,6 +114,8 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
   // Selección dispersa: marcado = override ?? requiere_compra.
   const [overrides, setOverrides] = useState<Map<number, boolean>>(new Map())
   const [cantidades, setCantidades] = useState<Record<number, string>>({})
+  // Motivo del ajuste (mig 152): la fila lo pide solo ante un ajuste fuerte.
+  const [motivos, setMotivos] = useState<Record<number, string>>({})
 
   useEffect(() => {
     const t = setTimeout(() => setBusqueda(busquedaInput), 250)
@@ -181,6 +183,10 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
 
   const setCantidad = useCallback((id: number, valor: string) => {
     setCantidades((prev) => ({ ...prev, [id]: valor }))
+  }, [])
+
+  const setMotivo = useCallback((id: number, valor: string) => {
+    setMotivos((prev) => ({ ...prev, [id]: valor }))
   }, [])
 
   function marcarTodos(marcar: boolean) {
@@ -261,6 +267,9 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
         cantidad_pedida: cantidad,
         precio_costo: f.precio_costo,
         venta_por_peso: f.venta_por_peso,
+        // Persistencia del sugerido (mig 152): viaja hasta items_pedido.
+        cantidad_sugerida: f.cantidad_sugerida_redondeada,
+        motivo_ajuste: motivos[f.producto_id]?.trim() || null,
       })),
     })
     router.push('/pedidos/nuevo')
@@ -473,9 +482,11 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
                         cantidades[f.producto_id] ??
                         String(f.cantidad_sugerida_redondeada)
                       }
+                      motivo={motivos[f.producto_id] ?? ''}
                       mostrarCostos={mostrarCostos}
                       onToggle={toggle}
                       onCantidad={setCantidad}
+                      onMotivo={setMotivo}
                     />
                   ))}
                 </TableBody>

@@ -32,18 +32,23 @@ interface Props {
   fila: SugerenciaFila
   marcado: boolean
   cantidad: string
+  /** Motivo del ajuste (mig 152); el input aparece solo ante ajuste fuerte. */
+  motivo: string
   mostrarCostos: boolean
   onToggle: (id: number) => void
   onCantidad: (id: number, valor: string) => void
+  onMotivo: (id: number, valor: string) => void
 }
 
 export const FilaSugerencia = memo(function FilaSugerencia({
   fila: f,
   marcado,
   cantidad,
+  motivo,
   mostrarCostos,
   onToggle,
   onCantidad,
+  onMotivo,
 }: Props) {
   const cantidadNum = Number(cantidad.replace(',', '.')) || 0
   const ajusteFuerte =
@@ -249,6 +254,18 @@ export const FilaSugerencia = memo(function FilaSugerencia({
           }
           aria-label={`Pedido final de ${f.nombre}`}
         />
+        {ajusteFuerte && (
+          // Motivo opcional del ajuste (mig 152): queda guardado en la orden
+          // para analizar después las decisiones de compra.
+          <Input
+            value={motivo}
+            onChange={(e) => onMotivo(f.producto_id, e.target.value)}
+            placeholder="Motivo (opcional)"
+            maxLength={120}
+            className="h-7 w-24 mt-1 text-xs border-[#e4a42a]/60 placeholder:text-[#c8a58a]"
+            aria-label={`Motivo del ajuste de ${f.nombre}`}
+          />
+        )}
       </TableCell>
     </TableRow>
   )

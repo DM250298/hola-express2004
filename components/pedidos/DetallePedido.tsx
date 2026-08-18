@@ -34,7 +34,11 @@ import {
   useActualizarEstadoPedido,
   useCancelarPedido,
 } from '@/lib/hooks/usePedidos'
-import { formatearCantidad, formatearFechaCorta } from '@/lib/utils/formato'
+import {
+  cantidadesIguales,
+  formatearCantidad,
+  formatearFechaCorta,
+} from '@/lib/utils/formato'
 import { ModalRecepcion } from './ModalRecepcion'
 
 interface Props {
@@ -283,6 +287,31 @@ export function DetallePedido({ pedidoId }: Props) {
                         {it.producto?.codigo_barras && (
                           <div className="text-xs text-[#c8a58a] font-mono mt-0.5">
                             {it.producto.codigo_barras}
+                          </div>
+                        )}
+                        {/* Trazabilidad de la compra (mig 152): qué sugirió el
+                            sistema y por qué el comprador lo cambió. */}
+                        {it.cantidad_sugerida != null && (
+                          <div className="text-xs mt-0.5">
+                            <span
+                              className={
+                                cantidadesIguales(
+                                  it.cantidad_sugerida,
+                                  it.cantidad_pedida
+                                )
+                                  ? 'text-[#c8a58a]'
+                                  : 'text-[#a15c2f]'
+                              }
+                            >
+                              Sugerido:{' '}
+                              {formatearCantidad(it.cantidad_sugerida, porPeso)}
+                            </span>
+                            {it.motivo_ajuste && (
+                              <span className="text-[#6f3a2a] italic">
+                                {' '}
+                                · «{it.motivo_ajuste}»
+                              </span>
+                            )}
                           </div>
                         )}
                       </TableCell>
