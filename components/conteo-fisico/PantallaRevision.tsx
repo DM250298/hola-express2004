@@ -3,7 +3,13 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2, RotateCcw } from 'lucide-react'
+import {
+  ArrowLeft,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  RotateCcw,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,6 +30,11 @@ import {
   formatearNumero,
 } from '@/lib/utils/formato'
 import { tienePermiso } from '@/lib/permisos'
+import {
+  exportarTablaExcel,
+  exportarTablaPDF,
+  type ColumnaExport,
+} from '@/lib/utils/exportarTabla'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useUsuariosActivos } from '@/lib/hooks/useConteos'
 import {
@@ -135,6 +146,79 @@ export function PantallaRevision({ sesionId }: Props) {
         <EstadoError mensaje="Esta pantalla es solo para quienes gestionan el conteo (permiso de cierre)." />
       </div>
     )
+  }
+
+  // Exporta la tabla del filtro activo (mismo orden por plata) — planilla
+  // para revisar diferencias fuera del sistema o archivar el conteo.
+  async function exportarDiferencias(tipo: 'excel' | 'pdf') {
+    if (filas.length === 0) return
+
+    const etiquetaFiltro =
+      FILTROS.find((f) => f.clave === filtro)?.etiqueta ?? ''
+    const columnas: ColumnaExport[] = [
+      { titulo: '#', wch: 5, pdfAncho: 9, align: 'right' },
+      { titulo: 'Producto', wch: 40, pdfAncho: 52 },
+      { titulo: 'Código', wch: 16, pdfAncho: 24 },
+      { titulo: 'Teórico', wch: 10, pdfAncho: 16, align: 'right' },
+      { titulo: 'Contado', wch: 10, pdfAncho: 16, align: 'right' },
+      { titulo: 'Diferencia', wch: 11, pdfAncho: 18, align: 'right' },
+      { titulo: 'Dif. $', wch: 12, pdfAncho: 20, align: 'right' },
+      { titulo: 'Obs.', wch: 26, pdfAncho: 26 },
+    ]
+
+    const filasExcel = filas.map((d, i) => [
+      i + 1,
+      d.nombre,
+      d.codigo_barras ?? '',
+      d.teorico_esperado,
+      d.total_contado ?? '',
+      d.diferencia ?? '',
+      d.diferencia_pesos ?? '',
+      d.observaciones.join(' / '),
+    ])
+
+    const filasPdf = filas.map((d, i) => [
+      i + 1,
+      d.nombre,
+      d.codigo_barras ?? '—',
+      formatearCantidad(d.teorico_esperado, d.venta_por_peso),
+      d.total_contado != null
+        ? formatearCantidad(d.total_contado, d.venta_por_peso)
+        : 'sin contar',
+      d.diferencia != null
+        ? formatearCantidad(d.diferencia, d.venta_por_peso)
+        : '—',
+      d.diferencia_pesos != null ? formatearMonto(d.diferencia_pesos) : '—',
+      d.observaciones.join(' / ') || '—',
+    ])
+
+    const opciones = {
+      titulo: 'Diferencias de conteo físico',
+      subtitulo: `Sesión #${sesionId} · ${etiquetaFiltro}`,
+      archivo: `conteo-diferencias-sesion-${sesionId}`,
+      columnas,
+      filas: filasExcel,
+      filasPdf,
+      kpis: [
+        {
+          etiqueta: 'Contados',
+          valor: `${formatearNumero(resumen.contados)} / ${formatearNumero(resumen.total)}`,
+        },
+        {
+          etiqueta: 'Con diferencia',
+          valor: formatearNumero(resumen.conDiferencia),
+        },
+        { etiqueta: 'Faltante $', valor: formatearMonto(resumen.faltantePesos) },
+        { etiqueta: 'Sobrante $', valor: formatearMonto(resumen.sobrantePesos) },
+      ],
+    }
+
+    try {
+      if (tipo === 'excel') await exportarTablaExcel(opciones)
+      else await exportarTablaPDF(opciones)
+    } catch {
+      toast.error(`No se pudo generar el ${tipo === 'excel' ? 'Excel' : 'PDF'}.`)
+    }
   }
 
   function alternarSeleccion(productoId: number) {
@@ -285,6 +369,26 @@ export function PantallaRevision({ sesionId }: Props) {
               {f.etiqueta}
             </button>
           ))}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarDiferencias('excel')}
+            disabled={filas.length === 0}
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Excel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarDiferencias('pdf')}
+            disabled={filas.length === 0}
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            PDF
+          </Button>
         </div>
         {!sesionCerrada && seleccion.size > 0 && (
           <div className="flex items-center gap-2">

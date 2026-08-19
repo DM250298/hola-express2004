@@ -48,7 +48,17 @@ import {
 } from '@/lib/utils/cotizacion'
 import { guardarHandoffReposicion } from '@/lib/compras/handoffReposicion'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { formatearMontoEntero, formatearNumero } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearMonto,
+  formatearMontoEntero,
+  formatearNumero,
+} from '@/lib/utils/formato'
+import {
+  exportarTablaExcel,
+  exportarTablaPDF,
+  type ColumnaExport,
+} from '@/lib/utils/exportarTabla'
 import { cn } from '@/lib/utils'
 import type { GrupoProveedor, SugerenciaFila } from './CentroCompras'
 import { FilaSugerencia } from './FilaSugerencia'
@@ -238,6 +248,113 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
   const sinProveedor = grupo.proveedor_id === null
   const puedeGenerar = itemsSel.length > 0
 
+  // Exporta el listado filtrado con TODAS las columnas de cobertura (análisis
+  // interno; distinto de la cotización, que es el papel para el proveedor).
+  async function exportarListado(tipo: 'excel' | 'pdf') {
+    if (filtrados.length === 0) return
+
+    const partes: string[] = [grupo.proveedor_nombre]
+    if (filtroEstado !== 'todos') partes.push(FILTROS_ESTADO[filtroEstado])
+    if (clasesSel.size > 0)
+      partes.push(`Clase ${[...clasesSel].sort().join(' + ')}`)
+    if (busqueda.trim()) partes.push(`búsqueda: «${busqueda.trim()}»`)
+
+    const columnas: ColumnaExport[] = [
+      { titulo: '#', wch: 5, pdfAncho: 8, align: 'right' },
+      { titulo: 'Producto', wch: 40, pdfAncho: 38 },
+      { titulo: 'Cl.', wch: 5, pdfAncho: 8, align: 'center' },
+      { titulo: 'Stock', wch: 9, pdfAncho: 13, align: 'right' },
+      { titulo: 'Venta 30d', wch: 10, pdfAncho: 14, align: 'right' },
+      { titulo: '/día', wch: 8, pdfAncho: 11, align: 'right' },
+      { titulo: 'Días', wch: 8, pdfAncho: 11, align: 'right' },
+      { titulo: 'Tránsito', wch: 9, pdfAncho: 13, align: 'right' },
+      { titulo: 'Punto', wch: 9, pdfAncho: 12, align: 'right' },
+      { titulo: 'Objetivo', wch: 9, pdfAncho: 13, align: 'right' },
+      { titulo: 'Sugerido', wch: 9, pdfAncho: 13, align: 'right' },
+      ...(mostrarCostos
+        ? [{ titulo: 'Costo', wch: 12, align: 'right' as const }]
+        : []),
+      { titulo: 'Pedido final', wch: 11, pdfAncho: 15, align: 'right' },
+    ]
+
+    const cantidadDe = (f: (typeof filtrados)[number]) =>
+      Number(
+        (
+          cantidades[f.producto_id] ?? String(f.cantidad_sugerida_redondeada)
+        ).replace(',', '.')
+      ) || 0
+
+    const filas = filtrados.map((f, i) => [
+      i + 1,
+      f.codigo_barras ? `${f.nombre} [${f.codigo_barras}]` : f.nombre,
+      f.clase_abc ?? '—',
+      f.stock_actual,
+      f.venta_30d,
+      f.venta_diaria,
+      f.dias_stock ?? '',
+      f.stock_en_transito,
+      f.punto_reposicion,
+      f.stock_objetivo,
+      f.cantidad_sugerida_redondeada,
+      ...(mostrarCostos ? [f.precio_costo] : []),
+      marcado(f) ? cantidadDe(f) : 0,
+    ])
+
+    const filasPdf = filtrados.map((f, i) => [
+      i + 1,
+      f.codigo_barras ? `${f.nombre}\n${f.codigo_barras}` : f.nombre,
+      f.clase_abc ?? '—',
+      formatearCantidad(f.stock_actual, f.venta_por_peso),
+      formatearCantidad(f.venta_30d, f.venta_por_peso),
+      formatearNumero(f.venta_diaria),
+      f.dias_stock != null ? `${formatearNumero(f.dias_stock)} d` : 'sin ventas',
+      f.stock_en_transito > 0
+        ? formatearCantidad(f.stock_en_transito, f.venta_por_peso)
+        : '—',
+      formatearCantidad(f.punto_reposicion, f.venta_por_peso),
+      formatearCantidad(f.stock_objetivo, f.venta_por_peso),
+      formatearCantidad(f.cantidad_sugerida_redondeada, f.venta_por_peso),
+      ...(mostrarCostos ? [formatearMonto(f.precio_costo)] : []),
+      marcado(f)
+        ? formatearCantidad(cantidadDe(f), f.venta_por_peso)
+        : '—',
+    ])
+
+    const opciones = {
+      titulo: 'Centro de Compras',
+      subtitulo: partes.join(' · '),
+      archivo: `centro-compras-${grupo.proveedor_nombre}`,
+      columnas,
+      filas,
+      filasPdf,
+      kpis: [
+        { etiqueta: 'Productos', valor: formatearNumero(filtrados.length) },
+        {
+          etiqueta: 'Requieren compra',
+          valor: formatearNumero(
+            filtrados.filter((f) => f.requiere_compra).length
+          ),
+        },
+        { etiqueta: 'Seleccionados', valor: formatearNumero(itemsSel.length) },
+        ...(mostrarCostos && totalSeleccion > 0
+          ? [
+              {
+                etiqueta: 'Total selección',
+                valor: formatearMontoEntero(totalSeleccion),
+              },
+            ]
+          : []),
+      ],
+    }
+
+    try {
+      if (tipo === 'excel') await exportarTablaExcel(opciones)
+      else await exportarTablaPDF(opciones)
+    } catch {
+      toast.error(`No se pudo generar el ${tipo === 'excel' ? 'Excel' : 'PDF'}.`)
+    }
+  }
+
   async function descargarExcel() {
     if (!puedeGenerar) return
     try {
@@ -406,6 +523,30 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
           </span>{' '}
           producto(s)
         </p>
+        <div className="flex items-center gap-1.5 pb-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarListado('excel')}
+            disabled={filtrados.length === 0}
+            title="Exporta el listado filtrado con todas las columnas de cobertura"
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Excel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarListado('pdf')}
+            disabled={filtrados.length === 0}
+            title="Exporta el listado filtrado con todas las columnas de cobertura"
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            PDF
+          </Button>
+        </div>
       </div>
 
       {/* Tabla */}

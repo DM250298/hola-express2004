@@ -49,18 +49,27 @@ const BADGE_CLASE: Record<
 
 export function TablaABC({ productos, dias = 30 }: Props) {
   const [busqueda, setBusqueda] = useState('')
-  const [filtroClase, setFiltroClase] = useState<ClaseABC | 'todas'>(
-    'todas'
-  )
+  // Clases COMBINABLES: vacío = todas; con clases activas se pueden sumar
+  // (ej: A + B para armar un pedido con ambas).
+  const [clasesSel, setClasesSel] = useState<Set<ClaseABC>>(new Set())
   const [ordenCol, setOrdenCol] = useState<OrdenCol>('ingresos')
   const [ordenAsc, setOrdenAsc] = useState(false)
+
+  function toggleClase(clase: ClaseABC) {
+    setClasesSel((prev) => {
+      const s = new Set(prev)
+      if (s.has(clase)) s.delete(clase)
+      else s.add(clase)
+      return s
+    })
+  }
 
   const filtrados = useMemo(() => {
     let lista = [...productos]
 
-    // Filtro por clase
-    if (filtroClase !== 'todas') {
-      lista = lista.filter((p) => p.clase === filtroClase)
+    // Filtro por clase (combinable)
+    if (clasesSel.size > 0) {
+      lista = lista.filter((p) => clasesSel.has(p.clase))
     }
 
     // Filtro por búsqueda
@@ -102,7 +111,7 @@ export function TablaABC({ productos, dias = 30 }: Props) {
     })
 
     return lista
-  }, [productos, filtroClase, busqueda, ordenCol, ordenAsc])
+  }, [productos, clasesSel, busqueda, ordenCol, ordenAsc])
 
   function alternarOrden(col: OrdenCol) {
     if (ordenCol === col) {
@@ -128,9 +137,10 @@ export function TablaABC({ productos, dias = 30 }: Props) {
       porcentaje_acumulado: p.porcentaje_acumulado,
       stock_actual: p.stock_actual,
     }))
+    const clases = [...clasesSel].sort()
     try {
-      if (tipo === 'excel') await generarAbcExcel(filas, filtroClase, dias)
-      else await generarAbcPDF(filas, filtroClase, dias)
+      if (tipo === 'excel') await generarAbcExcel(filas, clases, dias)
+      else await generarAbcPDF(filas, clases, dias)
     } catch {
       toast.error(
         `No se pudo generar el ${tipo === 'excel' ? 'Excel' : 'PDF'}.`
@@ -153,22 +163,39 @@ export function TablaABC({ productos, dias = 30 }: Props) {
         </div>
 
         <div className="flex items-center gap-1.5">
-          {(['todas', 'A', 'B', 'C'] as const).map((opcion) => (
-            <Button
-              key={opcion}
-              variant={filtroClase === opcion ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setFiltroClase(opcion)}
-              className={cn(
-                'h-8 text-xs font-bold',
-                filtroClase === opcion
-                  ? 'bg-[#391511] text-white hover:bg-[#391511]/90'
-                  : 'border-[#e4c9b0] text-[#6f3a2a]'
-              )}
-            >
-              {opcion === 'todas' ? 'Todas' : `Clase ${opcion}`}
-            </Button>
-          ))}
+          <Button
+            variant={clasesSel.size === 0 ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setClasesSel(new Set())}
+            className={cn(
+              'h-8 text-xs font-bold',
+              clasesSel.size === 0
+                ? 'bg-[#391511] text-white hover:bg-[#391511]/90'
+                : 'border-[#e4c9b0] text-[#6f3a2a]'
+            )}
+          >
+            Todas
+          </Button>
+          {(['A', 'B', 'C'] as const).map((opcion) => {
+            const activo = clasesSel.has(opcion)
+            return (
+              <Button
+                key={opcion}
+                variant={activo ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => toggleClase(opcion)}
+                title="Combinable: podés activar más de una clase a la vez"
+                className={cn(
+                  'h-8 text-xs font-bold',
+                  activo
+                    ? 'bg-[#391511] text-white hover:bg-[#391511]/90'
+                    : 'border-[#e4c9b0] text-[#6f3a2a]'
+                )}
+              >
+                Clase {opcion}
+              </Button>
+            )
+          })}
         </div>
 
         <span className="text-xs text-[#6f3a2a]">

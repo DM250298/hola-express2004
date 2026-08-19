@@ -16,26 +16,32 @@ export interface FilaAbcExport {
   stock_actual: number
 }
 
-function etiquetaFiltro(filtro: string): string {
-  return filtro === 'todas' ? 'Todas las clases' : `Clase ${filtro}`
+/** `clases` vacío = sin filtro (todas). Combinables: ['A','B'] → "Clases A + B". */
+function etiquetaFiltro(clases: string[]): string {
+  if (clases.length === 0) return 'Todas las clases'
+  const orden = [...clases].sort()
+  return `${orden.length > 1 ? 'Clases' : 'Clase'} ${orden.join(' + ')}`
 }
 
-function nombreArchivo(filtro: string, ext: string): string {
+function nombreArchivo(clases: string[], ext: string): string {
   const f = new Date().toISOString().slice(0, 10)
-  const sufijo = filtro === 'todas' ? 'todas' : `clase-${filtro.toLowerCase()}`
+  const sufijo =
+    clases.length === 0
+      ? 'todas'
+      : `clase-${[...clases].sort().join('-').toLowerCase()}`
   return `ranking-abc-${sufijo}-${f}.${ext}`
 }
 
 /** Excel con los productos filtrados (números crudos, para seguir operando). */
 export async function generarAbcExcel(
   filas: FilaAbcExport[],
-  filtro: string,
+  clases: string[],
   dias: number
 ): Promise<void> {
   const XLSX = await import('xlsx')
   const aoa: (string | number)[][] = [
     ['Ranking ABC de ventas — ¡Hola! Express'],
-    [`${etiquetaFiltro(filtro)} · últimos ${dias} días`],
+    [`${etiquetaFiltro(clases)} · últimos ${dias} días`],
     [`Generado: ${new Date().toLocaleDateString('es-AR')}`],
     [],
     [
@@ -78,13 +84,13 @@ export async function generarAbcExcel(
   ]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Ranking ABC')
-  XLSX.writeFile(wb, nombreArchivo(filtro, 'xlsx'))
+  XLSX.writeFile(wb, nombreArchivo(clases, 'xlsx'))
 }
 
 /** PDF con encabezado de marca, KPIs y la tabla filtrada (imprimible). */
 export async function generarAbcPDF(
   filas: FilaAbcExport[],
-  filtro: string,
+  clases: string[],
   dias: number
 ): Promise<void> {
   const { crearDocumentoConHeader, agregarTabla, agregarBloqueKPIs, guardarPDF } =
@@ -95,11 +101,11 @@ export async function generarAbcPDF(
   desde.setDate(desde.getDate() - dias)
 
   // guardarPDF agrega la extensión: acá va el nombre pelado.
-  const base = nombreArchivo(filtro, 'pdf').replace(/\.pdf$/, '')
+  const base = nombreArchivo(clases, 'pdf').replace(/\.pdf$/, '')
 
   const doc = crearDocumentoConHeader({
     titulo: 'Ranking ABC de ventas',
-    subtitulo: `${etiquetaFiltro(filtro)} · por ingresos de los últimos ${dias} días`,
+    subtitulo: `${etiquetaFiltro(clases)} · por ingresos de los últimos ${dias} días`,
     desde: desde.toISOString(),
     hasta: hasta.toISOString(),
     archivo: base,
@@ -116,7 +122,7 @@ export async function generarAbcPDF(
   const y = agregarBloqueKPIs(doc, 63, [
     { etiqueta: 'Productos', valor: numero.format(filas.length) },
     { etiqueta: 'Ingresos del período', valor: enteroARS.format(totalIngresos) },
-    { etiqueta: 'Filtro', valor: etiquetaFiltro(filtro) },
+    { etiqueta: 'Filtro', valor: etiquetaFiltro(clases) },
   ])
 
   agregarTabla(

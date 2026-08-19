@@ -12,8 +12,9 @@ const COLOR_CREMA: [number, number, number] = [253, 250, 246] // #fdfaf6
 export interface OpcionesPDF {
   titulo: string
   subtitulo?: string
-  desde: string
-  hasta: string
+  /** Período del reporte (ISO). Opcional: sin ambos, la línea no se dibuja. */
+  desde?: string
+  hasta?: string
   archivo: string // nombre sin extensión
 }
 
@@ -52,22 +53,26 @@ export function crearDocumentoConHeader(opciones: OpcionesPDF): jsPDF {
     doc.text(opciones.subtitulo, 14, 46)
   }
 
-  // Período
+  // Período (solo si el reporte tiene rango de fechas)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)
   doc.setTextColor(...COLOR_CAFE)
   const formatearFecha = (iso: string) =>
     format(new Date(iso), "d 'de' MMMM 'de' yyyy", { locale: es })
-  doc.text(
-    `Período: ${formatearFecha(opciones.desde)} al ${formatearFecha(opciones.hasta)}`,
-    14,
-    opciones.subtitulo ? 52 : 46
-  )
+  let yLinea = opciones.subtitulo ? 52 : 46
+  if (opciones.desde && opciones.hasta) {
+    doc.text(
+      `Período: ${formatearFecha(opciones.desde)} al ${formatearFecha(opciones.hasta)}`,
+      14,
+      yLinea
+    )
+    yLinea += 5
+  }
 
   doc.text(
     `Generado: ${format(new Date(), "d/MM/yyyy 'a las' HH:mm")}`,
     14,
-    opciones.subtitulo ? 57 : 51
+    yLinea
   )
 
   return doc

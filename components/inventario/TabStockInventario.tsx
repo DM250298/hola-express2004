@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { FileSpreadsheet, FileText, Search } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -23,6 +25,12 @@ import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
+import {
+  exportarTablaExcel,
+  exportarTablaPDF,
+  type ColumnaExport,
+} from '@/lib/utils/exportarTabla'
+import { formatearCantidad, formatearMonto, formatearNumero } from '@/lib/utils/formato'
 import type {
   EstadoStock,
   FiltrosInventario,
@@ -134,6 +142,104 @@ export function TabStockInventario() {
     ubicacionFiltro !== TODAS_UBIC ||
     estadoFiltro !== null ||
     estadoProducto !== 'activos'
+
+  // Exporta la lista COMPLETA filtrada (no solo la página visible).
+  async function exportar(tipo: 'excel' | 'pdf') {
+    if (!productos || productos.length === 0) return
+
+    const partes: string[] = []
+    if (categoriaFiltro !== TODAS_CAT)
+      partes.push(itemsCategoria[categoriaFiltro] ?? 'Categoría')
+    if (proveedorFiltro !== TODOS_PROV)
+      partes.push(itemsProveedor[proveedorFiltro] ?? 'Proveedor')
+    if (ubicacionFiltro !== TODAS_UBIC) partes.push(ubicacionFiltro)
+    if (estadoFiltro)
+      partes.push(
+        { normal: 'Stock normal', bajo: 'Stock bajo', critico: 'Sin stock' }[
+          estadoFiltro
+        ] ?? estadoFiltro
+      )
+    if (estadoProducto !== 'activos')
+      partes.push(ESTADO_PRODUCTO_ITEMS[estadoProducto])
+    if (busqueda) partes.push(`búsqueda: «${busqueda}»`)
+    const subtitulo =
+      partes.length > 0 ? partes.join(' · ') : 'Todos los productos activos'
+
+    const ESTADO_LABEL: Record<EstadoStock, string> = {
+      normal: 'Normal',
+      bajo: 'Bajo',
+      critico: 'Crítico',
+    }
+
+    const columnas: ColumnaExport[] = [
+      { titulo: '#', wch: 5, pdfAncho: 9, align: 'right' },
+      { titulo: 'Producto', wch: 42, pdfAncho: 48 },
+      { titulo: 'Código', wch: 16, pdfAncho: 24 },
+      { titulo: 'Categoría', wch: 16, pdfAncho: 20 },
+      { titulo: 'Proveedor', wch: 18, pdfAncho: 22 },
+      { titulo: 'Stock', wch: 10, pdfAncho: 15, align: 'right' },
+      { titulo: 'Mínimo', wch: 9, pdfAncho: 13, align: 'right' },
+      { titulo: 'Estado', wch: 9, pdfAncho: 13, align: 'center' },
+      { titulo: 'Precio venta', wch: 13, pdfAncho: 18, align: 'right' },
+      ...(puedeVerCosto
+        ? [
+            { titulo: 'Costo', wch: 12, align: 'right' as const },
+            { titulo: 'Margen %', wch: 9, align: 'right' as const },
+          ]
+        : []),
+    ]
+
+    const filas = productos.map((p, i) => [
+      i + 1,
+      p.nombre,
+      p.codigo_barras ?? '',
+      p.categoria_nombre ?? '',
+      p.proveedor_nombre ?? '',
+      p.stock_actual,
+      p.stock_minimo,
+      ESTADO_LABEL[p.estado_stock],
+      p.precio_venta,
+      ...(puedeVerCosto ? [p.precio_costo, p.margen] : []),
+    ])
+
+    const filasPdf = productos.map((p, i) => [
+      i + 1,
+      p.nombre,
+      p.codigo_barras ?? '—',
+      p.categoria_nombre ?? '—',
+      p.proveedor_nombre ?? '—',
+      formatearCantidad(p.stock_actual, p.venta_por_peso),
+      formatearCantidad(p.stock_minimo, p.venta_por_peso),
+      ESTADO_LABEL[p.estado_stock],
+      formatearMonto(p.precio_venta),
+      ...(puedeVerCosto
+        ? [formatearMonto(p.precio_costo), `${formatearNumero(p.margen)} %`]
+        : []),
+    ])
+
+    const sinStock = productos.filter((p) => p.estado_stock === 'critico').length
+    const bajos = productos.filter((p) => p.estado_stock === 'bajo').length
+    const opciones = {
+      titulo: 'Inventario de stock',
+      subtitulo,
+      archivo: 'stock',
+      columnas,
+      filas,
+      filasPdf,
+      kpis: [
+        { etiqueta: 'Productos', valor: formatearNumero(productos.length) },
+        { etiqueta: 'Sin stock', valor: formatearNumero(sinStock) },
+        { etiqueta: 'Stock bajo', valor: formatearNumero(bajos) },
+      ],
+    }
+
+    try {
+      if (tipo === 'excel') await exportarTablaExcel(opciones)
+      else await exportarTablaPDF(opciones)
+    } catch {
+      toast.error(`No se pudo generar el ${tipo === 'excel' ? 'Excel' : 'PDF'}.`)
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -247,7 +353,7 @@ export function TabStockInventario() {
         </Select>
       </div>
 
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex items-center justify-between text-sm gap-2 flex-wrap">
         <p className="text-[#6f3a2a]">
           <span className="font-semibold text-[#391511]">
             {productos?.length ?? 0}
@@ -255,6 +361,28 @@ export function TabStockInventario() {
           {productos?.length === 1 ? 'producto' : 'productos'}
           {hayFiltros && ' (filtrados)'}
         </p>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportar('excel')}
+            disabled={!productos || productos.length === 0}
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Excel
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportar('pdf')}
+            disabled={!productos || productos.length === 0}
+            className="h-8 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+          >
+            <FileText className="h-3.5 w-3.5" />
+            PDF
+          </Button>
+        </div>
       </div>
 
       <TablaStock

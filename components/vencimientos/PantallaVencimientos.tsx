@@ -6,9 +6,12 @@ import {
   CalendarPlus,
   CheckCircle2,
   Database,
+  FileSpreadsheet,
+  FileText,
   Search,
   XOctagon,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -19,7 +22,24 @@ import { ModalNuevoLote } from './ModalNuevoLote'
 import { ModalBajaLote } from './ModalBajaLote'
 import { ModalSincronizarStock } from './ModalSincronizarStock'
 import { useLotesActivos } from '@/lib/hooks/useVencimientos'
+import {
+  exportarTablaExcel,
+  exportarTablaPDF,
+  type ColumnaExport,
+} from '@/lib/utils/exportarTabla'
+import {
+  formatearCantidad,
+  formatearFechaCorta,
+  formatearNumero,
+} from '@/lib/utils/formato'
 import type { LoteConProducto } from '@/lib/queries/vencimientos'
+
+const ESTADO_LOTE_LABEL: Record<string, string> = {
+  vencido: 'Vencido',
+  rojo: 'Próximo (<3 días)',
+  amarillo: 'Atención (3-7 días)',
+  verde: 'OK',
+}
 
 export function PantallaVencimientos() {
   const { data: lotes, isLoading, isError } = useLotesActivos()
@@ -47,6 +67,72 @@ export function PantallaVencimientos() {
     }
     return { vencidos, proximos, atencion, ok }
   }, [lotes, busqueda])
+
+  // Exporta TODOS los lotes filtrados por la búsqueda, en orden de urgencia
+  // (vencidos → próximos → atención → OK), con su estado como columna.
+  async function exportar(tipo: 'excel' | 'pdf') {
+    const todos = [
+      ...agrupados.vencidos,
+      ...agrupados.proximos,
+      ...agrupados.atencion,
+      ...agrupados.ok,
+    ]
+    if (todos.length === 0) return
+
+    const columnas: ColumnaExport[] = [
+      { titulo: '#', wch: 5, pdfAncho: 9, align: 'right' },
+      { titulo: 'Producto', wch: 42, pdfAncho: 62 },
+      { titulo: 'Código', wch: 16, pdfAncho: 26 },
+      { titulo: 'Vencimiento', wch: 13, pdfAncho: 24, align: 'center' },
+      { titulo: 'Días', wch: 7, pdfAncho: 14, align: 'right' },
+      { titulo: 'Cantidad', wch: 10, pdfAncho: 18, align: 'right' },
+      { titulo: 'Estado', wch: 18, pdfAncho: 28 },
+    ]
+
+    const filas = todos.map((l, i) => [
+      i + 1,
+      l.producto.nombre,
+      l.producto.codigo_barras ?? '',
+      l.fecha_vencimiento,
+      l.dias_restantes,
+      l.cantidad_actual,
+      ESTADO_LOTE_LABEL[l.clase] ?? l.clase,
+    ])
+
+    const filasPdf = todos.map((l, i) => [
+      i + 1,
+      l.producto.nombre,
+      l.producto.codigo_barras ?? '—',
+      formatearFechaCorta(l.fecha_vencimiento),
+      l.dias_restantes,
+      formatearCantidad(l.cantidad_actual, l.producto.venta_por_peso),
+      ESTADO_LOTE_LABEL[l.clase] ?? l.clase,
+    ])
+
+    const opciones = {
+      titulo: 'Control de vencimientos',
+      subtitulo: busqueda.trim()
+        ? `Lotes activos · búsqueda: «${busqueda.trim()}»`
+        : 'Lotes activos por urgencia',
+      archivo: 'vencimientos',
+      columnas,
+      filas,
+      filasPdf,
+      kpis: [
+        { etiqueta: 'Vencidos', valor: formatearNumero(agrupados.vencidos.length) },
+        { etiqueta: 'Próximos (<3 d)', valor: formatearNumero(agrupados.proximos.length) },
+        { etiqueta: 'Atención (3-7 d)', valor: formatearNumero(agrupados.atencion.length) },
+        { etiqueta: 'OK', valor: formatearNumero(agrupados.ok.length) },
+      ],
+    }
+
+    try {
+      if (tipo === 'excel') await exportarTablaExcel(opciones)
+      else await exportarTablaPDF(opciones)
+    } catch {
+      toast.error(`No se pudo generar el ${tipo === 'excel' ? 'Excel' : 'PDF'}.`)
+    }
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-5">
@@ -82,15 +168,37 @@ export function PantallaVencimientos() {
 
       <ResumenVencimientos />
 
-      {/* Buscador */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
-        <Input
-          placeholder="Buscar por nombre o código…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
-        />
+      {/* Buscador + exportación */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
+          <Input
+            placeholder="Buscar por nombre o código…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c] bg-white"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => exportar('excel')}
+          disabled={isLoading || !lotes || lotes.length === 0}
+          className="h-9 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          Excel
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => exportar('pdf')}
+          disabled={isLoading || !lotes || lotes.length === 0}
+          className="h-9 border-[#e4c9b0] text-[#6f3a2a] gap-1.5 disabled:opacity-40"
+        >
+          <FileText className="h-3.5 w-3.5" />
+          PDF
+        </Button>
       </div>
 
       {/* Tabs */}
