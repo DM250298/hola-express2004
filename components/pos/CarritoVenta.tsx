@@ -12,6 +12,7 @@ import {
   type ItemCarrito,
 } from './carrito'
 import { cn } from '@/lib/utils'
+import type { ListaPrecio } from '@/types/database'
 
 /**
  * Input editable de cantidad. Mantiene estado local para permitir
@@ -85,6 +86,9 @@ interface Props {
   hayTerminalActiva?: boolean
   /** Abre el modal de peso para re-editar un ítem por kg. */
   onEditarPeso?: (productoId: number) => void
+  /** Lista de precios activa de la orden (mig 153). */
+  listaPrecio: ListaPrecio
+  onCambiarLista: (lista: ListaPrecio) => void
 }
 
 export function CarritoVenta({
@@ -98,10 +102,13 @@ export function CarritoVenta({
   onCobrarTerminal,
   hayTerminalActiva = false,
   onEditarPeso,
+  listaPrecio,
+  onCambiarLista,
 }: Props) {
   const total = calcularTotal(items)
   const unidades = contarUnidades(items)
   const vacio = items.length === 0
+  const esMayorista = listaPrecio === 'mayorista'
 
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl flex flex-col h-full overflow-hidden shadow-sm">
@@ -166,6 +173,48 @@ export function CarritoVenta({
         )}
       </div>
 
+      {/* Lista de precios de la venta */}
+      <div
+        className={cn(
+          'px-3 py-2 border-b border-[#e4c9b0]/40',
+          esMayorista ? 'bg-[#f9b44c]/25' : 'bg-white'
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-[#e4c9b0] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => onCambiarLista('minorista')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold transition-colors',
+                !esMayorista
+                  ? 'bg-[#391511] text-white'
+                  : 'bg-white text-[#6f3a2a] hover:bg-[#fdfaf6]'
+              )}
+            >
+              Minorista
+            </button>
+            <button
+              type="button"
+              onClick={() => onCambiarLista('mayorista')}
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold transition-colors',
+                esMayorista
+                  ? 'bg-[#f9b44c] text-[#391511]'
+                  : 'bg-white text-[#6f3a2a] hover:bg-[#fdfaf6]'
+              )}
+            >
+              Mayorista
+            </button>
+          </div>
+          {esMayorista && (
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#6f3a2a]">
+              Lista mayorista
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Items */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {vacio ? (
@@ -195,6 +244,14 @@ export function CarritoVenta({
                       <span className="text-[#c8a58a]">
                         {it.venta_por_peso ? ' / kg' : ' c/u'}
                       </span>
+                      {esMayorista && it.lista_aplicada === 'minorista' && (
+                        <span
+                          className="ml-1.5 px-1 py-px rounded bg-[#e4c9b0]/50 text-[#6f3a2a] text-[10px] font-semibold uppercase"
+                          title="Sin precio mayorista definido: se cobra el precio minorista"
+                        >
+                          min.
+                        </span>
+                      )}
                     </div>
                   </div>
                   <Button

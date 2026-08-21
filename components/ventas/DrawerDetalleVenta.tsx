@@ -94,6 +94,13 @@ export function DrawerDetalleVenta({ ventaId, onCambioAbierto }: Props) {
                     </span>
                   </div>
                 )}
+                {data.venta.lista_precio === 'mayorista' && (
+                  <div className="mt-1">
+                    <span className="text-[9px] uppercase tracking-wider font-bold text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
+                      Lista mayorista
+                    </span>
+                  </div>
+                )}
                 {data.venta.estado === 'anulada' && (
                   <div className="text-[10px] uppercase tracking-wider font-bold text-[#c43e2c] mt-1">
                     Anulada

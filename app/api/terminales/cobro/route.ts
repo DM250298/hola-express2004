@@ -14,6 +14,8 @@ interface ItemCobro {
   producto_id: number
   cantidad: number
   precio_unitario: number
+  /** Lista aplicada (mig 153); el jsonb persiste el ítem completo tal cual. */
+  lista_precio?: 'minorista' | 'mayorista'
 }
 
 /**

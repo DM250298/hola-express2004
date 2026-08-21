@@ -53,6 +53,9 @@ async function enviarVenta(v: VentaPendiente): Promise<void> {
       producto_id: it.producto_id,
       cantidad: it.cantidad,
       precio_unitario: it.precio_unitario,
+      // Ventas encoladas con el payload viejo no traen la clave → null; el
+      // RPC la toma como minorista (mig 153).
+      lista_precio: it.lista_precio ?? null,
     })) as unknown as Json,
     p_cliente_uuid: v.cliente_uuid,
     p_cliente_id: v.cliente_id,

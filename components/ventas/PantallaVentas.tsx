@@ -40,7 +40,7 @@ import {
   rangoPredefinido,
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
-import type { MedioPago } from '@/types/database'
+import type { ListaPrecio, MedioPago } from '@/types/database'
 
 const TODOS = '__todos__'
 
@@ -58,6 +58,12 @@ const ITEMS_ESTADO: Record<string, string> = {
   [TODOS]: 'Todas',
 }
 
+const ITEMS_LISTA: Record<string, string> = {
+  [TODOS]: 'Todas',
+  minorista: 'Minorista',
+  mayorista: 'Mayorista',
+}
+
 function hoyIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -69,6 +75,7 @@ export function PantallaVentas() {
   const [hastaPers, setHastaPers] = useState(hoyIso())
   const [medioFiltro, setMedioFiltro] = useState<string>(TODOS)
   const [estadoFiltro, setEstadoFiltro] = useState<string>('completada')
+  const [listaFiltro, setListaFiltro] = useState<string>(TODOS)
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(25)
   const [ventaSeleccionada, setVentaSeleccionada] = useState<number | null>(null)
@@ -87,8 +94,10 @@ export function PantallaVentas() {
       medio_pago: (medioFiltro === TODOS ? null : (medioFiltro as MedioPago)),
       estado:
         estadoFiltro === TODOS ? null : (estadoFiltro as 'completada' | 'anulada'),
+      lista_precio:
+        listaFiltro === TODOS ? null : (listaFiltro as ListaPrecio),
     }),
-    [rango.desde, rango.hasta, medioFiltro, estadoFiltro]
+    [rango.desde, rango.hasta, medioFiltro, estadoFiltro, listaFiltro]
   )
 
   const { data: ventas, isLoading, isError } = useVentasListado(filtros)
@@ -246,6 +255,26 @@ export function PantallaVentas() {
                 <SelectItem value="completada">Completadas</SelectItem>
                 <SelectItem value="anulada">Anuladas</SelectItem>
                 <SelectItem value={TODOS}>Todas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+              Lista
+            </Label>
+            <Select
+              items={ITEMS_LISTA}
+              value={listaFiltro}
+              onValueChange={(v) => setListaFiltro(v ?? TODOS)}
+            >
+              <SelectTrigger className="w-[150px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Todas</SelectItem>
+                <SelectItem value="minorista">Minorista</SelectItem>
+                <SelectItem value="mayorista">Mayorista</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -14,10 +14,13 @@ import {
 import { ModalCliente } from '@/components/clientes/ModalCliente'
 import { useClientes } from '@/lib/hooks/useClientes'
 import { cn } from '@/lib/utils'
+import type { ListaPrecio } from '@/types/database'
 
 export interface ClienteSeleccionado {
   id: number
   nombre: string
+  /** Lista asignada al cliente: el POS la aplica sola al elegirlo (mig 153). */
+  lista_precio: ListaPrecio
 }
 
 interface Props {
@@ -81,7 +84,7 @@ export function SelectorCliente({
     } else if (e.key === 'Enter' && resultados.length > 0) {
       e.preventDefault()
       const c = resultados[Math.min(indiceSeleccionado, resultados.length - 1)]
-      elegir({ id: c.id, nombre: c.nombre })
+      elegir({ id: c.id, nombre: c.nombre, lista_precio: c.lista_precio })
     } else if (e.key === 'Escape' && busquedaInput) {
       // Primer Esc limpia la búsqueda; el segundo (sin texto) cierra el modal.
       e.preventDefault()
@@ -155,7 +158,13 @@ export function SelectorCliente({
                     <li key={c.id}>
                       <button
                         type="button"
-                        onClick={() => elegir({ id: c.id, nombre: c.nombre })}
+                        onClick={() =>
+                          elegir({
+                            id: c.id,
+                            nombre: c.nombre,
+                            lista_precio: c.lista_precio,
+                          })
+                        }
                         onMouseEnter={() => setIndiceSeleccionado(idx)}
                         className={cn(
                           'w-full px-4 py-2.5 flex items-center justify-between gap-3 text-left',
@@ -165,8 +174,13 @@ export function SelectorCliente({
                         )}
                       >
                         <div className="min-w-0">
-                          <div className="font-medium text-[#391511] text-sm truncate">
+                          <div className="font-medium text-[#391511] text-sm truncate flex items-center gap-1.5">
                             {c.nombre}
+                            {c.lista_precio === 'mayorista' && (
+                              <span className="px-1 py-px rounded bg-[#f9b44c]/30 text-[#6f3a2a] text-[10px] font-semibold uppercase shrink-0">
+                                May.
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-[#c8a58a] truncate">
                             {[c.telefono, c.documento]
@@ -215,7 +229,13 @@ export function SelectorCliente({
       <ModalCliente
         abierto={modalNuevo}
         onCambioAbierto={setModalNuevo}
-        onCreado={(nuevo) => elegir({ id: nuevo.id, nombre: nuevo.nombre })}
+        onCreado={(nuevo) =>
+          elegir({
+            id: nuevo.id,
+            nombre: nuevo.nombre,
+            lista_precio: nuevo.lista_precio,
+          })
+        }
       />
     </>
   )

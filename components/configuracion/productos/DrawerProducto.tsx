@@ -361,6 +361,15 @@ export function DrawerProducto({
   const [precioTocado, setPrecioTocado] = useState(false)
   // Detección del modo inicial (una vez por apertura, cuando carga la config).
   const refModoDetectado = useRef(false)
+  // ── Precio mayorista (mig 153): par coherente propio, opcional. Vacío =
+  //    sin lista mayorista (el POS cae al precio minorista). ──
+  const [margenMayorista, setMargenMayorista] = useState('')
+  const [precioManualMayorista, setPrecioManualMayorista] = useState('')
+  const [modoPrecioMayorista, setModoPrecioMayorista] = useState<
+    'margen' | 'precio'
+  >('margen')
+  const [precioMayoristaTocado, setPrecioMayoristaTocado] = useState(false)
+  const refModoMayoristaDetectado = useRef(false)
   const [imagenUrl, setImagenUrl] = useState<string | null>(null)
 
   // ── Combo: componentes elegidos ──
@@ -490,6 +499,16 @@ export function DrawerProducto({
     setPrecioManual(String(producto?.precio_venta ?? ''))
     setPrecioTocado(false)
     refModoDetectado.current = false
+    // Bloque mayorista: sin par guardado arranca vacío (= sin lista).
+    setMargenMayorista(
+      producto?.margen_mayorista != null ? String(producto.margen_mayorista) : ''
+    )
+    setPrecioManualMayorista(
+      producto?.precio_mayorista != null ? String(producto.precio_mayorista) : ''
+    )
+    setModoPrecioMayorista('margen')
+    setPrecioMayoristaTocado(false)
+    refModoMayoristaDetectado.current = false
     setImagenUrl(producto?.imagen_url ?? null)
     const adic = (producto?.costos_adicionales ?? []) as CostoAdicional[]
     setAdicionales(
@@ -527,6 +546,30 @@ export function DrawerProducto({
     if (Math.abs(recalculado - precioGuardado) > 0.5) {
       setModoPrecio('precio')
       setPrecioManual(String(precioGuardado))
+    }
+  }, [abierto, esEdicion, producto, pricing])
+
+  // Modo inicial del bloque MAYORISTA: mismo algoritmo, contra su propio par.
+  useEffect(() => {
+    if (!abierto || refModoMayoristaDetectado.current || pricing.cargando) return
+    refModoMayoristaDetectado.current = true
+    if (!esEdicion || !producto) return
+    const precioGuardado = producto.precio_mayorista ?? 0
+    if (precioGuardado <= 0) return
+    const costoNeto = producto.precio_costo ?? 0
+    const costoParaMotor =
+      pricing.regimen === 'monotributista'
+        ? costoNeto * (1 + (producto.iva_compra ?? 21) / 100)
+        : costoNeto
+    const { desglose } = pricing.calcular(
+      costoParaMotor,
+      producto.margen_mayorista ?? 0,
+      producto.iva_venta ?? 21
+    )
+    const recalculado = desglose?.precioRedondeado ?? 0
+    if (Math.abs(recalculado - precioGuardado) > 0.5) {
+      setModoPrecioMayorista('precio')
+      setPrecioManualMayorista(String(precioGuardado))
     }
   }, [abierto, esEdicion, producto, pricing])
 
@@ -615,6 +658,64 @@ export function DrawerProducto({
     }
   }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, precioManual, modoPrecio, pricing, esCombo, costoComponentes])
 
+  // ── Cálculo del precio MAYORISTA (mig 153): mismo motor, otro margen. ──
+  // Campos vacíos = el producto no tiene lista mayorista (fallback minorista).
+  const calcMayorista = useMemo(() => {
+    const definido =
+      modoPrecioMayorista === 'precio'
+        ? (Number(precioManualMayorista) || 0) > 0
+        : margenMayorista.trim() !== ''
+    if (!definido) {
+      return {
+        definido: false as const,
+        modo: modoPrecioMayorista,
+        precioVenta: 0,
+        margenFinal: 0,
+        margenNeto: null as number | null,
+        error: null as string | null,
+      }
+    }
+
+    const sumaAdic = adicionales.reduce((s, a) => s + (Number(a.monto) || 0), 0)
+    const base = esCombo ? costoComponentes : Number(costoBase) || 0
+    const costoNeto = base + sumaAdic
+    const costoConIva = costoNeto * (1 + (Number(ivaCompra) || 0) / 100)
+    const costoParaMotor =
+      pricing.regimen === 'monotributista' ? costoConIva : costoNeto
+
+    if (modoPrecioMayorista === 'precio') {
+      const precio = Number(precioManualMayorista) || 0
+      const { desglose, error } = pricing.calcularDesdePrecio(
+        precio,
+        costoParaMotor,
+        Number(ivaVenta) || 0
+      )
+      return {
+        definido: true as const,
+        modo: 'precio' as const,
+        precioVenta: precio,
+        margenFinal:
+          desglose && desglose.margen != null ? desglose.margen * 100 : 0,
+        margenNeto: desglose?.margen ?? null,
+        error,
+      }
+    }
+
+    const { desglose, error } = pricing.calcular(
+      costoParaMotor,
+      Number(margenMayorista) || 0,
+      Number(ivaVenta) || 0
+    )
+    return {
+      definido: true as const,
+      modo: 'margen' as const,
+      precioVenta: desglose?.precioRedondeado ?? 0,
+      margenFinal: Number(margenMayorista) || 0,
+      margenNeto: (Number(margenMayorista) || 0) / 100,
+      error,
+    }
+  }, [adicionales, costoBase, ivaCompra, ivaVenta, margenMayorista, precioManualMayorista, modoPrecioMayorista, pricing, esCombo, costoComponentes])
+
   function simularEscaneo() {
     const codigo = generarCodigoBarrasSimulado()
     setValue('codigo_barras', codigo, { shouldValidate: true, shouldDirty: true })
@@ -697,6 +798,23 @@ export function DrawerProducto({
     const precioAGuardar = conservarPrecio
       ? (producto.precio_venta ?? 0)
       : r2(calc.precioVenta)
+    // Mayorista: si no se tocó NI el bloque mayorista NI el de costo/precio,
+    // se conserva el par vigente. Tocar el costo sí lo repricea (margen
+    // mayorista manda, igual que la factura v14). Campos vacíos → null/null
+    // (borra la lista: vuelve al fallback minorista).
+    const conservarMayorista =
+      esEdicion && producto != null && !precioTocado && !precioMayoristaTocado
+    const mayoristaAGuardar = conservarMayorista
+      ? {
+          precio_mayorista: producto.precio_mayorista ?? null,
+          margen_mayorista: producto.margen_mayorista ?? null,
+        }
+      : calcMayorista.definido && calcMayorista.precioVenta > 0
+        ? {
+            precio_mayorista: r2(calcMayorista.precioVenta),
+            margen_mayorista: r2(calcMayorista.margenFinal),
+          }
+        : { precio_mayorista: null, margen_mayorista: null }
     const payload = {
       codigo_barras: limpiar(validado.codigo_barras),
       codigo_barras_2: limpiar(validado.codigo_barras_2),
@@ -716,6 +834,7 @@ export function DrawerProducto({
       // En modo "por precio" el margen es el DEDUCIDO del precio; en modo
       // "por margen" es el que se tipeó. calc.margenFinal unifica ambos.
       margen: conservarPrecio ? (producto.margen ?? 0) : r2(calc.margenFinal),
+      ...mayoristaAGuardar,
       costos_adicionales: costosAdicionales,
       // Un combo no maneja stock propio: el stock sale de los componentes
       // (el "stock" que se ve es el virtual, calculado en las queries).
@@ -1616,6 +1735,191 @@ export function DrawerProducto({
                     Cargá el costo y el margen para ver el precio de venta.
                   </p>
                 )}
+              </div>
+
+              {/* ── Precio mayorista (opcional, mig 153) ── */}
+              <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <h3 className="flex items-center gap-2 text-[#391511] font-bold text-sm">
+                    <TrendingUp className="h-4 w-4 text-[#e4a42a]" />
+                    Precio mayorista
+                    <span className="text-[10px] font-semibold uppercase text-[#c8a58a]">
+                      opcional
+                    </span>
+                  </h3>
+                  <div className="flex gap-0.5 rounded-lg bg-[#f1e2d0] p-0.5 text-[11px] font-semibold">
+                    <button
+                      type="button"
+                      disabled={guardando}
+                      onClick={() => {
+                        // Mismo trinquete que el minorista: sin ediciones se
+                        // arranca del precio GUARDADO, no del recalculado.
+                        if (
+                          esEdicion &&
+                          !precioMayoristaTocado &&
+                          (producto?.precio_mayorista ?? 0) > 0
+                        ) {
+                          setPrecioManualMayorista(
+                            String(producto?.precio_mayorista ?? '')
+                          )
+                        } else if (calcMayorista.precioVenta > 0) {
+                          setPrecioManualMayorista(
+                            String(calcMayorista.precioVenta)
+                          )
+                        }
+                        setModoPrecioMayorista('precio')
+                      }}
+                      className={
+                        'rounded-md px-2.5 py-1 transition ' +
+                        (modoPrecioMayorista === 'precio'
+                          ? 'bg-white text-[#391511] shadow-sm'
+                          : 'text-[#6f3a2a] hover:text-[#391511]')
+                      }
+                    >
+                      Por precio
+                    </button>
+                    <button
+                      type="button"
+                      disabled={guardando}
+                      onClick={() => {
+                        if (esEdicion && !precioMayoristaTocado && producto) {
+                          setMargenMayorista(
+                            producto.margen_mayorista != null
+                              ? String(producto.margen_mayorista)
+                              : ''
+                          )
+                        } else if (calcMayorista.definido) {
+                          setMargenMayorista(String(r2(calcMayorista.margenFinal)))
+                        }
+                        setModoPrecioMayorista('margen')
+                      }}
+                      className={
+                        'rounded-md px-2.5 py-1 transition ' +
+                        (modoPrecioMayorista === 'margen'
+                          ? 'bg-white text-[#391511] shadow-sm'
+                          : 'text-[#6f3a2a] hover:text-[#391511]')
+                      }
+                    >
+                      Por margen
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {modoPrecioMayorista === 'margen' ? (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Margen mayorista %
+                      </Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={margenMayorista}
+                        onChange={(e) => {
+                          setPrecioMayoristaTocado(true)
+                          setMargenMayorista(e.target.value)
+                        }}
+                        placeholder="Vacío = sin lista"
+                        disabled={guardando}
+                        className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                        Precio mayorista $
+                      </Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={precioManualMayorista}
+                        onChange={(e) => {
+                          setPrecioMayoristaTocado(true)
+                          setPrecioManualMayorista(e.target.value)
+                        }}
+                        placeholder="Vacío = sin lista"
+                        disabled={guardando}
+                        className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold block">
+                      {modoPrecioMayorista === 'margen'
+                        ? 'Precio resultante'
+                        : 'Margen neto real'}
+                    </span>
+                    {!calcMayorista.definido ? (
+                      <div className="h-9 flex items-center text-sm text-[#c8a58a]">
+                        Sin lista mayorista
+                      </div>
+                    ) : calcMayorista.error ? (
+                      <div className="h-9 flex items-center text-xs text-[#c43e2c]">
+                        {calcMayorista.error}
+                      </div>
+                    ) : modoPrecioMayorista === 'margen' ? (
+                      <div className="h-9 flex items-center font-extrabold text-[#391511] tabular-nums">
+                        <MontoARS monto={calcMayorista.precioVenta} />
+                      </div>
+                    ) : (
+                      <div
+                        className={
+                          'h-9 flex items-center font-extrabold tabular-nums ' +
+                          ((calcMayorista.margenNeto ?? 0) >= 0
+                            ? 'text-[#2f8f4e]'
+                            : 'text-[#c43e2c]')
+                        }
+                      >
+                        {calcMayorista.margenNeto == null
+                          ? '—'
+                          : `${calcMayorista.margenNeto >= 0 ? '+' : ''}${(calcMayorista.margenNeto * 100).toFixed(1)}%`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Ahorro vs minorista + alerta de margen negativo */}
+                {calcMayorista.definido &&
+                  !calcMayorista.error &&
+                  calcMayorista.precioVenta > 0 &&
+                  calc.precioVenta > 0 && (
+                    <p className="text-xs text-[#6f3a2a]">
+                      {calcMayorista.precioVenta < calc.precioVenta ? (
+                        <>
+                          {(
+                            (1 - calcMayorista.precioVenta / calc.precioVenta) *
+                            100
+                          ).toFixed(1)}
+                          % más barato que el minorista (
+                          <MontoARS monto={calc.precioVenta} />
+                          ).
+                        </>
+                      ) : (
+                        <span className="text-[#b5701f]">
+                          Ojo: no es más barato que el minorista (
+                          <MontoARS monto={calc.precioVenta} />
+                          ).
+                        </span>
+                      )}
+                    </p>
+                  )}
+                {calcMayorista.definido &&
+                  calcMayorista.margenNeto != null &&
+                  calcMayorista.margenNeto < 0 && (
+                    <div className="flex items-start gap-2 rounded-lg border-2 border-[#c43e2c]/40 bg-[#c43e2c]/8 p-2.5">
+                      <AlertTriangle className="h-4 w-4 text-[#c43e2c] shrink-0 mt-0.5" />
+                      <p className="text-xs text-[#391511]">
+                        A este precio mayorista <strong>perdés plata</strong>:
+                        no cubre el costo más las cargas.
+                      </p>
+                    </div>
+                  )}
+                <p className="text-[10px] text-[#c8a58a] leading-relaxed">
+                  Un producto sin precio mayorista se vende al precio minorista
+                  aunque la venta sea mayorista. Al cargar una factura que
+                  afecta precios, el mayorista se recalcula desde su margen.
+                </p>
               </div>
             </section>
 

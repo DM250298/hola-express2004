@@ -53,7 +53,7 @@ import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { PagoPayload, ProductoFrecuente } from '@/lib/queries/ventas'
 import type { VentaCompleta } from '@/lib/queries/ventas'
-import type { DeudorBuscado } from '@/types/database'
+import type { DeudorBuscado, ListaPrecio } from '@/types/database'
 
 interface Props {
   usuarioId: string
@@ -65,6 +65,8 @@ interface Orden {
   items: ItemCarrito[]
   clienteId: number | null
   clienteNombre: string | null
+  /** Lista de precios de la orden: la fija el cliente o el toggle del cajero. */
+  listaPrecio: ListaPrecio
 }
 
 const MAX_ORDENES = 5
@@ -75,6 +77,7 @@ function nuevaOrden(): Orden {
     items: [],
     clienteId: null,
     clienteNombre: null,
+    listaPrecio: 'minorista',
   }
 }
 
@@ -130,6 +133,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     nombre: string
     codigo_barras: string | null
     precio_venta: number
+    precio_mayorista: number | null
     stock_actual: number
     pesoActualKg?: number
   } | null>(null)
@@ -165,6 +169,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   }
 
   function elegirCliente(c: ClienteSeleccionado | null) {
+    // El cliente trae su lista asignada: mayorista la activa sola; sin
+    // cliente (o cliente minorista) vuelve a minorista. El toggle del
+    // cajero puede pisar después con cambiarLista().
+    const lista: ListaPrecio =
+      c?.lista_precio === 'mayorista' ? 'mayorista' : 'minorista'
     setOrdenes((prev) =>
       prev.map((o) =>
         o.id === ordenActivaId
@@ -172,6 +181,22 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
               ...o,
               clienteId: c?.id ?? null,
               clienteNombre: c?.nombre ?? null,
+              listaPrecio: lista,
+              items: reducerCarrito(o.items, { tipo: 'CAMBIAR_LISTA', lista }),
+            }
+          : o
+      )
+    )
+  }
+
+  function cambiarLista(lista: ListaPrecio) {
+    setOrdenes((prev) =>
+      prev.map((o) =>
+        o.id === ordenActivaId
+          ? {
+              ...o,
+              listaPrecio: lista,
+              items: reducerCarrito(o.items, { tipo: 'CAMBIAR_LISTA', lista }),
             }
           : o
       )
@@ -329,6 +354,18 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   }
 
   // — Con turno abierto —
+  const listaActiva: ListaPrecio = ordenActiva?.listaPrecio ?? 'minorista'
+
+  /** Precio según la lista activa, con el mismo fallback del carrito. */
+  function precioSegunListaActiva(
+    precioMinorista: number,
+    precioMayorista: number | null
+  ) {
+    return listaActiva === 'mayorista' && (precioMayorista ?? 0) > 0
+      ? (precioMayorista as number)
+      : precioMinorista
+  }
+
   function agregarProducto(p: ProductoConRelaciones | ProductoFrecuente) {
     const datos =
       'id' in p
@@ -337,6 +374,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             nombre: p.nombre,
             codigo_barras: p.codigo_barras,
             precio_venta: p.precio_venta,
+            precio_mayorista: p.precio_mayorista ?? null,
             stock_actual: p.stock_actual,
             venta_por_peso: p.venta_por_peso ?? false,
           }
@@ -345,6 +383,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             nombre: p.nombre,
             codigo_barras: p.codigo_barras,
             precio_venta: p.precio_venta,
+            precio_mayorista: p.precio_mayorista ?? null,
             stock_actual: p.stock_actual,
             venta_por_peso: p.venta_por_peso ?? false,
           }
@@ -358,7 +397,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       return
     }
 
-    dispatchCarrito({ tipo: 'AGREGAR_PRODUCTO', producto: datos })
+    dispatchCarrito({ tipo: 'AGREGAR_PRODUCTO', producto: datos, lista: listaActiva })
   }
 
   /** Llamado desde el carrito para re-editar el peso de un ítem por kg. */
@@ -369,7 +408,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       producto_id: it.producto_id,
       nombre: it.nombre,
       codigo_barras: it.codigo_barras,
-      precio_venta: it.precio_unitario,
+      precio_venta: it.precio_minorista,
+      precio_mayorista: it.precio_mayorista,
       stock_actual: it.stock_disponible,
       pesoActualKg: it.cantidad,
     })
@@ -386,6 +426,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       stock_actual: it.stock_disponible,
       nombre: it.nombre,
       venta_por_peso: it.venta_por_peso,
+      lista_precio: it.lista_aplicada,
     }))
 
     crearVenta.mutate(
@@ -431,6 +472,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       stock_actual: it.stock_disponible,
       nombre: it.nombre,
       venta_por_peso: it.venta_por_peso,
+      lista_precio: it.lista_aplicada,
     }))
     // Si hay un cobro parcial pre-cargado (modo "mixto"), combinamos los
     // pagos no-maquinita con la línea de la maquinita aprobada.
@@ -730,6 +772,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             onCobrarTerminal={() => setModalTerminalAbierto(true)}
             hayTerminalActiva={hayTerminalActiva}
             onEditarPeso={editarPesoCarrito}
+            listaPrecio={listaActiva}
+            onCambiarLista={cambiarLista}
           />
         </div>
       </div>
@@ -853,6 +897,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           producto_id: it.producto_id,
           cantidad: it.cantidad,
           precio_unitario: it.precio_unitario,
+          // Persistida en cobros_terminal.items: el webhook registra la
+          // venta con la misma lista aunque gane la carrera al POS.
+          lista_precio: it.lista_aplicada,
         }))}
         pagosPrevios={pagosPrevios}
         turnoId={turno.id}
@@ -868,7 +915,10 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
           abierto={!!productoPeso}
           onCambioAbierto={(v) => !v && setProductoPeso(null)}
           nombre={productoPeso.nombre}
-          precioPorKg={productoPeso.precio_venta}
+          precioPorKg={precioSegunListaActiva(
+            productoPeso.precio_venta,
+            productoPeso.precio_mayorista
+          )}
           pesoActualKg={productoPeso.pesoActualKg}
           onConfirmar={(kg) => {
             dispatchCarrito({
@@ -878,10 +928,12 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
                 nombre: productoPeso.nombre,
                 codigo_barras: productoPeso.codigo_barras,
                 precio_venta: productoPeso.precio_venta,
+                precio_mayorista: productoPeso.precio_mayorista,
                 stock_actual: productoPeso.stock_actual,
                 venta_por_peso: true,
                 cantidad_kg: kg,
               },
+              lista: listaActiva,
             })
             setProductoPeso(null)
           }}

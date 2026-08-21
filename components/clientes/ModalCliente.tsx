@@ -12,8 +12,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useCreateCliente, useUpdateCliente } from '@/lib/hooks/useClientes'
-import type { ClienteRow } from '@/types/database'
+import type { ClienteRow, ListaPrecio } from '@/types/database'
+
+const LISTAS_PRECIO: Record<ListaPrecio, string> = {
+  minorista: 'Minorista',
+  mayorista: 'Mayorista',
+}
 
 interface Props {
   abierto: boolean
@@ -40,6 +52,7 @@ export function ModalCliente({
   const [documento, setDocumento] = useState('')
   const [direccion, setDireccion] = useState('')
   const [notas, setNotas] = useState('')
+  const [listaPrecio, setListaPrecio] = useState<ListaPrecio>('minorista')
 
   useEffect(() => {
     if (abierto) {
@@ -49,6 +62,7 @@ export function ModalCliente({
       setDocumento(cliente?.documento ?? '')
       setDireccion(cliente?.direccion ?? '')
       setNotas(cliente?.notas ?? '')
+      setListaPrecio(cliente?.lista_precio ?? 'minorista')
     }
   }, [abierto, cliente])
 
@@ -65,6 +79,7 @@ export function ModalCliente({
       documento: documento.trim() || null,
       direccion: direccion.trim() || null,
       notas: notas.trim() || null,
+      lista_precio: listaPrecio,
     }
     if (editando && cliente) {
       actualizar.mutate(
@@ -162,6 +177,35 @@ export function ModalCliente({
               disabled={procesando}
               className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[#391511] font-medium text-sm">
+              Lista de precios
+            </Label>
+            <Select
+              items={LISTAS_PRECIO}
+              value={listaPrecio}
+              onValueChange={(v) => v && setListaPrecio(v as ListaPrecio)}
+              disabled={procesando}
+            >
+              <SelectTrigger className="w-full border-[#e4c9b0] bg-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(
+                  Object.entries(LISTAS_PRECIO) as Array<[ListaPrecio, string]>
+                ).map(([valor, etiqueta]) => (
+                  <SelectItem key={valor} value={valor}>
+                    {etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-[#c8a58a]">
+              Mayorista: el POS aplica solo los precios mayoristas al elegir a
+              este cliente.
+            </p>
           </div>
 
           <div className="space-y-1.5">

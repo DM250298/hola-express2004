@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { encolarVenta, nuevoUuid } from '@/lib/offline/cola'
 import { esErrorDeRed } from '@/lib/offline/sync'
-import type { Json, MedioPago, VentaRow } from '@/types/database'
+import type { Json, ListaPrecio, MedioPago, VentaRow } from '@/types/database'
 
 export interface ItemVentaPayload {
   producto_id: number
@@ -13,6 +13,11 @@ export interface ItemVentaPayload {
   nombre: string
   /** true = se vendió por peso: el ticket imprime kg y el precio por kilo. */
   venta_por_peso: boolean
+  /**
+   * Lista aplicada al ítem (mig 153). Opcional por las ventas encoladas en
+   * IndexedDB con el payload viejo: sin la clave, el RPC asume minorista.
+   */
+  lista_precio?: ListaPrecio
 }
 
 export interface PagoPayload {
@@ -82,9 +87,12 @@ export interface VentaCompleta {
     subtotal: number
     /** true = cantidad en kg y precio_unitario por kilo. */
     venta_por_peso: boolean
+    lista_precio: ListaPrecio
   }>
   pagos: PagoPayload[]
   total: number
+  /** 'mayorista' si algún ítem se cobró a precio mayorista (para el ticket). */
+  listaPrecio: ListaPrecio
   /** true si la venta se cobró offline y quedó en cola para sincronizar. */
   pendiente?: boolean
   /** Cliente a imprimir. null = venta al mostrador (el ticket no lo menciona). */
@@ -127,7 +135,15 @@ function detalleItems(items: ItemVentaPayload[]) {
     // `?? false` por las ventas que quedaron encoladas en IndexedDB con una
     // versión anterior del payload, que no traía el flag.
     venta_por_peso: it.venta_por_peso ?? false,
+    lista_precio: it.lista_precio ?? ('minorista' as ListaPrecio),
   }))
+}
+
+/** Lista de la venta para el ticket: mayorista si algún ítem lo es. */
+function listaDeVenta(items: ItemVentaPayload[]): ListaPrecio {
+  return items.some((it) => it.lista_precio === 'mayorista')
+    ? 'mayorista'
+    : 'minorista'
 }
 
 /** Medio de pago con mayor monto (el "principal" de la venta). */
@@ -154,10 +170,12 @@ function ventaPendienteCompleta(
       created_at: ahora,
       cliente_uuid: clienteUuid,
       cliente_id: payload.cliente_id ?? null,
+      lista_precio: listaDeVenta(payload.items),
     },
     items: detalleItems(payload.items),
     pagos: payload.pagos,
     total,
+    listaPrecio: listaDeVenta(payload.items),
     pendiente: true,
     cliente: resolverClienteVenta(payload),
   }
@@ -237,6 +255,7 @@ export async function crearVenta(
         producto_id: it.producto_id,
         cantidad: it.cantidad,
         precio_unitario: it.precio_unitario,
+        lista_precio: it.lista_precio ?? null,
       })) as unknown as Json,
       p_cliente_uuid: clienteUuid,
       p_cliente_id: payload.cliente_id ?? null,
@@ -250,6 +269,7 @@ export async function crearVenta(
       items: detalleItems(payload.items),
       pagos: payload.pagos,
       total,
+      listaPrecio: listaDeVenta(payload.items),
       cliente: resolverClienteVenta(payload),
     }
   } catch (error) {
@@ -306,6 +326,7 @@ export interface ProductoFrecuente {
   nombre: string
   codigo_barras: string | null
   precio_venta: number
+  precio_mayorista: number | null
   stock_actual: number
   cantidad_vendida: number
   venta_por_peso: boolean
@@ -330,7 +351,7 @@ export async function getProductosFrecuentesTurno(
     .select(
       `cantidad,
        ventas!inner(turno_id, estado),
-       productos!inner(id, nombre, codigo_barras, precio_venta, stock_actual, activo, venta_por_peso, imagen_url)`
+       productos!inner(id, nombre, codigo_barras, precio_venta, precio_mayorista, stock_actual, activo, venta_por_peso, imagen_url)`
     )
     .eq('ventas.turno_id', turnoId)
     .eq('ventas.estado', 'completada')
@@ -350,6 +371,7 @@ export async function getProductosFrecuentesTurno(
       nombre: string
       codigo_barras: string | null
       precio_venta: number
+      precio_mayorista: number | null
       stock_actual: number
       venta_por_peso: boolean
       imagen_url: string | null
@@ -370,6 +392,7 @@ export async function getProductosFrecuentesTurno(
         nombre: p.nombre,
         codigo_barras: p.codigo_barras,
         precio_venta: p.precio_venta,
+        precio_mayorista: p.precio_mayorista,
         stock_actual: p.stock_actual,
         venta_por_peso: p.venta_por_peso,
         imagen_url: p.imagen_url,

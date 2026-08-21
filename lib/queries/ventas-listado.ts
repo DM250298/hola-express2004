@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import type {
   ItemVentaRow,
+  ListaPrecio,
   MedioPago,
   PagoVentaRow,
   VentaRow,
@@ -69,6 +70,7 @@ export interface FiltrosVentas {
   medio_pago?: MedioPago | null
   turno_id?: number | null
   estado?: 'completada' | 'anulada' | null
+  lista_precio?: ListaPrecio | null
 }
 
 export async function getVentas(
@@ -96,6 +98,7 @@ export async function getVentas(
       if (filtros.medio_pago) q = q.eq('medio_pago', filtros.medio_pago)
       if (filtros.turno_id) q = q.eq('turno_id', filtros.turno_id)
       if (filtros.estado) q = q.eq('estado', filtros.estado)
+      if (filtros.lista_precio) q = q.eq('lista_precio', filtros.lista_precio)
       return q
     }),
     mapaFiadosEmpleado(filtros),
@@ -209,6 +212,7 @@ export async function getVentaDetalle(
       created_at: ventaData.created_at,
       cliente_uuid: ventaData.cliente_uuid ?? null,
       cliente_id: ventaData.cliente_id ?? null,
+      lista_precio: ventaData.lista_precio ?? 'minorista',
     },
     cajero_nombre: ventaData.usuarios?.nombre ?? null,
     cliente_nombre: clienteNombre ?? empleadoNombre,

@@ -11,6 +11,12 @@ export type EstadoTurno = 'abierto' | 'cerrado'
  */
 export type MedioPago = string
 export type EstadoVenta = 'completada' | 'anulada'
+/**
+ * Lista de precios (mig 153). Dos listas fijas: minorista (precio_venta)
+ * y mayorista (precio_mayorista, opcional por producto con fallback a
+ * minorista cuando no está definido).
+ */
+export type ListaPrecio = 'minorista' | 'mayorista'
 export type EstadoLote = 'activo' | 'agotado' | 'vencido' | 'dado_de_baja'
 export type TipoMovimiento =
   | 'entrada'
@@ -161,6 +167,8 @@ export type ClienteRow = {
   direccion: string | null
   notas: string | null
   activo: boolean
+  /** Lista de precios asignada: el POS la aplica sola al elegirlo (mig 153). */
+  lista_precio: ListaPrecio
   created_at: string
   updated_at: string
 }
@@ -174,6 +182,7 @@ export type ClienteInsert = {
   direccion?: string | null
   notas?: string | null
   activo?: boolean
+  lista_precio?: ListaPrecio
   created_at?: string
   updated_at?: string
 }
@@ -186,6 +195,7 @@ export type ClienteUpdate = {
   direccion?: string | null
   notas?: string | null
   activo?: boolean
+  lista_precio?: ListaPrecio
   updated_at?: string
 }
 
@@ -1097,6 +1107,12 @@ export type ProductoRow = {
   iva_compra: number
   iva_venta: number
   margen: number
+  /**
+   * Precio mayorista final con IVA (mig 153). Par coherente con
+   * margen_mayorista. Null = sin lista mayorista → se vende a precio_venta.
+   */
+  precio_mayorista: number | null
+  margen_mayorista: number | null
   costos_adicionales: CostoAdicional[]
   dias_vencimiento_minimo: number | null
   venta_por_peso: boolean
@@ -1136,6 +1152,8 @@ export type ProductoInsert = {
   iva_compra?: number
   iva_venta?: number
   margen?: number
+  precio_mayorista?: number | null
+  margen_mayorista?: number | null
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
   venta_por_peso?: boolean
@@ -1171,6 +1189,8 @@ export type ProductoUpdate = {
   iva_compra?: number
   iva_venta?: number
   margen?: number
+  precio_mayorista?: number | null
+  margen_mayorista?: number | null
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
   venta_por_peso?: boolean
@@ -1362,6 +1382,8 @@ export type VentaRow = {
   cliente_uuid: string | null
   /** Cliente asociado a la venta (FASE 3 — CRM). Null = venta al mostrador. */
   cliente_id: number | null
+  /** 'mayorista' si algún ítem se vendió a precio mayorista (mig 153). */
+  lista_precio: ListaPrecio
 }
 
 export type VentaInsert = {
@@ -1375,6 +1397,7 @@ export type VentaInsert = {
   created_at?: string
   cliente_uuid?: string | null
   cliente_id?: number | null
+  lista_precio?: ListaPrecio
 }
 
 export type VentaUpdate = {
@@ -1393,6 +1416,8 @@ export type ItemVentaRow = {
   cantidad: number
   precio_unitario: number
   subtotal: number
+  /** Lista APLICADA a este ítem (mig 153): captura el fallback a minorista. */
+  lista_precio: ListaPrecio
 }
 
 export type ItemVentaInsert = {
@@ -1402,6 +1427,7 @@ export type ItemVentaInsert = {
   cantidad: number
   precio_unitario: number
   subtotal: number
+  lista_precio?: ListaPrecio
 }
 
 export type ItemVentaUpdate = {

@@ -54,6 +54,7 @@ export function TicketTermico({ venta, vuelto, nombreCajero }: Props) {
           )}
           <div>{formatearFechaHora(venta.venta.fecha)}</div>
           <div>Atendió: {nombreCajero}</div>
+          {venta.listaPrecio === 'mayorista' && <div>Lista: MAYORISTA</div>}
           {venta.cliente && !venta.cliente.fiado && (
             <div>Cliente: {venta.cliente.nombre}</div>
           )}

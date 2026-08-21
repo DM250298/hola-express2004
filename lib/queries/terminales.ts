@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import type {
+  ListaPrecio,
   TerminalInsert,
   TerminalRow,
   TerminalUpdate,
@@ -120,6 +121,8 @@ export interface ItemCobroPayload {
   producto_id: number
   cantidad: number
   precio_unitario: number
+  /** Lista aplicada (mig 153): el webhook registra la venta con la misma. */
+  lista_precio?: ListaPrecio
 }
 
 /** Argumentos para crear un cobro con terminal. Los campos de contexto de la

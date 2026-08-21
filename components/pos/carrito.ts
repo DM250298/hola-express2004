@@ -2,6 +2,8 @@
 // (PantallaPOS) — no necesita persistencia entre páginas porque una sesión de
 // venta se completa de inmediato.
 
+import type { ListaPrecio } from '@/types/database'
+
 export interface ItemCarrito {
   producto_id: number
   nombre: string
@@ -12,6 +14,13 @@ export interface ItemCarrito {
   stock_disponible: number
   /** true = se vende por kg. precio_unitario = precio por 1 kg. */
   venta_por_peso: boolean
+  /** Ambos precios viajan con el ítem para repricear al cambiar de lista sin
+   *  re-consultar el catálogo (funciona offline). Mig 153. */
+  precio_minorista: number
+  precio_mayorista: number | null
+  /** Lista realmente aplicada: 'minorista' también en venta mayorista si el
+   *  producto no tiene precio mayorista definido (fallback). */
+  lista_aplicada: ListaPrecio
 }
 
 export type AccionCarrito =
@@ -22,11 +31,14 @@ export type AccionCarrito =
         nombre: string
         codigo_barras: string | null
         precio_venta: number
+        precio_mayorista: number | null
         stock_actual: number
         venta_por_peso: boolean
         /** Para productos por peso, la cantidad en kg a agregar. */
         cantidad_kg?: number
       }
+      /** Lista activa de la orden: decide con qué precio entra el ítem. */
+      lista: ListaPrecio
       /** Si es true, se permite agregar/superar aunque no haya stock (venta en negativo). */
       permitir_sin_stock?: boolean
     }
@@ -39,6 +51,22 @@ export type AccionCarrito =
     }
   | { tipo: 'ELIMINAR'; producto_id: number }
   | { tipo: 'VACIAR' }
+  | { tipo: 'CAMBIAR_LISTA'; lista: ListaPrecio }
+
+/**
+ * Precio y lista aplicada según la lista pedida. Mayorista sin precio
+ * definido (null o 0) cae a minorista — y el ítem queda marcado así.
+ */
+function resolverPrecio(
+  lista: ListaPrecio,
+  precioMinorista: number,
+  precioMayorista: number | null
+): { precio: number; lista_aplicada: ListaPrecio } {
+  if (lista === 'mayorista' && (precioMayorista ?? 0) > 0) {
+    return { precio: precioMayorista as number, lista_aplicada: 'mayorista' }
+  }
+  return { precio: precioMinorista, lista_aplicada: 'minorista' }
+}
 
 export function reducerCarrito(
   estado: ItemCarrito[],
@@ -46,10 +74,15 @@ export function reducerCarrito(
 ): ItemCarrito[] {
   switch (accion.tipo) {
     case 'AGREGAR_PRODUCTO': {
-      const { producto, permitir_sin_stock } = accion
+      const { producto, lista, permitir_sin_stock } = accion
       if (!permitir_sin_stock && producto.stock_actual <= 0) return estado
 
       const existente = estado.find((it) => it.producto_id === producto.producto_id)
+      const { precio, lista_aplicada } = resolverPrecio(
+        lista,
+        producto.precio_venta,
+        producto.precio_mayorista
+      )
 
       if (producto.venta_por_peso) {
         // Por peso: siempre REEMPLAZA la cantidad (re-pesar)
@@ -68,10 +101,13 @@ export function reducerCarrito(
             producto_id: producto.producto_id,
             nombre: producto.nombre,
             codigo_barras: producto.codigo_barras,
-            precio_unitario: producto.precio_venta,
+            precio_unitario: precio,
             cantidad: kg,
             stock_disponible: producto.stock_actual,
             venta_por_peso: true,
+            precio_minorista: producto.precio_venta,
+            precio_mayorista: producto.precio_mayorista,
+            lista_aplicada,
           },
         ]
       }
@@ -92,10 +128,13 @@ export function reducerCarrito(
           producto_id: producto.producto_id,
           nombre: producto.nombre,
           codigo_barras: producto.codigo_barras,
-          precio_unitario: producto.precio_venta,
+          precio_unitario: precio,
           cantidad: 1,
           stock_disponible: producto.stock_actual,
           venta_por_peso: false,
+          precio_minorista: producto.precio_venta,
+          precio_mayorista: producto.precio_mayorista,
+          lista_aplicada,
         },
       ]
     }
@@ -119,6 +158,18 @@ export function reducerCarrito(
       return estado.filter((it) => it.producto_id !== accion.producto_id)
     case 'VACIAR':
       return []
+    case 'CAMBIAR_LISTA': {
+      // Repriceo completo del carrito con los precios que ya viajan en cada
+      // ítem (kg y cantidades se conservan; solo cambia el precio unitario).
+      return estado.map((it) => {
+        const { precio, lista_aplicada } = resolverPrecio(
+          accion.lista,
+          it.precio_minorista,
+          it.precio_mayorista
+        )
+        return { ...it, precio_unitario: precio, lista_aplicada }
+      })
+    }
   }
 }
 
