@@ -31,7 +31,16 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import { formatearFechaCorta } from '@/lib/utils/formato'
-import { cuitValido } from '@/lib/utils/fiscal'
+import { toast } from 'sonner'
+import {
+  TIPOS_COMPROBANTE_COMPRA,
+  TIPOS_COMPROBANTE_COMPRA_ITEMS,
+  cuitValido,
+  exigeDatosFiscales,
+  numeroComprobanteValido,
+  puntoVentaValido,
+  soloDigitos,
+} from '@/lib/utils/fiscal'
 import { cn } from '@/lib/utils'
 import {
   useControlarCompraDirecta,
@@ -40,7 +49,6 @@ import {
 } from '@/lib/hooks/useFacturasCompra'
 import type { ComprobanteCargado } from '@/lib/queries/facturasCompra'
 
-const TIPOS_COMPROBANTE = ['A', 'B', 'C', 'M', 'X']
 
 interface Props {
   abierto: boolean
@@ -82,9 +90,29 @@ export function ModalControlarCompra({
   // Se valida solo lo que se tipeó: una compra vieja pudo quedar con un CUIT
   // mal cargado y no hay que impedir corregir el resto por eso.
   const cuitError = cuit.trim() !== '' && !cuitValido(cuit)
+  // Cuarta puerta (mig 155): los datos fiscales son obligatorios también al
+  // controlar (salvo tipo X), si no un "Controlar" podía volver a dejar en
+  // blanco lo que la carga exigió. Se avisa al guardar, no se deshabilita.
+  const fiscalObligatorio = exigeDatosFiscales(tipo)
+  const ptoError = punto.trim() !== '' && !puntoVentaValido(punto)
+  const nroError = numero.trim() !== '' && !numeroComprobanteValido(numero)
+  const faltaPto = fiscalObligatorio && punto.trim() === ''
+  const faltaNro = fiscalObligatorio && numero.trim() === ''
+  const faltaCuit = fiscalObligatorio && soloDigitos(cuit).length !== 11 && !cuitError
 
   function guardar(marcarControlada: boolean) {
-    if (!compra || cuitError) return
+    if (!compra || cuitError || ptoError || nroError) return
+    if (faltaPto || faltaNro || faltaCuit) {
+      const faltantes = [
+        faltaPto && 'el punto de venta',
+        faltaNro && 'el número',
+        faltaCuit && 'el CUIT del proveedor (11 dígitos)',
+      ].filter((s): s is string => typeof s === 'string')
+      toast.error(
+        `Falta ${faltantes.join(', ')} del comprobante. Si es un ticket sin datos fiscales, elegí tipo X.`
+      )
+      return
+    }
     controlar.mutate(
       {
         factura_id: compra.id,
@@ -213,42 +241,74 @@ export function ModalControlarCompra({
               <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Tipo</Label>
-                  <Select value={tipo} onValueChange={(v) => setTipo(v ?? 'A')} disabled={procesando}>
-                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] h-9">
+                  <Select
+                    items={TIPOS_COMPROBANTE_COMPRA_ITEMS}
+                    value={tipo}
+                    onValueChange={(v) => setTipo(v ?? 'A')}
+                    disabled={procesando}
+                  >
+                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] h-9 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {TIPOS_COMPROBANTE.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {t}
+                      {TIPOS_COMPROBANTE_COMPRA.map((t) => (
+                        <SelectItem key={t.valor} value={t.valor}>
+                          {t.etiqueta}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Pto vta</Label>
+                  <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                    Pto vta{' '}
+                    {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+                  </Label>
                   <Input
+                    inputMode="numeric"
                     value={punto}
                     onChange={(e) => setPunto(e.target.value)}
                     placeholder="0001"
                     disabled={procesando}
-                    className="h-9 tabular-nums border-[#e4c9b0]"
+                    className={cn(
+                      'h-9 tabular-nums',
+                      ptoError ? 'border-[#c43e2c]' : faltaPto ? 'border-[#f9b44c]' : 'border-[#e4c9b0]'
+                    )}
                   />
+                  {ptoError ? (
+                    <p className="text-[10px] text-[#c43e2c]">Solo números (hasta 5).</p>
+                  ) : faltaPto ? (
+                    <p className="text-[10px] text-[#b3821b]">Falta.</p>
+                  ) : null}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Número</Label>
+                  <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                    Número{' '}
+                    {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+                  </Label>
                   <Input
+                    inputMode="numeric"
                     value={numero}
                     onChange={(e) => setNumero(e.target.value)}
                     placeholder="00001234"
                     disabled={procesando}
-                    className="h-9 tabular-nums border-[#e4c9b0]"
+                    className={cn(
+                      'h-9 tabular-nums',
+                      nroError ? 'border-[#c43e2c]' : faltaNro ? 'border-[#f9b44c]' : 'border-[#e4c9b0]'
+                    )}
                   />
+                  {nroError ? (
+                    <p className="text-[10px] text-[#c43e2c]">Solo números (hasta 8).</p>
+                  ) : faltaNro ? (
+                    <p className="text-[10px] text-[#b3821b]">Falta.</p>
+                  ) : null}
                 </div>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">CUIT proveedor</Label>
+                <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                  CUIT proveedor{' '}
+                  {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+                </Label>
                 <Input
                   value={cuit}
                   onChange={(e) => setCuit(e.target.value)}
@@ -290,7 +350,7 @@ export function ModalControlarCompra({
               type="button"
               variant="outline"
               onClick={() => guardar(false)}
-              disabled={procesando || cuitError}
+              disabled={procesando || cuitError || ptoError || nroError}
               className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
             >
               Guardar
@@ -298,7 +358,7 @@ export function ModalControlarCompra({
             <Button
               type="button"
               onClick={() => guardar(true)}
-              disabled={procesando || cuitError}
+              disabled={procesando || cuitError || ptoError || nroError}
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold"
             >
               {procesando ? (

@@ -117,8 +117,9 @@ export function useGuardarFacturaCompra() {
       qc.invalidateQueries({ queryKey: ['pagos-programados'] })
       const hoy = new Date()
       const hoyIso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+      // fecha null = hoy (mig 155): nunca es un programado.
       const programados =
-        vars.pagos?.some((p) => p.fecha > hoyIso) ?? false
+        vars.pagos?.some((p) => !!p.fecha && p.fecha > hoyIso) ?? false
       toast.success(
         vars.pagos && vars.pagos.length > 0
           ? programados

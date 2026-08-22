@@ -1,7 +1,12 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { traerTodo } from '@/lib/supabase/paginacion'
-import { claveSemana, fechaLocal, semanasEnRango } from '@/lib/utils/periodos'
+import {
+  claveSemana,
+  fechaLocal,
+  hoyIso,
+  semanasEnRango,
+} from '@/lib/utils/periodos'
 import type { CuentaAPagarUpdate, EgresoRow, Json } from '@/types/database'
 
 export interface PuntoSemana {
@@ -498,6 +503,35 @@ export function esFormaPago(v: string | null): v is FormaPago {
   return v != null && FORMAS_PAGO.some((f) => f.valor === v)
 }
 
+/**
+ * Formas de pago que dejan un número rastreable: el N° de comprobante de pago
+ * (transferencia / cheque / operación) es OBLIGATORIO con ellas. Efectivo y
+ * "otro" no tienen número que cargar.
+ */
+export const FORMAS_CON_COMPROBANTE: readonly FormaPago[] = [
+  'transferencia',
+  'cheque',
+  'debito',
+]
+
+export function requiereComprobante(forma: string | null | undefined): boolean {
+  return esFormaPago(forma ?? null) && FORMAS_CON_COMPROBANTE.includes(forma as FormaPago)
+}
+
+/** Etiqueta del campo "comprobante de pago" según la forma de pago. */
+export function labelComprobante(forma: string | null | undefined): string {
+  switch (forma) {
+    case 'transferencia':
+      return 'N° de transferencia'
+    case 'cheque':
+      return 'N° de cheque'
+    case 'debito':
+      return 'N° de operación'
+    default:
+      return 'N° de comprobante'
+  }
+}
+
 export interface PagarCuentaPayload {
   cuenta_id: number
   usuario_id: string
@@ -519,6 +553,21 @@ export interface PagarCuentaPayload {
  * paga de más (redondeo), el excedente va a 5.2.10 y la deuda queda saldada.
  */
 export async function pagarCuenta(payload: PagarCuentaPayload): Promise<void> {
+  // Validación defensiva (cubre cualquier UI): un pago "ahora" no puede ser
+  // futuro (para eso están los programados) y las formas rastreables
+  // exigen su número. El server NO lo chequea a propósito: fn_pagar_cuenta
+  // también ejecuta programados que pueden no tener comprobante todavía.
+  if (!payload.fecha || payload.fecha > hoyIso()) {
+    throw new Error(
+      'La fecha del pago no puede ser futura. Para pagar más adelante, programalo desde la carga de la factura.'
+    )
+  }
+  if (
+    requiereComprobante(payload.forma_pago) &&
+    !(payload.comprobante ?? '').trim()
+  ) {
+    throw new Error(`Falta el ${labelComprobante(payload.forma_pago)}.`)
+  }
   const supabase = createClient()
   const { error } = await supabase.rpc('fn_pagar_cuenta', {
     p_cuenta_id: payload.cuenta_id,
@@ -676,15 +725,26 @@ export async function getPagosProgramados(): Promise<PagoProgramadoConDatos[]> {
   }))
 }
 
-/** Ejecuta el pago programado: debita HOY vía fn_pagar_cuenta (atómico). */
+/**
+ * Ejecuta el pago programado: debita HOY vía fn_pagar_cuenta (atómico). El
+ * comprobante (n° de transferencia) se carga recién acá, cuando la plata sale
+ * de verdad (mig 155): viaja como p_comprobante y se persiste en la fila del
+ * programado y en el pago resultante.
+ */
 export async function ejecutarPagoProgramado(
   programadoId: number,
-  usuarioId: string
+  usuarioId: string,
+  comprobante?: string | null
 ): Promise<void> {
   const supabase = createClient()
+  const comp = (comprobante ?? '').trim()
   const { error } = await supabase.rpc('fn_ejecutar_pago_programado', {
     p_programado_id: programadoId,
     p_usuario_id: usuarioId,
+    // Solo viaja con valor (efectivo/otro no lo tienen). OJO: con la key
+    // presente la llamada exige la firma de 3 args → la mig 155 tiene que
+    // estar corrida ANTES de deployar este frontend.
+    ...(comp ? { p_comprobante: comp } : {}),
   })
   if (error) throw error
 }

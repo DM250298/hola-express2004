@@ -1,7 +1,19 @@
 import { createClient } from '@/lib/supabase/client'
 import { completarCuitProveedor } from '@/lib/queries/proveedores'
-import { soloDigitos } from '@/lib/utils/fiscal'
-import type { CuotaPlanPayload } from '@/lib/queries/finanzas'
+import {
+  exigeDatosFiscales,
+  normalizarNumeroComprobante,
+  normalizarPuntoVenta,
+  numeroComprobanteValido,
+  puntoVentaValido,
+  soloDigitos,
+} from '@/lib/utils/fiscal'
+import {
+  labelComprobante,
+  requiereComprobante,
+  type CuotaPlanPayload,
+  type FormaPago,
+} from '@/lib/queries/finanzas'
 import type { Json } from '@/types/database'
 
 export interface CompraDirectaLinea {
@@ -34,6 +46,10 @@ export interface CompraDirectaPago {
   cuenta_id?: number | null
   /** Importe que se paga AHORA (mig 149). Omitido = el total (compat v1). */
   monto?: number
+  /** Forma de pago (mig 155). Origen turno = siempre efectivo. */
+  forma_pago?: FormaPago | null
+  /** N° de transferencia / cheque / operación (mig 155): obligatorio según la forma. */
+  comprobante?: string | null
 }
 
 export interface CompraDirectaPayload {
@@ -61,11 +77,41 @@ export interface CompraDirectaPayload {
  */
 export async function registrarCompraDirecta(p: CompraDirectaPayload) {
   const supabase = createClient()
+  // Pto/número al formato AFIP (mig 155): el índice único y los anti-duplicados
+  // comparan texto exacto. El RPC v3 normaliza y valida igual (defensa en
+  // profundidad); acá el mensaje llega antes y en castellano claro.
+  const fiscal = {
+    ...p.fiscal,
+    punto_venta: normalizarPuntoVenta(p.fiscal.punto_venta) || null,
+    numero_comprobante: normalizarNumeroComprobante(p.fiscal.numero_comprobante) || null,
+  }
+  const cuitDigitos = soloDigitos(p.fiscal.cuit ?? '')
+  if (exigeDatosFiscales(p.fiscal.tipo_comprobante)) {
+    if (!p.fiscal.tipo_comprobante) throw new Error('Falta el tipo de comprobante.')
+    if (!fiscal.punto_venta) throw new Error('Falta el punto de venta del comprobante.')
+    if (!fiscal.numero_comprobante) throw new Error('Falta el número del comprobante.')
+    if (cuitDigitos.length !== 11) {
+      throw new Error('Falta el CUIT del proveedor (11 dígitos).')
+    }
+  }
+  if (fiscal.punto_venta && !puntoVentaValido(fiscal.punto_venta)) {
+    throw new Error('El punto de venta tiene más de 5 dígitos.')
+  }
+  if (fiscal.numero_comprobante && !numeroComprobanteValido(fiscal.numero_comprobante)) {
+    throw new Error('El número de comprobante tiene más de 8 dígitos.')
+  }
+  if (
+    p.pago.origen === 'cuenta' &&
+    requiereComprobante(p.pago.forma_pago) &&
+    !(p.pago.comprobante ?? '').trim()
+  ) {
+    throw new Error(`Falta el ${labelComprobante(p.pago.forma_pago)} del pago.`)
+  }
   const { data, error } = await supabase.rpc('fn_registrar_compra_directa', {
     p_usuario_id: p.usuario_id,
     p_proveedor_id: p.proveedor_id,
     p_fecha: p.fecha,
-    p_fiscal: p.fiscal as unknown as Json,
+    p_fiscal: fiscal as unknown as Json,
     p_lineas: p.lineas as unknown as Json,
     p_gasto: (p.gasto ?? {}) as unknown as Json,
     p_mueve_stock: p.mueve_stock,
@@ -83,7 +129,6 @@ export async function registrarCompraDirecta(p: CompraDirectaPayload) {
   // Completa el CUIT en la ficha del proveedor si no tenía (nunca pisa uno ya
   // cargado: el filtro `.is('cuit', null)` corre en el server). Best-effort: la
   // compra ya quedó registrada y pagada, un error acá no puede voltearla.
-  const cuitDigitos = soloDigitos(p.fiscal.cuit ?? '')
   if (p.proveedor_id && cuitDigitos.length === 11) {
     try {
       await completarCuitProveedor(p.proveedor_id, cuitDigitos)

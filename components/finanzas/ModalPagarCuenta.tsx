@@ -27,19 +27,17 @@ import { cn } from '@/lib/utils'
 import {
   FORMAS_PAGO,
   FORMA_PAGO_LABEL,
+  labelComprobante as labelComprobantePorForma,
+  requiereComprobante,
   type FormaPago,
   type CuentaAPagarConProveedor,
 } from '@/lib/queries/finanzas'
+import { hoyIso } from '@/lib/utils/periodos'
 
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   cuenta: CuentaAPagarConProveedor | null
-}
-
-function hoyIso(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100
@@ -151,20 +149,22 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
   const bovedaNegativa =
     saldoInsuficiente && (cuentaSel?.es_caja_fuerte ?? false)
 
-  const labelComprobante =
-    formaPago === 'transferencia'
-      ? 'N° de transferencia'
-      : formaPago === 'cheque'
-        ? 'N° de cheque'
-        : formaPago === 'debito'
-          ? 'N° de operación'
-          : 'N° de comprobante'
+  const labelComprobante = labelComprobantePorForma(formaPago)
+  // N° de comprobante OBLIGATORIO con transferencia / cheque / débito (mig
+  // 155); efectivo y "otro" no tienen número que cargar.
+  const comprobanteFaltante =
+    requiereComprobante(formaPago) && comprobante.trim() === ''
+  // Un pago registrado acá sale HOY (o atrasado): una fecha futura es un
+  // programado, que se carga desde la factura.
+  const fechaFutura = !fecha || fecha > hoyIso()
 
   const puedeGuardar =
     !!usuario &&
     !!cuentaSel &&
     montoNum > 0 &&
     !bovedaNegativa &&
+    !comprobanteFaltante &&
+    !fechaFutura &&
     !pagar.isPending
 
   function handlePagar() {
@@ -383,25 +383,51 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                   value={fecha}
                   max={hoyIso()}
                   onChange={(e) => setFecha(e.target.value)}
-                  className="h-11 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                  className={cn(
+                    'h-11 tabular-nums focus-visible:ring-[#f9b44c]',
+                    fechaFutura ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  )}
                 />
+                {fechaFutura && (
+                  <p className="text-[11px] text-[#c43e2c]">
+                    {fecha
+                      ? 'No puede ser futura: para pagar más adelante, programalo desde la carga de la factura.'
+                      : 'Poné la fecha del pago.'}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Comprobante */}
+            {/* Comprobante (obligatorio según la forma, mig 155) */}
             <div className="space-y-1.5">
               <Label className="text-[11px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                 {labelComprobante}{' '}
-                <span className="normal-case text-[#c8a58a] font-normal">
-                  (opcional)
-                </span>
+                {requiereComprobante(formaPago) ? (
+                  <span className="text-[#c43e2c]">*</span>
+                ) : (
+                  <span className="normal-case text-[#c8a58a] font-normal">
+                    (opcional)
+                  </span>
+                )}
               </Label>
               <Input
                 value={comprobante}
                 onChange={(e) => setComprobante(e.target.value)}
-                placeholder="N° de la operación, cheque o recibo"
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                placeholder={
+                  requiereComprobante(formaPago)
+                    ? `${labelComprobante} (obligatorio)`
+                    : 'N° de la operación, cheque o recibo'
+                }
+                className={cn(
+                  'focus-visible:ring-[#f9b44c]',
+                  comprobanteFaltante ? 'border-[#f9b44c]' : 'border-[#e4c9b0]'
+                )}
               />
+              {comprobanteFaltante && (
+                <p className="text-[11px] text-[#b3821b]">
+                  Poné el {labelComprobante} para poder registrar el pago.
+                </p>
+              )}
             </div>
 
             {/* Nota */}

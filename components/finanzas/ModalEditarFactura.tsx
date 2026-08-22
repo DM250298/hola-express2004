@@ -46,6 +46,7 @@ import { useProductos } from '@/lib/hooks/useProductos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useCuentas } from '@/lib/hooks/useCuentas'
+import { useConfigFiscal } from '@/lib/hooks/useFiscal'
 import {
   useAnularFacturaCompra,
   useFacturaCompra,
@@ -59,11 +60,24 @@ import {
   leerBorrador,
   purgarBorradoresVencidos,
 } from '@/lib/utils/borradores'
+import {
+  TIPOS_COMPROBANTE_COMPRA,
+  TIPOS_COMPROBANTE_COMPRA_ITEMS,
+  cuitValido,
+  exigeDatosFiscales,
+  numeroComprobanteValido,
+  puntoVentaValido,
+  soloDigitos,
+  tipoDesdeCondicionIva,
+} from '@/lib/utils/fiscal'
+import { hoyIso, isoMasDias } from '@/lib/utils/periodos'
 import { cn } from '@/lib/utils'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import {
   FORMAS_PAGO,
   FORMA_PAGO_LABEL,
+  labelComprobante,
+  requiereComprobante,
   type FormaPago,
   type CuentaAPagarConProveedor,
 } from '@/lib/queries/finanzas'
@@ -158,18 +172,25 @@ interface BorradorFactura {
    *  (sin estos campos) se restauran igual, sin bumpear BORRADOR_V. */
   usarCuotas?: boolean
   cuotas?: CuotaForm[]
+  /** Cómo se paga (mig 155). Opcional por el mismo motivo. */
+  modoPago?: ModoPago | null
 }
+
+/**
+ * Cómo se cancela la factura — elección EXPLÍCITA y obligatoria (pedido del
+ * dueño: "sí o sí hay que configurar cómo se va a pagar"):
+ *  · ahora           → uno o más pagos de HOY (o atrasados), con cuenta,
+ *                      método y n° de comprobante si el método lo tiene
+ *  · programado      → uno o más pagos con fecha FUTURA (no debitan hoy)
+ *  · cuenta_corriente→ sin pagos: vencimiento único o plan de cuotas
+ */
+type ModoPago = 'ahora' | 'programado' | 'cuenta_corriente'
 
 /** Versión del formato del borrador: si cambia la forma, los viejos se ignoran. */
 const BORRADOR_V = 1
 
 function claveBorrador(cuentaId: number): string {
   return `factura-c${cuentaId}`
-}
-
-function hoyIso(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** dd/mm/aaaa desde un ISO (para mostrar vencimiento y fecha de pago). */
@@ -185,21 +206,6 @@ function r2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
-function soloDigitos(s: string): string {
-  return s.replace(/\D/g, '')
-}
-
-/** Valida un CUIT argentino: 11 dígitos + dígito verificador. */
-function cuitValido(s: string): boolean {
-  const d = soloDigitos(s)
-  if (d.length !== 11) return false
-  const mult = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2]
-  const suma = mult.reduce((acc, m, i) => acc + m * Number(d[i]), 0)
-  const resto = suma % 11
-  const verif = resto === 0 ? 0 : resto === 1 ? 9 : 11 - resto
-  return verif === Number(d[10])
-}
-
 const CABECERA_DEFAULT: CabeceraState = {
   // Vacío a propósito: lo completa el proveedor de la cuenta según su condición
   // de IVA (ver tipoDesdeCondicionIva); si no hay dato, cae a 'A'.
@@ -211,13 +217,22 @@ const CABECERA_DEFAULT: CabeceraState = {
   fecha_emision: hoyIso(),
 }
 
-const TIPOS_COMPROBANTE = [
-  { valor: 'A', etiqueta: 'Factura A' },
-  { valor: 'B', etiqueta: 'Factura B' },
-  { valor: 'C', etiqueta: 'Factura C' },
-  { valor: 'M', etiqueta: 'Factura M' },
-  { valor: 'E', etiqueta: 'Factura E (export.)' },
-]
+/**
+ * Pto. venta y número desde el "N° de factura" que pidió la recepción móvil
+ * (cuentas_a_pagar.numero_factura): "0001-00012345" o "A 0001-00012345" →
+ * ambos; solo dígitos (≤ 8) → número. Así una factura recibida por celular
+ * no obliga a retipear lo que ya se cargó en el depósito.
+ */
+function parsearNumeroFactura(
+  s: string | null | undefined
+): { punto: string; numero: string } | null {
+  const t = (s ?? '').trim()
+  if (!t) return null
+  const m = t.match(/^(?:[A-Z]\s+)?(\d{1,5})-(\d{1,8})$/i)
+  if (m) return { punto: m[1], numero: m[2] }
+  if (/^\d{1,8}$/.test(t)) return { punto: '', numero: t }
+  return null
+}
 
 /**
  * Campo numérico con etiqueta arriba — para las tarjetas en mobile, donde no
@@ -258,25 +273,8 @@ function CampoNumero({
 }
 
 /**
- * Letra de comprobante que suele emitir un proveedor según su condición frente
- * al IVA (el receptor, Hola Express, es responsable inscripto). Es solo un
- * default editable: el administrativo puede cambiarlo si la factura dice otra.
- */
-function tipoDesdeCondicionIva(cond: string | null | undefined): string {
-  switch (cond) {
-    case 'responsable_inscripto':
-      return 'A'
-    case 'monotributo':
-    case 'exento':
-    case 'consumidor_final':
-      return 'C'
-    default:
-      return 'A'
-  }
-}
-
-/**
- * Letra sugerida por la ficha del proveedor. Sin ficha resuelta devuelve ''
+ * Letra sugerida por la ficha del proveedor (tipoDesdeCondicionIva compartido
+ * en lib/utils/fiscal.ts). Sin ficha resuelta devuelve ''
  * (y NO 'A'): si devolviera 'A', el effect de relleno la vería como un valor
  * ya puesto y no la corregiría cuando la ficha llegue tarde (un monotributista
  * quedaría clavado en A).
@@ -327,7 +325,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   // impagos de cada cuota (Σ = saldo actual) y siempre se re-manda entero.
   const [usarCuotas, setUsarCuotas] = useState(false)
   const [cuotas, setCuotas] = useState<CuotaForm[]>([])
+  // ── Modo de pago explícito (mig 155) ─────────────────────────────────
+  // null = todavía no eligió. NO se setea un default: se DERIVA en render
+  // (modoPagoEfectivo) porque `facturaGuardada` resuelve async y setearlo en
+  // el bloque (2) de la init pisaría lo que el usuario tocó mientras cargaba.
+  const [modoPago, setModoPago] = useState<ModoPago | null>(null)
+  // Los "Falta …" de los datos obligatorios se muestran en ámbar hasta que
+  // se intenta guardar; después, en rojo (patrón RecepcionMovil).
+  const [intentoGuardar, setIntentoGuardar] = useState(false)
+  const ptoRef = useRef<HTMLInputElement>(null)
+  const nroRef = useRef<HTMLInputElement>(null)
+  const cuitRef = useRef<HTMLInputElement>(null)
+  const fechaEmisionRef = useRef<HTMLInputElement>(null)
   const { data: cuentasTesoreria } = useCuentas(true)
+  // CUIT propio (config fiscal): copiar el del receptor es el error más fácil
+  // y pasa la validación del verificador — se bloquea explícito.
+  const { data: configFiscal } = useConfigFiscal()
 
   const { data: productosBusqueda } = useProductos({
     activo: true,
@@ -453,6 +466,18 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         // Cuotas (mig 148): con fallback — un borrador pre-cuotas no las trae.
         setUsarCuotas(borrador.usarCuotas ?? false)
         setCuotas(Array.isArray(borrador.cuotas) ? borrador.cuotas : [])
+        // Modo de pago (mig 155): un borrador anterior al cambio no lo trae →
+        // se infiere de sus pagos (como hacía el server por fecha); sin pagos
+        // queda null para forzar la elección explícita.
+        setModoPago(
+          borrador.modoPago ??
+            (borrador.pagosLineas.length > 0
+              ? borrador.fechaPago > hoyIso()
+                ? 'programado'
+                : 'ahora'
+              : null)
+        )
+        setIntentoGuardar(false)
         setAfectaVenta(borrador.afectaVenta)
         setLineas(borrador.lineas)
         setBusqueda('')
@@ -465,18 +490,26 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         return
       }
       setBorradorRestaurado(false)
+      // Pto/número precargados desde el N° que pidió la recepción móvil (si
+      // lo hay): los datos fiscales son obligatorios y no se retipean.
+      const nf = parsearNumeroFactura(cuenta?.numero_factura)
       setCab({
         ...CABECERA_DEFAULT,
         cuit_proveedor: proveedorCuenta?.cuit ?? '',
         tipo_comprobante: tipoSugerido(proveedorCuenta),
+        punto_venta: nf?.punto ?? '',
+        numero_comprobante: nf?.numero ?? '',
       })
       setPercepciones({ iibb: '', iva: '', otros: '' })
       setGastosNoDebitables('')
       setRedondeo('')
-      // Pago integrado: cada apertura arranca sin pagos (cuenta corriente).
+      // Pago integrado: cada apertura arranca sin pagos y SIN modo elegido
+      // (el default de una factura ya guardada se deriva en render).
       setPagosLineas([])
       setFechaPago(hoyIso())
       setVencimientoCC(cuenta?.fecha_vencimiento?.slice(0, 10) ?? '')
+      setModoPago(null)
+      setIntentoGuardar(false)
       // Plan de cuotas vigente → el editor arranca con los REMANENTES impagos
       // (Σ = saldo actual). Si el total cambia al re-editar, el editor marca
       // la diferencia y bloquea el guardado hasta que vuelva a cerrar.
@@ -612,10 +645,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (facturaGuardada) {
       setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
       const f = facturaGuardada.factura
+      // Factura vieja sin pto/número: cae al N° que pidió la recepción móvil
+      // (misma precarga que el bloque 1), el dato de la factura manda si existe.
+      const nfGuardada = parsearNumeroFactura(cuenta?.numero_factura)
       setCab({
         tipo_comprobante: f.tipo_comprobante || tipoSugerido(proveedorCuenta),
-        punto_venta: f.punto_venta ?? '',
-        numero_comprobante: f.numero_comprobante ?? '',
+        punto_venta: f.punto_venta || nfGuardada?.punto || '',
+        numero_comprobante: f.numero_comprobante || nfGuardada?.numero || '',
         cae: f.cae ?? '',
         // El CUIT de la FACTURA manda: puede diferir del de la ficha (el
         // proveedor facturó con otro) y es el que va al Libro IVA.
@@ -669,6 +705,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       vencimientoCC,
       usarCuotas,
       cuotas,
+      modoPago,
     }
     const json = JSON.stringify(foto)
     if (pristineRef.current === null) {
@@ -699,6 +736,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     vencimientoCC,
     usarCuotas,
     cuotas,
+    modoPago,
   ])
 
   // Flush del borrador al cerrar (como sea que se cierre): lo tipeado en los
@@ -975,30 +1013,105 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const filaIncompleta = pagosLineas.some(
     (f) => !f.cuenta_id || (Number(f.monto) || 0) <= 0
   )
-  // Fecha FUTURA = pagos PROGRAMADOS (mig 146): no debitan nada al guardar,
-  // quedan agendados y se ejecutan desde Finanzas › Cuentas a pagar.
-  const pagoProgramado = hayPagos && fechaPago > hoyIso()
   // Con los pagos previos cubriendo el total no hay nada que pagar: el server
   // rechazaría cualquier monto y abortaría también la factura.
   const deudaCubierta = !cuentaPagada && pendientePago <= 0 && yaPagado > 0.009
-  // Bloquea el guardado: filas incompletas, una fila intermedia que ya cubre
-  // el total, o bóveda en negativo (solo para pagos que debitan HOY: los
-  // programados se validan recién al ejecutarse).
+
+  // ── Modo de pago explícito (mig 155) ─────────────────────────────────
+  // requiereModo: con la deuda viva hay que elegir. Pagada o cubierta por
+  // pagos previos → no hay nada que configurar (selector oculto, CC implícito).
+  // El default de una factura ya guardada (o con plan de cuotas) es CC: así
+  // re-guardar para corregir un precio no exige elegir de nuevo.
+  const teniaPlan = (cuenta?.cuotas.length ?? 0) > 0
+  const requiereModo = !!cuenta && !cuentaPagada && !deudaCubierta
+  const modoPagoEfectivo: ModoPago | null =
+    modoPago ?? (facturaGuardada || teniaPlan ? 'cuenta_corriente' : null)
+  const modoAhora = requiereModo && modoPagoEfectivo === 'ahora'
+  // PROGRAMADO (mig 146): no debita nada al guardar, queda agendado y se
+  // ejecuta desde Finanzas › Cuentas a pagar. Ya no se infiere por la fecha:
+  // lo dice el modo, y la fecha tiene que ser coherente con él.
+  const pagoProgramado = requiereModo && modoPagoEfectivo === 'programado'
+  const fechaPagoInvalida =
+    (modoAhora && (!fechaPago || fechaPago > hoyIso())) ||
+    (pagoProgramado && (!fechaPago || fechaPago <= hoyIso()))
+  // N° de comprobante obligatorio en los pagos de HOY con forma rastreable
+  // (transferencia/cheque/débito). En programados se carga al ejecutarlos.
+  const idxSinComprobante = modoAhora
+    ? pagosLineas.findIndex(
+        (f) => requiereComprobante(f.forma) && f.comprobante.trim() === ''
+      )
+    : -1
+  const comprobanteFaltante = idxSinComprobante >= 0
+  // Deshabilita Guardar SOLO lo que tiene explicación inline: una fila
+  // intermedia que ya cubre el total, o bóveda en negativo (solo para pagos
+  // que debitan HOY: los programados se validan al ejecutarse). Las filas
+  // incompletas (cuenta/importe) se avisan al click, igual que los faltantes
+  // del comprobante: elegir "Pago ahora" crea una fila vacía y no puede
+  // apagar el botón sin decir por qué. Mismo gate que el payload (solo
+  // cuentan los pagos en los modos que los mandan).
   const pagoInvalido =
+    (modoAhora || pagoProgramado) &&
     hayPagos &&
-    (filaIncompleta ||
-      ordenInvalido ||
-      deudaCubierta ||
-      (!pagoProgramado && bovedaNegativa))
+    (ordenInvalido || (!pagoProgramado && bovedaNegativa))
+  const filasIncompletasPendientes =
+    (modoAhora || pagoProgramado) && hayPagos && filaIncompleta
 
   // ── Cuotas del saldo (mig 148) ───────────────────────────────────────
-  // Solo tiene sentido donde hoy vive el vencimiento único: deuda viva, con
-  // saldo, y sin pagos programados (la fecha futura ya "agenda" el saldo).
-  const teniaPlan = (cuenta?.cuotas.length ?? 0) > 0
+  // Viven donde vive el saldo a cuenta corriente: modo CC, o "ahora" con pago
+  // parcial. En "programado" NO se tocan (la fecha futura ya agenda el saldo
+  // y el plan vigente se mantiene intacto).
   const cuotasActivas =
-    usarCuotas && !pagoProgramado && !deudaCubierta && saldoRestante > 0.009
+    usarCuotas && requiereModo && !pagoProgramado && saldoRestante > 0.009
   const cuotasInvalidas =
     cuotasActivas && !cuotasValidas(cuotas, Math.max(0, saldoRestante))
+  // Saldo que queda a CC sin plan de cuotas → necesita vencimiento.
+  const faltaVencimientoCC =
+    requiereModo &&
+    !pagoProgramado &&
+    saldoRestante > 0.009 &&
+    !cuotasActivas &&
+    !vencimientoCC
+  const modoInvalido =
+    requiereModo &&
+    (modoPagoEfectivo === null ||
+      ((modoAhora || pagoProgramado) && !hayPagos) ||
+      faltaVencimientoCC)
+
+  /** Cambiar el modo normaliza fecha y filas para que las reglas se cumplan. */
+  function elegirModo(m: ModoPago) {
+    if (m === 'cuenta_corriente') {
+      // Solo pide confirmación por filas con algo cargado POR EL USUARIO: la
+      // fila que se crea sola al elegir "ahora" trae importe pero no cuenta.
+      const cargadas = pagosLineas.filter(
+        (f) =>
+          f.cuenta_id !== '' ||
+          f.comprobante.trim() !== '' ||
+          f.nota.trim() !== ''
+      ).length
+      if (
+        cargadas > 0 &&
+        !window.confirm(
+          `Se ${cargadas === 1 ? 'quita el pago cargado' : `quitan los ${cargadas} pagos cargados`}. ¿Seguir?`
+        )
+      ) {
+        return
+      }
+      setPagosLineas([])
+    } else if (m === 'ahora') {
+      setFechaPago((f) => (!f || f > hoyIso() ? hoyIso() : f))
+      if (pagosLineas.length === 0) agregarPagoLinea()
+    } else {
+      // Programado: sugiere el vencimiento de la deuda si es futuro; si no,
+      // mañana (la fecha tiene que ser > hoy).
+      setFechaPago((f) => {
+        if (f && f > hoyIso()) return f
+        const venc = cuenta?.fecha_vencimiento?.slice(0, 10) ?? ''
+        return venc > hoyIso() ? venc : isoMasDias(hoyIso(), 1)
+      })
+      if (pagosLineas.length === 0) agregarPagoLinea()
+    }
+    setModoPago(m)
+  }
 
   // Σ de unidades del comprobante vs. lo recibido, separando los productos por
   // peso (venta_por_peso: la cantidad es en kg, no se mezcla con unidades).
@@ -1082,15 +1195,38 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     setPagosLineas((prev) => prev.filter((f) => f.key !== key))
   }
 
-  // Validación de los datos formales (solo si el usuario cargó algo).
+  // ── Datos formales del comprobante ───────────────────────────────────
+  // Errores de FORMATO (solo si hay algo tipeado) + CUIT propio: deshabilitan
+  // Guardar, siempre en rojo.
+  const cuitDigitos = soloDigitos(cab.cuit_proveedor)
   const cuitError =
     cab.cuit_proveedor.trim() !== '' && !cuitValido(cab.cuit_proveedor)
+  const cuitPropio = soloDigitos(configFiscal?.cuit ?? '')
+  const esCuitPropio = cuitPropio.length === 11 && cuitDigitos === cuitPropio
   const ptoError =
-    cab.punto_venta.trim() !== '' && !/^\d{1,5}$/.test(cab.punto_venta.trim())
+    cab.punto_venta.trim() !== '' && !puntoVentaValido(cab.punto_venta)
   const nroError =
     cab.numero_comprobante.trim() !== '' &&
-    !/^\d{1,8}$/.test(cab.numero_comprobante.trim())
-  const hayErroresCab = cuitError || ptoError || nroError
+    !numeroComprobanteValido(cab.numero_comprobante)
+  const hayErroresCab = cuitError || ptoError || nroError || esCuitPropio
+  // FALTANTES (mig 155: tipo, pto, número, CUIT y fecha son obligatorios;
+  // CAE no; el tipo X exime pto/número/CUIT). No deshabilitan el botón: se
+  // muestran en ámbar y, al intentar guardar, en rojo con foco al primero.
+  const fiscalObligatorio = exigeDatosFiscales(cab.tipo_comprobante)
+  const faltaTipo = cab.tipo_comprobante === ''
+  const faltaPto = fiscalObligatorio && cab.punto_venta.trim() === ''
+  const faltaNro = fiscalObligatorio && cab.numero_comprobante.trim() === ''
+  const faltaCuit = fiscalObligatorio && cuitDigitos.length === 0
+  const fechaEmisionError =
+    !cab.fecha_emision || cab.fecha_emision > hoyIso()
+  const faltanDatos =
+    faltaTipo || faltaPto || faltaNro || faltaCuit || fechaEmisionError
+  // Color de los avisos de faltante: ámbar hasta el intento, rojo después.
+  const clsFalta = intentoGuardar ? 'text-[#c43e2c]' : 'text-[#b3821b]'
+  const bordeFalta = intentoGuardar ? 'border-[#c43e2c]' : 'border-[#f9b44c]'
+  // Factura guardada antes de la obligatoriedad, sin cabecera completa.
+  const cabeceraIncompletaGuardada =
+    !!facturaGuardada && (faltaTipo || faltaPto || faltaNro || faltaCuit)
 
   // ── Ficha del proveedor: lo que se muestra y el aviso de datos faltantes ──
   // La ficha viva manda; `cuenta.proveedor_nombre` (del embed) es el fallback
@@ -1112,7 +1248,35 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
     if (lineas.length === 0) return
     if (hayErroresCab) {
-      toast.error('Revisá los datos del comprobante (CUIT o número).')
+      toast.error(
+        esCuitPropio
+          ? 'Ese es el CUIT de Hola Express: cargá el del proveedor que emite la factura.'
+          : 'Revisá los datos del comprobante (CUIT o número).'
+      )
+      return
+    }
+    // Datos obligatorios (mig 155): avisar qué falta y enfocar el primero.
+    if (faltanDatos) {
+      setIntentoGuardar(true)
+      const faltantes = [
+        faltaTipo && 'el tipo',
+        faltaPto && 'el punto de venta',
+        faltaNro && 'el número',
+        faltaCuit && 'el CUIT del proveedor',
+        fechaEmisionError &&
+          (cab.fecha_emision ? 'una fecha de emisión válida (no futura)' : 'la fecha de emisión'),
+      ].filter((s): s is string => typeof s === 'string')
+      toast.error(`Falta ${faltantes.join(', ')} del comprobante.`)
+      const ref = faltaPto
+        ? ptoRef
+        : faltaNro
+          ? nroRef
+          : faltaCuit
+            ? cuitRef
+            : fechaEmisionError
+              ? fechaEmisionRef
+              : null
+      ref?.current?.focus()
       return
     }
     if (hayErrorPrecio) {
@@ -1121,15 +1285,48 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       )
       return
     }
+    if (modoInvalido) {
+      setIntentoGuardar(true)
+      toast.error(
+        modoPagoEfectivo === null
+          ? 'Elegí cómo se paga la factura: ahora, programado o a cuenta corriente.'
+          : faltaVencimientoCC
+            ? 'Poné la fecha de vencimiento del saldo que queda a cuenta corriente.'
+            : 'Agregá al menos un pago (o elegí "Cuenta corriente").'
+      )
+      return
+    }
+    if (fechaPagoInvalida) {
+      setIntentoGuardar(true)
+      toast.error(
+        pagoProgramado
+          ? 'Un pago programado necesita una fecha posterior a hoy.'
+          : 'La fecha del pago no puede ser futura: para pagar más adelante elegí "Pago programado".'
+      )
+      return
+    }
+    if (filasIncompletasPendientes) {
+      setIntentoGuardar(true)
+      const idx = pagosLineas.findIndex(
+        (f) => !f.cuenta_id || (Number(f.monto) || 0) <= 0
+      )
+      toast.error(
+        `Completá la cuenta y el importe del pago ${idx + 1}.`
+      )
+      return
+    }
+    if (comprobanteFaltante) {
+      setIntentoGuardar(true)
+      toast.error(
+        `Poné el ${labelComprobante(pagosLineas[idxSinComprobante].forma)} del pago ${idxSinComprobante + 1}.`
+      )
+      return
+    }
     if (pagoInvalido) {
       toast.error(
         bovedaNegativa
           ? 'Los pagos dejan la caja fuerte en negativo: bajá el monto o elegí otra cuenta.'
-          : ordenInvalido
-            ? 'Los pagos anteriores ya cubren el total: borrá o bajá el último pago.'
-            : deudaCubierta
-              ? 'La deuda ya está cubierta por los pagos registrados: guardá la factura sin pagos.'
-              : 'Completá la cuenta y el importe de cada pago.'
+          : 'Los pagos anteriores ya cubren el total: borrá o bajá el último pago.'
       )
       return
     }
@@ -1148,7 +1345,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         cuenta_id: cuenta.id,
         pedido_id: pedido.id,
         proveedor_id: cuenta.proveedor_id,
-        fecha: cab.fecha_emision || hoyIso(),
+        // Sin fallback a hoy (mig 155): la fecha de emisión es obligatoria y
+        // ya se validó arriba (fechaEmisionError).
+        fecha: cab.fecha_emision,
         afecta_precio_venta: afectaVenta,
         usuario_id: usuario.id,
         percepciones: { iva: percIva, iibb: percIibb, otros: percOtros },
@@ -1175,39 +1374,46 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           precio_venta:
             l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
         })),
-        // Pagos en el mismo acto (mig 145): se aplican en orden, todos con la
-        // misma fecha (default hoy, nunca futura) — independiente de la fecha
-        // de emisión; el guard de período cerrado del server la valida.
+        // Pagos en el mismo acto (mig 145) o programados (mig 146), según el
+        // MODO elegido (mig 155). Todos con la misma fecha; en "ahora" con
+        // fecha de hoy viaja null → el RPC usa su "hoy" LOCAL (La Rioja) y
+        // nunca queda programado por un reloj desfasado. El guard de período
+        // cerrado del server valida la fecha.
         pagos:
-          hayPagos && !cuentaPagada
+          (modoAhora || pagoProgramado) && hayPagos
             ? pagosLineas.map((f) => ({
                 cuenta_origen_id: Number(f.cuenta_id),
                 monto: r2(Number(f.monto) || 0),
                 forma_pago: f.forma,
                 comprobante: f.comprobante.trim() || null,
-                fecha: fechaPago || hoyIso(),
+                fecha: modoAhora && fechaPago === hoyIso() ? null : fechaPago,
                 nota: f.nota.trim() || null,
               }))
             : null,
         // Vencimiento ajustado desde el modal: solo viaja si lo cambiaron
         // (y la deuda sigue viva). Con cuotas activas NO viaja: el plan fija
         // el vencimiento del padre.
+        // Con plan vigente y pago PROGRAMADO tampoco viaja: el plan no se
+        // toca y el vencimiento del padre lo fija la próxima cuota.
         fecha_vencimiento:
           !cuentaPagada &&
           !cuotasActivas &&
+          !(pagoProgramado && teniaPlan) &&
           vencimientoCC &&
           vencimientoCC !== (cuenta.fecha_vencimiento ?? '').slice(0, 10)
             ? vencimientoCC
             : undefined,
         // Plan de cuotas (mig 148): activo → se re-manda ENTERO (Σ = saldo
         // post-pagos); desactivado con plan previo → [] lo borra; sin plan y
-        // sin activar → undefined (no viaja, no toca nada).
+        // sin activar → undefined (no viaja, no toca nada). En PROGRAMADO
+        // nunca se toca: el plan vigente se mantiene y el pago agendado se
+        // aplica a la próxima cuota al ejecutarse.
         cuotas: cuotasActivas
           ? cuotas.map((c) => ({
               monto: r2(Number(c.monto) || 0),
               fecha_vencimiento: c.fecha,
             }))
-          : teniaPlan && !cuentaPagada
+          : teniaPlan && !cuentaPagada && !pagoProgramado
             ? []
             : undefined,
       },
@@ -1987,89 +2193,161 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-2">
               Datos del comprobante (para libro IVA)
             </div>
+            {cabeceraIncompletaGuardada && (
+              <div className="mb-2 flex items-start gap-2 rounded-lg border border-[#f9b44c]/60 bg-[#f9b44c]/15 px-2.5 py-1.5 text-[11px] leading-snug text-[#6f3a2a]">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
+                <span>
+                  Esta factura se guardó sin todos los datos del comprobante:
+                  completalos para poder guardar cambios (anular sigue
+                  disponible).
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-2.5">
               <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">Tipo</Label>
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  Tipo <span className="text-[#c43e2c]">*</span>
+                </Label>
                 <Select
+                  items={TIPOS_COMPROBANTE_COMPRA_ITEMS}
                   value={cab.tipo_comprobante}
                   onValueChange={(v) =>
                     setCabCampo('tipo_comprobante', v ?? 'A')
                   }
                 >
-                  <SelectTrigger className="h-8 border-[#e4c9b0] bg-white text-xs">
+                  <SelectTrigger
+                    className={cn(
+                      'h-8 bg-white text-xs',
+                      faltaTipo ? bordeFalta : 'border-[#e4c9b0]'
+                    )}
+                  >
                     <SelectValue placeholder="Elegí" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS_COMPROBANTE.map((t) => (
+                    {TIPOS_COMPROBANTE_COMPRA.map((t) => (
                       <SelectItem key={t.valor} value={t.valor}>
                         {t.etiqueta}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {faltaTipo && (
+                  <p className={cn('text-[9px]', clsFalta)}>Falta el tipo.</p>
+                )}
+                {!fiscalObligatorio && (
+                  <p className="text-[9px] text-[#9e6b15]">
+                    Ticket sin datos fiscales: pto., número y CUIT opcionales.
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">Pto. venta</Label>
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  Pto. venta{' '}
+                  {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+                </Label>
                 <Input
+                  ref={ptoRef}
                   inputMode="numeric"
                   placeholder="0001"
                   value={cab.punto_venta}
                   onChange={(e) => setCabCampo('punto_venta', e.target.value)}
-                  className={`h-8 bg-white text-xs tabular-nums ${
-                    ptoError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                  }`}
+                  className={cn(
+                    'h-8 bg-white text-xs tabular-nums',
+                    ptoError
+                      ? 'border-[#c43e2c]'
+                      : faltaPto
+                        ? bordeFalta
+                        : 'border-[#e4c9b0]'
+                  )}
                 />
-                {ptoError && (
+                {ptoError ? (
                   <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 5 dígitos).</p>
-                )}
+                ) : faltaPto ? (
+                  <p className={cn('text-[9px]', clsFalta)}>Falta el punto de venta.</p>
+                ) : null}
               </div>
               <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">Número</Label>
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  Número{' '}
+                  {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+                </Label>
                 <Input
+                  ref={nroRef}
                   inputMode="numeric"
                   placeholder="00001234"
                   value={cab.numero_comprobante}
                   onChange={(e) =>
                     setCabCampo('numero_comprobante', e.target.value)
                   }
-                  className={`h-8 bg-white text-xs tabular-nums ${
-                    nroError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                  }`}
+                  className={cn(
+                    'h-8 bg-white text-xs tabular-nums',
+                    nroError
+                      ? 'border-[#c43e2c]'
+                      : faltaNro
+                        ? bordeFalta
+                        : 'border-[#e4c9b0]'
+                  )}
                 />
-                {nroError && (
+                {nroError ? (
                   <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 8 dígitos).</p>
-                )}
+                ) : faltaNro ? (
+                  <p className={cn('text-[9px]', clsFalta)}>Falta el número.</p>
+                ) : null}
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-[#6f3a2a]">
-                  CUIT proveedor
+                  CUIT proveedor{' '}
+                  {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
                 </Label>
                 <Input
+                  ref={cuitRef}
                   inputMode="numeric"
                   placeholder="30-xxxxxxxx-x"
                   value={cab.cuit_proveedor}
                   onChange={(e) =>
                     setCabCampo('cuit_proveedor', e.target.value)
                   }
-                  className={`h-8 bg-white text-xs tabular-nums ${
-                    cuitError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                  }`}
+                  className={cn(
+                    'h-8 bg-white text-xs tabular-nums',
+                    cuitError || esCuitPropio
+                      ? 'border-[#c43e2c]'
+                      : faltaCuit
+                        ? bordeFalta
+                        : 'border-[#e4c9b0]'
+                  )}
                 />
-                {cuitError && (
+                {esCuitPropio ? (
+                  <p className="text-[9px] text-[#c43e2c]">
+                    Ese es el CUIT de Hola Express: va el del proveedor.
+                  </p>
+                ) : cuitError ? (
                   <p className="text-[9px] text-[#c43e2c]">CUIT inválido (11 dígitos).</p>
-                )}
+                ) : faltaCuit ? (
+                  <p className={cn('text-[9px]', clsFalta)}>Falta el CUIT.</p>
+                ) : null}
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-[#6f3a2a]">
-                  Fecha emisión
+                  Fecha emisión <span className="text-[#c43e2c]">*</span>
                 </Label>
                 <Input
+                  ref={fechaEmisionRef}
                   type="date"
                   value={cab.fecha_emision}
                   max={hoyIso()}
                   onChange={(e) => setCabCampo('fecha_emision', e.target.value)}
-                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                  className={cn(
+                    'h-8 bg-white text-xs tabular-nums',
+                    fechaEmisionError ? bordeFalta : 'border-[#e4c9b0]'
+                  )}
                 />
+                {fechaEmisionError && (
+                  <p className={cn('text-[9px]', clsFalta)}>
+                    {cab.fecha_emision
+                      ? 'No puede ser posterior a hoy.'
+                      : 'Falta la fecha.'}
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
                 <Label className="text-[10px] text-[#6f3a2a]">CAE</Label>
@@ -2215,32 +2493,104 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold flex items-center gap-1.5">
                     <Wallet className="h-3.5 w-3.5 text-[#f9b44c]" />
-                    Agregar pago
+                    Cómo se paga{' '}
+                    {requiereModo && <span className="text-[#c43e2c]">*</span>}
                   </span>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {yaPagado > 0.009 && (
-                      <span className="rounded-full bg-[#f9b44c]/15 border border-[#f9b44c]/50 px-2 py-0.5 text-[10px] font-semibold text-[#9e6b15]">
-                        Ya tiene pagos por <MontoARS monto={yaPagado} />
+                  {yaPagado > 0.009 && (
+                    <span className="rounded-full bg-[#f9b44c]/15 border border-[#f9b44c]/50 px-2 py-0.5 text-[10px] font-semibold text-[#9e6b15]">
+                      Ya tiene pagos por <MontoARS monto={yaPagado} />
+                    </span>
+                  )}
+                </div>
+
+                {/* Modo de pago (mig 155): elección explícita y obligatoria */}
+                {requiereModo && (
+                  <div
+                    className={cn(
+                      'grid grid-cols-3 gap-1.5 rounded-lg',
+                      intentoGuardar &&
+                        modoPagoEfectivo === null &&
+                        'ring-2 ring-[#c43e2c]/60 ring-offset-1'
+                    )}
+                  >
+                    {(
+                      [
+                        {
+                          v: 'ahora',
+                          t: 'Pago ahora',
+                          d: 'Sale plata hoy',
+                        },
+                        {
+                          v: 'programado',
+                          t: 'Pago programado',
+                          d: 'Se agenda a fecha',
+                        },
+                        {
+                          v: 'cuenta_corriente',
+                          t: 'Cuenta corriente',
+                          d: 'Vence o en cuotas',
+                        },
+                      ] as { v: ModoPago; t: string; d: string }[]
+                    ).map((op) => {
+                      const activo = modoPagoEfectivo === op.v
+                      return (
+                        <button
+                          key={op.v}
+                          type="button"
+                          onClick={() => elegirModo(op.v)}
+                          className={cn(
+                            'rounded-lg border-2 px-2 py-1.5 text-left transition-all',
+                            activo
+                              ? 'border-[#f9b44c] bg-[#f9b44c]/15'
+                              : 'border-[#e4c9b0] bg-white hover:border-[#c8a58a]'
+                          )}
+                        >
+                          <div className="text-[11px] font-bold leading-tight text-[#391511]">
+                            {op.t}
+                          </div>
+                          <div className="text-[9px] leading-tight text-[#6f3a2a]">
+                            {op.d}
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {/* Sin `cargando`: con factura guardada el default CC recién
+                    se conoce cuando resuelve la query; evita el parpadeo. */}
+                {requiereModo && modoPagoEfectivo === null && !cargando && (
+                  <p className={cn('text-[11px]', clsFalta)}>
+                    Elegí cómo se paga la factura para poder guardar.
+                  </p>
+                )}
+
+                {(modoAhora || pagoProgramado) && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-[#6f3a2a]">
+                    <span>{pagoProgramado ? 'Programado para el' : 'Fecha del pago'}</span>
+                    <Input
+                      type="date"
+                      value={fechaPago}
+                      max={modoAhora ? hoyIso() : undefined}
+                      min={pagoProgramado ? isoMasDias(hoyIso(), 1) : undefined}
+                      onChange={(e) => setFechaPago(e.target.value)}
+                      className={cn(
+                        'h-8 w-36 text-xs tabular-nums focus-visible:ring-[#f9b44c]',
+                        fechaPagoInvalida
+                          ? 'border-[#c43e2c]'
+                          : pagoProgramado
+                            ? 'border-[#f9b44c] bg-[#f9b44c]/10'
+                            : 'border-[#e4c9b0]'
+                      )}
+                    />
+                    {fechaPagoInvalida && (
+                      <span className="text-[#c43e2c]">
+                        {pagoProgramado
+                          ? 'Tiene que ser posterior a hoy.'
+                          : 'No puede ser futura (elegí "Programado").'}
                       </span>
                     )}
-                    {hayPagos && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-[#6f3a2a]">
-                        <span>Fecha del pago</span>
-                        <Input
-                          type="date"
-                          value={fechaPago}
-                          onChange={(e) => setFechaPago(e.target.value)}
-                          className={cn(
-                            'h-8 w-36 text-xs tabular-nums focus-visible:ring-[#f9b44c]',
-                            pagoProgramado
-                              ? 'border-[#f9b44c] bg-[#f9b44c]/10'
-                              : 'border-[#e4c9b0]'
-                          )}
-                        />
-                      </div>
-                    )}
                   </div>
-                </div>
+                )}
 
                 {/* Filas de pago (labels solo en la primera) */}
                 {pagosLineas.map((f, i) => (
@@ -2267,7 +2617,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           onChange={(e) =>
                             setPagoCampo(f.key, 'monto', e.target.value)
                           }
-                          className="pl-5 h-8 text-right text-xs font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          className={cn(
+                            'pl-5 h-8 text-right text-xs font-semibold tabular-nums focus-visible:ring-[#f9b44c]',
+                            intentoGuardar && (Number(f.monto) || 0) <= 0
+                              ? 'border-[#c43e2c]'
+                              : 'border-[#e4c9b0]'
+                          )}
                         />
                       </div>
                     </div>
@@ -2309,7 +2664,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           elegirCuentaPagoLinea(f.key, v ?? '')
                         }
                       >
-                        <SelectTrigger className="w-full h-8 text-xs border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                        <SelectTrigger
+                          className={cn(
+                            'w-full h-8 text-xs focus:ring-[#f9b44c] bg-white',
+                            intentoGuardar && !f.cuenta_id
+                              ? 'border-[#c43e2c]'
+                              : 'border-[#e4c9b0]'
+                          )}
+                        >
                           <SelectValue placeholder="Elegí la cuenta…" />
                         </SelectTrigger>
                         <SelectContent>
@@ -2329,16 +2691,35 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <div className="space-y-1">
                       {i === 0 && (
                         <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                          N° comp.
+                          {labelComprobante(f.forma)}{' '}
+                          {modoAhora && requiereComprobante(f.forma) && (
+                            <span className="text-[#c43e2c]">*</span>
+                          )}
                         </Label>
                       )}
+                      {/* Obligatorio en pagos de HOY con forma rastreable
+                          (transferencia/cheque/débito); en programados se carga
+                          al ejecutar. El placeholder lo dice por fila (el label
+                          solo sale en la primera). */}
                       <Input
                         value={f.comprobante}
                         onChange={(e) =>
                           setPagoCampo(f.key, 'comprobante', e.target.value)
                         }
-                        placeholder="Opcional"
-                        className="h-8 text-xs border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        placeholder={
+                          requiereComprobante(f.forma)
+                            ? `${labelComprobante(f.forma)}${modoAhora ? ' *' : ' (al ejecutar)'}`
+                            : 'Opcional'
+                        }
+                        className={cn(
+                          'h-8 text-xs focus-visible:ring-[#f9b44c]',
+                          intentoGuardar &&
+                            modoAhora &&
+                            requiereComprobante(f.forma) &&
+                            f.comprobante.trim() === ''
+                            ? 'border-[#c43e2c]'
+                            : 'border-[#e4c9b0]'
+                        )}
                       />
                     </div>
                     <div className="space-y-1">
@@ -2367,8 +2748,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </div>
                 ))}
 
-                {/* Agregar: se oculta cuando ya no queda nada por cubrir */}
-                {!deudaCubierta && saldoRestante > 0.009 && (
+                {/* Agregar: solo en los modos con pagos, y mientras quede
+                    algo por cubrir */}
+                {(modoAhora || pagoProgramado) &&
+                  !deudaCubierta &&
+                  saldoRestante > 0.009 && (
                   <button
                     type="button"
                     onClick={agregarPagoLinea}
@@ -2442,19 +2826,31 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     : <MontoARS monto={Math.max(0, saldoRestante)} />
                   </div>
                   {pagoProgramado ? (
-                    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
-                      <span>
-                        La deuda queda a cuenta corriente (vence el
-                      </span>
-                      <Input
-                        type="date"
-                        value={vencimientoCC}
-                        onChange={(e) => setVencimientoCC(e.target.value)}
-                        className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                      />
-                      <span>
-                        ) hasta ejecutar los pagos programados.
-                      </span>
+                    <div className="space-y-1.5">
+                      {teniaPlan ? (
+                        // Programado NO toca el plan: se mantiene intacto y el
+                        // pago agendado se aplica a la próxima cuota al ejecutarse.
+                        <p className="text-[11px] text-[#6f3a2a]">
+                          El plan de {cuenta.cuotas.length} cuotas se mantiene;
+                          el pago programado se aplica a la próxima cuota al
+                          ejecutarse.
+                        </p>
+                      ) : (
+                        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
+                          <span>
+                            La deuda queda a cuenta corriente (vence el
+                          </span>
+                          <Input
+                            type="date"
+                            value={vencimientoCC}
+                            onChange={(e) => setVencimientoCC(e.target.value)}
+                            className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          />
+                          <span>
+                            ) hasta ejecutar los pagos programados.
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ) : !deudaCubierta && saldoRestante > 0.009 ? (
                     <div className="space-y-2 text-left">
@@ -2484,13 +2880,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         />
                       ) : (
                         <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
-                          <span>vence el</span>
+                          <span>
+                            vence el <span className="text-[#c43e2c]">*</span>
+                          </span>
                           <Input
                             type="date"
                             value={vencimientoCC}
                             onChange={(e) => setVencimientoCC(e.target.value)}
-                            className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                            className={cn(
+                              'h-8 w-36 text-xs tabular-nums focus-visible:ring-[#f9b44c]',
+                              faltaVencimientoCC ? bordeFalta : 'border-[#e4c9b0]'
+                            )}
                           />
+                          {faltaVencimientoCC && (
+                            <span className={clsFalta}>Poné la fecha.</span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2530,11 +2934,32 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </span>
             {cuenta && !cuentaPagada && (
               <span className="text-xs text-[#6f3a2a]">
-                Saldo a cta. cte.:{' '}
-                <span className="font-bold tabular-nums text-[#391511]">
-                  <MontoARS monto={Math.max(0, saldoRestante)} />
-                </span>
-                {cuotasActivas ? ` · en ${cuotas.length} cuotas` : ''}
+                {requiereModo && modoPagoEfectivo === null ? (
+                  <span className={cn('font-semibold', clsFalta)}>
+                    Elegí cómo se paga
+                  </span>
+                ) : (
+                  <>
+                    {modoAhora && hayPagos
+                      ? 'Pago ahora '
+                      : pagoProgramado && hayPagos
+                        ? `Programado ${fechaCorta(fechaPago)} `
+                        : ''}
+                    {(modoAhora || pagoProgramado) && hayPagos && (
+                      <>
+                        <span className="font-bold tabular-nums text-[#391511]">
+                          <MontoARS monto={totalPagos} />
+                        </span>
+                        {' · '}
+                      </>
+                    )}
+                    Saldo a cta. cte.:{' '}
+                    <span className="font-bold tabular-nums text-[#391511]">
+                      <MontoARS monto={Math.max(0, saldoRestante)} />
+                    </span>
+                    {cuotasActivas ? ` · en ${cuotas.length} cuotas` : ''}
+                  </>
+                )}
               </span>
             )}
           </div>
@@ -2580,7 +3005,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Guardando…
                 </>
-              ) : hayPagos ? (
+              ) : (modoAhora || pagoProgramado) && hayPagos ? (
                 <>
                   {pagoProgramado ? 'Guardar y programar' : 'Guardar y pagar'}
                   &nbsp;

@@ -131,10 +131,13 @@ export function useEjecutarPagoProgramado() {
     mutationFn: ({
       programadoId,
       usuarioId,
+      comprobante,
     }: {
       programadoId: number
       usuarioId: string
-    }) => ejecutarPagoProgramado(programadoId, usuarioId),
+      /** N° de transferencia/cheque/operación cargado al ejecutar (mig 155). */
+      comprobante?: string | null
+    }) => ejecutarPagoProgramado(programadoId, usuarioId, comprobante),
     onSuccess: () => {
       // Ejecutar = un pago real: invalida todo lo de un pago + la lista.
       invalidarTrasPago(qc)

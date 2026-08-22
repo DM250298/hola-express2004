@@ -246,7 +246,13 @@ export async function getLibroIvaCompras(
     .lt('fecha', hastaExcl)
     .order('fecha', { ascending: true })
   if (error) throw error
-  const facturas = (facturasData ?? []) as unknown as FacturaRow[]
+  // El tipo X (ticket / recibo sin datos fiscales, mig 155) no es un
+  // comprobante fiscal: no discrimina IVA ni tiene pto/número/CUIT, así que
+  // no va al Libro IVA (saldría como una fila en blanco). Se filtra en
+  // cliente para no dejar afuera las filas con tipo NULL (cargas viejas).
+  const facturas = ((facturasData ?? []) as unknown as FacturaRow[]).filter(
+    (f) => f.tipo_comprobante !== 'X'
+  )
 
   const cero: TotalesLibroIva = {
     neto21: 0,

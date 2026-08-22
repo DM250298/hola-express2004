@@ -1833,6 +1833,9 @@ export type EgresoRow = {
   cuenta_id: number | null
   turno_id: number | null
   created_at: string
+  /** Forma de pago y n° de comprobante (mig 155): solo pagos a proveedores. */
+  forma_pago: string | null
+  comprobante: string | null
 }
 
 export type EgresoInsert = {
@@ -1845,6 +1848,8 @@ export type EgresoInsert = {
   cuenta_id?: number | null
   turno_id?: number | null
   created_at?: string
+  forma_pago?: string | null
+  comprobante?: string | null
 }
 
 export type EgresoUpdate = {
@@ -1854,6 +1859,8 @@ export type EgresoUpdate = {
   fecha?: string
   cuenta_id?: number | null
   turno_id?: number | null
+  forma_pago?: string | null
+  comprobante?: string | null
 }
 
 // ─── tipo_cuenta / tipo_movimiento_cuenta enums ──────────────────────────────
@@ -4463,11 +4470,13 @@ export interface Database {
         Returns: undefined
       }
       /** Ejecuta un pago programado (mig 146): debita HOY vía fn_pagar_cuenta
-       *  y marca la fila como 'ejecutado'. */
+       *  y marca la fila como 'ejecutado'. v3 (mig 155): + p_comprobante, el
+       *  n° de transferencia se carga al ejecutar (cuando la plata sale). */
       fn_ejecutar_pago_programado: {
         Args: {
           p_programado_id: number
           p_usuario_id: string
+          p_comprobante?: string | null
         }
         Returns: Json
       }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Loader2,
@@ -10,6 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,14 +41,26 @@ import { useCuentas } from '@/lib/hooks/useCuentas'
 import { useRegistrarCompraDirecta } from '@/lib/hooks/useComprasDirectas'
 import { useConfigFiscal } from '@/lib/hooks/useFiscal'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { CATEGORIAS_EGRESO } from '@/lib/queries/finanzas'
+import {
+  CATEGORIAS_EGRESO,
+  FORMAS_PAGO,
+  labelComprobante,
+  requiereComprobante,
+  type FormaPago,
+} from '@/lib/queries/finanzas'
 import { cn } from '@/lib/utils'
 import {
+  TIPOS_COMPROBANTE_COMPRA,
+  TIPOS_COMPROBANTE_COMPRA_ITEMS,
   cuitValido,
   discriminaIva,
+  exigeDatosFiscales,
+  numeroComprobanteValido,
+  puntoVentaValido,
   soloDigitos,
   tipoDesdeCondicionIva,
 } from '@/lib/utils/fiscal'
+import { hoyIso } from '@/lib/utils/periodos'
 
 interface LineaStock {
   producto_id: number
@@ -69,14 +82,14 @@ interface Props {
   turnoId?: number | null
 }
 
-const TIPOS_COMPROBANTE = ['A', 'B', 'C', 'M', 'X']
-
-function hoyIso(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
 const r2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Cómo se cancela la compra directa (mig 155): elección explícita. No existe
+ * "programado" acá — fn_registrar_compra_directa paga en el acto o deja el
+ * saldo a cuenta corriente (mig 149).
+ */
+type ModoPagoDirecta = 'ahora' | 'cuenta_corriente'
 
 export function ModalCompraFactura({
   abierto,
@@ -132,6 +145,20 @@ export function ModalCompraFactura({
   const [vencimientoCC, setVencimientoCC] = useState('')
   const [usarCuotas, setUsarCuotas] = useState(false)
   const [cuotas, setCuotas] = useState<CuotaForm[]>([])
+  // ── Modo de pago explícito + forma + comprobante (mig 155) ───────────
+  // Finanzas: null hasta que elija. POS: 'ahora' (efectivo del turno), y las
+  // tarjetas solo aparecen si el usuario puede dejar saldo.
+  const [modoPago, setModoPago] = useState<ModoPagoDirecta | null>(null)
+  const [formaPago, setFormaPago] = useState<FormaPago>('transferencia')
+  const [comprobantePago, setComprobantePago] = useState('')
+  // "Falta …" en ámbar hasta que se intenta confirmar; después en rojo, con
+  // foco al primer campo faltante (en modo mercadería el bloque fiscal queda
+  // lejos de la tabla).
+  const [intentoConfirmar, setIntentoConfirmar] = useState(false)
+  const ptoRef = useRef<HTMLInputElement>(null)
+  const nroRef = useRef<HTMLInputElement>(null)
+  const cuitRef = useRef<HTMLInputElement>(null)
+  const comprobanteRef = useRef<HTMLInputElement>(null)
 
   const procesando = registrar.isPending
 
@@ -157,6 +184,18 @@ export function ModalCompraFactura({
     setVencimientoCC('')
     setUsarCuotas(false)
     setCuotas([])
+    setModoPago(null)
+    setFormaPago('transferencia')
+    setComprobantePago('')
+    setIntentoConfirmar(false)
+  }
+
+  /** Elegir la cuenta de pago sugiere la forma por su tipo (editable). */
+  function elegirCuenta(v: string | null) {
+    const id = v ?? ''
+    setCuentaId(id)
+    const c = (cuentas ?? []).find((x) => String(x.id) === id)
+    if (c) setFormaPago(c.tipo === 'caja' ? 'efectivo' : 'transferencia')
   }
 
   /**
@@ -251,6 +290,20 @@ export function ModalCompraFactura({
   const nombreProveedor = proveedorSel?.nombre ?? 'el proveedor'
   // Solo bloquea lo que el usuario tipeó mal (ver comentario de `cuitTocado`).
   const cuitError = cuitTocado && cuit.trim() !== '' && !cuitValido(cuit)
+  // ── Datos fiscales obligatorios (mig 155), salvo tipo X ──────────────
+  // Errores de FORMATO deshabilitan; los FALTANTES se avisan en ámbar y, al
+  // intentar confirmar, en rojo (el botón queda habilitado para poder avisar).
+  // CUIT obligatorio = 11 dígitos; el verificador se valida solo con
+  // cuitTocado (fichas viejas con CUIT mal no bloquean la compra).
+  const fiscalObligatorio = exigeDatosFiscales(tipoComp)
+  const ptoError = puntoVenta.trim() !== '' && !puntoVentaValido(puntoVenta)
+  const nroError = numero.trim() !== '' && !numeroComprobanteValido(numero)
+  const faltaPto = fiscalObligatorio && puntoVenta.trim() === ''
+  const faltaNro = fiscalObligatorio && numero.trim() === ''
+  const faltaCuit = fiscalObligatorio && soloDigitos(cuit).length !== 11 && !cuitError
+  const faltanDatos = faltaPto || faltaNro || faltaCuit
+  const clsFalta = intentoConfirmar ? 'text-[#c43e2c]' : 'text-[#b3821b]'
+  const bordeFalta = intentoConfirmar ? 'border-[#c43e2c]' : 'border-[#f9b44c]'
   // La factura trae DOS CUIT: el del que emite y el nuestro. Copiar el nuestro
   // es el error más fácil de cometer y pasa la validación sin chistar, así que
   // se bloquea explícito.
@@ -276,11 +329,6 @@ export function ModalCompraFactura({
 
   const cuentaSel = (cuentas ?? []).find((c) => String(c.id) === cuentaId)
 
-  // ── Pago parcial / saldo a cuenta corriente (mig 149) ────────────────
-  const montoPagoNum = pagoTocado ? Number(montoPago) || 0 : total
-  const saldoCC = r2(total - montoPagoNum)
-  const hayDeuda = saldoCC > 0.009
-  const pagoInvalido = montoPagoNum < 0 || montoPagoNum > total + 0.009
   // Dejar deuda exige permiso 'finanzas' (espejo del guard del RPC). En el
   // contexto finanzas la pantalla ya está gateada por ese permiso; el rol
   // admin bypassa fn_tiene_permiso, así que acá también.
@@ -288,6 +336,29 @@ export function ModalCompraFactura({
     contexto === 'finanzas' ||
     usuarioActual?.rol === 'admin' ||
     (usuarioActual?.permisos ?? []).includes('finanzas')
+
+  // ── Modo de pago explícito (mig 155) + pago parcial / saldo a CC (mig 149) ──
+  // Sin permiso para dejar saldo no hay nada que elegir: se paga todo.
+  const modoEfectivo: ModoPagoDirecta | null = !puedeDejarSaldo
+    ? 'ahora'
+    : (modoPago ?? (contexto === 'pos' ? 'ahora' : null))
+  const montoPagoNum =
+    modoEfectivo === 'ahora'
+      ? pagoTocado
+        ? Number(montoPago) || 0
+        : total
+      : 0
+  const saldoCC = r2(total - montoPagoNum)
+  // Sin modo elegido todavía no hay "deuda" que mostrar ni validar.
+  const hayDeuda = modoEfectivo !== null && saldoCC > 0.009
+  const pagoInvalido = montoPagoNum < 0 || montoPagoNum > total + 0.009
+  // Forma de pago: desde el turno siempre efectivo (sin número que cargar);
+  // desde una cuenta, la elegida. Transferencia/cheque/débito exigen el n°.
+  const formaEfectiva: FormaPago = contexto === 'pos' ? 'efectivo' : formaPago
+  const comprobanteFaltante =
+    montoPagoNum > 0.009 &&
+    requiereComprobante(formaEfectiva) &&
+    comprobantePago.trim() === ''
   const cuotasOk = cuotasValidas(cuotas, saldoCC)
   const totalUnidades = lineas.reduce(
     (acc, l) => acc + (Number(l.cantidad) || 0),
@@ -309,11 +380,15 @@ export function ModalCompraFactura({
     lineas.every((l) => Number(l.cantidad) > 0 && Number(l.costo_sin_iva) > 0)
   const gastoValido = !mueveStock && neto > 0 && gastoDescripcion.trim().length >= 2
 
+  // Validez "dura" (deshabilita el botón). Los FALTANTES obligatorios (datos
+  // fiscales, modo, comprobante) se chequean al confirmar, con aviso y foco.
   const puedeConfirmar =
     !procesando &&
     !!proveedorId &&
     !cuitError &&
     !esCuitPropio &&
+    !ptoError &&
+    !nroError &&
     !fechaError &&
     total > 0 &&
     !pagoInvalido &&
@@ -323,11 +398,43 @@ export function ModalCompraFactura({
       : contexto === 'pos'
         ? !!turnoId
         : !!cuentaId && !bloqueoBoveda) &&
-    (!hayDeuda ||
-      (puedeDejarSaldo && (usarCuotas ? cuotasOk : !!vencimientoCC)))
+    (!hayDeuda || (puedeDejarSaldo && (!usarCuotas || cuotasOk)))
 
   function confirmar() {
     if (!puedeConfirmar) return
+    // Obligatorios (mig 155): se avisa qué falta en vez de dejar el botón
+    // gris sin explicación.
+    if (faltanDatos) {
+      setIntentoConfirmar(true)
+      const faltantes = [
+        faltaPto && 'punto de venta',
+        faltaNro && 'número',
+        faltaCuit && 'CUIT del proveedor',
+      ].filter((s): s is string => typeof s === 'string')
+      toast.error(
+        `Faltan datos del comprobante: ${faltantes.join(', ')}.${
+          contexto === 'pos' ? ' Si es un ticket sin datos fiscales, elegí tipo X.' : ''
+        }`
+      )
+      ;(faltaPto ? ptoRef : faltaNro ? nroRef : cuitRef).current?.focus()
+      return
+    }
+    if (modoEfectivo === null) {
+      setIntentoConfirmar(true)
+      toast.error('Elegí cómo se paga la compra: ahora o a cuenta corriente.')
+      return
+    }
+    if (comprobanteFaltante) {
+      setIntentoConfirmar(true)
+      toast.error(`Poné el ${labelComprobante(formaEfectiva)} del pago.`)
+      comprobanteRef.current?.focus()
+      return
+    }
+    if (hayDeuda && !usarCuotas && !vencimientoCC) {
+      setIntentoConfirmar(true)
+      toast.error('Poné la fecha de vencimiento del saldo a cuenta corriente.')
+      return
+    }
     registrar.mutate(
       {
         usuario_id: usuarioId,
@@ -383,6 +490,9 @@ export function ModalCompraFactura({
                   origen: 'cuenta',
                   cuenta_id: Number(cuentaId),
                   monto: r2(montoPagoNum),
+                  // mig 155: forma + n° de comprobante (obligatorio según forma)
+                  forma_pago: formaEfectiva,
+                  comprobante: comprobantePago.trim() || null,
                 },
       },
       {
@@ -752,9 +862,11 @@ export function ModalCompraFactura({
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                CUIT proveedor
+                CUIT proveedor{' '}
+                {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
               </Label>
               <Input
+                ref={cuitRef}
                 inputMode="numeric"
                 placeholder="30xxxxxxxxx"
                 value={cuit}
@@ -767,7 +879,9 @@ export function ModalCompraFactura({
                   'h-9 tabular-nums',
                   cuitError || esCuitPropio
                     ? 'border-[#c43e2c]'
-                    : 'border-[#e4c9b0]'
+                    : faltaCuit
+                      ? bordeFalta
+                      : 'border-[#e4c9b0]'
                 )}
               />
               {esCuitPropio ? (
@@ -778,6 +892,11 @@ export function ModalCompraFactura({
               ) : cuitError ? (
                 <p className="text-[10px] text-[#c43e2c]">
                   CUIT inválido (11 dígitos).
+                </p>
+              ) : faltaCuit ? (
+                <p className={cn('text-[10px]', clsFalta)}>
+                  Falta el CUIT del proveedor (11 dígitos).
+                  {contexto === 'pos' ? ' ¿Es un ticket sin datos fiscales? Elegí tipo X.' : ''}
                 </p>
               ) : null}
             </div>
@@ -808,40 +927,74 @@ export function ModalCompraFactura({
             </div>
           </div>
 
-          {/* Comprobante + IVA */}
+          {/* Comprobante + IVA. Tipo X = ticket sin datos fiscales: exime
+              pto/número/CUIT (mig 155). */}
           <div className="grid grid-cols-4 gap-2">
             <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Tipo</Label>
-              <Select value={tipoComp} onValueChange={(v) => aplicarTipo(v ?? 'A')} disabled={procesando}>
-                <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] h-9">
+              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Tipo <span className="text-[#c43e2c]">*</span>
+              </Label>
+              <Select
+                items={TIPOS_COMPROBANTE_COMPRA_ITEMS}
+                value={tipoComp}
+                onValueChange={(v) => aplicarTipo(v ?? 'A')}
+                disabled={procesando}
+              >
+                <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] h-9 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_COMPROBANTE.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
+                  {TIPOS_COMPROBANTE_COMPRA.map((t) => (
+                    <SelectItem key={t.valor} value={t.valor}>
+                      {t.etiqueta}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Pto vta</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Pto vta{' '}
+                {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+              </Label>
               <Input
+                ref={ptoRef}
+                inputMode="numeric"
                 value={puntoVenta}
                 onChange={(e) => setPuntoVenta(e.target.value)}
                 placeholder="0001"
-                className="h-9 tabular-nums border-[#e4c9b0]"
+                className={cn(
+                  'h-9 tabular-nums',
+                  ptoError ? 'border-[#c43e2c]' : faltaPto ? bordeFalta : 'border-[#e4c9b0]'
+                )}
               />
+              {ptoError ? (
+                <p className="text-[10px] text-[#c43e2c]">Solo números (hasta 5).</p>
+              ) : faltaPto ? (
+                <p className={cn('text-[10px]', clsFalta)}>Falta.</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">Número</Label>
+              <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Número{' '}
+                {fiscalObligatorio && <span className="text-[#c43e2c]">*</span>}
+              </Label>
               <Input
+                ref={nroRef}
+                inputMode="numeric"
                 value={numero}
                 onChange={(e) => setNumero(e.target.value)}
                 placeholder="00001234"
-                className="h-9 tabular-nums border-[#e4c9b0]"
+                className={cn(
+                  'h-9 tabular-nums',
+                  nroError ? 'border-[#c43e2c]' : faltaNro ? bordeFalta : 'border-[#e4c9b0]'
+                )}
               />
+              {nroError ? (
+                <p className="text-[10px] text-[#c43e2c]">Solo números (hasta 8).</p>
+              ) : faltaNro ? (
+                <p className={cn('text-[10px]', clsFalta)}>Falta.</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">IVA %</Label>
@@ -866,70 +1019,101 @@ export function ModalCompraFactura({
           {/* Pago (mig 149: puede ser total, parcial o nada — el resto queda
               a cuenta corriente del proveedor, con vencimiento o en cuotas) */}
           <div className="space-y-2">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-[#391511] font-medium text-sm">
-                  Importe a pagar ahora
-                </Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c8a58a] text-sm">
-                    $
-                  </span>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={pagoTocado ? montoPago : String(total)}
-                    onChange={(e) => {
-                      setMontoPago(e.target.value)
-                      setPagoTocado(true)
-                    }}
-                    disabled={procesando}
-                    className={cn(
-                      'pl-7 h-9 w-40 text-right font-semibold tabular-nums focus-visible:ring-[#f9b44c]',
-                      pagoInvalido ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                    )}
-                  />
-                </div>
+            <Label className="text-[#391511] font-medium text-sm">
+              Cómo se paga{' '}
+              {puedeDejarSaldo && <span className="text-[#c43e2c]">*</span>}
+            </Label>
+
+            {/* Modo explícito (mig 155): dos tarjetas — acá no hay "programado"
+                (la compra directa paga en el acto o deja saldo a CC). Sin
+                permiso para dejar saldo, se paga todo y no hay nada que elegir. */}
+            {puedeDejarSaldo && (
+              <div
+                className={cn(
+                  'grid grid-cols-2 gap-2 rounded-xl',
+                  intentoConfirmar &&
+                    modoEfectivo === null &&
+                    'ring-2 ring-[#c43e2c]/60 ring-offset-1'
+                )}
+              >
+                {(
+                  [
+                    { v: 'ahora', t: 'Pago ahora', d: contexto === 'pos' ? 'Efectivo del turno' : 'Total o parcial' },
+                    { v: 'cuenta_corriente', t: 'Cuenta corriente', d: 'Vence o en cuotas' },
+                  ] as { v: ModoPagoDirecta; t: string; d: string }[]
+                ).map((op) => {
+                  const activo = modoEfectivo === op.v
+                  return (
+                    <button
+                      key={op.v}
+                      type="button"
+                      onClick={() => {
+                        setModoPago(op.v)
+                        if (op.v === 'cuenta_corriente') {
+                          setMontoPago('0')
+                          setPagoTocado(true)
+                        } else {
+                          // Vuelve a seguir al total (editable para parcial).
+                          setMontoPago('')
+                          setPagoTocado(false)
+                        }
+                      }}
+                      disabled={procesando}
+                      className={cn(
+                        'py-2 px-3 rounded-xl border-2 text-left transition-all',
+                        activo
+                          ? 'border-[#f9b44c] bg-[#f9b44c]/15'
+                          : 'border-[#e4c9b0] bg-white hover:border-[#c8a58a]'
+                      )}
+                    >
+                      <div className="text-sm font-bold text-[#391511]">{op.t}</div>
+                      <div className="text-[10px] text-[#6f3a2a]">{op.d}</div>
+                    </button>
+                  )
+                })}
               </div>
-              {puedeDejarSaldo && (
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPagoTocado(false)
-                      setMontoPago('')
-                    }}
-                    disabled={procesando}
-                    className={cn(
-                      'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                      !hayDeuda && !pagoTocado
-                        ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
-                        : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#f9b44c]'
-                    )}
-                  >
-                    Pagar todo
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMontoPago('0')
-                      setPagoTocado(true)
-                    }}
-                    disabled={procesando}
-                    className={cn(
-                      'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
-                      pagoTocado && montoPagoNum <= 0.009
-                        ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
-                        : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#f9b44c]'
-                    )}
-                  >
-                    Todo a cta. cte.
-                  </button>
+            )}
+            {puedeDejarSaldo && modoEfectivo === null && (
+              <p className={cn('text-xs', clsFalta)}>
+                Elegí cómo se paga la compra para poder registrarla.
+              </p>
+            )}
+
+            {modoEfectivo === 'ahora' && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] text-[#6f3a2a]">
+                    Importe a pagar ahora
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c8a58a] text-sm">
+                      $
+                    </span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={pagoTocado ? montoPago : String(total)}
+                      onChange={(e) => {
+                        setMontoPago(e.target.value)
+                        setPagoTocado(true)
+                      }}
+                      disabled={procesando}
+                      className={cn(
+                        'pl-7 h-9 w-40 text-right font-semibold tabular-nums focus-visible:ring-[#f9b44c]',
+                        pagoInvalido ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                      )}
+                    />
+                  </div>
                 </div>
-              )}
-            </div>
+                {puedeDejarSaldo && hayDeuda && (
+                  <p className="text-[11px] text-[#6f3a2a] pb-2">
+                    Pago parcial: el resto queda a cuenta corriente.
+                  </p>
+                )}
+              </div>
+            )}
             {pagoInvalido && (
               <p className="text-[#c43e2c] text-xs">
                 El pago no puede ser negativo ni superar el total.
@@ -939,7 +1123,7 @@ export function ModalCompraFactura({
             {montoPagoNum > 0.009 &&
               (contexto === 'pos' ? (
                 <div className="rounded-lg bg-[#fdfaf6] border border-[#e4c9b0]/60 px-3 py-2 text-xs text-[#6f3a2a]">
-                  Se paga con el <strong>efectivo del turno</strong> (se descuenta al cerrar la caja).
+                  Se paga en <strong>efectivo del turno</strong> (se descuenta al cerrar la caja).
                   {!turnoId && (
                     <span className="text-[#c43e2c] block mt-0.5">
                       No hay un turno abierto para registrar la compra.
@@ -947,30 +1131,89 @@ export function ModalCompraFactura({
                   )}
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  <Label className="text-[#391511] font-medium text-sm">
-                    Pagar desde <span className="text-[#c43e2c]">*</span>
-                  </Label>
-                  <Select value={cuentaId} onValueChange={(v) => setCuentaId(v ?? '')} disabled={procesando}>
-                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
-                      <SelectValue placeholder="Elegí la cuenta…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(cuentas ?? []).map((c) => (
-                        <SelectItem key={c.id} value={String(c.id)}>
-                          {c.nombre} ·{' '}
-                          <span className="font-mono tabular-nums">
-                            ${Number(c.saldo_actual).toFixed(2)}
-                          </span>
-                        </SelectItem>
+                <div className="space-y-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-[#391511] font-medium text-sm">
+                      Pagar desde <span className="text-[#c43e2c]">*</span>
+                    </Label>
+                    <Select value={cuentaId} onValueChange={elegirCuenta} disabled={procesando}>
+                      <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                        <SelectValue placeholder="Elegí la cuenta…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(cuentas ?? []).map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.nombre} ·{' '}
+                            <span className="font-mono tabular-nums">
+                              ${Number(c.saldo_actual).toFixed(2)}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {bloqueoBoveda && (
+                      <p className="text-[#c43e2c] text-xs">
+                        La caja fuerte no puede quedar en negativo.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Forma de pago + n° de comprobante (mig 155) */}
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      Forma de pago
+                    </Label>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {FORMAS_PAGO.map((f) => (
+                        <button
+                          key={f.valor}
+                          type="button"
+                          onClick={() => setFormaPago(f.valor)}
+                          disabled={procesando}
+                          className={cn(
+                            'rounded-lg border-2 py-1.5 text-[11px] font-semibold transition-all',
+                            formaPago === f.valor
+                              ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                              : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#c8a58a]'
+                          )}
+                        >
+                          {f.label}
+                        </button>
                       ))}
-                    </SelectContent>
-                  </Select>
-                  {bloqueoBoveda && (
-                    <p className="text-[#c43e2c] text-xs">
-                      La caja fuerte no puede quedar en negativo.
-                    </p>
-                  )}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                      {labelComprobante(formaPago)}{' '}
+                      {requiereComprobante(formaPago) ? (
+                        <span className="text-[#c43e2c]">*</span>
+                      ) : (
+                        <span className="normal-case text-[#c8a58a] font-normal">
+                          (opcional)
+                        </span>
+                      )}
+                    </Label>
+                    <Input
+                      ref={comprobanteRef}
+                      value={comprobantePago}
+                      onChange={(e) => setComprobantePago(e.target.value)}
+                      placeholder={
+                        formaPago === 'transferencia'
+                          ? 'N° de la transferencia (va a Egresos y a la conciliación)'
+                          : 'N° de la operación, cheque o recibo'
+                      }
+                      disabled={procesando}
+                      className={cn(
+                        'h-9 focus-visible:ring-[#f9b44c]',
+                        comprobanteFaltante ? bordeFalta : 'border-[#e4c9b0]'
+                      )}
+                    />
+                    {comprobanteFaltante && (
+                      <p className={cn('text-[10px]', clsFalta)}>
+                        Poné el {labelComprobante(formaPago)}.
+                      </p>
+                    )}
+                  </div>
                 </div>
               ))}
 
@@ -1003,16 +1246,21 @@ export function ModalCompraFactura({
                   />
                 ) : (
                   <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6f3a2a]">
-                    <span>vence el</span>
+                    <span>
+                      vence el <span className="text-[#c43e2c]">*</span>
+                    </span>
                     <Input
                       type="date"
                       value={vencimientoCC}
                       onChange={(e) => setVencimientoCC(e.target.value)}
                       disabled={procesando}
-                      className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      className={cn(
+                        'h-8 w-36 text-xs tabular-nums focus-visible:ring-[#f9b44c]',
+                        !vencimientoCC ? bordeFalta : 'border-[#e4c9b0]'
+                      )}
                     />
                     {!vencimientoCC && (
-                      <span className="text-[#c43e2c]">Poné la fecha.</span>
+                      <span className={clsFalta}>Poné la fecha.</span>
                     )}
                   </div>
                 )}

@@ -80,6 +80,18 @@ export function fechaLocal(iso: string): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Hoy en fecha LOCAL (yyyy-MM-dd), para inputs type="date" y comparaciones. */
+export function hoyIso(): string {
+  return fechaLocal(new Date().toISOString())
+}
+
+/** `base` (yyyy-MM-dd) + N días, en fecha local (sin sorpresas de zona). */
+export function isoMasDias(base: string, dias: number): string {
+  const [y, m, d] = base.split('-').map(Number)
+  const f = new Date(y, (m ?? 1) - 1, (d ?? 1) + dias)
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
+}
+
 /** Lunes de la semana que contiene la fecha dada (locale es-AR: semana empieza lunes). */
 export function inicioSemana(fecha: Date): Date {
   const d = new Date(fecha)

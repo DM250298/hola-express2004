@@ -1,7 +1,20 @@
 import { createClient } from '@/lib/supabase/client'
 import { completarCuitProveedor } from '@/lib/queries/proveedores'
-import { soloDigitos } from '@/lib/utils/fiscal'
-import type { CuotaPlanPayload, FormaPago } from '@/lib/queries/finanzas'
+import {
+  exigeDatosFiscales,
+  normalizarNumeroComprobante,
+  normalizarPuntoVenta,
+  numeroComprobanteValido,
+  puntoVentaValido,
+  soloDigitos,
+} from '@/lib/utils/fiscal'
+import { hoyIso } from '@/lib/utils/periodos'
+import {
+  labelComprobante,
+  requiereComprobante,
+  type CuotaPlanPayload,
+  type FormaPago,
+} from '@/lib/queries/finanzas'
 import type {
   FacturaCompraRow,
   ItemFacturaCompraRow,
@@ -99,8 +112,12 @@ export interface PagoFacturaPayload {
   monto: number
   forma_pago: FormaPago
   comprobante?: string | null
-  /** Fecha del PAGO (no la fecha de emisión de la factura). */
-  fecha: string
+  /**
+   * Fecha del PAGO (no la fecha de emisión de la factura). null = HOY según
+   * el reloj LOCAL del server (el RPC hace coalesce con la fecha de La Rioja):
+   * así un pago "ahora" nunca queda programado por un desfasaje de reloj.
+   */
+  fecha: string | null
   nota?: string | null
 }
 
@@ -262,26 +279,47 @@ export async function controlarCompraDirecta(payload: {
   const supabase = createClient()
   // CUIT pelado: es parte de la clave del índice único de comprobantes, y si
   // acá entrara con guiones no cruzaría contra las otras puertas de carga.
+  // Pto/número al formato AFIP por el mismo motivo (mig 155).
   const cuit = payload.cuit ? soloDigitos(payload.cuit) || null : null
+  const tipo = payload.tipo?.trim() || null
+  const punto = normalizarPuntoVenta(payload.punto) || null
+  const numero = normalizarNumeroComprobante(payload.numero) || null
+
+  // Datos fiscales obligatorios salvo tipo X (cuarta puerta: sin esto, un
+  // "Controlar" podía volver a dejar en NULL lo que la carga exigió).
+  if (exigeDatosFiscales(tipo)) {
+    if (!tipo) throw new Error('Falta el tipo de comprobante.')
+    if (!punto) throw new Error('Falta el punto de venta del comprobante.')
+    if (!numero) throw new Error('Falta el número del comprobante.')
+    if (!cuit || cuit.length !== 11) {
+      throw new Error('Falta el CUIT del proveedor (11 dígitos).')
+    }
+  }
+  if (punto && !puntoVentaValido(punto)) {
+    throw new Error('El punto de venta tiene más de 5 dígitos.')
+  }
+  if (numero && !numeroComprobanteValido(numero)) {
+    throw new Error('El número de comprobante tiene más de 8 dígitos.')
+  }
 
   // Pre-chequeo de duplicado: el RPC hace el update sin guarda, así que sin
   // esto un comprobante repetido devuelve el error crudo de Postgres
   // ("duplicate key value violates unique constraint…") en la cara del usuario.
-  if (cuit && payload.tipo && payload.punto && payload.numero) {
+  if (cuit && tipo && punto && numero) {
     const { data: dup, error: errDup } = await supabase
       .from('facturas_compra')
       .select('id')
       .eq('cuit_proveedor', cuit)
-      .eq('tipo_comprobante', payload.tipo)
-      .eq('punto_venta', payload.punto)
-      .eq('numero_comprobante', payload.numero)
+      .eq('tipo_comprobante', tipo)
+      .eq('punto_venta', punto)
+      .eq('numero_comprobante', numero)
       .neq('id', payload.factura_id)
       .limit(1)
       .maybeSingle<{ id: number }>()
     if (errDup) throw errDup
     if (dup) {
       throw new Error(
-        `Ese comprobante (${payload.tipo} ${payload.punto}-${payload.numero}) ya está cargado en otra factura.`
+        `Ese comprobante (${tipo} ${punto}-${numero}) ya está cargado en otra factura.`
       )
     }
   }
@@ -289,9 +327,9 @@ export async function controlarCompraDirecta(payload: {
   const { error } = await supabase.rpc('fn_controlar_compra_directa', {
     p_factura_id: payload.factura_id,
     p_usuario_id: payload.usuario_id,
-    p_tipo: payload.tipo,
-    p_punto: payload.punto,
-    p_numero: payload.numero,
+    p_tipo: tipo,
+    p_punto: punto,
+    p_numero: numero,
     p_cuit: cuit,
     p_controlada: payload.controlada,
   })
@@ -333,35 +371,72 @@ export async function guardarFacturaCompra(
 ): Promise<void> {
   const supabase = createClient()
   const comp = payload.comprobante
-  // CUIT pelado UNA vez: se usa para el anti-duplicado y para guardar, así el
-  // chequeo compara exactamente lo mismo que después queda en la fila (el
-  // índice único compara texto exacto, y con guiones no cruzaría).
+  // CUIT pelado y pto/número al formato AFIP (00001 / 00012345) UNA vez: se
+  // usan para el anti-duplicado y para guardar, así el chequeo compara
+  // exactamente lo mismo que después queda en la fila (el índice único
+  // compara texto exacto: con guiones, o "1" vs "00001", no cruzaría).
   const cuitNorm = comp?.cuit_proveedor
     ? soloDigitos(comp.cuit_proveedor) || null
     : null
+  const tipoNorm = comp?.tipo_comprobante?.trim() || null
+  const ptoNorm = normalizarPuntoVenta(comp?.punto_venta) || null
+  const nroNorm = normalizarNumeroComprobante(comp?.numero_comprobante) || null
+
+  // 0. Validación defensiva (cubre cualquier UI, no solo el modal): fecha de
+  //    emisión real, datos fiscales obligatorios salvo tipo X, y n° de
+  //    comprobante en los pagos de HOY con forma rastreable (los programados
+  //    lo cargan al ejecutarse). El server no lo chequea: la cabecera va en
+  //    un UPDATE aparte del RPC (limitación conocida, ver paso 3).
+  if (!payload.fecha || payload.fecha > hoyIso()) {
+    throw new Error('Falta la fecha de emisión del comprobante (no puede ser futura).')
+  }
+  if (comp && exigeDatosFiscales(tipoNorm)) {
+    if (!tipoNorm) throw new Error('Falta el tipo de comprobante.')
+    if (!ptoNorm) throw new Error('Falta el punto de venta del comprobante.')
+    if (!nroNorm) throw new Error('Falta el número del comprobante.')
+    if (!cuitNorm || cuitNorm.length !== 11) {
+      throw new Error('Falta el CUIT del proveedor (11 dígitos).')
+    }
+  }
+  // padStart no recorta: un número más largo que el formato AFIP se rechaza
+  // (el RPC de compra directa hace lo mismo; así las puertas guardan igual).
+  if (ptoNorm && !puntoVentaValido(ptoNorm)) {
+    throw new Error('El punto de venta tiene más de 5 dígitos.')
+  }
+  if (nroNorm && !numeroComprobanteValido(nroNorm)) {
+    throw new Error('El número de comprobante tiene más de 8 dígitos.')
+  }
+  for (const [i, p] of (payload.pagos ?? []).entries()) {
+    const programado = !!p.fecha && p.fecha > hoyIso()
+    if (
+      !programado &&
+      requiereComprobante(p.forma_pago) &&
+      !(p.comprobante ?? '').trim()
+    ) {
+      throw new Error(`Poné el ${labelComprobante(p.forma_pago)} del pago ${i + 1}.`)
+    }
+  }
 
   // 1. Anti-duplicado: si el comprobante está identificado por completo,
   //    no puede existir el mismo (CUIT + tipo + punto + número) en OTRA
-  //    cuenta. Re-guardar la misma cuenta sí es válido.
-  if (
-    cuitNorm &&
-    comp?.tipo_comprobante &&
-    comp.punto_venta &&
-    comp.numero_comprobante
-  ) {
+  //    factura. Re-guardar la misma cuenta sí es válido. Las compras directas
+  //    pagadas en el acto tienen cuenta_id NULL: `neq` las excluiría (NULL <> N
+  //    es NULL), por eso el `or` con `is.null`.
+  if (cuitNorm && tipoNorm && ptoNorm && nroNorm) {
     const { data: dup, error: errDup } = await supabase
       .from('facturas_compra')
       .select('cuenta_id')
       .eq('cuit_proveedor', cuitNorm)
-      .eq('tipo_comprobante', comp.tipo_comprobante)
-      .eq('punto_venta', comp.punto_venta)
-      .eq('numero_comprobante', comp.numero_comprobante)
-      .neq('cuenta_id', payload.cuenta_id)
+      .eq('tipo_comprobante', tipoNorm)
+      .eq('punto_venta', ptoNorm)
+      .eq('numero_comprobante', nroNorm)
+      .or(`cuenta_id.is.null,cuenta_id.neq.${payload.cuenta_id}`)
+      .limit(1)
       .maybeSingle<{ cuenta_id: number | null }>()
     if (errDup) throw errDup
     if (dup) {
       throw new Error(
-        `Ese comprobante (${comp.tipo_comprobante} ${comp.punto_venta}-${comp.numero_comprobante}) ya fue cargado para otra cuenta.`
+        `Ese comprobante (${tipoNorm} ${ptoNorm}-${nroNorm}) ya fue cargado en otra factura.`
       )
     }
   }
@@ -433,18 +508,28 @@ export async function guardarFacturaCompra(
   }
 
   // 3. Cabecera formal del comprobante (UPDATE aditivo por cuenta_id).
+  //    Limitación conocida: va en un request aparte del RPC; si falla, la
+  //    factura ya quedó guardada sin cabecera → mensaje propio para que el
+  //    usuario la reabra y complete (pasarla al RPC cambia la firma de
+  //    fn_guardar_factura_compra, queda para otra iteración).
   if (comp) {
     const { error: errComp } = await supabase
       .from('facturas_compra')
       .update({
-        tipo_comprobante: comp.tipo_comprobante,
-        punto_venta: comp.punto_venta,
-        numero_comprobante: comp.numero_comprobante,
+        tipo_comprobante: tipoNorm,
+        punto_venta: ptoNorm,
+        numero_comprobante: nroNorm,
         cae: comp.cae,
         cuit_proveedor: cuitNorm,
       })
       .eq('cuenta_id', payload.cuenta_id)
-    if (errComp) throw errComp
+    if (errComp) {
+      throw new Error(
+        errComp.code === '23505'
+          ? `La factura se guardó, pero el comprobante ${tipoNorm} ${ptoNorm}-${nroNorm} ya existe en otra factura: reabrila y corregí los datos del comprobante.`
+          : `La factura se guardó pero el comprobante no pudo registrarse (${errComp.message}): reabrila y completá los datos.`
+      )
+    }
   }
 
   // 4. Completa el CUIT en la ficha del proveedor si no tenía (nunca pisa uno

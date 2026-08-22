@@ -32,14 +32,17 @@ import {
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { ModalEditarFactura } from './ModalEditarFactura'
 import { ModalPagarCuenta } from './ModalPagarCuenta'
+import { ModalEjecutarProgramado } from './ModalEjecutarProgramado'
 import { DrawerCuentaPagar } from './DrawerCuentaPagar'
 import { cn } from '@/lib/utils'
 import {
   FORMA_PAGO_LABEL,
   LIMITE_CUENTAS_PAGADAS,
   esFormaPago,
+  labelComprobante,
   type CuentaAPagarConProveedor,
   type FiltroEstadoCuentas,
+  type PagoProgramadoConDatos,
 } from '@/lib/queries/finanzas'
 
 function hoyIso(): string {
@@ -65,6 +68,9 @@ export function TabCuentasAPagar() {
     useState<CuentaAPagarConProveedor | null>(null)
   const [cuentaDrawer, setCuentaDrawer] =
     useState<CuentaAPagarConProveedor | null>(null)
+  // Programado a ejecutar: el modal pide el n° de comprobante (mig 155).
+  const [programadoEjecutar, setProgramadoEjecutar] =
+    useState<PagoProgramadoConDatos | null>(null)
 
   const estadoQuery: FiltroEstadoCuentas =
     estadoFiltro === TODOS
@@ -191,6 +197,11 @@ export function TabCuentasAPagar() {
                           : ''}
                         {p.pedido_id ? ` · pedido #${p.pedido_id}` : ''}
                       </div>
+                      {p.comprobante && (
+                        <div className="text-[10px] text-[#6f3a2a] truncate">
+                          {labelComprobante(p.forma_pago)}: {p.comprobante}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className="font-bold text-[#391511] tabular-nums text-sm">
@@ -219,19 +230,10 @@ export function TabCuentasAPagar() {
                         ejecutarProg.isPending ||
                         cancelarProg.isPending
                       }
-                      onClick={() => {
-                        if (!usuario) return
-                        const ok = window.confirm(
-                          `¿Ejecutar el pago de ${p.proveedor_nombre ?? 'proveedor'} ` +
-                            `desde ${p.cuenta_origen_nombre ?? 'la cuenta'}?\n\n` +
-                            'La plata se descuenta AHORA de la cuenta.'
-                        )
-                        if (!ok) return
-                        ejecutarProg.mutate({
-                          programadoId: p.id,
-                          usuarioId: usuario.id,
-                        })
-                      }}
+                      // El modal confirma y pide el n° de comprobante cuando
+                      // la forma lo exige (mig 155): acá es donde la
+                      // transferencia se concreta.
+                      onClick={() => setProgramadoEjecutar(p)}
                       className="flex-1 h-8 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold"
                     >
                       {ejecutarProg.isPending ? (
@@ -427,6 +429,20 @@ export function TabCuentasAPagar() {
         abierto={cuentaPago !== null}
         onCambioAbierto={(v) => !v && setCuentaPago(null)}
         cuenta={cuentaPagoViva}
+      />
+
+      <ModalEjecutarProgramado
+        programado={programadoEjecutar}
+        abierto={programadoEjecutar !== null}
+        onCambioAbierto={(v) => !v && setProgramadoEjecutar(null)}
+        ejecutando={ejecutarProg.isPending}
+        onEjecutar={(p, comprobante) => {
+          if (!usuario) return
+          ejecutarProg.mutate(
+            { programadoId: p.id, usuarioId: usuario.id, comprobante },
+            { onSuccess: () => setProgramadoEjecutar(null) }
+          )
+        }}
       />
 
       <DrawerCuentaPagar
