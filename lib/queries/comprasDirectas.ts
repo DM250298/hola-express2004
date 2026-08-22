@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { completarCuitProveedor } from '@/lib/queries/proveedores'
 import { soloDigitos } from '@/lib/utils/fiscal'
+import type { CuotaPlanPayload } from '@/lib/queries/finanzas'
 import type { Json } from '@/types/database'
 
 export interface CompraDirectaLinea {
@@ -27,9 +28,12 @@ export interface CompraDirectaFiscal {
 }
 
 export interface CompraDirectaPago {
-  origen: 'turno' | 'cuenta'
+  /** 'ninguno' (mig 149) = no se paga nada ahora: todo el total queda a CC. */
+  origen: 'turno' | 'cuenta' | 'ninguno'
   turno_id?: number | null
   cuenta_id?: number | null
+  /** Importe que se paga AHORA (mig 149). Omitido = el total (compat v1). */
+  monto?: number
 }
 
 export interface CompraDirectaPayload {
@@ -44,9 +48,17 @@ export interface CompraDirectaPayload {
   mueve_stock: boolean
   afecta_precio_venta: boolean
   pago: CompraDirectaPago
+  /** Saldo a cuenta corriente (mig 149): vencimiento único del impago. */
+  cta_cte?: { fecha_vencimiento: string; nota?: string | null } | null
+  /** Plan de cuotas del saldo (mig 149 → fn_definir_cuotas_cuenta). */
+  cuotas?: CuotaPlanPayload[] | null
 }
 
-/** Registra una factura de compra directa (pagada al instante) vía RPC atómico. */
+/**
+ * Registra una factura de compra directa vía RPC atómico. El pago puede ser
+ * total (como siempre), parcial o nulo (mig 149): el saldo queda como deuda
+ * al proveedor, con vencimiento único o en cuotas.
+ */
 export async function registrarCompraDirecta(p: CompraDirectaPayload) {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('fn_registrar_compra_directa', {
@@ -59,6 +71,12 @@ export async function registrarCompraDirecta(p: CompraDirectaPayload) {
     p_mueve_stock: p.mueve_stock,
     p_afecta_precio_venta: p.afecta_precio_venta,
     p_pago: p.pago as unknown as Json,
+    // Solo viajan si hay saldo a CC: sin las keys, la llamada sigue
+    // resolviendo contra la firma pre-149 hasta correr la migración.
+    ...(p.cta_cte ? { p_cta_cte: p.cta_cte as unknown as Json } : {}),
+    ...(p.cuotas && p.cuotas.length > 0
+      ? { p_cuotas: p.cuotas as unknown as Json }
+      : {}),
   })
   if (error) throw error
 

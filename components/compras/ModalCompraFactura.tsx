@@ -29,11 +29,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { MontoARS } from '@/components/shared/MontoARS'
+import {
+  EditorCuotas,
+  cuotasValidas,
+  type CuotaForm,
+} from '@/components/finanzas/EditorCuotas'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useBuscarProductos } from '@/lib/hooks/useProductos'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import { useRegistrarCompraDirecta } from '@/lib/hooks/useComprasDirectas'
 import { useConfigFiscal } from '@/lib/hooks/useFiscal'
+import { useUsuario } from '@/lib/hooks/useUsuario'
 import { CATEGORIAS_EGRESO } from '@/lib/queries/finanzas'
 import { cn } from '@/lib/utils'
 import {
@@ -70,6 +76,8 @@ function hoyIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const r2 = (n: number) => Math.round(n * 100) / 100
+
 export function ModalCompraFactura({
   abierto,
   onCambioAbierto,
@@ -80,6 +88,7 @@ export function ModalCompraFactura({
   const { data: proveedores } = useProveedores()
   const { data: cuentas } = useCuentas(true)
   const { data: configFiscal } = useConfigFiscal()
+  const { data: usuarioActual } = useUsuario()
   const registrar = useRegistrarCompraDirecta()
 
   const [proveedorId, setProveedorId] = useState('')
@@ -115,6 +124,15 @@ export function ModalCompraFactura({
   // Pago (finanzas)
   const [cuentaId, setCuentaId] = useState('')
 
+  // ── Pago parcial / saldo a cuenta corriente (mig 149) ────────────────
+  // Sin tocar nada se paga el total, como siempre. `pagoTocado` distingue
+  // "no tocó el importe" (sigue al total vivo) de "escribió un importe".
+  const [montoPago, setMontoPago] = useState('')
+  const [pagoTocado, setPagoTocado] = useState(false)
+  const [vencimientoCC, setVencimientoCC] = useState('')
+  const [usarCuotas, setUsarCuotas] = useState(false)
+  const [cuotas, setCuotas] = useState<CuotaForm[]>([])
+
   const procesando = registrar.isPending
 
   function reset() {
@@ -134,6 +152,11 @@ export function ModalCompraFactura({
     setCuit('')
     setCuitTocado(false)
     setCuentaId('')
+    setMontoPago('')
+    setPagoTocado(false)
+    setVencimientoCC('')
+    setUsarCuotas(false)
+    setCuotas([])
   }
 
   /**
@@ -252,9 +275,30 @@ export function ModalCompraFactura({
   const fechaPasada = !!fecha && fecha < hoyIso()
 
   const cuentaSel = (cuentas ?? []).find((c) => String(c.id) === cuentaId)
+
+  // ── Pago parcial / saldo a cuenta corriente (mig 149) ────────────────
+  const montoPagoNum = pagoTocado ? Number(montoPago) || 0 : total
+  const saldoCC = r2(total - montoPagoNum)
+  const hayDeuda = saldoCC > 0.009
+  const pagoInvalido = montoPagoNum < 0 || montoPagoNum > total + 0.009
+  // Dejar deuda exige permiso 'finanzas' (espejo del guard del RPC). En el
+  // contexto finanzas la pantalla ya está gateada por ese permiso; el rol
+  // admin bypassa fn_tiene_permiso, así que acá también.
+  const puedeDejarSaldo =
+    contexto === 'finanzas' ||
+    usuarioActual?.rol === 'admin' ||
+    (usuarioActual?.permisos ?? []).includes('finanzas')
+  const cuotasOk = cuotasValidas(cuotas, saldoCC)
+  const totalUnidades = lineas.reduce(
+    (acc, l) => acc + (Number(l.cantidad) || 0),
+    0
+  )
+
+  // El guard de la bóveda se evalúa sobre lo que SALE ahora (lo pagado),
+  // no sobre el total: un pago parcial no se bloquea por el resto a CC.
   const saldoResultante =
-    contexto === 'finanzas' && cuentaSel && total > 0
-      ? Number(cuentaSel.saldo_actual) - total
+    contexto === 'finanzas' && cuentaSel && montoPagoNum > 0
+      ? Number(cuentaSel.saldo_actual) - montoPagoNum
       : null
   const bloqueoBoveda =
     !!cuentaSel?.es_caja_fuerte && saldoResultante !== null && saldoResultante < 0
@@ -272,8 +316,15 @@ export function ModalCompraFactura({
     !esCuitPropio &&
     !fechaError &&
     total > 0 &&
+    !pagoInvalido &&
     (mueveStock ? lineasValidas : gastoValido) &&
-    (contexto === 'pos' ? !!turnoId : !!cuentaId && !bloqueoBoveda)
+    (montoPagoNum <= 0.009
+      ? true
+      : contexto === 'pos'
+        ? !!turnoId
+        : !!cuentaId && !bloqueoBoveda) &&
+    (!hayDeuda ||
+      (puedeDejarSaldo && (usarCuotas ? cuotasOk : !!vencimientoCC)))
 
   function confirmar() {
     if (!puedeConfirmar) return
@@ -292,6 +343,18 @@ export function ModalCompraFactura({
           neto: Math.round(neto * 100) / 100,
           iva_total: ivaTotal,
         },
+        // Saldo a cuenta corriente (mig 149): vencimiento único o cuotas.
+        cta_cte:
+          hayDeuda && !usarCuotas
+            ? { fecha_vencimiento: vencimientoCC }
+            : null,
+        cuotas:
+          hayDeuda && usarCuotas
+            ? cuotas.map((c) => ({
+                monto: r2(Number(c.monto) || 0),
+                fecha_vencimiento: c.fecha,
+              }))
+            : null,
         lineas: mueveStock
           ? lineas.map((l) => ({
               producto_id: l.producto_id,
@@ -308,9 +371,19 @@ export function ModalCompraFactura({
         mueve_stock: mueveStock,
         afecta_precio_venta: mueveStock && afectaPrecio,
         pago:
-          contexto === 'pos'
-            ? { origen: 'turno', turno_id: turnoId ?? null }
-            : { origen: 'cuenta', cuenta_id: Number(cuentaId) },
+          montoPagoNum <= 0.009
+            ? { origen: 'ninguno', monto: 0 }
+            : contexto === 'pos'
+              ? {
+                  origen: 'turno',
+                  turno_id: turnoId ?? null,
+                  monto: r2(montoPagoNum),
+                }
+              : {
+                  origen: 'cuenta',
+                  cuenta_id: Number(cuentaId),
+                  monto: r2(montoPagoNum),
+                },
       },
       {
         onSuccess: () => {
@@ -339,7 +412,17 @@ export function ModalCompraFactura({
         onCambioAbierto(v)
       }}
     >
-      <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col">
+      <DialogContent
+        className={cn(
+          'p-0 gap-0 overflow-hidden flex flex-col',
+          // En modo mercadería el modal se agranda: la lista de productos es
+          // la protagonista. En modo gasto (y en el POS por defecto) queda
+          // angosto como siempre.
+          mueveStock
+            ? 'sm:max-w-[min(1500px,96vw)] h-[min(94vh,1100px)] max-h-[94vh]'
+            : 'sm:max-w-lg max-h-[92vh]'
+        )}
+      >
         <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0">
           <DialogTitle className="text-[#391511] text-lg flex items-center gap-2">
             <Package className="h-5 w-5 text-[#f9b44c]" />
@@ -352,7 +435,24 @@ export function ModalCompraFactura({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        {/* En modo mercadería (lg+): grilla de 2 columnas — los productos a la
+            izquierda ocupando todo el alto, proveedor/fiscal/pago en la
+            columna derecha angosta. En gasto o pantallas chicas: apilado. */}
+        <div
+          className={cn(
+            'flex-1 min-h-0 overflow-y-auto',
+            mueveStock &&
+              'lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:grid-rows-[auto_minmax(0,1fr)] lg:overflow-hidden'
+          )}
+        >
+          <div
+            className={cn(
+              'px-6 pt-5 space-y-4',
+              mueveStock
+                ? 'lg:col-start-2 lg:row-start-1 lg:border-l lg:border-[#e4c9b0]/60 lg:bg-[#fdfaf6] lg:pt-4 lg:pb-2'
+                : 'pb-2'
+            )}
+          >
           {/* Proveedor */}
           <div className="space-y-1.5">
             <Label className="text-[#391511] font-medium text-sm">
@@ -431,9 +531,10 @@ export function ModalCompraFactura({
               )
             })}
           </div>
+          </div>
 
           {mueveStock ? (
-            <div className="space-y-2">
+            <div className="px-6 pt-4 space-y-2 lg:col-start-1 lg:row-start-1 lg:row-span-2 lg:flex lg:flex-col lg:min-h-0 lg:overflow-hidden lg:pb-4">
               {/* Buscador de productos */}
               <Label className="text-[#391511] font-medium text-sm">Productos</Label>
               <div className="relative">
@@ -473,64 +574,108 @@ export function ModalCompraFactura({
                   Buscá y agregá los productos comprados.
                 </p>
               ) : (
-                <div className="space-y-1.5">
-                  {lineas.map((l) => (
-                    <div
-                      key={l.producto_id}
-                      className="flex items-center gap-2 rounded-lg border border-[#e4c9b0]/60 px-2 py-1.5"
-                    >
-                      <div className="flex-1 min-w-0 text-sm text-[#391511] truncate">
-                        {l.nombre}
-                      </div>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={l.cantidad}
-                        onChange={(e) => editarLinea(l.producto_id, 'cantidad', e.target.value)}
-                        placeholder="Cant."
-                        className="w-16 h-8 text-sm tabular-nums border-[#e4c9b0]"
-                      />
-                      <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">$</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={l.costo_sin_iva}
-                          onChange={(e) => editarLinea(l.producto_id, 'costo_sin_iva', e.target.value)}
-                          placeholder="Costo s/IVA"
-                          className="w-24 h-8 pl-5 text-sm tabular-nums border-[#e4c9b0]"
-                        />
-                      </div>
-                      {afectaPrecio && (
-                        <div className="relative" title="Margen % para recalcular el precio de venta">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={l.margen}
-                            onChange={(e) => editarLinea(l.producto_id, 'margen', e.target.value)}
-                            placeholder="Marg"
-                            className="w-16 h-8 pr-5 text-sm tabular-nums border-[#e4c9b0]"
-                          />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">%</span>
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setLineas((prev) => prev.filter((x) => x.producto_id !== l.producto_id))
-                        }
-                        className="text-[#c8a58a] hover:text-[#c43e2c]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="rounded-xl border border-[#e4c9b0]/60 overflow-x-auto lg:flex-1 lg:min-h-0 lg:overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-[#391511] text-[#f9d2a2]">
+                        <th className="p-2 text-left">Producto</th>
+                        <th className="p-2 w-20">Cant.</th>
+                        <th className="p-2 w-28">Costo s/IVA</th>
+                        {afectaPrecio && (
+                          <th
+                            className="p-2 w-20"
+                            title="Margen % para recalcular el precio de venta"
+                          >
+                            Margen %
+                          </th>
+                        )}
+                        <th className="p-2 w-9" aria-label="Quitar" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lineas.map((l) => (
+                        <tr
+                          key={l.producto_id}
+                          className="border-b border-[#e4c9b0]/40 bg-white"
+                        >
+                          <td className="p-2 text-sm text-[#391511] min-w-[160px]">
+                            {l.nombre}
+                          </td>
+                          <td className="p-1">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={l.cantidad}
+                              onChange={(e) => editarLinea(l.producto_id, 'cantidad', e.target.value)}
+                              placeholder="Cant."
+                              className="w-full h-8 text-right text-sm tabular-nums border-[#e4c9b0]"
+                            />
+                          </td>
+                          <td className="p-1">
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">$</span>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={l.costo_sin_iva}
+                                onChange={(e) => editarLinea(l.producto_id, 'costo_sin_iva', e.target.value)}
+                                placeholder="Costo s/IVA"
+                                className="w-full h-8 pl-5 text-right text-sm tabular-nums border-[#e4c9b0]"
+                              />
+                            </div>
+                          </td>
+                          {afectaPrecio && (
+                            <td className="p-1">
+                              <div className="relative">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  value={l.margen}
+                                  onChange={(e) => editarLinea(l.producto_id, 'margen', e.target.value)}
+                                  placeholder="Marg"
+                                  className="w-full h-8 pr-5 text-right text-sm tabular-nums border-[#e4c9b0]"
+                                />
+                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">%</span>
+                              </div>
+                            </td>
+                          )}
+                          <td className="p-1 text-center">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLineas((prev) => prev.filter((x) => x.producto_id !== l.producto_id))
+                              }
+                              title="Quitar"
+                              className="text-[#c8a58a] hover:text-[#c43e2c]"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-[#e4c9b0] bg-[#fdfaf6] text-[11px] font-semibold text-[#391511]">
+                        <td className="p-2">
+                          {lineas.length}{' '}
+                          {lineas.length === 1 ? 'producto' : 'productos'}
+                        </td>
+                        <td className="p-2 text-right tabular-nums">
+                          {new Intl.NumberFormat('es-AR', {
+                            maximumFractionDigits: 3,
+                          }).format(totalUnidades)}{' '}
+                          u.
+                        </td>
+                        <td className="p-2" colSpan={afectaPrecio ? 3 : 2} />
+                      </tr>
+                    </tfoot>
+                  </table>
                 </div>
               )}
 
-              <label className="flex items-center gap-2 text-xs text-[#6f3a2a] cursor-pointer pt-1">
+              <label className="flex items-center gap-2 text-xs text-[#6f3a2a] cursor-pointer pt-1 shrink-0">
                 <input
                   type="checkbox"
                   checked={afectaPrecio}
@@ -540,7 +685,18 @@ export function ModalCompraFactura({
                 Actualizar también el precio de venta con estos costos
               </label>
             </div>
-          ) : (
+          ) : null}
+
+          {/* Gasto (sin stock) + fiscal + pago: en modo mercadería es la
+              parte baja de la columna derecha, con su propio scroll. */}
+          <div
+            className={cn(
+              'px-6 py-5 space-y-4',
+              mueveStock &&
+                'lg:col-start-2 lg:row-start-2 lg:border-l lg:border-[#e4c9b0]/60 lg:bg-[#fdfaf6] lg:overflow-y-auto lg:pt-2'
+            )}
+          >
+          {!mueveStock && (
             <div className="space-y-3">
               <div className="space-y-1.5">
                 <Label className="text-[#391511] font-medium text-sm">
@@ -707,49 +863,190 @@ export function ModalCompraFactura({
             </p>
           )}
 
-          {/* Pago */}
-          {contexto === 'pos' ? (
-            <div className="rounded-lg bg-[#fdfaf6] border border-[#e4c9b0]/60 px-3 py-2 text-xs text-[#6f3a2a]">
-              Se paga con el <strong>efectivo del turno</strong> (se descuenta al cerrar la caja).
-              {!turnoId && (
-                <span className="text-[#c43e2c] block mt-0.5">
-                  No hay un turno abierto para registrar la compra.
-                </span>
+          {/* Pago (mig 149: puede ser total, parcial o nada — el resto queda
+              a cuenta corriente del proveedor, con vencimiento o en cuotas) */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-[#391511] font-medium text-sm">
+                  Importe a pagar ahora
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c8a58a] text-sm">
+                    $
+                  </span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={pagoTocado ? montoPago : String(total)}
+                    onChange={(e) => {
+                      setMontoPago(e.target.value)
+                      setPagoTocado(true)
+                    }}
+                    disabled={procesando}
+                    className={cn(
+                      'pl-7 h-9 w-40 text-right font-semibold tabular-nums focus-visible:ring-[#f9b44c]',
+                      pagoInvalido ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                    )}
+                  />
+                </div>
+              </div>
+              {puedeDejarSaldo && (
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPagoTocado(false)
+                      setMontoPago('')
+                    }}
+                    disabled={procesando}
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                      !hayDeuda && !pagoTocado
+                        ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                        : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#f9b44c]'
+                    )}
+                  >
+                    Pagar todo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMontoPago('0')
+                      setPagoTocado(true)
+                    }}
+                    disabled={procesando}
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors',
+                      pagoTocado && montoPagoNum <= 0.009
+                        ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                        : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#f9b44c]'
+                    )}
+                  >
+                    Todo a cta. cte.
+                  </button>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="space-y-1.5">
-              <Label className="text-[#391511] font-medium text-sm">
-                Pagar desde <span className="text-[#c43e2c]">*</span>
-              </Label>
-              <Select value={cuentaId} onValueChange={(v) => setCuentaId(v ?? '')} disabled={procesando}>
-                <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
-                  <SelectValue placeholder="Elegí la cuenta…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(cuentas ?? []).map((c) => (
-                    <SelectItem key={c.id} value={String(c.id)}>
-                      {c.nombre} ·{' '}
-                      <span className="font-mono tabular-nums">
-                        ${Number(c.saldo_actual).toFixed(2)}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {bloqueoBoveda && (
-                <p className="text-[#c43e2c] text-xs">
-                  La caja fuerte no puede quedar en negativo.
-                </p>
-              )}
-            </div>
-          )}
+            {pagoInvalido && (
+              <p className="text-[#c43e2c] text-xs">
+                El pago no puede ser negativo ni superar el total.
+              </p>
+            )}
+
+            {montoPagoNum > 0.009 &&
+              (contexto === 'pos' ? (
+                <div className="rounded-lg bg-[#fdfaf6] border border-[#e4c9b0]/60 px-3 py-2 text-xs text-[#6f3a2a]">
+                  Se paga con el <strong>efectivo del turno</strong> (se descuenta al cerrar la caja).
+                  {!turnoId && (
+                    <span className="text-[#c43e2c] block mt-0.5">
+                      No hay un turno abierto para registrar la compra.
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-[#391511] font-medium text-sm">
+                    Pagar desde <span className="text-[#c43e2c]">*</span>
+                  </Label>
+                  <Select value={cuentaId} onValueChange={(v) => setCuentaId(v ?? '')} disabled={procesando}>
+                    <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                      <SelectValue placeholder="Elegí la cuenta…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(cuentas ?? []).map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>
+                          {c.nombre} ·{' '}
+                          <span className="font-mono tabular-nums">
+                            ${Number(c.saldo_actual).toFixed(2)}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {bloqueoBoveda && (
+                    <p className="text-[#c43e2c] text-xs">
+                      La caja fuerte no puede quedar en negativo.
+                    </p>
+                  )}
+                </div>
+              ))}
+
+            {hayDeuda && puedeDejarSaldo && (
+              <div className="rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#6f3a2a]">
+                  <span>
+                    Queda a cuenta corriente de {nombreProveedor}:{' '}
+                    <span className="font-bold tabular-nums text-[#391511]">
+                      <MontoARS monto={saldoCC} />
+                    </span>
+                  </span>
+                  <label className="flex items-center gap-1.5 font-semibold text-[#391511] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={usarCuotas}
+                      onChange={(e) => setUsarCuotas(e.target.checked)}
+                      className="accent-[#f9b44c] h-3.5 w-3.5"
+                    />
+                    En cuotas
+                  </label>
+                </div>
+                {usarCuotas ? (
+                  <EditorCuotas
+                    objetivo={saldoCC}
+                    cuotas={cuotas}
+                    onChange={setCuotas}
+                    condicionPago={proveedorSel?.condicion_pago ?? null}
+                    deshabilitado={procesando}
+                  />
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#6f3a2a]">
+                    <span>vence el</span>
+                    <Input
+                      type="date"
+                      value={vencimientoCC}
+                      onChange={(e) => setVencimientoCC(e.target.value)}
+                      disabled={procesando}
+                      className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                    {!vencimientoCC && (
+                      <span className="text-[#c43e2c]">Poné la fecha.</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            {hayDeuda && !puedeDejarSaldo && (
+              <p className="text-[#c43e2c] text-xs">
+                Dejar saldo a cuenta corriente requiere permiso de finanzas:
+                pagá el total.
+              </p>
+            )}
+          </div>
+          </div>
         </div>
 
         <DialogFooter className="px-6 py-4 border-t border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0 flex-col sm:flex-col gap-2">
-          <div className="flex items-center justify-between w-full text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 w-full text-sm">
             <span className="text-[#6f3a2a]">
               Neto <MontoARS monto={neto} /> · IVA <MontoARS monto={ivaTotal} />
+              {hayDeuda && (
+                <span className="block text-[11px]">
+                  Pagás ahora{' '}
+                  <span className="font-semibold tabular-nums text-[#391511]">
+                    <MontoARS monto={montoPagoNum} />
+                  </span>{' '}
+                  · queda a cta. cte.{' '}
+                  <span className="font-semibold tabular-nums text-[#391511]">
+                    <MontoARS monto={saldoCC} />
+                  </span>
+                  {usarCuotas && cuotas.length > 0
+                    ? ` en ${cuotas.length} cuotas`
+                    : ''}
+                </span>
+              )}
             </span>
             <span className="text-lg font-extrabold text-[#391511] tabular-nums">
               Total <MontoARS monto={total} />

@@ -11,7 +11,7 @@ export function useRegistrarCompraDirecta() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (p: CompraDirectaPayload) => registrarCompraDirecta(p),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       // Stock / inventario
       qc.invalidateQueries({ queryKey: ['productos'] })
       qc.invalidateQueries({ queryKey: ['inventario'] })
@@ -30,9 +30,16 @@ export function useRegistrarCompraDirecta() {
       qc.invalidateQueries({ queryKey: ['movimientos-cuenta'] })
       qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
       qc.invalidateQueries({ queryKey: ['resumen-turno'] })
+      // El saldo impago queda como deuda al proveedor (mig 149).
+      qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
       // El CUIT tipeado puede haber completado la ficha del proveedor.
       qc.invalidateQueries({ queryKey: ['proveedores'] })
-      toast.success('Compra registrada con factura')
+      const dejaSaldo = !!vars.cta_cte || (vars.cuotas?.length ?? 0) > 0
+      toast.success(
+        dejaSaldo
+          ? 'Compra registrada · el saldo quedó a cuenta corriente'
+          : 'Compra registrada con factura'
+      )
     },
     onError: (e: Error) =>
       toast.error(`No se pudo registrar la compra: ${e.message}`),

@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { completarCuitProveedor } from '@/lib/queries/proveedores'
 import { soloDigitos } from '@/lib/utils/fiscal'
-import type { FormaPago } from '@/lib/queries/finanzas'
+import type { CuotaPlanPayload, FormaPago } from '@/lib/queries/finanzas'
 import type {
   FacturaCompraRow,
   ItemFacturaCompraRow,
@@ -127,9 +127,16 @@ export interface GuardarFacturaPayload {
   /**
    * Vencimiento de la deuda ajustado desde el modal (yyyy-MM-dd). Si viene,
    * se actualiza en cuentas_a_pagar tras guardar (el RPC no lo toca: quedó
-   * el calculado en la recepción). Omitir = no se cambia.
+   * el calculado en la recepción). Omitir = no se cambia. Se ignora cuando
+   * viajan cuotas (el plan fija el vencimiento del padre).
    */
   fecha_vencimiento?: string | null
+  /**
+   * Plan de cuotas del saldo (mig 148): omitir/null = no tocar el plan
+   * existente; [] = quitarlo; con elementos = redefinirlo (Σ debe coincidir
+   * con el saldo POST-pagos de esta misma llamada).
+   */
+  cuotas?: CuotaPlanPayload[] | null
 }
 
 export interface FacturaCompraCompleta {
@@ -405,12 +412,19 @@ export async function guardarFacturaCompra(
           })) as unknown as Json,
         }
       : {}),
+    // Plan de cuotas (mig 148): solo viaja si el modal lo manda ([] = borrar,
+    // lista = redefinir); sin la key el RPC no toca el plan existente.
+    ...(payload.cuotas != null
+      ? { p_cuotas: payload.cuotas as unknown as Json }
+      : {}),
   })
   if (error) throw error
 
   // 2b. Vencimiento ajustado desde el modal (UPDATE aditivo, como la cabecera:
   //     el RPC no toca fecha_vencimiento y acá la deuda ya quedó fijada).
-  if (payload.fecha_vencimiento) {
+  //     Con cuotas NO corre: fn_definir_cuotas_cuenta dejó el vencimiento del
+  //     padre en la primera cuota impaga y pisarlo lo desincronizaría.
+  if (payload.fecha_vencimiento && !(payload.cuotas && payload.cuotas.length > 0)) {
     const { error: errVenc } = await supabase
       .from('cuentas_a_pagar')
       .update({ fecha_vencimiento: payload.fecha_vencimiento })

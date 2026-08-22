@@ -24,6 +24,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { BadgeEstadoCuenta } from '@/components/shared/BadgeEstadoCuenta'
+import { ModalCuotasCuenta } from '@/components/finanzas/ModalCuotasCuenta'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import {
   usePagosCuenta,
@@ -34,6 +35,7 @@ import {
   FORMA_PAGO_LABEL,
   esFormaPago,
   type CuentaAPagarConProveedor,
+  type CuotaConEstado,
 } from '@/lib/queries/finanzas'
 
 interface Props {
@@ -64,31 +66,42 @@ export function DrawerCuentaPagar({
   const [vencimiento, setVencimiento] = useState('')
   const [monto, setMonto] = useState('')
   const [nota, setNota] = useState('')
+  // Modal de plan de cuotas (mig 148), montado por este drawer.
+  const [modalCuotas, setModalCuotas] = useState(false)
 
+  // Deps por id: la cuenta llega "viva" desde la tab (se re-resuelve en cada
+  // render) y un refetch de fondo no debe pisar lo tipeado en los inputs.
   useEffect(() => {
     if (abierto && cuenta) {
       setVencimiento(cuenta.fecha_vencimiento)
       setMonto(String(cuenta.monto))
       setNota(cuenta.nota ?? '')
     }
-  }, [abierto, cuenta])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, cuenta?.id])
 
   if (!cuenta) return null
 
   const pagada = cuenta.estado === 'pagada'
-  const montoCambia = !cuenta.tiene_factura && Number(monto) !== cuenta.monto
+  // Con plan de cuotas, vencimiento y monto NO se editan directo: el
+  // vencimiento del padre lo fija la próxima cuota impaga, y el monto debe
+  // cuadrar con Σ cuotas (editarCuentaAPagar lo bloquea server-side también).
+  const tienePlan = cuenta.cuotas.length > 0
+  const montoCambia =
+    !cuenta.tiene_factura && !tienePlan && Number(monto) !== cuenta.monto
+  const vencCambia = !tienePlan && vencimiento !== cuenta.fecha_vencimiento
   const hayCambios =
-    vencimiento !== cuenta.fecha_vencimiento ||
-    (nota ?? '') !== (cuenta.nota ?? '') ||
-    montoCambia
+    vencCambia || (nota ?? '') !== (cuenta.nota ?? '') || montoCambia
 
   function handleGuardar() {
     if (!cuenta || editar.isPending || !hayCambios) return
     editar.mutate({
       cuenta_id: cuenta.id,
-      fecha_vencimiento: vencimiento,
+      ...(vencCambia ? { fecha_vencimiento: vencimiento } : {}),
       nota: nota.trim() === '' ? null : nota.trim(),
-      ...(!cuenta.tiene_factura ? { monto: Number(monto) || 0 } : {}),
+      ...(!cuenta.tiene_factura && !tienePlan
+        ? { monto: Number(monto) || 0 }
+        : {}),
     })
   }
 
@@ -101,13 +114,19 @@ export function DrawerCuentaPagar({
             <BadgeEstadoCuenta estado={cuenta.estado} />
           </SheetTitle>
           <SheetDescription className="text-[#6f3a2a]">
-            <Link
-              href={`/pedidos/${cuenta.pedido_id}`}
-              className="inline-flex items-center gap-1 text-[#c43e2c] hover:underline font-mono text-xs"
-            >
-              Pedido #{cuenta.pedido_id}
-              <ExternalLink className="h-3 w-3" />
-            </Link>
+            {cuenta.pedido_id != null ? (
+              <Link
+                href={`/pedidos/${cuenta.pedido_id}`}
+                className="inline-flex items-center gap-1 text-[#c43e2c] hover:underline font-mono text-xs"
+              >
+                Pedido #{cuenta.pedido_id}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : (
+              <span className="font-mono text-xs">
+                Compra directa · sin orden
+              </span>
+            )}
           </SheetDescription>
         </SheetHeader>
 
@@ -164,9 +183,15 @@ export function DrawerCuentaPagar({
               <Input
                 type="date"
                 value={vencimiento}
+                disabled={tienePlan}
                 onChange={(e) => setVencimiento(e.target.value)}
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
+                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums disabled:opacity-60"
               />
+              {tienePlan && (
+                <p className="text-[10px] text-[#c8a58a]">
+                  Lo fija la próxima cuota del plan (abajo).
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] text-[#6f3a2a]">Monto</Label>
@@ -175,15 +200,19 @@ export function DrawerCuentaPagar({
                 min="0"
                 step="0.01"
                 value={monto}
-                disabled={cuenta.tiene_factura}
+                disabled={cuenta.tiene_factura || tienePlan}
                 onChange={(e) => setMonto(e.target.value)}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums disabled:opacity-60"
               />
-              {cuenta.tiene_factura && (
+              {cuenta.tiene_factura ? (
                 <p className="text-[10px] text-[#c8a58a]">
                   Tiene factura — el monto se edita en Comprobantes.
                 </p>
-              )}
+              ) : tienePlan ? (
+                <p className="text-[10px] text-[#c8a58a]">
+                  Tiene plan de cuotas — editá el plan para cambiarlo.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <Label className="text-[11px] text-[#6f3a2a]">Nota</Label>
@@ -209,6 +238,52 @@ export function DrawerCuentaPagar({
                 'Guardar cambios'
               )}
             </Button>
+          </div>
+
+          {/* Plan de cuotas (mig 148) */}
+          <div className="space-y-2 rounded-xl border border-[#e4c9b0]/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
+                Plan de cuotas
+              </div>
+              {!pagada && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalCuotas(true)}
+                  className="h-7 border-[#e4c9b0] px-2 text-[11px] text-[#6f3a2a] hover:text-[#391511]"
+                >
+                  <CalendarClock className="mr-1 h-3 w-3" />
+                  {tienePlan ? 'Editar plan' : 'Dividir en cuotas'}
+                </Button>
+              )}
+            </div>
+            {tienePlan ? (
+              <div className="space-y-1">
+                {cuenta.cuotas.map((q) => (
+                  <div
+                    key={q.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-[#e4c9b0]/40 bg-[#fdfaf6] px-2.5 py-1.5 text-xs"
+                  >
+                    <span className="text-[#6f3a2a]">
+                      Cuota {q.numero}/{cuenta.cuotas.length} ·{' '}
+                      {formatearFechaCorta(q.fecha_vencimiento)}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-semibold tabular-nums text-[#391511]">
+                        <MontoARS monto={q.monto} />
+                      </span>
+                      <ChipEstadoCuota cuota={q} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[#6f3a2a]">
+                Vencimiento único. Podés dividir el saldo pendiente en cuotas
+                con distintas fechas de pago.
+              </p>
+            )}
           </div>
 
           {/* Historial de pagos */}
@@ -305,7 +380,43 @@ export function DrawerCuentaPagar({
           )}
         </div>
       </SheetContent>
+
+      {/* Editor del plan de cuotas (Dialog, portalea fuera del Sheet). */}
+      <ModalCuotasCuenta
+        cuenta={cuenta}
+        abierto={modalCuotas}
+        onCambioAbierto={setModalCuotas}
+      />
     </Sheet>
+  )
+}
+
+function ChipEstadoCuota({ cuota }: { cuota: CuotaConEstado }) {
+  if (cuota.estado === 'pagada') {
+    return (
+      <span className="rounded-full bg-[#2f8f4e]/12 px-1.5 py-px text-[10px] font-semibold text-[#2f8f4e]">
+        Pagada
+      </span>
+    )
+  }
+  if (cuota.estado === 'vencida') {
+    return (
+      <span className="rounded-full bg-[#c43e2c]/12 px-1.5 py-px text-[10px] font-semibold text-[#c43e2c]">
+        Vencida{cuota.pagado > 0.009 ? ' · parcial' : ''}
+      </span>
+    )
+  }
+  if (cuota.estado === 'parcial') {
+    return (
+      <span className="rounded-full bg-[#f9b44c]/20 px-1.5 py-px text-[10px] font-semibold text-[#9e6b15]">
+        Resta <MontoARS monto={cuota.monto - cuota.pagado} />
+      </span>
+    )
+  }
+  return (
+    <span className="rounded-full bg-[#e4c9b0]/40 px-1.5 py-px text-[10px] font-semibold text-[#6f3a2a]">
+      Pendiente
+    </span>
   )
 }
 

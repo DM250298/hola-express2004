@@ -65,19 +65,56 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
   const [comprobante, setComprobante] = useState<string>('')
   const [nota, setNota] = useState<string>('')
 
-  // Al abrir, precargar monto = saldo pendiente y resetear
+  // Al abrir, precargar y resetear. Con plan de cuotas (mig 148) el monto
+  // precargado es lo que falta de la PRÓXIMA cuota; sin plan, todo el saldo.
+  // Deps por id: la cuenta llega "viva" desde la tab (se re-resuelve en cada
+  // render) y un refetch de fondo no debe pisar lo tipeado.
   useEffect(() => {
     if (abierto && cuenta) {
-      setMonto(String(r2(cuenta.saldo_pendiente)))
+      const prox = cuenta.proxima_cuota
+      setMonto(
+        String(r2(prox ? prox.monto - prox.pagado : cuenta.saldo_pendiente))
+      )
       setFecha(hoyIso())
       setComprobante('')
       setNota('')
       setCuentaOrigen('')
       setFormaPago('transferencia')
     }
-  }, [abierto, cuenta])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, cuenta?.id])
 
   const montoNum = Number(monto) || 0
+
+  // Plan de cuotas (mig 148): accesos rápidos y explicación de cobertura.
+  const cuotasPlan = cuenta?.cuotas ?? []
+  const proximaCuota = cuenta?.proxima_cuota ?? null
+  const restoProxima = proximaCuota
+    ? r2(proximaCuota.monto - proximaCuota.pagado)
+    : 0
+  // Hasta qué cuota llega el monto tipeado (FIFO client-side, espejo del
+  // reparto del server).
+  const coberturaCuotas = useMemo(() => {
+    if (!proximaCuota || montoNum <= 0) return null
+    let resto = montoNum
+    let ultima: number | null = null
+    let completas = 0
+    for (const q of cuotasPlan) {
+      const falta = r2(q.monto - q.pagado)
+      if (falta <= 0.009) continue
+      if (resto >= falta - 0.009) {
+        resto = r2(resto - falta)
+        ultima = q.numero
+        completas += 1
+      } else {
+        break
+      }
+    }
+    const impagas = cuotasPlan.filter(
+      (q) => q.monto - q.pagado > 0.009
+    ).length
+    return { ultima, quedan: impagas - completas }
+  }, [cuotasPlan, proximaCuota, montoNum])
 
   const cuentaSel = useMemo(
     () => (cuentas ?? []).find((c) => String(c.id) === cuentaOrigen) ?? null,
@@ -159,8 +196,13 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
             Registrar pago
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            {cuenta?.proveedor_nombre ?? 'Proveedor'} · pedido #
-            {cuenta?.pedido_id}
+            {cuenta?.proveedor_nombre ?? 'Proveedor'}
+            {cuenta?.pedido_id != null
+              ? ` · pedido #${cuenta.pedido_id}`
+              : ' · compra directa'}
+            {proximaCuota
+              ? ` · cuota ${proximaCuota.numero}/${cuotasPlan.length}`
+              : ''}
           </DialogDescription>
         </DialogHeader>
 
@@ -287,6 +329,34 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                     className="pl-7 h-11 text-lg font-semibold tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
                   />
                 </div>
+                {proximaCuota && restoProxima > 0.009 && (
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setMonto(String(restoProxima))}
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors',
+                        Math.abs(montoNum - restoProxima) <= 0.009
+                          ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                          : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#f9b44c]'
+                      )}
+                    >
+                      Esta cuota (<MontoARS monto={restoProxima} />)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMonto(String(r2(pendiente)))}
+                      className={cn(
+                        'rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors',
+                        Math.abs(montoNum - r2(pendiente)) <= 0.009
+                          ? 'border-[#f9b44c] bg-[#f9b44c]/15 text-[#391511]'
+                          : 'border-[#e4c9b0] bg-white text-[#6f3a2a] hover:border-[#f9b44c]'
+                      )}
+                    >
+                      Todo el saldo (<MontoARS monto={pendiente} />)
+                    </button>
+                  </div>
+                )}
                 {sobrante > 0 && !sobranteGrande && (
                   <p className="text-[11px] text-[#b3821b]">
                     Pagás <MontoARS monto={sobrante} /> de más: se registra
@@ -371,6 +441,20 @@ export function ModalPagarCuenta({ abierto, onCambioAbierto, cuenta }: Props) {
                       <MontoARS monto={pendiente - montoNum} />
                     </span>{' '}
                     pendientes
+                    {coberturaCuotas &&
+                      (coberturaCuotas.ultima != null ? (
+                        <>
+                          {' '}
+                          · cubre hasta la cuota {coberturaCuotas.ultima}/
+                          {cuotasPlan.length} (quedan {coberturaCuotas.quedan})
+                        </>
+                      ) : proximaCuota ? (
+                        <>
+                          {' '}
+                          · pago parcial de la cuota {proximaCuota.numero}/
+                          {cuotasPlan.length}
+                        </>
+                      ) : null)}
                   </>
                 ) : sobrante > 0 ? (
                   <>

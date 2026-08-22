@@ -7,6 +7,7 @@ import {
   anularEgreso,
   cancelarPagoProgramado,
   crearEgreso,
+  definirCuotasCuenta,
   editarCuentaAPagar,
   ejecutarPagoProgramado,
   getCuentaAPagarPorId,
@@ -18,6 +19,7 @@ import {
   getResumenFinanciero,
   pagarCuenta,
   type ActualizarEgresoPayload,
+  type DefinirCuotasPayload,
   type EditarCuentaPayload,
   type FiltroEstadoCuentas,
   type NuevoEgresoPayload,
@@ -179,6 +181,26 @@ export function useEditarCuentaAPagar() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo actualizar: ${error.message}`)
+    },
+  })
+}
+
+/** Define/reemplaza/quita el plan de cuotas de una deuda (mig 148). */
+export function useDefinirCuotas() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: DefinirCuotasPayload) => definirCuotasCuenta(payload),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: CUENTAS_PAGAR_KEY })
+      // El plan redistribuye la deuda en el tiempo: tablero y flujo cambian.
+      qc.invalidateQueries({ queryKey: ['tablero-directivo'] })
+      qc.invalidateQueries({ queryKey: ['flujo-proyectado'] })
+      toast.success(
+        vars.cuotas.length > 0 ? 'Plan de cuotas guardado' : 'Plan de cuotas quitado'
+      )
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo guardar el plan: ${error.message}`)
     },
   })
 }

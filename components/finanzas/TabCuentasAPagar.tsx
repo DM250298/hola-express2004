@@ -86,6 +86,16 @@ export function TabCuentasAPagar() {
       ? (cuentas ?? []).filter((c) => c.estado !== 'pagada')
       : (cuentas ?? [])
 
+  // Objetos VIVOS para drawer/modales: el state guarda la copia del click, y
+  // tras definir cuotas o pagar quedaría vieja (mostraría el plan anterior).
+  // Se re-resuelve por id contra la query fresca en cada render; si la fila
+  // salió del filtro (p.ej. pasó a pagada), cae a la copia.
+  const resolverViva = (c: CuentaAPagarConProveedor | null) =>
+    c ? ((cuentas ?? []).find((x) => x.id === c.id) ?? c) : null
+  const cuentaEditarViva = resolverViva(cuentaEditar)
+  const cuentaPagoViva = resolverViva(cuentaPago)
+  const cuentaDrawerViva = resolverViva(cuentaDrawer)
+
   const totalPendiente = cuentasFiltradas
     .filter((c) => c.estado !== 'pagada')
     .reduce((acc, c) => acc + Number(c.saldo_pendiente), 0)
@@ -327,6 +337,14 @@ export function TabCuentasAPagar() {
                     )}
                   >
                     {formatearFechaCorta(c.fecha_vencimiento)}
+                    {c.proxima_cuota && (
+                      <span
+                        className="ml-1.5 text-[9px] uppercase tracking-wider text-[#6f3a2a] bg-[#e4c9b0]/40 rounded-full px-1.5 py-0.5"
+                        title="La deuda tiene plan de cuotas: el vencimiento es el de la próxima cuota impaga"
+                      >
+                        Cuota {c.proxima_cuota.numero}/{c.cuotas.length}
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     <div className="font-bold text-[#391511]">
@@ -402,17 +420,17 @@ export function TabCuentasAPagar() {
       <ModalEditarFactura
         abierto={cuentaEditar !== null}
         onCambioAbierto={(v) => !v && setCuentaEditar(null)}
-        cuenta={cuentaEditar}
+        cuenta={cuentaEditarViva}
       />
 
       <ModalPagarCuenta
         abierto={cuentaPago !== null}
         onCambioAbierto={(v) => !v && setCuentaPago(null)}
-        cuenta={cuentaPago}
+        cuenta={cuentaPagoViva}
       />
 
       <DrawerCuentaPagar
-        cuenta={cuentaDrawer}
+        cuenta={cuentaDrawerViva}
         abierto={cuentaDrawer !== null}
         onCambioAbierto={(v) => !v && setCuentaDrawer(null)}
         onPagar={(c) => {

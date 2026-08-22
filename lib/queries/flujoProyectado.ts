@@ -182,12 +182,24 @@ export async function getFlujoProyectado(
     semanas[b].ingresos_cobranzas += Number(a.monto_neto) - iibbRetenido
   }
 
-  // Cuentas a pagar pendientes por vencimiento
+  // Cuentas a pagar pendientes por vencimiento. Con plan de cuotas (mig 148)
+  // cada cuota impaga cae en SU semana; sin plan, todo el saldo en la del
+  // vencimiento único. Σ de los restos = saldo_pendiente (el total no cambia).
   for (const c of cuentasPagar) {
     if (c.estado === 'pagada') continue
-    const b = bucket(parseIso(c.fecha_vencimiento))
-    if (b === null) continue
-    semanas[b].egresos_proveedores += Number(c.saldo_pendiente)
+    if (c.cuotas.length > 0) {
+      for (const q of c.cuotas) {
+        const resto = q.monto - q.pagado
+        if (resto <= 0.009) continue
+        const b = bucket(parseIso(q.fecha_vencimiento))
+        if (b === null) continue
+        semanas[b].egresos_proveedores += resto
+      }
+    } else {
+      const b = bucket(parseIso(c.fecha_vencimiento))
+      if (b === null) continue
+      semanas[b].egresos_proveedores += Number(c.saldo_pendiente)
+    }
   }
 
   // Impuestos: vencen el mes siguiente al período, día de config fiscal

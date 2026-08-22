@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { getResumenPorCobrar } from '@/lib/queries/acreditaciones'
+import { derivarCuotas, type CuotaCruda } from '@/lib/queries/finanzas'
 import { costoDesdeEmbed } from '@/lib/queries/productos'
 import { getPosicionCaja, type PosicionCaja } from '@/lib/queries/posicionCaja'
 import { fechaLocal } from '@/lib/utils/periodos'
@@ -67,10 +68,13 @@ export async function getTableroDirectivo(
       monto_pagado: number | null
       fecha_vencimiento: string | null
       pagos_cuenta: { sobrante: number | null }[] | null
+      cuotas_cuenta_pagar: CuotaCruda[] | null
     }>(() =>
       supabase
         .from('cuentas_a_pagar')
-        .select('monto, monto_pagado, fecha_vencimiento, pagos_cuenta(sobrante)')
+        .select(
+          'monto, monto_pagado, fecha_vencimiento, pagos_cuenta(sobrante), cuotas_cuenta_pagar(id, numero, monto, fecha_vencimiento)'
+        )
         .eq('estado', 'pendiente')
         .order('id')
     ),
@@ -104,17 +108,35 @@ export async function getTableroDirectivo(
       (acc, p) => acc + Number(p.sobrante ?? 0),
       0
     )
-    const monto = Math.max(
-      0,
-      (Number(d.monto) || 0) - Math.max(0, pagado - sobrantes)
-    )
+    const aplicado = Math.max(0, pagado - sobrantes)
+    const monto = Math.max(0, (Number(d.monto) || 0) - aplicado)
     if (monto <= 0) continue
     por_pagar.total_pendiente += monto
-    const dias = d.fecha_vencimiento ? diasHasta(d.fecha_vencimiento) : 999
-    if (dias < 0) por_pagar.vencidas += monto
-    else if (dias <= 7) por_pagar.vence_7 += monto
-    else if (dias <= 15) por_pagar.vence_15 += monto
-    else if (dias <= 30) por_pagar.vence_30 += monto
+    // Con plan de cuotas (mig 148) cada cuota impaga bucketea por SU fecha
+    // (Σ de los restos = monto); sin plan, el saldo entero por el vencimiento.
+    const cuotas = derivarCuotas(
+      Number(d.monto) || 0,
+      aplicado,
+      'pendiente',
+      d.cuotas_cuenta_pagar
+    )
+    if (cuotas.length > 0) {
+      for (const q of cuotas) {
+        const resto = q.monto - q.pagado
+        if (resto <= 0.009) continue
+        const dias = diasHasta(q.fecha_vencimiento)
+        if (dias < 0) por_pagar.vencidas += resto
+        else if (dias <= 7) por_pagar.vence_7 += resto
+        else if (dias <= 15) por_pagar.vence_15 += resto
+        else if (dias <= 30) por_pagar.vence_30 += resto
+      }
+    } else {
+      const dias = d.fecha_vencimiento ? diasHasta(d.fecha_vencimiento) : 999
+      if (dias < 0) por_pagar.vencidas += monto
+      else if (dias <= 7) por_pagar.vence_7 += monto
+      else if (dias <= 15) por_pagar.vence_15 += monto
+      else if (dias <= 30) por_pagar.vence_30 += monto
+    }
   }
 
   const arqueos: ArqueosResumen = {

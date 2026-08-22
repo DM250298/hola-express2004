@@ -34,6 +34,11 @@ import {
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import {
+  EditorCuotas,
+  cuotasValidas,
+  type CuotaForm,
+} from '@/components/finanzas/EditorCuotas'
 import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
@@ -80,6 +85,8 @@ interface LineaFactura {
   codigo_barras: string | null
   /** Lo físicamente recibido (para mostrar recibido vs. facturado). null = extra. */
   cantidad_recibida: number | null
+  /** Lo pedido en la OC (referencia secundaria). null = extra o dato viejo. */
+  cantidad_pedida: number | null
   cantidad: string
   costo: string
   descuento: string
@@ -147,6 +154,10 @@ interface BorradorFactura {
   pagosLineas: PagoLinea[]
   fechaPago: string
   vencimientoCC: string
+  /** Plan de cuotas del saldo (mig 148). Opcionales: los borradores viejos
+   *  (sin estos campos) se restauran igual, sin bumpear BORRADOR_V. */
+  usarCuotas?: boolean
+  cuotas?: CuotaForm[]
 }
 
 /** Versión del formato del borrador: si cambia la forma, los viejos se ignoran. */
@@ -247,42 +258,6 @@ function CampoNumero({
 }
 
 /**
- * Bajo el nombre de cada renglón del pedido: muestra lo RECIBIDO y avisa si la
- * cantidad facturada difiere → la factura ajustará el stock por esa diferencia.
- * No aplica a productos extra. (El vencimiento se carga en la recepción, que es
- * donde se tiene la mercadería a la vista; acá no se toca.)
- */
-function InfoLineaRecepcion({
-  recibida,
-  cantidad,
-  esExtra,
-}: {
-  recibida: number | null
-  cantidad: string
-  esExtra: boolean
-}) {
-  if (esExtra || recibida == null) return null
-  const difiere = Number(cantidad) !== recibida
-  return (
-    <div className="mt-1">
-      <span
-        className={`text-[10px] font-medium ${
-          difiere ? 'text-[#c43e2c]' : 'text-[#c8a58a]'
-        }`}
-        title={
-          difiere
-            ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
-            : undefined
-        }
-      >
-        Recibido: {recibida}
-        {difiere ? ' · ajusta stock' : ''}
-      </span>
-    </div>
-  )
-}
-
-/**
  * Letra de comprobante que suele emitir un proveedor según su condición frente
  * al IVA (el receptor, Hola Express, es responsable inscripto). Es solo un
  * default editable: el administrativo puede cambiarlo si la factura dice otra.
@@ -346,6 +321,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   // Vencimiento de la deuda, editable acá (al cargar la factura se ve el
   // vencimiento real del comprobante). Solo se guarda si lo cambian.
   const [vencimientoCC, setVencimientoCC] = useState('')
+  // ── Plan de cuotas del saldo (mig 148) ────────────────────────────────
+  // Activo, el saldo a cuenta corriente se divide en cuotas (reemplaza al
+  // vencimiento único). Con plan vigente, el editor precarga los REMANENTES
+  // impagos de cada cuota (Σ = saldo actual) y siempre se re-manda entero.
+  const [usarCuotas, setUsarCuotas] = useState(false)
+  const [cuotas, setCuotas] = useState<CuotaForm[]>([])
   const { data: cuentasTesoreria } = useCuentas(true)
 
   const { data: productosBusqueda } = useProductos({
@@ -469,6 +450,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         )
         setFechaPago(borrador.fechaPago || hoyIso())
         setVencimientoCC(borrador.vencimientoCC)
+        // Cuotas (mig 148): con fallback — un borrador pre-cuotas no las trae.
+        setUsarCuotas(borrador.usarCuotas ?? false)
+        setCuotas(Array.isArray(borrador.cuotas) ? borrador.cuotas : [])
         setAfectaVenta(borrador.afectaVenta)
         setLineas(borrador.lineas)
         setBusqueda('')
@@ -493,6 +477,25 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setPagosLineas([])
       setFechaPago(hoyIso())
       setVencimientoCC(cuenta?.fecha_vencimiento?.slice(0, 10) ?? '')
+      // Plan de cuotas vigente → el editor arranca con los REMANENTES impagos
+      // (Σ = saldo actual). Si el total cambia al re-editar, el editor marca
+      // la diferencia y bloquea el guardado hasta que vuelva a cerrar.
+      const remanentes = (cuenta?.cuotas ?? []).filter(
+        (c) => c.pagado < c.monto - 0.009
+      )
+      if (remanentes.length > 0) {
+        setUsarCuotas(true)
+        setCuotas(
+          remanentes.map((c) => ({
+            key: `qi${c.id}`,
+            monto: String(r2(c.monto - c.pagado)),
+            fecha: c.fecha_vencimiento.slice(0, 10),
+          }))
+        )
+      } else {
+        setUsarCuotas(false)
+        setCuotas([])
+      }
     }
 
     // ── (2) Líneas ────────────────────────────────────────────────────
@@ -554,6 +557,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             nombre: it?.producto?.nombre ?? `Producto #${g.producto_id}`,
             codigo_barras: it?.producto?.codigo_barras ?? null,
             cantidad_recibida: it?.cantidad_recibida ?? null,
+            cantidad_pedida: it?.cantidad_pedida ?? null,
             cantidad: String(g.cantidad),
             costo: String(g.costo_sin_iva),
             descuento: String(g.descuento_porcentaje),
@@ -589,6 +593,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           nombre: it.producto?.nombre ?? 'Producto eliminado',
           codigo_barras: it.producto?.codigo_barras ?? null,
           cantidad_recibida: it.cantidad_recibida ?? null,
+          cantidad_pedida: it.cantidad_pedida ?? null,
           // Baseline: si ya se facturó una vez, arranca de lo facturado (así
           // re-guardar es delta 0); si no, de lo recibido.
           cantidad: String(it.cantidad_facturada ?? it.cantidad_recibida ?? 0),
@@ -662,6 +667,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       pagosLineas,
       fechaPago,
       vencimientoCC,
+      usarCuotas,
+      cuotas,
     }
     const json = JSON.stringify(foto)
     if (pristineRef.current === null) {
@@ -690,6 +697,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     pagosLineas,
     fechaPago,
     vencimientoCC,
+    usarCuotas,
+    cuotas,
   ])
 
   // Flush del borrador al cerrar (como sea que se cierre): lo tipeado en los
@@ -771,6 +780,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         nombre: p.nombre,
         codigo_barras: p.codigo_barras ?? null,
         cantidad_recibida: it?.cantidad_recibida ?? null,
+        cantidad_pedida: it?.cantidad_pedida ?? null,
         cantidad:
           it?.cantidad_facturada != null
             ? String(it.cantidad_facturada)
@@ -981,6 +991,41 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       deudaCubierta ||
       (!pagoProgramado && bovedaNegativa))
 
+  // ── Cuotas del saldo (mig 148) ───────────────────────────────────────
+  // Solo tiene sentido donde hoy vive el vencimiento único: deuda viva, con
+  // saldo, y sin pagos programados (la fecha futura ya "agenda" el saldo).
+  const teniaPlan = (cuenta?.cuotas.length ?? 0) > 0
+  const cuotasActivas =
+    usarCuotas && !pagoProgramado && !deudaCubierta && saldoRestante > 0.009
+  const cuotasInvalidas =
+    cuotasActivas && !cuotasValidas(cuotas, Math.max(0, saldoRestante))
+
+  // Σ de unidades del comprobante vs. lo recibido, separando los productos por
+  // peso (venta_por_peso: la cantidad es en kg, no se mezcla con unidades).
+  const totalesCantidad = calculadas.reduce(
+    (acc, { l, cantidad }) => {
+      const porPeso = productosMap.get(l.producto_id)?.venta_por_peso ?? false
+      if (porPeso) acc.facKg += cantidad
+      else acc.facU += cantidad
+      if (l.item_pedido_id !== null && l.cantidad_recibida != null) {
+        if (porPeso) acc.recKg += l.cantidad_recibida
+        else acc.recU += l.cantidad_recibida
+      }
+      return acc
+    },
+    { facU: 0, facKg: 0, recU: 0, recKg: 0 }
+  )
+  const fmtCantidad = (u: number, kg: number) => {
+    const partes: string[] = []
+    if (u > 0 || kg <= 0)
+      partes.push(`${new Intl.NumberFormat('es-AR').format(u)} u.`)
+    if (kg > 0)
+      partes.push(
+        `${new Intl.NumberFormat('es-AR', { maximumFractionDigits: 3 }).format(kg)} kg`
+      )
+    return partes.join(' + ')
+  }
+
   function agregarPagoLinea() {
     pagoKeyRef.current += 1
     setPagosLineas((prev) => [
@@ -1088,6 +1133,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       )
       return
     }
+    if (cuotasInvalidas) {
+      toast.error(
+        'Las cuotas no cierran: la suma tiene que dar igual al saldo que queda a cuenta corriente.'
+      )
+      return
+    }
     const limpio = (s: string) => {
       const t = s.trim()
       return t === '' ? null : t
@@ -1139,12 +1190,25 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               }))
             : null,
         // Vencimiento ajustado desde el modal: solo viaja si lo cambiaron
-        // (y la deuda sigue viva).
+        // (y la deuda sigue viva). Con cuotas activas NO viaja: el plan fija
+        // el vencimiento del padre.
         fecha_vencimiento:
           !cuentaPagada &&
+          !cuotasActivas &&
           vencimientoCC &&
           vencimientoCC !== (cuenta.fecha_vencimiento ?? '').slice(0, 10)
             ? vencimientoCC
+            : undefined,
+        // Plan de cuotas (mig 148): activo → se re-manda ENTERO (Σ = saldo
+        // post-pagos); desactivado con plan previo → [] lo borra; sin plan y
+        // sin activar → undefined (no viaja, no toca nada).
+        cuotas: cuotasActivas
+          ? cuotas.map((c) => ({
+              monto: r2(Number(c.monto) || 0),
+              fecha_vencimiento: c.fecha,
+            }))
+          : teniaPlan && !cuentaPagada
+            ? []
             : undefined,
       },
       {
@@ -1198,8 +1262,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         onCambioAbierto(v)
       }}
     >
-      <DialogContent className="sm:max-w-6xl p-0 gap-0 overflow-hidden max-h-[92vh] flex flex-col">
-        <DialogHeader className="px-6 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0">
+      <DialogContent className="sm:max-w-[min(1800px,97vw)] h-[96vh] max-h-[96vh] p-0 gap-0 overflow-hidden flex flex-col">
+        <DialogHeader className="px-5 py-3 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] shrink-0">
           <DialogTitle className="text-[#391511] text-lg flex items-center gap-2">
             <FileText className="h-5 w-5 text-[#f9b44c]" />
             Cargar factura{cuenta ? ` · Pedido #${cuenta.pedido_id}` : ''}
@@ -1213,7 +1277,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto px-6 py-5 space-y-4">
+        {/* Banda central: en lg+ dos columnas — la tabla de productos a la
+            IZQUIERDA (protagonista, con su propio scroll) y el detalle del
+            comprobante/totales/pago a la DERECHA en segundo plano; en
+            pantallas chicas todo apilado con el scroll de página de siempre. */}
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+          <div className="flex flex-col gap-3 px-5 pt-4 pb-4 lg:flex-1 lg:min-w-0 lg:overflow-hidden">
           {/* Pre-guardado: se recuperó un borrador de esta cuenta */}
           {borradorRestaurado && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f9b44c]/60 bg-[#f9b44c]/15 px-3 py-2">
@@ -1237,58 +1306,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             </div>
           )}
 
-          {/* Ficha del proveedor: lo que va a salir en el comprobante y en el
-              Libro IVA. Read-only a propósito — la fuente de verdad es
-              Configuración › Proveedores. */}
-          <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
-                  Proveedor
-                </span>
-                <span className="block truncate text-base font-bold leading-tight text-[#391511]">
-                  {nombreProveedor}
-                </span>
-                {razonSocial && (
-                  <span className="mt-0.5 block text-xs text-[#6f3a2a]">
-                    Razón social:{' '}
-                    <span className="font-medium text-[#391511]">
-                      {razonSocial}
-                    </span>
-                  </span>
-                )}
-              </div>
-              <label className="flex shrink-0 items-center gap-2 text-sm text-[#391511]">
-                <Switch checked={afectaVenta} onCheckedChange={setAfectaVenta} />
-                Afectar precio de venta
-              </label>
-            </div>
-
-            {avisoFicha && (
-              <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#f9b44c]/50 bg-[#f9b44c]/15 px-3 py-2">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
-                <div className="min-w-0 space-y-0.5 text-[11px] leading-snug text-[#6f3a2a]">
-                  <p className="font-semibold text-[#391511]">
-                    La ficha de {nombreProveedor} está incompleta
-                  </p>
-                  {faltaRazonSocial && (
-                    <p>
-                      Le falta la <strong>razón social</strong>. Cargala en
-                      Configuración › Proveedores: es la que sale en el Libro
-                      IVA y, si está vacía, sale el nombre de fantasía.
-                    </p>
-                  )}
-                  {avisarCuit && (
-                    <p>
-                      Le falta el <strong>CUIT</strong>. El que pongas acá abajo
-                      queda guardado en la ficha al guardar la factura.
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          <p className="text-[11px] text-[#c8a58a] -mt-2">
+          {/* La leyenda del margen quedó junto a la tabla (la protagonista);
+              la ficha del proveedor y el comprobante viven en la columna
+              derecha. */}
+          <p className="shrink-0 text-[11px] text-[#c8a58a]">
             Poné el <strong>margen</strong> y el precio se calcula solo
             (asegura el margen después de IIBB, imp. créd/déb y la comisión de
             Mercado Pago —peor caso—, y redondea para arriba
@@ -1298,117 +1319,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             ), o tipeá el <strong>precio de venta</strong> que querés y el
             margen real se deduce solo.
           </p>
-
-          {/* Comprobante escaneado en la recepción (se puede agregar más acá) */}
-          <GaleriaComprobantes
-            pedidoId={cuenta?.pedido_id ?? undefined}
-            usuarioId={usuario?.id ?? null}
-          />
-
-          {/* Datos formales del comprobante */}
-          <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3">
-            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-2">
-              Datos del comprobante (para libro IVA)
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-              <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">Tipo</Label>
-                <Select
-                  value={cab.tipo_comprobante}
-                  onValueChange={(v) =>
-                    setCabCampo('tipo_comprobante', v ?? 'A')
-                  }
-                >
-                  <SelectTrigger className="h-8 border-[#e4c9b0] bg-white text-xs">
-                    <SelectValue placeholder="Elegí" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_COMPROBANTE.map((t) => (
-                      <SelectItem key={t.valor} value={t.valor}>
-                        {t.etiqueta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">Pto. venta</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0001"
-                  value={cab.punto_venta}
-                  onChange={(e) => setCabCampo('punto_venta', e.target.value)}
-                  className={`h-8 bg-white text-xs tabular-nums ${
-                    ptoError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                  }`}
-                />
-                {ptoError && (
-                  <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 5 dígitos).</p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">Número</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="00001234"
-                  value={cab.numero_comprobante}
-                  onChange={(e) =>
-                    setCabCampo('numero_comprobante', e.target.value)
-                  }
-                  className={`h-8 bg-white text-xs tabular-nums ${
-                    nroError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                  }`}
-                />
-                {nroError && (
-                  <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 8 dígitos).</p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">
-                  CUIT proveedor
-                </Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="30-xxxxxxxx-x"
-                  value={cab.cuit_proveedor}
-                  onChange={(e) =>
-                    setCabCampo('cuit_proveedor', e.target.value)
-                  }
-                  className={`h-8 bg-white text-xs tabular-nums ${
-                    cuitError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
-                  }`}
-                />
-                {cuitError && (
-                  <p className="text-[9px] text-[#c43e2c]">CUIT inválido (11 dígitos).</p>
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">
-                  Fecha emisión
-                </Label>
-                <Input
-                  type="date"
-                  value={cab.fecha_emision}
-                  max={hoyIso()}
-                  onChange={(e) => setCabCampo('fecha_emision', e.target.value)}
-                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] text-[#6f3a2a]">CAE</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="Opcional"
-                  value={cab.cae}
-                  onChange={(e) => setCabCampo('cae', e.target.value)}
-                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
-                />
-              </div>
-            </div>
-          </div>
-
           {/* Buscador para agregar un producto a la factura */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
             <Input
               value={busqueda}
@@ -1417,7 +1329,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               className="pl-9 border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
             />
             {busqueda && resultados.length > 0 && (
-              <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-[#e4c9b0] rounded-xl shadow-lg max-h-64 overflow-y-auto">
+              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[#e4c9b0] rounded-xl shadow-lg max-h-64 overflow-y-auto">
                 {resultados.map((p) => (
                   <button
                     key={p.id}
@@ -1484,11 +1396,33 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           Nuevo · completá precio
                         </span>
                       )}
-                      <InfoLineaRecepcion
-                        recibida={l.cantidad_recibida}
-                        cantidad={l.cantidad}
-                        esExtra={l.item_pedido_id === null}
-                      />
+                      {l.item_pedido_id !== null && l.cantidad_recibida != null && (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span
+                            className={cn(
+                              'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                              Number(l.cantidad) !== l.cantidad_recibida
+                                ? 'bg-[#c43e2c]/12 text-[#c43e2c]'
+                                : 'bg-[#e4c9b0]/40 text-[#6f3a2a]'
+                            )}
+                            title={
+                              Number(l.cantidad) !== l.cantidad_recibida
+                                ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
+                                : undefined
+                            }
+                          >
+                            Recibido {l.cantidad_recibida}
+                            {Number(l.cantidad) !== l.cantidad_recibida
+                              ? ' · ajusta stock'
+                              : ''}
+                          </span>
+                          {l.cantidad_pedida != null && (
+                            <span className="rounded-full bg-[#e4c9b0]/25 px-1.5 py-0.5 text-[10px] font-medium text-[#6f3a2a]">
+                              Pedido {l.cantidad_pedida}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex shrink-0 items-center">
                       <button
@@ -1520,7 +1454,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     </span>
                     <div className="grid grid-cols-2 gap-2.5">
                       <CampoNumero
-                        label="Cantidad"
+                        label="Cantidad facturada"
                         value={l.cantidad}
                         onChange={(v) => setLineaCampo(l.key, 'cantidad', v)}
                         min="0"
@@ -1656,19 +1590,46 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </div>
                 </div>
               ))}
+              {/* Σ unidades del comprobante vs. lo recibido (espejo del tfoot) */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] px-3 py-2 text-xs text-[#6f3a2a]">
+                <span>
+                  Recibido:{' '}
+                  <span className="font-bold tabular-nums text-[#391511]">
+                    {fmtCantidad(totalesCantidad.recU, totalesCantidad.recKg)}
+                  </span>
+                </span>
+                <span>
+                  Facturado:{' '}
+                  <span className="font-bold tabular-nums text-[#391511]">
+                    {fmtCantidad(totalesCantidad.facU, totalesCantidad.facKg)}
+                  </span>
+                </span>
+              </div>
             </div>
 
-            {/* md+: tabla completa. Con gastos no debitables aparece la columna
-                read-only "Costo final" (costo neto + prorrateo). */}
-            <div className="hidden overflow-x-auto rounded-xl border border-[#e4c9b0]/60 md:block">
+            {/* md+: tabla completa (la protagonista): en lg+ tiene scroll
+                propio con el encabezado fijo. Con gastos no debitables aparece
+                la columna read-only "Costo final" (costo neto + prorrateo). */}
+            <div className="hidden md:block rounded-xl border border-[#e4c9b0]/60 overflow-x-auto lg:flex-1 lg:min-h-0 lg:overflow-auto">
               <table className="w-full text-xs">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className="bg-[#391511] text-[#f9d2a2]">
                     <th className="p-2 text-left" rowSpan={2}>
                       Producto
                     </th>
-                    <th className="p-2" rowSpan={2}>
-                      Cant.
+                    <th
+                      className="p-2"
+                      rowSpan={2}
+                      title="Cantidad que dice el comprobante (editable)"
+                    >
+                      Cant. factura ✎
+                    </th>
+                    <th
+                      className="p-2"
+                      rowSpan={2}
+                      title="Unidades físicamente recibidas en la recepción (y lo pedido en la orden)"
+                    >
+                      Recibido
                     </th>
                     <th
                       className="p-2 text-center bg-[#6f3a2a]"
@@ -1759,11 +1720,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                                 Nuevo · completá precio
                               </span>
                             )}
-                            <InfoLineaRecepcion
-                              recibida={l.cantidad_recibida}
-                              cantidad={l.cantidad}
-                              esExtra={l.item_pedido_id === null}
-                            />
                           </div>
                         </div>
                       </td>
@@ -1778,6 +1734,41 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           }
                           className={inputCls}
                         />
+                      </td>
+                      <td className="p-2 w-20 text-center align-middle">
+                        {l.item_pedido_id === null ||
+                        l.cantidad_recibida == null ? (
+                          <span className="text-[#c8a58a]">—</span>
+                        ) : (
+                          <div
+                            title={
+                              Number(l.cantidad) !== l.cantidad_recibida
+                                ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
+                                : undefined
+                            }
+                          >
+                            <span
+                              className={cn(
+                                'tabular-nums',
+                                Number(l.cantidad) !== l.cantidad_recibida
+                                  ? 'font-bold text-[#c43e2c]'
+                                  : 'font-semibold text-[#391511]'
+                              )}
+                            >
+                              {l.cantidad_recibida}
+                            </span>
+                            {Number(l.cantidad) !== l.cantidad_recibida && (
+                              <span className="block text-[9px] font-semibold leading-tight text-[#c43e2c]">
+                                ajusta stock
+                              </span>
+                            )}
+                            {l.cantidad_pedida != null && (
+                              <span className="block text-[9px] leading-tight text-[#c8a58a]">
+                                Pedido: {l.cantidad_pedida}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="p-1 w-24">
                         <Input
@@ -1910,13 +1901,189 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-[#e4c9b0] bg-[#fdfaf6] text-[11px] font-semibold text-[#391511]">
+                    <td className="p-2 text-right text-[10px] uppercase tracking-wide text-[#6f3a2a]">
+                      Σ unidades
+                    </td>
+                    <td className="p-2 text-center tabular-nums">
+                      {fmtCantidad(totalesCantidad.facU, totalesCantidad.facKg)}
+                    </td>
+                    <td className="p-2 text-center tabular-nums">
+                      {fmtCantidad(totalesCantidad.recU, totalesCantidad.recKg)}
+                    </td>
+                    <td colSpan={(hayGastos ? 6 : 5) + 4} />
+                  </tr>
+                </tfoot>
               </table>
             </div>
             </>
           )}
-        </div>
+          </div>
 
-        <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 shrink-0">
+          {/* ── DERECHA: proveedor, comprobante, totales y pago, en segundo
+              plano. En lg+ es una columna angosta con su propio scroll. ── */}
+          <div className="shrink-0 border-t lg:border-t-0 lg:border-l border-[#e4c9b0]/60 bg-[#fdfaf6] px-5 py-4 space-y-3 lg:w-[400px] xl:w-[440px] lg:overflow-y-auto">
+          {/* Ficha del proveedor: lo que va a salir en el comprobante y en el
+              Libro IVA. Read-only a propósito — la fuente de verdad es
+              Configuración › Proveedores. */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 bg-white p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+                  Proveedor
+                </span>
+                <span className="block truncate text-base font-bold leading-tight text-[#391511]">
+                  {nombreProveedor}
+                </span>
+                {razonSocial && (
+                  <span className="mt-0.5 block text-xs text-[#6f3a2a]">
+                    Razón social:{' '}
+                    <span className="font-medium text-[#391511]">
+                      {razonSocial}
+                    </span>
+                  </span>
+                )}
+              </div>
+              <label className="flex shrink-0 items-center gap-2 text-sm text-[#391511]">
+                <Switch checked={afectaVenta} onCheckedChange={setAfectaVenta} />
+                Afectar precio de venta
+              </label>
+            </div>
+
+            {avisoFicha && (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-[#f9b44c]/50 bg-[#f9b44c]/15 px-3 py-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
+                <div className="min-w-0 space-y-0.5 text-[11px] leading-snug text-[#6f3a2a]">
+                  <p className="font-semibold text-[#391511]">
+                    La ficha de {nombreProveedor} está incompleta
+                  </p>
+                  {faltaRazonSocial && (
+                    <p>
+                      Le falta la <strong>razón social</strong>. Cargala en
+                      Configuración › Proveedores: es la que sale en el Libro
+                      IVA y, si está vacía, sale el nombre de fantasía.
+                    </p>
+                  )}
+                  {avisarCuit && (
+                    <p>
+                      Le falta el <strong>CUIT</strong>. El que pongas acá abajo
+                      queda guardado en la ficha al guardar la factura.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Comprobante escaneado en la recepción (se puede agregar más acá) */}
+          <GaleriaComprobantes
+            pedidoId={cuenta?.pedido_id ?? undefined}
+            usuarioId={usuario?.id ?? null}
+          />
+
+          {/* Datos formales del comprobante */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 bg-white p-3">
+            <div className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-2">
+              Datos del comprobante (para libro IVA)
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">Tipo</Label>
+                <Select
+                  value={cab.tipo_comprobante}
+                  onValueChange={(v) =>
+                    setCabCampo('tipo_comprobante', v ?? 'A')
+                  }
+                >
+                  <SelectTrigger className="h-8 border-[#e4c9b0] bg-white text-xs">
+                    <SelectValue placeholder="Elegí" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_COMPROBANTE.map((t) => (
+                      <SelectItem key={t.valor} value={t.valor}>
+                        {t.etiqueta}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">Pto. venta</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0001"
+                  value={cab.punto_venta}
+                  onChange={(e) => setCabCampo('punto_venta', e.target.value)}
+                  className={`h-8 bg-white text-xs tabular-nums ${
+                    ptoError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  }`}
+                />
+                {ptoError && (
+                  <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 5 dígitos).</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">Número</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="00001234"
+                  value={cab.numero_comprobante}
+                  onChange={(e) =>
+                    setCabCampo('numero_comprobante', e.target.value)
+                  }
+                  className={`h-8 bg-white text-xs tabular-nums ${
+                    nroError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  }`}
+                />
+                {nroError && (
+                  <p className="text-[9px] text-[#c43e2c]">Solo números (hasta 8 dígitos).</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  CUIT proveedor
+                </Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="30-xxxxxxxx-x"
+                  value={cab.cuit_proveedor}
+                  onChange={(e) =>
+                    setCabCampo('cuit_proveedor', e.target.value)
+                  }
+                  className={`h-8 bg-white text-xs tabular-nums ${
+                    cuitError ? 'border-[#c43e2c]' : 'border-[#e4c9b0]'
+                  }`}
+                />
+                {cuitError && (
+                  <p className="text-[9px] text-[#c43e2c]">CUIT inválido (11 dígitos).</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">
+                  Fecha emisión
+                </Label>
+                <Input
+                  type="date"
+                  value={cab.fecha_emision}
+                  max={hoyIso()}
+                  onChange={(e) => setCabCampo('fecha_emision', e.target.value)}
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[10px] text-[#6f3a2a]">CAE</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="Opcional"
+                  value={cab.cae}
+                  onChange={(e) => setCabCampo('cae', e.target.value)}
+                  className="h-8 border-[#e4c9b0] bg-white text-xs tabular-nums"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Percepciones sufridas en el comprobante */}
           <div className="flex flex-wrap items-center justify-end gap-3 mb-3">
             <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mr-1">
@@ -2079,7 +2246,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 {pagosLineas.map((f, i) => (
                   <div
                     key={f.key}
-                    className="grid grid-cols-2 sm:grid-cols-[110px_120px_1fr_110px_1fr_32px] gap-2 items-end"
+                    className="grid grid-cols-2 gap-2 items-end"
                   >
                     <div className="space-y-1">
                       {i === 0 && (
@@ -2290,17 +2457,42 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       </span>
                     </div>
                   ) : !deudaCubierta && saldoRestante > 0.009 ? (
-                    <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
-                      <span>
-                        {hayPagos ? 'El saldo queda' : 'La deuda queda'} a
-                        cuenta corriente del proveedor · vence el
-                      </span>
-                      <Input
-                        type="date"
-                        value={vencimientoCC}
-                        onChange={(e) => setVencimientoCC(e.target.value)}
-                        className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                      />
+                    <div className="space-y-2 text-left">
+                      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
+                        <span>
+                          {hayPagos ? 'El saldo queda' : 'La deuda queda'} a
+                          cuenta corriente del proveedor
+                        </span>
+                        <label className="flex items-center gap-1.5 text-[11px] font-semibold text-[#391511]">
+                          <Switch
+                            checked={usarCuotas}
+                            onCheckedChange={setUsarCuotas}
+                          />
+                          En cuotas
+                        </label>
+                      </div>
+                      {usarCuotas ? (
+                        <EditorCuotas
+                          objetivo={Math.max(0, saldoRestante)}
+                          cuotas={cuotas}
+                          onChange={setCuotas}
+                          condicionPago={
+                            pedido?.terminos_pago ??
+                            proveedorCuenta?.condicion_pago ??
+                            null
+                          }
+                        />
+                      ) : (
+                        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5 text-[11px] text-[#6f3a2a]">
+                          <span>vence el</span>
+                          <Input
+                            type="date"
+                            value={vencimientoCC}
+                            onChange={(e) => setVencimientoCC(e.target.value)}
+                            className="h-8 w-36 text-xs tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : sobrantePago > 0 ? (
                     <p
@@ -2324,7 +2516,29 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               </div>
             ))}
 
-          <div className="flex gap-2">
+          </div>
+        </div>
+
+        {/* ── Banda inferior: resumen + acciones, SIEMPRE visibles ── */}
+        <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-5 py-3 shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+            <span className="text-sm font-bold text-[#391511]">
+              Total a pagar:{' '}
+              <span className="text-lg font-extrabold tabular-nums">
+                <MontoARS monto={totalConIva} />
+              </span>
+            </span>
+            {cuenta && !cuentaPagada && (
+              <span className="text-xs text-[#6f3a2a]">
+                Saldo a cta. cte.:{' '}
+                <span className="font-bold tabular-nums text-[#391511]">
+                  <MontoARS monto={Math.max(0, saldoRestante)} />
+                </span>
+                {cuotasActivas ? ` · en ${cuotas.length} cuotas` : ''}
+              </span>
+            )}
+          </div>
+          <div className="flex w-full gap-2 sm:w-auto sm:min-w-[420px]">
             {facturaGuardada && (
               <Button
                 variant="outline"
@@ -2356,7 +2570,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 lineas.length === 0 ||
                 hayErroresCab ||
                 hayErrorPrecio ||
-                pagoInvalido
+                pagoInvalido ||
+                cuotasInvalidas
               }
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
@@ -2371,6 +2586,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   &nbsp;
                   <MontoARS monto={totalPagos} />
                 </>
+              ) : cuotasActivas ? (
+                `Guardar · saldo en ${cuotas.length} cuotas`
               ) : (
                 'Guardar factura'
               )}

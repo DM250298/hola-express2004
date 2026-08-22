@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { claveSemana, fechaLocal, semanasEnRango } from '@/lib/utils/periodos'
-import type { CuentaAPagarUpdate, EgresoRow } from '@/types/database'
+import type { CuentaAPagarUpdate, EgresoRow, Json } from '@/types/database'
 
 export interface PuntoSemana {
   semana: string // ISO yyyy-MM-dd (lunes)
@@ -215,6 +215,10 @@ export interface CuentaAPagarConProveedor {
   numero_factura: string | null
   nota: string | null
   proveedor_nombre: string | null
+  /** Plan de cuotas (mig 148), con estado derivado por FIFO. [] si no hay plan. */
+  cuotas: CuotaConEstado[]
+  /** Primera cuota no cubierta del plan, o null (sin plan o todo cubierto). */
+  proxima_cuota: CuotaConEstado | null
 }
 
 /**
@@ -232,6 +236,76 @@ function derivarEstado(
   return 'pendiente'
 }
 
+export type EstadoCuotaDerivado = 'pagada' | 'parcial' | 'pendiente' | 'vencida'
+
+export interface CuotaConEstado {
+  id: number
+  numero: number
+  monto: number
+  fecha_vencimiento: string
+  /** Porción de esta cuota ya cubierta por los pagos (reparto FIFO). */
+  pagado: number
+  estado: EstadoCuotaDerivado
+}
+
+export interface CuotaCruda {
+  id: number
+  numero: number
+  monto: number
+  fecha_vencimiento: string
+}
+
+/**
+ * Deriva el estado de cada cuota repartiendo el aplicado de la deuda por FIFO
+ * (misma regla que fn_sync_vencimiento_cuotas, mig 148): head = monto − Σcuotas
+ * es la porción "ya cubierta" cuando el plan se definió sobre un saldo parcial;
+ * lo que excede el head se aplica cuota a cuota en orden (fecha, numero).
+ * Con el padre 'pagada' todas las cuotas se muestran pagadas (cubre la
+ * condonación de residuos ≤ $1 y los sobrepagos).
+ */
+export function derivarCuotas(
+  montoDeuda: number,
+  aplicado: number,
+  estadoPadre: 'pendiente' | 'pagada' | 'vencida',
+  crudas: CuotaCruda[] | null | undefined
+): CuotaConEstado[] {
+  const lista = [...(crudas ?? [])].sort(
+    (a, b) =>
+      a.fecha_vencimiento.localeCompare(b.fecha_vencimiento) ||
+      a.numero - b.numero
+  )
+  if (lista.length === 0) return []
+
+  const suma = lista.reduce((acc, c) => acc + Number(c.monto), 0)
+  const head = Math.max(0, montoDeuda - suma)
+  let restante =
+    estadoPadre === 'pagada' ? suma : Math.max(0, aplicado - head)
+
+  return lista.map((c) => {
+    const monto = Number(c.monto)
+    const pagado = Math.min(monto, restante)
+    restante = Math.max(0, restante - monto)
+    let estado: EstadoCuotaDerivado
+    if (pagado >= monto - 0.009) {
+      estado = 'pagada'
+    } else if (derivarEstado('pendiente', c.fecha_vencimiento) === 'vencida') {
+      estado = 'vencida' // manda sobre parcial: lo que resta ya está vencido
+    } else if (pagado > 0.009) {
+      estado = 'parcial'
+    } else {
+      estado = 'pendiente'
+    }
+    return {
+      id: c.id,
+      numero: c.numero,
+      monto,
+      fecha_vencimiento: c.fecha_vencimiento,
+      pagado,
+      estado,
+    }
+  })
+}
+
 /**
  * Filtro de estado del listado. `'abiertas'` = pendientes + vencidas (todo lo
  * no pagado); `null` = abiertas completas + las últimas pagadas.
@@ -246,7 +320,7 @@ export type FiltroEstadoCuentas = EstadoCuentaDerivado | 'abiertas' | null
 export const LIMITE_CUENTAS_PAGADAS = 500
 
 const SELECT_CUENTAS =
-  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre), pagos_cuenta(sobrante)'
+  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre), pagos_cuenta(sobrante), cuotas_cuenta_pagar(id, numero, monto, fecha_vencimiento)'
 
 type FilaCuentaCruda = {
   id: number
@@ -263,6 +337,7 @@ type FilaCuentaCruda = {
   nota: string | null
   proveedores: { nombre: string } | null
   pagos_cuenta: { sobrante: number | null }[] | null
+  cuotas_cuenta_pagar: CuotaCruda[] | null
 }
 
 function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
@@ -278,6 +353,12 @@ function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
   const aplicado = Math.max(0, pagado - sobrantes)
   // Clamp a 0: en una cuenta pagada el saldo nunca se muestra negativo.
   const saldo = Math.max(0, Number(f.monto) - aplicado)
+  const cuotas = derivarCuotas(
+    Number(f.monto),
+    aplicado,
+    f.estado,
+    f.cuotas_cuenta_pagar
+  )
   return {
     id: f.id,
     pedido_id: f.pedido_id,
@@ -295,6 +376,8 @@ function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
     numero_factura: f.numero_factura,
     nota: f.nota,
     proveedor_nombre: f.proveedores?.nombre ?? null,
+    cuotas,
+    proxima_cuota: cuotas.find((c) => c.pagado < c.monto - 0.009) ?? null,
   }
 }
 
@@ -446,6 +529,35 @@ export async function pagarCuenta(payload: PagarCuentaPayload): Promise<void> {
     p_nota: payload.nota ?? null,
     p_forma_pago: payload.forma_pago ?? null,
     p_comprobante: payload.comprobante ?? null,
+  })
+  if (error) throw error
+}
+
+export interface CuotaPlanPayload {
+  monto: number
+  fecha_vencimiento: string
+}
+
+export interface DefinirCuotasPayload {
+  cuenta_id: number
+  usuario_id: string
+  /** [] quita el plan; con elementos, Σ debe = saldo pendiente ± $0,01. */
+  cuotas: CuotaPlanPayload[]
+}
+
+/**
+ * Define / reemplaza / quita el plan de cuotas de una deuda (mig 148). El
+ * server valida la suma contra el saldo real y deja el vencimiento del padre
+ * apuntando a la primera cuota impaga.
+ */
+export async function definirCuotasCuenta(
+  payload: DefinirCuotasPayload
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_definir_cuotas_cuenta', {
+    p_cuenta_id: payload.cuenta_id,
+    p_usuario_id: payload.usuario_id,
+    p_cuotas: payload.cuotas as unknown as Json,
   })
   if (error) throw error
 }
@@ -612,46 +724,61 @@ export async function editarCuentaAPagar(
     patch.fecha_vencimiento = payload.fecha_vencimiento
   if (payload.nota !== undefined) patch.nota = payload.nota
 
-  if (payload.monto !== undefined) {
+  // La lectura previa corre si el cambio toca monto O vencimiento: ambos
+  // chocan con un plan de cuotas vigente (mig 148: el vencimiento del padre
+  // lo fija la próxima cuota impaga, y el monto debe cuadrar con Σ cuotas).
+  if (payload.monto !== undefined || payload.fecha_vencimiento !== undefined) {
     const { data: actual, error: errLeer } = await supabase
       .from('cuentas_a_pagar')
-      .select('monto_pagado, tiene_factura, estado, pagos_cuenta(sobrante)')
+      .select(
+        'monto_pagado, tiene_factura, estado, pagos_cuenta(sobrante), cuotas_cuenta_pagar(id)'
+      )
       .eq('id', payload.cuenta_id)
       .single<{
         monto_pagado: number | null
         tiene_factura: boolean
         estado: 'pendiente' | 'pagada' | 'vencida'
         pagos_cuenta: { sobrante: number | null }[] | null
+        cuotas_cuenta_pagar: { id: number }[] | null
       }>()
     if (errLeer) throw errLeer
-    if (actual.tiene_factura) {
+
+    if ((actual.cuotas_cuenta_pagar ?? []).length > 0) {
       throw new Error(
-        'No se puede cambiar el monto: la cuenta ya tiene una factura cargada. Editá la factura en Comprobantes.'
+        'Esta deuda tiene un plan de cuotas: editá el plan (o quitalo) desde "Plan de cuotas".'
       )
     }
-    // Aplicado = pagado − sobrantes (misma definición que el server, mig 144).
-    const pagado = Number(actual.monto_pagado ?? 0)
-    const sobrantes = (actual.pagos_cuenta ?? []).reduce(
-      (acc, p) => acc + Number(p.sobrante ?? 0),
-      0
-    )
-    const aplicado = Math.max(0, pagado - sobrantes)
-    if (payload.monto < aplicado) {
-      throw new Error('El monto no puede ser menor a lo ya pagado.')
-    }
-    patch.monto = payload.monto
-    // Re-derivar estado con la misma regla que fn_guardar_factura_compra v14:
-    // subir el monto de una cuenta pagada la REABRE (si no, quedaría 'pagada'
-    // con saldo, invisible en pendientes/flujo); bajarlo hasta lo ya aplicado
-    // la cierra.
-    if (aplicado > 0.009) {
-      const cubre = aplicado >= payload.monto - 0.009
-      if (cubre && actual.estado !== 'pagada') {
-        patch.estado = 'pagada'
-        patch.fecha_pago = new Date().toISOString()
-      } else if (!cubre && actual.estado === 'pagada') {
-        patch.estado = 'pendiente'
-        patch.fecha_pago = null
+
+    if (payload.monto !== undefined) {
+      if (actual.tiene_factura) {
+        throw new Error(
+          'No se puede cambiar el monto: la cuenta ya tiene una factura cargada. Editá la factura en Comprobantes.'
+        )
+      }
+      // Aplicado = pagado − sobrantes (misma definición que el server, mig 144).
+      const pagado = Number(actual.monto_pagado ?? 0)
+      const sobrantes = (actual.pagos_cuenta ?? []).reduce(
+        (acc, p) => acc + Number(p.sobrante ?? 0),
+        0
+      )
+      const aplicado = Math.max(0, pagado - sobrantes)
+      if (payload.monto < aplicado) {
+        throw new Error('El monto no puede ser menor a lo ya pagado.')
+      }
+      patch.monto = payload.monto
+      // Re-derivar estado con la misma regla que fn_guardar_factura_compra v14:
+      // subir el monto de una cuenta pagada la REABRE (si no, quedaría 'pagada'
+      // con saldo, invisible en pendientes/flujo); bajarlo hasta lo ya aplicado
+      // la cierra.
+      if (aplicado > 0.009) {
+        const cubre = aplicado >= payload.monto - 0.009
+        if (cubre && actual.estado !== 'pagada') {
+          patch.estado = 'pagada'
+          patch.fecha_pago = new Date().toISOString()
+        } else if (!cubre && actual.estado === 'pagada') {
+          patch.estado = 'pendiente'
+          patch.fecha_pago = null
+        }
       }
     }
   }
