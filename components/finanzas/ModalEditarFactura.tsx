@@ -892,13 +892,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       // `desglose.margen` viene como FRACCIÓN (y es null si el costo es 0).
       const margenPct =
         inv.desglose?.margen != null ? r2(inv.desglose.margen * 100) : null
+      // Bonificada (desc 100% / costo 0) con precio a mano: el margen no se
+      // puede medir ("—"), pero NO es error — el precio manda y el server
+      // guarda igual (y desde la mig 156 conserva el último costo real).
+      const bonificada = calc.costoFinal <= 0 && precioFinal > 0
       const error =
         inv.error ??
         (precioFinal <= 0
           ? 'Poné un precio, o tocá el margen para volver al automático.'
-          : margenPct == null
-            ? 'Sin costo no se puede deducir el margen de ese precio.'
-            : null)
+          : pricing.config === null
+            ? null // config de pricing todavía cargando: sin veredicto
+            : bonificada
+              ? null
+              : margenPct == null
+                ? 'Sin costo no se puede deducir el margen de ese precio.'
+                : null)
       return {
         l,
         calc,
@@ -906,6 +914,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         venta: null,
         precioFinal,
         margenPct,
+        bonificada,
         error,
       }
     }
@@ -921,13 +930,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       venta,
       precioFinal: venta.desglose?.precioRedondeado ?? 0,
       margenPct: Number(l.margen) || 0,
+      bonificada: false,
       error: venta.error,
     }
   })
-  // Con un divisor inválido (cargas > 100%), un precio vacío o un costo 0 en
-  // modo precio, el par precio/margen no cierra: se bloquea el guardado y se
-  // muestra el error en la línea.
-  const hayErrorPrecio = calculadas.some((c) => c.error !== null)
+  // Con un divisor inválido (cargas > 100%) o un precio vacío en modo precio,
+  // el par precio/margen no cierra: el error se muestra en la línea y entra a
+  // la lista `bloqueos` (banner + toast al intentar guardar).
 
   const totales = calculadas.reduce(
     (acc, { calc, cantidad }) => {
@@ -1042,13 +1051,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       )
     : -1
   const comprobanteFaltante = idxSinComprobante >= 0
-  // Deshabilita Guardar SOLO lo que tiene explicación inline: una fila
-  // intermedia que ya cubre el total, o bóveda en negativo (solo para pagos
-  // que debitan HOY: los programados se validan al ejecutarse). Las filas
-  // incompletas (cuenta/importe) se avisan al click, igual que los faltantes
-  // del comprobante: elegir "Pago ahora" crea una fila vacía y no puede
-  // apagar el botón sin decir por qué. Mismo gate que el payload (solo
-  // cuentan los pagos en los modos que los mandan).
+  // Nada de esto deshabilita Guardar: el click siempre corre y TODO lo que
+  // bloquea se lista en el banner de faltantes (`bloqueos`) + toast. La
+  // bóveda en negativo solo aplica a pagos que debitan HOY (los programados
+  // se validan al ejecutarse). Mismo gate que el payload (solo cuentan los
+  // pagos en los modos que los mandan).
   const pagoInvalido =
     (modoAhora || pagoProgramado) &&
     hayPagos &&
@@ -1196,8 +1203,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   }
 
   // ── Datos formales del comprobante ───────────────────────────────────
-  // Errores de FORMATO (solo si hay algo tipeado) + CUIT propio: deshabilitan
-  // Guardar, siempre en rojo.
+  // Errores de FORMATO (solo si hay algo tipeado) + CUIT propio: siempre en
+  // rojo; bloquean vía la lista `bloqueos` (banner + toast al guardar).
   const cuitDigitos = soloDigitos(cab.cuit_proveedor)
   const cuitError =
     cab.cuit_proveedor.trim() !== '' && !cuitValido(cab.cuit_proveedor)
@@ -1208,7 +1215,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const nroError =
     cab.numero_comprobante.trim() !== '' &&
     !numeroComprobanteValido(cab.numero_comprobante)
-  const hayErroresCab = cuitError || ptoError || nroError || esCuitPropio
   // FALTANTES (mig 155: tipo, pto, número, CUIT y fecha son obligatorios;
   // CAE no; el tipo X exime pto/número/CUIT). No deshabilitan el botón: se
   // muestran en ámbar y, al intentar guardar, en rojo con foco al primero.
@@ -1219,8 +1225,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const faltaCuit = fiscalObligatorio && cuitDigitos.length === 0
   const fechaEmisionError =
     !cab.fecha_emision || cab.fecha_emision > hoyIso()
-  const faltanDatos =
-    faltaTipo || faltaPto || faltaNro || faltaCuit || fechaEmisionError
   // Color de los avisos de faltante: ámbar hasta el intento, rojo después.
   const clsFalta = intentoGuardar ? 'text-[#c43e2c]' : 'text-[#b3821b]'
   const bordeFalta = intentoGuardar ? 'border-[#c43e2c]' : 'border-[#f9b44c]'
@@ -1244,29 +1248,89 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     hayFicha && provCuit.trim() === '' && !cuitValido(cab.cuit_proveedor)
   const avisoFicha = faltaRazonSocial || avisarCuit
 
+  // ── Bloqueos de guardado, TODOS en una lista (en orden visual) ────────
+  // Lo único que apaga el botón es pending / sin líneas: cualquier otro
+  // problema deja clickear y se lista COMPLETO en el banner de faltantes
+  // (BannerFaltantes) + toast, en vez de apagar el botón sin decir por qué.
+  // Derivada en cada render: los ítems desaparecen en vivo al corregirlos.
+  const idxFilaIncompleta = pagosLineas.findIndex(
+    (f) => !f.cuenta_id || (Number(f.monto) || 0) <= 0
+  )
+  const bloqueos: string[] = [
+    // Cabecera del comprobante: formato inválido + faltantes obligatorios
+    ...(esCuitPropio
+      ? ['Ese es el CUIT de Hola Express: cargá el del proveedor que emite la factura.']
+      : []),
+    ...(cuitError ? ['El CUIT del proveedor no es válido (11 dígitos).'] : []),
+    ...(ptoError ? ['El punto de venta no es válido (hasta 5 dígitos).'] : []),
+    ...(nroError
+      ? ['El número de comprobante no es válido (hasta 8 dígitos).']
+      : []),
+    ...(faltaTipo ? ['Elegí el tipo de comprobante.'] : []),
+    ...(faltaPto ? ['Falta el punto de venta del comprobante.'] : []),
+    ...(faltaNro ? ['Falta el número del comprobante.'] : []),
+    ...(faltaCuit ? ['Falta el CUIT del proveedor.'] : []),
+    ...(fechaEmisionError
+      ? [
+          cab.fecha_emision
+            ? 'La fecha de emisión no puede ser futura.'
+            : 'Falta la fecha de emisión.',
+        ]
+      : []),
+    // Líneas con error de precio/margen, con nombre del producto
+    ...calculadas
+      .filter((c) => c.error !== null)
+      .map((c) => `«${c.l.nombre}»: ${c.error}`),
+    // Pago
+    ...(modoInvalido
+      ? [
+          modoPagoEfectivo === null
+            ? 'Elegí cómo se paga la factura: ahora, programado o a cuenta corriente.'
+            : faltaVencimientoCC
+              ? 'Poné la fecha de vencimiento del saldo que queda a cuenta corriente.'
+              : 'Agregá al menos un pago (o elegí "Cuenta corriente").',
+        ]
+      : []),
+    ...(fechaPagoInvalida
+      ? [
+          pagoProgramado
+            ? 'Un pago programado necesita una fecha posterior a hoy.'
+            : 'La fecha del pago no puede ser futura: para pagar más adelante elegí "Pago programado".',
+        ]
+      : []),
+    ...(filasIncompletasPendientes
+      ? [`Completá la cuenta y el importe del pago ${idxFilaIncompleta + 1}.`]
+      : []),
+    ...(comprobanteFaltante
+      ? [
+          `Poné el ${labelComprobante(pagosLineas[idxSinComprobante].forma)} del pago ${idxSinComprobante + 1}.`,
+        ]
+      : []),
+    ...(pagoInvalido
+      ? [
+          bovedaNegativa && !ordenInvalido
+            ? 'Los pagos dejan la caja fuerte en negativo: bajá el monto o elegí otra cuenta.'
+            : 'Los pagos anteriores ya cubren el total: borrá o bajá el último pago.',
+        ]
+      : []),
+    ...(cuotasInvalidas
+      ? [
+          'Las cuotas no cierran: la suma tiene que dar igual al saldo que queda a cuenta corriente.',
+        ]
+      : []),
+  ]
+
   function handleGuardar() {
     if (!pedido || !cuenta || !usuario || guardar.isPending) return
     if (lineas.length === 0) return
-    if (hayErroresCab) {
-      toast.error(
-        esCuitPropio
-          ? 'Ese es el CUIT de Hola Express: cargá el del proveedor que emite la factura.'
-          : 'Revisá los datos del comprobante (CUIT o número).'
-      )
-      return
-    }
-    // Datos obligatorios (mig 155): avisar qué falta y enfocar el primero.
-    if (faltanDatos) {
+    if (bloqueos.length > 0) {
       setIntentoGuardar(true)
-      const faltantes = [
-        faltaTipo && 'el tipo',
-        faltaPto && 'el punto de venta',
-        faltaNro && 'el número',
-        faltaCuit && 'el CUIT del proveedor',
-        fechaEmisionError &&
-          (cab.fecha_emision ? 'una fecha de emisión válida (no futura)' : 'la fecha de emisión'),
-      ].filter((s): s is string => typeof s === 'string')
-      toast.error(`Falta ${faltantes.join(', ')} del comprobante.`)
+      toast.error(
+        bloqueos.length === 1
+          ? bloqueos[0]
+          : `Faltan ${bloqueos.length} cosas para guardar: mirá el detalle abajo del todo.`
+      )
+      // Foco al primer campo fiscal con problema (misma prioridad de siempre).
       const ref = faltaPto
         ? ptoRef
         : faltaNro
@@ -1275,65 +1339,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             ? cuitRef
             : fechaEmisionError
               ? fechaEmisionRef
-              : null
+              : cuitError || esCuitPropio
+                ? cuitRef
+                : null
       ref?.current?.focus()
-      return
-    }
-    if (hayErrorPrecio) {
-      toast.error(
-        'Revisá el precio de venta de las líneas marcadas en rojo.'
-      )
-      return
-    }
-    if (modoInvalido) {
-      setIntentoGuardar(true)
-      toast.error(
-        modoPagoEfectivo === null
-          ? 'Elegí cómo se paga la factura: ahora, programado o a cuenta corriente.'
-          : faltaVencimientoCC
-            ? 'Poné la fecha de vencimiento del saldo que queda a cuenta corriente.'
-            : 'Agregá al menos un pago (o elegí "Cuenta corriente").'
-      )
-      return
-    }
-    if (fechaPagoInvalida) {
-      setIntentoGuardar(true)
-      toast.error(
-        pagoProgramado
-          ? 'Un pago programado necesita una fecha posterior a hoy.'
-          : 'La fecha del pago no puede ser futura: para pagar más adelante elegí "Pago programado".'
-      )
-      return
-    }
-    if (filasIncompletasPendientes) {
-      setIntentoGuardar(true)
-      const idx = pagosLineas.findIndex(
-        (f) => !f.cuenta_id || (Number(f.monto) || 0) <= 0
-      )
-      toast.error(
-        `Completá la cuenta y el importe del pago ${idx + 1}.`
-      )
-      return
-    }
-    if (comprobanteFaltante) {
-      setIntentoGuardar(true)
-      toast.error(
-        `Poné el ${labelComprobante(pagosLineas[idxSinComprobante].forma)} del pago ${idxSinComprobante + 1}.`
-      )
-      return
-    }
-    if (pagoInvalido) {
-      toast.error(
-        bovedaNegativa
-          ? 'Los pagos dejan la caja fuerte en negativo: bajá el monto o elegí otra cuenta.'
-          : 'Los pagos anteriores ya cubren el total: borrá o bajá el último pago.'
-      )
-      return
-    }
-    if (cuotasInvalidas) {
-      toast.error(
-        'Las cuotas no cierran: la suma tiene que dar igual al saldo que queda a cuenta corriente.'
-      )
       return
     }
     const limpio = (s: string) => {
@@ -1576,7 +1585,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             {/* Mobile (< md): cada línea como tarjeta apilada, compra arriba y
                 venta abajo, para no tener que hacer scroll horizontal. */}
             <div className="space-y-3 md:hidden">
-              {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, error }) => (
+              {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, error }) => (
                 <div
                   key={l.key}
                   className="overflow-hidden rounded-xl border border-[#e4c9b0] bg-white"
@@ -1694,6 +1703,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-xs">
+                      <span className="text-[#6f3a2a]">Subtotal c/IVA</span>
+                      <span className="font-semibold text-[#391511]">
+                        <MontoARS monto={calc.costoConIva * cantidad} />
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs">
                       <span className="text-[#6f3a2a]">Costo c/IVA (unit.)</span>
                       <span className="font-semibold text-[#391511]">
                         <MontoARS monto={calc.costoConIva} />
@@ -1761,14 +1776,20 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         </span>
                         <span
                           className={
-                            (margenPct ?? 0) < 0
-                              ? 'font-semibold text-[#c43e2c]'
-                              : 'font-semibold text-[#2f7d4f]'
+                            margenPct == null
+                              ? 'font-semibold text-[#b3821b]'
+                              : margenPct < 0
+                                ? 'font-semibold text-[#c43e2c]'
+                                : 'font-semibold text-[#2f7d4f]'
                           }
                         >
-                          {(margenPct ?? 0) < 0
-                            ? `Margen ${margenPct}% · vendés abajo del costo`
-                            : `Margen real ${margenPct}%`}
+                          {margenPct == null
+                            ? bonificada
+                              ? 'Bonificada · margen —'
+                              : 'Margen —'
+                            : margenPct < 0
+                              ? `Margen ${margenPct}% · vendés abajo del costo`
+                              : `Margen real ${margenPct}%`}
                         </span>
                       </div>
                     ) : (
@@ -1839,7 +1860,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     </th>
                     <th
                       className="p-2 text-center bg-[#6f3a2a]"
-                      colSpan={hayGastos ? 6 : 5}
+                      colSpan={hayGastos ? 7 : 6}
                     >
                       COMPRA
                     </th>
@@ -1857,6 +1878,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       title="Unitario, informativo del comprobante: el IVA es crédito fiscal, no forma parte del costo"
                     >
                       Costo c/IVA
+                    </th>
+                    <th
+                      className="p-1.5 font-medium"
+                      title="Costo c/IVA × cantidad facturada"
+                    >
+                      Subtotal c/IVA
                     </th>
                     {hayGastos && (
                       <th
@@ -1883,7 +1910,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </tr>
                 </thead>
                 <tbody>
-                  {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, error }) => (
+                  {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, error }) => (
                     <tr
                       key={l.key}
                       className="border-b border-[#e4c9b0]/40 bg-white"
@@ -2016,6 +2043,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       <td className="p-2 text-right tabular-nums font-semibold text-[#391511]">
                         <MontoARS monto={calc.costoConIva} />
                       </td>
+                      <td className="p-2 text-right tabular-nums font-semibold text-[#391511]">
+                        <MontoARS monto={calc.costoConIva * cantidad} />
+                      </td>
                       {hayGastos && (
                         <td className="p-2 text-right tabular-nums font-bold text-[#391511] bg-[#f9b44c]/12">
                           <MontoARS monto={calc.costoFinal} />
@@ -2036,7 +2066,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           }
                           title={
                             l.modoVenta === 'precio'
-                              ? 'Margen real que deja el precio fijado. Tocalo para volver al precio automático.'
+                              ? bonificada
+                                ? 'Producto bonificado (costo $0): el margen no se puede medir. Tocalo para volver al precio automático.'
+                                : 'Margen real que deja el precio fijado. Tocalo para volver al precio automático.'
                               : undefined
                           }
                           className={cn(
@@ -2118,7 +2150,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <td className="p-2 text-center tabular-nums">
                       {fmtCantidad(totalesCantidad.recU, totalesCantidad.recKg)}
                     </td>
-                    <td colSpan={(hayGastos ? 6 : 5) + 4} />
+                    <td colSpan={2} />
+                    <td className="p-2 text-right tabular-nums">
+                      <MontoARS monto={totales.neto} />
+                    </td>
+                    <td />
+                    <td />
+                    <td className="p-2 text-right tabular-nums">
+                      <MontoARS monto={totales.neto + totales.iva} />
+                    </td>
+                    {hayGastos && <td />}
+                    <td colSpan={4} />
                   </tr>
                 </tfoot>
               </table>
@@ -2446,6 +2488,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               IVA:{' '}
               <span className="font-semibold text-[#391511] tabular-nums">
                 <MontoARS monto={totales.iva} />
+              </span>
+            </span>
+            <span className="text-[#6f3a2a]">
+              Subtotal c/IVA:{' '}
+              <span className="font-semibold text-[#391511] tabular-nums">
+                <MontoARS monto={totales.neto + totales.iva} />
               </span>
             </span>
             {totalPercepciones > 0 && (
@@ -2923,6 +2971,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           </div>
         </div>
 
+        {/* ── Banner de faltantes: recién después del primer intento de
+            guardar, con TODO lo que bloquea. Derivado → se actualiza en vivo
+            al corregir y desaparece solo al quedar en cero. ── */}
+        {intentoGuardar && bloqueos.length > 0 && (
+          <BannerFaltantes items={bloqueos} />
+        )}
+
         {/* ── Banda inferior: resumen + acciones, SIEMPRE visibles ── */}
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-5 py-3 shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
@@ -2990,13 +3045,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             <Button
               onClick={handleGuardar}
               disabled={
-                guardar.isPending ||
-                anular.isPending ||
-                lineas.length === 0 ||
-                hayErroresCab ||
-                hayErrorPrecio ||
-                pagoInvalido ||
-                cuotasInvalidas
+                guardar.isPending || anular.isPending || lineas.length === 0
               }
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
@@ -3031,5 +3080,26 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       producto={productoEditar}
     />
     </>
+  )
+}
+
+/** Banner de alta jerarquía con TODO lo que falta para poder guardar.
+    Anclado arriba de la banda inferior, siempre visible (no scrollea). */
+function BannerFaltantes({ items }: { items: string[] }) {
+  return (
+    <div
+      role="alert"
+      className="shrink-0 border-t-2 border-[#c43e2c] bg-[#c43e2c]/10 px-5 py-2.5"
+    >
+      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-[#c43e2c]">
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        Falta para poder guardar ({items.length})
+      </p>
+      <ul className="mt-1 max-h-24 list-disc space-y-0.5 overflow-y-auto pl-5 text-xs font-medium text-[#7a2619]">
+        {items.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+    </div>
   )
 }
