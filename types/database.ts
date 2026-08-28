@@ -446,17 +446,29 @@ export type EstadoTareaTurno =
   | 'completada'
   | 'vencida'
   | 'cancelada'
+export type ModoTarea = 'individual' | 'grupal'
+export type TipoRecurrenciaTarea = 'dias_semana' | 'dia_mes' | 'cada_n_dias'
+export type AlcanceTarea = 'empleados' | 'todos'
 
 export type TareaRecurrenteRow = {
   id: string
   titulo: string
   descripcion: string | null
-  empleado_id: number
+  /** DEPRECADO (mig 158): manda `alcance` + tareas_recurrentes_asignados. */
+  empleado_id: number | null
   turno_id: number | null
   dias_semana: number[]
   prioridad: PrioridadTarea
   requiere_evidencia: boolean
   activa: boolean
+  alcance: AlcanceTarea
+  modo: ModoTarea
+  tipo_recurrencia: TipoRecurrenciaTarea
+  dia_mes: number | null
+  cada_n_dias: number | null
+  fecha_base: string | null
+  vigencia_desde: string | null
+  vigencia_hasta: string | null
   usuario_id: string | null
   created_at: string
 }
@@ -465,13 +477,26 @@ export type TareaRecurrenteInsert = {
   id?: string
   titulo: string
   descripcion?: string | null
-  empleado_id: number
+  empleado_id?: number | null
   turno_id?: number | null
   dias_semana?: number[]
   prioridad?: PrioridadTarea
   requiere_evidencia?: boolean
   activa?: boolean
+  alcance?: AlcanceTarea
+  modo?: ModoTarea
+  tipo_recurrencia?: TipoRecurrenciaTarea
+  dia_mes?: number | null
+  cada_n_dias?: number | null
+  fecha_base?: string | null
+  vigencia_desde?: string | null
+  vigencia_hasta?: string | null
   usuario_id?: string | null
+}
+
+export type TareaRecurrenteAsignadoRow = {
+  plantilla_id: string
+  empleado_id: number
 }
 
 export type TareaTurnoRow = {
@@ -479,7 +504,8 @@ export type TareaTurnoRow = {
   plantilla_id: string | null
   titulo: string
   descripcion: string | null
-  empleado_id: number
+  /** NULL = instancia grupal (participantes en tareas_turno_participantes). */
+  empleado_id: number | null
   turno_id: number | null
   fecha: string
   prioridad: PrioridadTarea
@@ -488,6 +514,11 @@ export type TareaTurnoRow = {
   evidencia_url: string | null
   completada_por: number | null
   completada_at: string | null
+  modo: ModoTarea
+  rechazada_por: string | null
+  rechazada_at: string | null
+  motivo_rechazo: string | null
+  rechazos_count: number
   notas: string | null
   usuario_id: string | null
   created_at: string
@@ -498,14 +529,20 @@ export type TareaTurnoInsert = {
   plantilla_id?: string | null
   titulo: string
   descripcion?: string | null
-  empleado_id: number
+  empleado_id?: number | null
   turno_id?: number | null
   fecha: string
   prioridad?: PrioridadTarea
   requiere_evidencia?: boolean
   estado?: EstadoTareaTurno
+  modo?: ModoTarea
   notas?: string | null
   usuario_id?: string | null
+}
+
+export type TareaTurnoParticipanteRow = {
+  tarea_id: string
+  empleado_id: number
 }
 
 // ─── novedades_empleado ──────────────────────────────────────────────────────
@@ -3547,6 +3584,34 @@ export interface Database {
         Update: Partial<TareaTurnoInsert>
         Relationships: []
       }
+      tareas_recurrentes_asignados: {
+        Row: TareaRecurrenteAsignadoRow
+        Insert: TareaRecurrenteAsignadoRow
+        Update: Partial<TareaRecurrenteAsignadoRow>
+        Relationships: [
+          {
+            foreignKeyName: 'tareas_recurrentes_asignados_plantilla_id_fkey'
+            columns: ['plantilla_id']
+            isOneToOne: false
+            referencedRelation: 'tareas_recurrentes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tareas_turno_participantes: {
+        Row: TareaTurnoParticipanteRow
+        Insert: TareaTurnoParticipanteRow
+        Update: Partial<TareaTurnoParticipanteRow>
+        Relationships: [
+          {
+            foreignKeyName: 'tareas_turno_participantes_tarea_id_fkey'
+            columns: ['tarea_id']
+            isOneToOne: false
+            referencedRelation: 'tareas_turno'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       novedades_empleado: {
         Row: NovedadEmpleadoRow
         Insert: NovedadEmpleadoInsert
@@ -4097,6 +4162,14 @@ export interface Database {
       fn_completar_tarea: {
         Args: { p_tarea_id: string; p_evidencia_url?: string | null }
         Returns: undefined
+      }
+      fn_rechazar_tarea: {
+        Args: { p_tarea_id: string; p_motivo: string }
+        Returns: undefined
+      }
+      fn_cumplimiento_tareas: {
+        Args: { p_desde: string; p_hasta: string; p_empleado_id?: number | null }
+        Returns: Json
       }
       fn_cerrar_dia_asistencia: {
         Args: { p_fecha: string }

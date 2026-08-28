@@ -46,6 +46,11 @@ const PERMISO_RUTA: Record<string, string[]> = {
   finanzas: ['/finanzas'],
   contabilidad: ['/contabilidad'],
   rrhh: ['/rrhh'],
+  // Gestión de tareas (/rrhh/tareas). Ojo: cajero/fiambrero entran igual por
+  // el prefijo '/rrhh' de su permiso 'rrhh' — el enforcement real es RLS +
+  // gate de UI en PantallaTareas; esta entrada habilita a un rol futuro que
+  // tenga tareas_gestion sin rrhh.
+  tareas_gestion: ['/rrhh/tareas'],
   // El panel y las tareas del empleado viven bajo /rrhh pero los habilita
   // 'mi_panel' (rol empleado), no 'rrhh'. Match por prefijo exacto o sub-ruta.
   // '/movil' también: el empleado común entra al hub móvil desde el celular

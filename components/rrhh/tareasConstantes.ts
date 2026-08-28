@@ -1,4 +1,10 @@
-import type { EstadoTareaTurno, PrioridadTarea } from '@/types/database'
+import type {
+  EstadoTareaTurno,
+  ModoTarea,
+  PrioridadTarea,
+  TareaRecurrenteRow,
+  TipoRecurrenciaTarea,
+} from '@/types/database'
 
 interface Estilo {
   label: string
@@ -44,4 +50,47 @@ export function diasResumen(dias: number[]): string {
   return DIAS_SEMANA.filter((d) => dias.includes(d.n))
     .map((d) => d.corto)
     .join(' · ')
+}
+
+export const MODO_TAREA: Record<ModoTarea, Estilo> = {
+  individual: { label: 'Cada uno', clase: 'bg-[#e4c9b0]/40 text-[#6f3a2a]' },
+  grupal: { label: 'Grupal', clase: 'bg-[#f9b44c]/25 text-[#a06b00]' },
+}
+
+export const TIPO_RECURRENCIA: Record<TipoRecurrenciaTarea, string> = {
+  dias_semana: 'Días de la semana',
+  dia_mes: 'Un día del mes',
+  cada_n_dias: 'Cada N días',
+}
+
+/** Resumen humano de la recurrencia de una plantilla (mig 158). */
+export function recurrenciaResumen(p: TareaRecurrenteRow): string {
+  switch (p.tipo_recurrencia) {
+    case 'dia_mes':
+      return p.dia_mes ? `El día ${p.dia_mes} de cada mes` : 'Sin día del mes'
+    case 'cada_n_dias':
+      if (!p.cada_n_dias) return 'Sin frecuencia'
+      return p.cada_n_dias === 1 ? 'Todos los días' : `Cada ${p.cada_n_dias} días`
+    default:
+      return diasResumen(p.dias_semana)
+  }
+}
+
+/**
+ * ¿La instancia le corresponde al empleado? Cubre las individuales (es el
+ * responsable) y las grupales (empleado_id null, figura entre los
+ * participantes). Usar SIEMPRE este helper al filtrar "mis tareas".
+ */
+export function tareaEsDe(
+  t: {
+    empleado_id: number | null
+    tareas_turno_participantes?: { empleado_id: number }[]
+  },
+  empleadoId: number
+): boolean {
+  if (t.empleado_id === empleadoId) return true
+  return (
+    t.empleado_id === null &&
+    (t.tareas_turno_participantes ?? []).some((p) => p.empleado_id === empleadoId)
+  )
 }

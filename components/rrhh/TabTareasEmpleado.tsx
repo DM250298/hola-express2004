@@ -6,7 +6,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ClipboardList, ExternalLink } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
-import { ESTADO_TAREA, PRIORIDAD_TAREA } from './tareasConstantes'
+import { ESTADO_TAREA, MODO_TAREA, PRIORIDAD_TAREA, tareaEsDe } from './tareasConstantes'
 import { hoyAr } from './asistenciaConstantes'
 import { useTareasFecha } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
@@ -19,8 +19,9 @@ export function TabTareasEmpleado({ empleadoId }: Props) {
   const [hoy] = useState(() => hoyAr())
   const { data: tareas, isLoading } = useTareasFecha(hoy)
 
+  // tareaEsDe incluye las grupales donde participa (empleado_id null).
   const mias = useMemo(
-    () => (tareas ?? []).filter((t) => t.empleado_id === empleadoId),
+    () => (tareas ?? []).filter((t) => tareaEsDe(t, empleadoId)),
     [tareas, empleadoId]
   )
 
@@ -55,6 +56,16 @@ export function TabTareasEmpleado({ empleadoId }: Props) {
           {mias.map((t) => (
             <li key={t.id} className="flex items-center gap-2 py-2.5">
               <span className="flex-1 text-[#391511] text-sm">{t.titulo}</span>
+              {t.empleado_id === null && (
+                <span
+                  className={cn(
+                    'text-[10px] uppercase font-bold px-1.5 py-0.5 rounded',
+                    MODO_TAREA.grupal.clase
+                  )}
+                >
+                  Grupal
+                </span>
+              )}
               <span
                 className={cn(
                   'text-[10px] uppercase font-bold px-1.5 py-0.5 rounded',

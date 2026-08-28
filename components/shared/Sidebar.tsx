@@ -209,7 +209,7 @@ const SECCIONES: Seccion[] = [
         href: '/rrhh/tareas',
         etiqueta: 'Tareas',
         icono: ClipboardList,
-        permiso: 'rrhh',
+        permiso: 'tareas_gestion',
       },
       {
         href: '/reportes',

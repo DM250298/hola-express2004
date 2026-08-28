@@ -7,11 +7,16 @@ import {
   completarTarea,
   createPlantilla,
   createTarea,
+  createTareaGrupal,
+  createTareasIndividuales,
   deletePlantilla,
   deleteTarea,
+  getCumplimiento,
   getPlantillas,
   getTareasFecha,
+  getTareasRango,
   materializarFecha,
+  rechazarTarea,
   updatePlantilla,
   updateTarea,
 } from '@/lib/queries/tareas'
@@ -23,6 +28,7 @@ import type {
 
 export const PLANTILLAS_KEY = ['tareas-plantillas'] as const
 export const TAREAS_KEY = ['tareas-turno'] as const
+export const CUMPLIMIENTO_KEY = ['tareas-cumplimiento'] as const
 
 // ─── Plantillas ────────────────────────────────────────────────────────────────
 
@@ -37,7 +43,13 @@ export function usePlantillas() {
 export function useCreatePlantilla() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (datos: TareaRecurrenteInsert) => createPlantilla(datos),
+    mutationFn: ({
+      datos,
+      asignados,
+    }: {
+      datos: TareaRecurrenteInsert
+      asignados: number[]
+    }) => createPlantilla(datos, asignados),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PLANTILLAS_KEY })
       toast.success('Tarea recurrente creada')
@@ -52,10 +64,12 @@ export function useUpdatePlantilla() {
     mutationFn: ({
       id,
       datos,
+      asignados,
     }: {
       id: string
       datos: Partial<TareaRecurrenteInsert>
-    }) => updatePlantilla(id, datos),
+      asignados: number[]
+    }) => updatePlantilla(id, datos, asignados),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PLANTILLAS_KEY })
       toast.success('Plantilla actualizada')
@@ -87,6 +101,21 @@ export function useTareasFecha(fecha: string) {
   })
 }
 
+/** Instancias de un rango (drill-down del cumplimiento; solo gestión). */
+export function useTareasRango(
+  desde: string,
+  hasta: string,
+  filtros?: { plantillaId?: string | null; titulo?: string },
+  habilitado = true
+) {
+  return useQuery({
+    queryKey: [...TAREAS_KEY, 'rango', desde, hasta, filtros ?? null],
+    queryFn: () => getTareasRango(desde, hasta, filtros),
+    enabled: habilitado && !!desde && !!hasta,
+    staleTime: 30 * 1000,
+  })
+}
+
 export function useCreateTarea() {
   const qc = useQueryClient()
   return useMutation({
@@ -94,6 +123,34 @@ export function useCreateTarea() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TAREAS_KEY })
       toast.success('Tarea creada')
+    },
+    onError: (e: Error) => toast.error(`No se pudo crear: ${e.message}`),
+  })
+}
+
+/** Crea una tarea única para varios empleados: N individuales o 1 grupal. */
+export function useCreateTareas() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      datos,
+      empleados,
+      grupal,
+    }: {
+      datos: Omit<TareaTurnoInsert, 'empleado_id'>
+      empleados: number[]
+      grupal: boolean
+    }) =>
+      grupal
+        ? createTareaGrupal(datos, empleados)
+        : createTareasIndividuales(datos, empleados),
+    onSuccess: (_res, vars) => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      toast.success(
+        vars.grupal
+          ? 'Tarea grupal creada'
+          : `Tarea creada para ${vars.empleados.length} empleado${vars.empleados.length === 1 ? '' : 's'}`
+      )
     },
     onError: (e: Error) => toast.error(`No se pudo crear: ${e.message}`),
   })
@@ -141,6 +198,31 @@ export function useCompletarTarea() {
       toast.success('¡Tarea completada!')
     },
     onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Rechaza una completada: vuelve a pendiente con el motivo registrado. */
+export function useRechazarTarea() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, motivo }: { id: string; motivo: string }) =>
+      rechazarTarea(id, motivo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: CUMPLIMIENTO_KEY })
+      toast.success('Tarea rechazada: vuelve a pendiente')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Agregados de cumplimiento por rango (pantalla de control; solo gestión). */
+export function useCumplimiento(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: [...CUMPLIMIENTO_KEY, desde, hasta],
+    queryFn: () => getCumplimiento(desde, hasta),
+    enabled: !!desde && !!hasta,
+    staleTime: 30 * 1000,
   })
 }
 

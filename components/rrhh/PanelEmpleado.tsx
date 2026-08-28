@@ -28,6 +28,7 @@ import { formatearMinutos } from './asistenciaConstantes'
 import { useAsistenciaEmpleado } from '@/lib/hooks/useAsistencia'
 import { useEvaluacionEmpleado } from '@/lib/hooks/useDesempeno'
 import { useTareasFecha } from '@/lib/hooks/useTareas'
+import { tareaEsDe } from './tareasConstantes'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
@@ -79,7 +80,8 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
   const { data: evaluacion } = useEvaluacionEmpleado(periodo, empleadoId)
 
   const misTareas = useMemo(() => {
-    const lista = (tareasHoy ?? []).filter((t) => t.empleado_id === empleadoId)
+    // tareaEsDe incluye las grupales donde participa (empleado_id null).
+    const lista = (tareasHoy ?? []).filter((t) => tareaEsDe(t, empleadoId))
     const total = lista.filter((t) => t.estado !== 'cancelada').length
     const completadas = lista.filter((t) => t.estado === 'completada').length
     return { total, completadas }

@@ -7,24 +7,30 @@ import {
   Camera,
   ChevronLeft,
   ChevronRight,
+  Lock,
   Plus,
   Repeat,
   Trash2,
+  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { ModalTarea } from './ModalTarea'
 import { ModalPlantilla } from './ModalPlantilla'
+import { TabCumplimiento } from './TabCumplimiento'
 import { nombreCompleto } from './constantes'
 import { hoyAr } from './asistenciaConstantes'
 import {
   COLUMNAS_KANBAN,
   ESTADO_TAREA,
+  MODO_TAREA,
   PRIORIDAD_TAREA,
-  diasResumen,
+  recurrenciaResumen,
 } from './tareasConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import {
   useDeletePlantilla,
   useMaterializar,
@@ -32,17 +38,24 @@ import {
   useTareasFecha,
 } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
-import type { TareaRecurrenteRow, TareaTurnoRow } from '@/types/database'
+import type {
+  PlantillaConAsignados,
+  TareaConParticipantes,
+} from '@/lib/queries/tareas'
 
 const claseTab = 'data-active:bg-[#f9b44c]/20 data-active:text-[#391511]'
 
 export function PantallaTareas() {
   const [hoy] = useState(() => hoyAr())
   const [fecha, setFecha] = useState(hoy)
-  const [modalTarea, setModalTarea] = useState<{ tarea: TareaTurnoRow | null } | null>(null)
+  const [modalTarea, setModalTarea] = useState<{ tarea: TareaConParticipantes | null } | null>(null)
   const [modalPlantilla, setModalPlantilla] = useState<{
-    plantilla: TareaRecurrenteRow | null
+    plantilla: PlantillaConAsignados | null
   } | null>(null)
+
+  const { data: usuario, isLoading: cargandoUsuario } = useUsuario()
+  const esGestor =
+    usuario?.rol === 'admin' || tienePermiso(usuario?.permisos, 'tareas_gestion')
 
   const { data: empleados } = useEmpleados()
   const { data: tareas, isLoading } = useTareasFecha(fecha)
@@ -66,7 +79,7 @@ export function PantallaTareas() {
   }, [empleados])
 
   const porEstado = useMemo(() => {
-    const m: Record<string, TareaTurnoRow[]> = {
+    const m: Record<string, TareaConParticipantes[]> = {
       pendiente: [],
       en_curso: [],
       completada: [],
@@ -77,13 +90,43 @@ export function PantallaTareas() {
     return m
   }, [tareas])
 
+  function resumenAsignados(p: PlantillaConAsignados): string {
+    if (p.alcance === 'todos') return 'Todos los empleados'
+    const ids =
+      p.tareas_recurrentes_asignados?.map((a) => a.empleado_id) ??
+      (p.empleado_id ? [p.empleado_id] : [])
+    if (ids.length === 0) return '—'
+    if (ids.length === 1) return nombrePorId.get(ids[0]) ?? '—'
+    return `${ids.length} empleados`
+  }
+
+  // Gate: la gestión de tareas es de encargadas/administración. Un cajero con
+  // 'rrhh' que llegue por URL ve el aviso (RLS igual le negaría escribir).
+  if (!cargandoUsuario && !esGestor) {
+    return (
+      <div className="p-6 max-w-lg mx-auto">
+        <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-8 text-center space-y-2">
+          <div className="inline-flex p-3 rounded-full bg-[#f9d2a2]/40">
+            <Lock className="h-6 w-6 text-[#6f3a2a]" />
+          </div>
+          <p className="text-[#391511] font-semibold">
+            No tenés permiso para gestionar tareas.
+          </p>
+          <p className="text-[#6f3a2a] text-sm">
+            Tus tareas asignadas están en <span className="font-semibold">Mis tareas</span>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-[1400px] mx-auto space-y-5">
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">Tareas</h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
-            Tareas operativas del personal y plantillas recurrentes.
+            Asigná tareas al personal, únicas o recurrentes, y controlá el cumplimiento.
           </p>
         </div>
         <Button
@@ -102,6 +145,9 @@ export function PantallaTareas() {
           </TabsTrigger>
           <TabsTrigger value="recurrentes" className={claseTab}>
             Recurrentes
+          </TabsTrigger>
+          <TabsTrigger value="cumplimiento" className={claseTab}>
+            Cumplimiento
           </TabsTrigger>
         </TabsList>
 
@@ -182,6 +228,11 @@ export function PantallaTareas() {
                             >
                               {PRIORIDAD_TAREA[t.prioridad].label}
                             </span>
+                            {t.rechazos_count > 0 && t.estado !== 'completada' && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#c43e2c]/15 text-[#c43e2c]">
+                                Rechazada ×{t.rechazos_count}
+                              </span>
+                            )}
                             {t.requiere_evidencia && (
                               <Camera className="h-3 w-3 text-[#c8a58a]" />
                             )}
@@ -194,7 +245,16 @@ export function PantallaTareas() {
                               />
                             )}
                             <span className="ml-auto text-[10px] text-[#6f3a2a] truncate max-w-[110px]">
-                              {nombrePorId.get(t.empleado_id) ?? '—'}
+                              {t.empleado_id !== null ? (
+                                nombrePorId.get(t.empleado_id) ?? '—'
+                              ) : t.estado === 'completada' && t.completada_por != null ? (
+                                `✓ ${nombrePorId.get(t.completada_por) ?? '—'}`
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5">
+                                  <Users className="h-3 w-3" />
+                                  Grupal · {t.tareas_turno_participantes?.length ?? 0}
+                                </span>
+                              )}
                             </span>
                           </div>
                         </button>
@@ -238,9 +298,19 @@ export function PantallaTareas() {
                         )}
                       </p>
                       <p className="text-[#c8a58a] text-xs">
-                        {nombrePorId.get(p.empleado_id) ?? '—'} · {diasResumen(p.dias_semana)}
+                        {resumenAsignados(p)} · {recurrenciaResumen(p)}
+                        {p.vigencia_hasta &&
+                          ` · hasta ${format(parseISO(p.vigencia_hasta), 'd MMM', { locale: es })}`}
                       </p>
                     </button>
+                    <span
+                      className={cn(
+                        'text-[10px] uppercase font-bold px-1.5 py-0.5 rounded',
+                        MODO_TAREA[p.modo].clase
+                      )}
+                    >
+                      {MODO_TAREA[p.modo].label}
+                    </span>
                     <span
                       className={cn(
                         'text-[10px] uppercase font-bold px-1.5 py-0.5 rounded',
@@ -266,6 +336,11 @@ export function PantallaTareas() {
               </ul>
             )}
           </div>
+        </TabsContent>
+
+        {/* ── Cumplimiento (control histórico) ── */}
+        <TabsContent value="cumplimiento">
+          <TabCumplimiento />
         </TabsContent>
       </Tabs>
 

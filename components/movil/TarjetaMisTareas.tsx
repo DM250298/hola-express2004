@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronRight, ListChecks } from 'lucide-react'
 import { useMaterializar, useTareasFecha } from '@/lib/hooks/useTareas'
 import { hoyAr } from '@/components/rrhh/asistenciaConstantes'
+import { tareaEsDe } from '@/components/rrhh/tareasConstantes'
 
 interface Props {
   empleadoId: number
@@ -34,8 +35,9 @@ export function TarjetaMisTareas({ empleadoId }: Props) {
 
   const pendientes = useMemo(() => {
     // RLS ya limita a las del empleado logueado; el filtro por id cubre el caso
-    // de un rol con permiso de RRHH que ve las de todos.
-    const mias = (tareas ?? []).filter((t) => t.empleado_id === empleadoId)
+    // de un rol con permiso de RRHH que ve las de todos. tareaEsDe suma las
+    // grupales donde participa (empleado_id null).
+    const mias = (tareas ?? []).filter((t) => tareaEsDe(t, empleadoId))
     return mias.filter(
       (t) =>
         t.estado === 'pendiente' ||
