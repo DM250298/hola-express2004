@@ -923,6 +923,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       Number(l.margen) || 0,
       Number(l.iva_venta) || 0
     )
+    // Bonificada en modo margen: el motor daría precio $0 — se exige tipear
+    // el precio a mano (pasa a modo precio, donde la bonificada ya se banca).
+    const bonificada = calc.costoFinal <= 0
     return {
       l,
       calc,
@@ -930,8 +933,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       venta,
       precioFinal: venta.desglose?.precioRedondeado ?? 0,
       margenPct: Number(l.margen) || 0,
-      bonificada: false,
-      error: venta.error,
+      bonificada,
+      error:
+        venta.error ??
+        (bonificada
+          ? 'Producto bonificado (costo $0): tipeá el precio de venta a mano.'
+          : null),
     }
   })
   // Con un divisor inválido (cargas > 100%) o un precio vacío en modo precio,
