@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { fechaLocal } from '@/lib/utils/periodos'
 import type { MedioPago } from '@/types/database'
 
 // ─── Reporte de ventas ───────────────────────────────────────────────────────
@@ -55,10 +56,13 @@ export async function getReporteVentas(
   const total = ventas.reduce((acc, v) => acc + Number(v.total), 0)
   const cantidad = ventas.length
 
-  // Por día
+  // Por día. `ventas.fecha` es timestamptz y llega en UTC: agrupar por
+  // fecha.slice(0,10) metía las ventas de 21:00 en adelante (UTC-3) en el día
+  // siguiente. En un 24/7 con la mitad de la facturación de noche, cada barra
+  // del gráfico se comía las últimas 3 horas del día anterior.
   const porDiaMap = new Map<string, PuntoVentaDia>()
   for (const v of ventas) {
-    const dia = v.fecha.slice(0, 10)
+    const dia = fechaLocal(v.fecha)
     const previo = porDiaMap.get(dia)
     if (previo) {
       previo.total += Number(v.total)
