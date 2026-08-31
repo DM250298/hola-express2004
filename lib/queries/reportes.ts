@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
+import { traerTodo } from '@/lib/supabase/paginacion'
 import type { MedioPago } from '@/types/database'
 
 // ─── Reporte de ventas ───────────────────────────────────────────────────────
@@ -33,17 +34,24 @@ export async function getReporteVentas(
   hasta: string
 ): Promise<ReporteVentas> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('ventas')
-    .select('total, fecha, medio_pago')
-    .eq('estado', 'completada')
-    .gte('fecha', desde)
-    .lte('fecha', hasta)
-    .order('fecha', { ascending: true })
 
-  if (error) throw error
+  type VentaFila = { total: number; fecha: string; medio_pago: MedioPago }
 
-  const ventas = data ?? []
+  // Paginado: con más de 1000 ventas en el período el Max Rows de PostgREST
+  // truncaba el reporte entero en silencio (KPIs, gráfico y PDF salían de las
+  // 1000 ventas más viejas). Desempate por id: dos ventas pueden compartir
+  // `fecha` y sin orden único la paginación duplica/saltea filas.
+  const ventas = await traerTodo<VentaFila>(() =>
+    supabase
+      .from('ventas')
+      .select('total, fecha, medio_pago')
+      .eq('estado', 'completada')
+      .gte('fecha', desde)
+      .lte('fecha', hasta)
+      .order('fecha', { ascending: true })
+      .order('id', { ascending: true })
+  )
+
   const total = ventas.reduce((acc, v) => acc + Number(v.total), 0)
   const cantidad = ventas.length
 
@@ -111,16 +119,6 @@ export async function getTopProductos(
   limite = 20
 ): Promise<TopProductoReporte[]> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('items_venta')
-    .select(
-      'cantidad, subtotal, ventas!inner(fecha, estado), productos!inner(id, nombre, categorias(nombre))'
-    )
-    .gte('ventas.fecha', desde)
-    .lte('ventas.fecha', hasta)
-    .eq('ventas.estado', 'completada')
-
-  if (error) throw error
 
   type Fila = {
     cantidad: number
@@ -132,11 +130,26 @@ export async function getTopProductos(
     }
   }
 
+  // Paginado (mismo patrón que clasificacionAbc.ts): cada ticket tiene varios
+  // items, así que 1000 filas son apenas ~300 ventas. Sin esto el ranking y los
+  // porcentajes se calculaban sobre una muestra arbitraria del período.
+  const filas = await traerTodo<Fila>(() =>
+    supabase
+      .from('items_venta')
+      .select(
+        'cantidad, subtotal, ventas!inner(fecha, estado), productos!inner(id, nombre, categorias(nombre))'
+      )
+      .gte('ventas.fecha', desde)
+      .lte('ventas.fecha', hasta)
+      .eq('ventas.estado', 'completada')
+      .order('id', { ascending: true })
+  )
+
   const acumulado = new Map<number, TopProductoReporte>()
   let totalUnidades = 0
   let totalMonto = 0
 
-  for (const fila of (data ?? []) as unknown as Fila[]) {
+  for (const fila of filas) {
     const p = fila.productos
     totalUnidades += fila.cantidad
     totalMonto += Number(fila.subtotal)
@@ -181,19 +194,66 @@ export interface RotacionProducto {
   ultimo_movimiento: string | null
 }
 
+/** Días de historia que mira el fallback cuando la RPC todavía no existe. */
+const DIAS_FALLBACK_ULTIMO_MOV = 180
+
+/**
+ * Fecha del último movimiento de stock de cada producto.
+ *
+ * Vía RPC agregada (migración 160): una fila por producto con max(created_at).
+ * Antes se bajaba `movimientos_stock` entera ordenada por fecha, así que el Max
+ * Rows de PostgREST dejaba ver solo los 1000 movimientos más recientes de toda
+ * la historia — en un 24/7 eso son días, y casi todo producto quedaba como
+ * "sin movimientos" (dead stock con falsos positivos). Paginar la tabla entera
+ * tampoco sirve: crece sin techo.
+ *
+ * La RPC igual se pagina porque el Max Rows corta también a las funciones que
+ * devuelven set (mismo caso que fn_productos_a_reponer); el orden estable lo
+ * pone el ORDER BY producto_id de la propia función.
+ */
+async function getUltimoMovimientoPorProducto(
+  supabase: ReturnType<typeof createClient>
+): Promise<Map<number, string>> {
+  type FilaRPC = { producto_id: number; ultimo_movimiento: string }
+
+  try {
+    const filas = await traerTodo<FilaRPC>(() =>
+      supabase.rpc('fn_ultimo_movimiento_por_producto')
+    )
+    return new Map(filas.map((f) => [f.producto_id, f.ultimo_movimiento]))
+  } catch (e) {
+    // PGRST202: la función no está en el schema cache (migración sin correr).
+    if ((e as { code?: string })?.code !== 'PGRST202') throw e
+  }
+
+  // Fallback degradado: ventana acotada de historia, paginada. Un producto sin
+  // movimientos en esa ventana figura como "sin movimientos" (dead stock lo
+  // incluye igual, que es lo correcto), pero nunca se baja la tabla completa.
+  const corte = new Date()
+  corte.setDate(corte.getDate() - DIAS_FALLBACK_ULTIMO_MOV)
+
+  type MovFila = { producto_id: number; created_at: string }
+  const movs = await traerTodo<MovFila>(() =>
+    supabase
+      .from('movimientos_stock')
+      .select('producto_id, created_at')
+      .gte('created_at', corte.toISOString())
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+  )
+
+  const mapa = new Map<number, string>()
+  for (const m of movs) {
+    if (!mapa.has(m.producto_id)) mapa.set(m.producto_id, m.created_at)
+  }
+  return mapa
+}
+
 export async function getRotacionInventario(
   desde: string,
   hasta: string
 ): Promise<RotacionProducto[]> {
   const supabase = createClient()
-
-  // 1. Productos activos
-  const { data: productosData, error: errProd } = await supabase
-    .from('productos')
-    .select('id, nombre, stock_actual, categorias(nombre)')
-    .eq('activo', true)
-
-  if (errProd) throw errProd
 
   type ProductoFila = {
     id: number
@@ -201,21 +261,30 @@ export async function getRotacionInventario(
     stock_actual: number
     categorias: { nombre: string } | null
   }
-  const productos = (productosData ?? []) as unknown as ProductoFila[]
 
-  // 2. Ventas del período por producto
-  const { data: items, error: errItems } = await supabase
-    .from('items_venta')
-    .select('cantidad, producto_id, ventas!inner(fecha, estado)')
-    .gte('ventas.fecha', desde)
-    .lte('ventas.fecha', hasta)
-    .eq('ventas.estado', 'completada')
+  // 1. Productos activos (paginado: el catálogo pasa las 1000 filas)
+  const productos = await traerTodo<ProductoFila>(() =>
+    supabase
+      .from('productos')
+      .select('id, nombre, stock_actual, categorias(nombre)')
+      .eq('activo', true)
+      .order('id', { ascending: true })
+  )
 
-  if (errItems) throw errItems
-
+  // 2. Ventas del período por producto (paginado: varios items por ticket)
   type ItemFila = { cantidad: number; producto_id: number }
+  const items = await traerTodo<ItemFila>(() =>
+    supabase
+      .from('items_venta')
+      .select('cantidad, producto_id, ventas!inner(fecha, estado)')
+      .gte('ventas.fecha', desde)
+      .lte('ventas.fecha', hasta)
+      .eq('ventas.estado', 'completada')
+      .order('id', { ascending: true })
+  )
+
   const ventasPorProducto = new Map<number, number>()
-  for (const it of (items ?? []) as unknown as ItemFila[]) {
+  for (const it of items) {
     ventasPorProducto.set(
       it.producto_id,
       (ventasPorProducto.get(it.producto_id) ?? 0) + it.cantidad
@@ -223,20 +292,7 @@ export async function getRotacionInventario(
   }
 
   // 3. Último movimiento por producto (cualquier tipo)
-  const { data: movs, error: errMov } = await supabase
-    .from('movimientos_stock')
-    .select('producto_id, created_at')
-    .order('created_at', { ascending: false })
-
-  if (errMov) throw errMov
-
-  type MovFila = { producto_id: number; created_at: string }
-  const ultimoMovPorProducto = new Map<number, string>()
-  for (const m of (movs ?? []) as unknown as MovFila[]) {
-    if (!ultimoMovPorProducto.has(m.producto_id)) {
-      ultimoMovPorProducto.set(m.producto_id, m.created_at)
-    }
-  }
+  const ultimoMovPorProducto = await getUltimoMovimientoPorProducto(supabase)
 
   // Días del período
   const msPeriodo =
@@ -291,15 +347,6 @@ export async function getDeadStock(
 ): Promise<DeadStockProducto[]> {
   const supabase = createClient()
 
-  // Productos activos con stock > 0
-  const { data: productosData, error: errProd } = await supabase
-    .from('productos')
-    .select('id, nombre, stock_actual, categorias(nombre), costos_producto(precio_costo)')
-    .eq('activo', true)
-    .gt('stock_actual', 0)
-
-  if (errProd) throw errProd
-
   type ProductoFila = {
     id: number
     nombre: string
@@ -307,23 +354,19 @@ export async function getDeadStock(
     costos_producto: CostoEmbed
     categorias: { nombre: string } | null
   }
-  const productos = (productosData ?? []) as unknown as ProductoFila[]
+
+  // Productos activos con stock > 0 (paginado: el catálogo pasa las 1000 filas)
+  const productos = await traerTodo<ProductoFila>(() =>
+    supabase
+      .from('productos')
+      .select('id, nombre, stock_actual, categorias(nombre), costos_producto(precio_costo)')
+      .eq('activo', true)
+      .gt('stock_actual', 0)
+      .order('id', { ascending: true })
+  )
 
   // Último movimiento por producto
-  const { data: movs, error: errMov } = await supabase
-    .from('movimientos_stock')
-    .select('producto_id, created_at')
-    .order('created_at', { ascending: false })
-
-  if (errMov) throw errMov
-
-  type MovFila = { producto_id: number; created_at: string }
-  const ultimoMov = new Map<number, string>()
-  for (const m of (movs ?? []) as unknown as MovFila[]) {
-    if (!ultimoMov.has(m.producto_id)) {
-      ultimoMov.set(m.producto_id, m.created_at)
-    }
-  }
+  const ultimoMov = await getUltimoMovimientoPorProducto(supabase)
 
   const ahora = Date.now()
   return productos
@@ -368,17 +411,6 @@ export async function getMermasPorCategoria(
 ): Promise<ReporteMermas> {
   const supabase = createClient()
 
-  const { data, error } = await supabase
-    .from('movimientos_stock')
-    .select(
-      'cantidad, productos(costos_producto(precio_costo), categorias(nombre))'
-    )
-    .eq('tipo', 'merma')
-    .gte('created_at', desde)
-    .lte('created_at', hasta)
-
-  if (error) throw error
-
   type FilaMerma = {
     cantidad: number
     productos: {
@@ -387,11 +419,25 @@ export async function getMermasPorCategoria(
     } | null
   }
 
+  // Paginado: en períodos largos las mermas superan las 1000 filas y el total
+  // quedaba subcontado en silencio.
+  const filas = await traerTodo<FilaMerma>(() =>
+    supabase
+      .from('movimientos_stock')
+      .select(
+        'cantidad, productos(costos_producto(precio_costo), categorias(nombre))'
+      )
+      .eq('tipo', 'merma')
+      .gte('created_at', desde)
+      .lte('created_at', hasta)
+      .order('id', { ascending: true })
+  )
+
   let total_unidades = 0
   let total_monto = 0
   const porCat = new Map<string, MermaPorCategoria>()
 
-  for (const m of (data ?? []) as unknown as FilaMerma[]) {
+  for (const m of filas) {
     const costo = costoDesdeEmbed(m.productos?.costos_producto ?? null)
     const cat = m.productos?.categorias?.nombre ?? 'Sin categoría'
     const monto = m.cantidad * costo

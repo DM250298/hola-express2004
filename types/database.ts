@@ -4643,6 +4643,13 @@ export interface Database {
         }
         Returns: AjusteStockRow
       }
+      fn_ultimo_movimiento_por_producto: {
+        Args: Record<string, never>
+        Returns: {
+          producto_id: number
+          ultimo_movimiento: string
+        }[]
+      }
       fn_eliminar_producto: {
         Args: { p_id: number }
         Returns: undefined
