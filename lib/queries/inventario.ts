@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
+import { fechaLocal } from '@/lib/utils/periodos'
 import type {
   CoberturaStockRow,
   Json,
@@ -408,20 +409,31 @@ export async function getEvolucionStock(
   desde.setDate(desde.getDate() - dias)
   desde.setHours(0, 0, 0, 0)
 
-  // Movimientos del rango — necesitamos stock_anterior/nuevo y created_at
-  const { data: movs, error: errMov } = await supabase
-    .from('movimientos_stock')
-    .select('cantidad, stock_anterior, stock_nuevo, created_at')
-    .eq('producto_id', producto_id)
-    .gte('created_at', desde.toISOString())
-    .order('created_at', { ascending: true })
+  // Movimientos del rango — necesitamos stock_anterior/nuevo y created_at.
+  // Paginado: un producto de alta rotación en un 24/7 pasa los 1000 movimientos
+  // en 30 días (~33 por día) y el Max Rows de PostgREST truncaba el gráfico.
+  const movs = await traerTodo<{
+    cantidad: number
+    stock_anterior: number
+    stock_nuevo: number
+    created_at: string
+  }>(() =>
+    supabase
+      .from('movimientos_stock')
+      .select('cantidad, stock_anterior, stock_nuevo, created_at')
+      .eq('producto_id', producto_id)
+      .gte('created_at', desde.toISOString())
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
+  )
 
-  if (errMov) throw errMov
-
-  // Cambio neto agrupado por día (yyyy-MM-dd)
+  // Cambio neto agrupado por día (yyyy-MM-dd). `created_at` es timestamptz y
+  // llega en UTC: agrupar por slice(0,10) corría los movimientos de 21:00 en
+  // adelante (UTC-3) al día siguiente, y encima el eje de fechas de abajo se
+  // arma con fechas locales — o sea, claves desfasadas entre datos y eje.
   const cambioPorDia = new Map<string, number>()
-  for (const m of movs ?? []) {
-    const clave = m.created_at.slice(0, 10)
+  for (const m of movs) {
+    const clave = fechaLocal(m.created_at)
     const delta = m.stock_nuevo - m.stock_anterior
     cambioPorDia.set(clave, (cambioPorDia.get(clave) ?? 0) + delta)
   }
