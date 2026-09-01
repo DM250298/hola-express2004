@@ -573,8 +573,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 (1 - Number(g.descuento_porcentaje) / 100)
             ) * factorGuardado
           )
+          // Misma cascada que `calculadas` (v22): una bonificada (landed $0)
+          // se pricea con el costo de LISTA — sin esto, el recalc daría $0,
+          // nunca coincidiría con el precio guardado y la línea reabriría
+          // en modo precio (rompiendo el round-trip "re-guardar es delta 0").
+          const costoListaLanded = r2(Number(g.costo_sin_iva) * factorGuardado)
           const recalc = pricing.calcular(
-            costoLanded,
+            costoLanded > 0 ? costoLanded : costoListaLanded,
             Number(g.margen_porcentaje) || 0,
             Number(g.iva_venta_porcentaje) || 0
           )
@@ -878,6 +883,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       },
       factorGastos
     )
+    // Base del lado VENTA (v22, mig 164). Una bonificada (desc 100% → costo
+    // final $0) se pricea con el costo de LISTA (pre-descuento, × gastos): el
+    // regalo se vende al mismo precio que sus hermanas pagadas. El descuento
+    // se ignora SOLO acá — el lado compra (neto, IVA, landed) no cambia.
+    const costoLista = r2((Number(l.costo) || 0) * factorGastos)
+    const costoPricing = calc.costoFinal > 0 ? calc.costoFinal : costoLista
     // Lado venta, dos vías (espejo del RPC v13, mig 138):
     //  · modo margen → el MOTOR calcula el precio (margen asegurado neto de
     //    IIBB + imp. créd/déb + comisión MP) y lo redondea al múltiplo de arriba.
@@ -886,15 +897,16 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       const precioFinal = Number(l.precio) || 0
       const inv = pricing.calcularDesdePrecio(
         precioFinal,
-        calc.costoFinal,
+        costoPricing,
         Number(l.iva_venta) || 0
       )
       // `desglose.margen` viene como FRACCIÓN (y es null si el costo es 0).
       const margenPct =
         inv.desglose?.margen != null ? r2(inv.desglose.margen * 100) : null
-      // Bonificada (desc 100% / costo 0) con precio a mano: el margen no se
-      // puede medir ("—"), pero NO es error — el precio manda y el server
-      // guarda igual (y desde la mig 156 conserva el último costo real).
+      // Bonificada (desc 100% / costo 0) con precio a mano: el margen se mide
+      // contra el costo de LISTA (costoPricing); solo queda "—" si tampoco hay
+      // lista, y aun así NO es error — el precio manda y el server guarda
+      // igual (y desde la mig 156 conserva el último costo real).
       const bonificada = calc.costoFinal <= 0 && precioFinal > 0
       const error =
         inv.error ??
@@ -919,12 +931,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       }
     }
     const venta = pricing.calcular(
-      calc.costoFinal,
+      costoPricing,
       Number(l.margen) || 0,
       Number(l.iva_venta) || 0
     )
-    // Bonificada en modo margen: el motor daría precio $0 — se exige tipear
-    // el precio a mano (pasa a modo precio, donde la bonificada ya se banca).
+    // Bonificada en modo margen: el precio sale del costo de LISTA. Solo se
+    // bloquea (aun con "Afectar precio" apagado: el par precio/margen se
+    // guarda igual en items_factura_compra) si tampoco hay costo de lista.
     const bonificada = calc.costoFinal <= 0
     return {
       l,
@@ -936,8 +949,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       bonificada,
       error:
         venta.error ??
-        (bonificada
-          ? 'Producto bonificado (costo $0): tipeá el precio de venta a mano.'
+        (bonificada && costoPricing <= 0
+          ? 'Producto bonificado sin costo de lista: poné el Costo s/IVA del renglón o tipeá el precio de venta a mano.'
           : null),
     }
   })
@@ -1796,13 +1809,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                               : 'Margen —'
                             : margenPct < 0
                               ? `Margen ${margenPct}% · vendés abajo del costo`
-                              : `Margen real ${margenPct}%`}
+                              : bonificada
+                                ? `Bonificada · margen s/lista ${margenPct}%`
+                                : `Margen real ${margenPct}%`}
                         </span>
                       </div>
                     ) : (
                       <>
                         <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
-                          <span className="text-[#6f3a2a]">Precio exacto</span>
+                          <span className="text-[#6f3a2a]">
+                            {bonificada
+                              ? 'Precio exacto (s/costo de lista)'
+                              : 'Precio exacto'}
+                          </span>
                           <span className="font-medium text-[#6f3a2a]">
                             {venta?.desglose ? (
                               <MontoARS monto={venta.desglose.precioFinalExacto} />
@@ -2074,9 +2093,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           title={
                             l.modoVenta === 'precio'
                               ? bonificada
-                                ? 'Producto bonificado (costo $0): el margen no se puede medir. Tocalo para volver al precio automático.'
+                                ? 'Producto bonificado: margen medido sobre el costo de LISTA (sin descuento). Tocalo para volver al precio automático.'
                                 : 'Margen real que deja el precio fijado. Tocalo para volver al precio automático.'
-                              : undefined
+                              : bonificada
+                                ? 'Producto bonificado: el precio se calcula sobre el costo de LISTA (sin descuento).'
+                                : undefined
                           }
                           className={cn(
                             inputCls,
@@ -2093,7 +2114,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         title={
                           l.modoVenta === 'precio'
                             ? 'Precio fijado a mano'
-                            : (error ?? undefined)
+                            : (error ??
+                              (bonificada
+                                ? 'Bonificada: precio calculado sobre el costo de lista (sin descuento)'
+                                : undefined))
                         }
                       >
                         {l.modoVenta === 'precio' ? (
