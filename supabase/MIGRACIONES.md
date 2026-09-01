@@ -88,7 +88,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **163**
+## Próximo número libre: **164**
 
 ---
 
@@ -260,3 +260,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 160 | `160_ultimo_movimiento_por_producto.sql` | ✅ aplicada | 2026-08-31 | `eade720` |
 | 161 | `161_blindar_rpcs_costo.sql` | ✅ aplicada | 2026-08-31 | pendiente de commit |
 | 162 | `162_advisors_security_invoker_search_path.sql` | ✅ aplicada | 2026-08-31 | pendiente de commit |
+| 163 | `163_iva_venta_por_medio_pago.sql` | ✅ aplicada | 2026-09-01 | en este commit |

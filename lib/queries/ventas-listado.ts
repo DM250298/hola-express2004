@@ -213,6 +213,8 @@ export async function getVentaDetalle(
       cliente_uuid: ventaData.cliente_uuid ?? null,
       cliente_id: ventaData.cliente_id ?? null,
       lista_precio: ventaData.lista_precio ?? 'minorista',
+      base_gravada: ventaData.base_gravada ?? null,
+      iva_debito: ventaData.iva_debito ?? null,
     },
     cajero_nombre: ventaData.usuarios?.nombre ?? null,
     cliente_nombre: clienteNombre ?? empleadoNombre,

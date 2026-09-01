@@ -174,6 +174,8 @@ export interface ActualizarMedioPagoPatch {
   cuenta_id?: number | null
   mp_payment_type?: string | null
   mp_payment_method_id?: string | null
+  /** false = lo cobrado con este medio no genera IVA débito fiscal (mig 163). */
+  genera_iva_venta?: boolean
 }
 
 export async function actualizarMedioPago(

@@ -292,7 +292,10 @@ export function TabImpuestos({ desde: periodoDesde }: Props) {
             <h3 className="text-[#391511] font-bold text-sm flex items-center gap-1">
               Detalle de IVA
               <AyudaContextual titulo="Cómo se calcula el IVA">
-                <strong>IVA Débito</strong> = el IVA que cobraste en tus ventas.{' '}
+                <strong>IVA Débito</strong> = el IVA de las ventas que sí
+                generan débito fiscal, según con qué se cobraron. Lo cobrado con
+                medios que tenés marcados sin IVA (por defecto, el efectivo)
+                queda fuera y lo declarás aparte.{' '}
                 <strong>IVA Crédito</strong> = el IVA que pagaste en tus
                 compras. Pagás la diferencia (débito − crédito).
               </AyudaContextual>
@@ -304,7 +307,17 @@ export function TabImpuestos({ desde: periodoDesde }: Props) {
                 label="IVA Débito (ventas)"
                 sub={
                   <>
-                    Ventas netas: <MontoARS monto={data.iva.ventas_neto} />
+                    <div>
+                      Ventas netas gravadas:{' '}
+                      <MontoARS monto={data.iva.ventas_neto} />
+                    </div>
+                    {data.iva.ventas_no_gravado > 0.009 && (
+                      <div className="text-[#c8a58a]">
+                        No gravado:{' '}
+                        <MontoARS monto={data.iva.ventas_no_gravado} /> · lo
+                        declarás aparte
+                      </div>
+                    )}
                   </>
                 }
                 monto={data.iva.iva_debito}
@@ -368,13 +381,18 @@ export function TabImpuestos({ desde: periodoDesde }: Props) {
             <h3 className="text-[#391511] font-bold text-sm flex items-center gap-1">
               Detalle de Ingresos Brutos — {jurisdiccion}
               <AyudaContextual titulo="Cómo se calcula IIBB">
-                <strong>Base imponible</strong> = lo que vendiste sin IVA.{' '}
+                <strong>Base imponible</strong> = lo que vendiste sin IVA,
+                contando solo las ventas que generan débito fiscal (la misma
+                base que el IVA).{' '}
                 <strong>Determinado</strong> = el porcentaje de Ingresos Brutos
                 sobre esa base. Le restás lo que ya te retuvieron MP y bancos.
               </AyudaContextual>
             </h3>
             <div className="space-y-1.5 text-sm">
-              <FilaIibb label="Base imponible (ventas netas)" monto={data.iibb.base} />
+              <FilaIibb
+                label="Base imponible (ventas netas gravadas)"
+                monto={data.iibb.base}
+              />
               <FilaIibb
                 label={`Determinado (${alicuotaIibb}%)`}
                 monto={data.iibb.determinado}
@@ -414,8 +432,11 @@ export function TabImpuestos({ desde: periodoDesde }: Props) {
           </div>
 
           <p className="text-[11px] text-[#c8a58a]">
-            El IVA débito asume precios de venta con {alicuotaIva}% incluido; el
-            IIBB usa la alícuota configurada en Configuración → Datos fiscales.
+            El IVA débito sale solo de las ventas cobradas con medios marcados
+            como &quot;genera IVA&quot; (se configura en Finanzas → Cuentas →
+            Medios de pago), y asume precios con {alicuotaIva}% incluido. El
+            IIBB usa esa misma base y la alícuota configurada en Configuración →
+            Datos fiscales.
           </p>
         </>
       )}

@@ -13,7 +13,6 @@ import {
   getActivos,
   getAsientoDetalle,
   getAsientos,
-  getLiquidacionIva,
   getPlanCuentas,
   type ActualizarCuentaPatch,
   type NuevaCuentaPayload,
@@ -164,12 +163,4 @@ export function useDarDeBajaActivo() {
   })
 }
 
-// ─── Liquidación de IVA ───────────────────────────────────────────
-
-export function useLiquidacionIva(desde: string, hastaExcl: string) {
-  return useQuery({
-    queryKey: ['liquidacion-iva', desde, hastaExcl],
-    queryFn: () => getLiquidacionIva(desde, hastaExcl),
-    staleTime: 60 * 1000,
-  })
-}
+// La liquidación de IVA se consume con useResumenFiscal (lib/hooks/useFiscal.ts).

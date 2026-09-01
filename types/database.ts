@@ -1421,6 +1421,10 @@ export type VentaRow = {
   cliente_id: number | null
   /** 'mayorista' si algún ítem se vendió a precio mayorista (mig 153). */
   lista_precio: ListaPrecio
+  /** Porción del total (con IVA) que genera débito fiscal, según el medio de pago (mig 163). */
+  base_gravada: number | null
+  /** IVA débito fiscal de la venta: se calcula sobre base_gravada, no sobre total (mig 163). */
+  iva_debito: number | null
 }
 
 export type VentaInsert = {
@@ -1435,6 +1439,8 @@ export type VentaInsert = {
   cliente_uuid?: string | null
   cliente_id?: number | null
   lista_precio?: ListaPrecio
+  base_gravada?: number | null
+  iva_debito?: number | null
 }
 
 export type VentaUpdate = {
@@ -2456,6 +2462,8 @@ export type MedioPagoRow = {
   cuenta_id: number | null
   /** false = el medio NO acredita cuenta al vender (efectivo: entra a la bóveda recién con el arqueo). El trigger de DB lo fuerza para 'efectivo'. */
   acredita_en_venta: boolean
+  /** false = lo cobrado con este medio NO genera IVA débito fiscal; se declara aparte, a mano (mig 163). */
+  genera_iva_venta: boolean
   protegido: boolean
   created_at: string
   updated_at: string
@@ -2476,6 +2484,7 @@ export type MedioPagoInsert = {
   dias_acreditacion?: number
   cuenta_id?: number | null
   acredita_en_venta?: boolean
+  genera_iva_venta?: boolean
   protegido?: boolean
   created_at?: string
   updated_at?: string
@@ -2495,6 +2504,7 @@ export type MedioPagoUpdate = {
   dias_acreditacion?: number
   cuenta_id?: number | null
   acredita_en_venta?: boolean
+  genera_iva_venta?: boolean
   protegido?: boolean
   updated_at?: string
 }

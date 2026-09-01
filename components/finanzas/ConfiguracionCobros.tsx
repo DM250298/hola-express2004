@@ -59,6 +59,12 @@ export function ConfiguracionCobros() {
     actualizar.mutate({ id: m.id, patch: { disponible_terminal } })
   }
 
+  // Sin `|| m.protegido` en el disabled: 'efectivo' es protegido y es
+  // justamente el medio que hay que poder sacar del débito fiscal.
+  function toggleIva(m: MedioPagoRow, genera_iva_venta: boolean) {
+    actualizar.mutate({ id: m.id, patch: { genera_iva_venta } })
+  }
+
   return (
     <details className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm group">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3">
@@ -78,6 +84,13 @@ export function ConfiguracionCobros() {
           cada cobro. La comisión es informativa y se descuenta como egreso al
           vender. El switch <strong>Terminal</strong> controla qué formas de
           pago aparecen al cobrar con el posnet.
+        </p>
+        <p className="text-[#6f3a2a] text-xs mb-3">
+          El switch <strong>IVA</strong> define si lo cobrado con ese medio
+          genera <strong>IVA débito fiscal</strong>. Apagado, la venta se
+          registra igual (total, stock y caja no cambian) pero queda fuera de la
+          liquidación automática de IVA e IIBB, para declararla aparte. Por
+          defecto viene apagado solo en <strong>Efectivo</strong>.
         </p>
         <div className="flex justify-end mb-3">
           <Button
@@ -104,7 +117,7 @@ export function ConfiguracionCobros() {
               <li
                 key={m.id}
                 className={cn(
-                  'flex items-center gap-3 p-3 rounded-xl border',
+                  'flex flex-wrap items-center gap-3 p-3 rounded-xl border',
                   m.activo
                     ? 'bg-[#fdfaf6] border-[#e4c9b0]/60'
                     : 'bg-[#f5f0e8]/60 border-[#e4c9b0]/40 opacity-70'
@@ -167,6 +180,18 @@ export function ConfiguracionCobros() {
                   />
                   <span className="text-[9px] text-[#6f3a2a] uppercase tracking-wide font-semibold">
                     Terminal
+                  </span>
+                </div>
+
+                <div className="flex flex-col items-center gap-0.5">
+                  <Switch
+                    checked={m.genera_iva_venta}
+                    onCheckedChange={(v) => toggleIva(m, v)}
+                    disabled={actualizar.isPending}
+                    aria-label={`Genera IVA débito fiscal: ${m.nombre}`}
+                  />
+                  <span className="text-[9px] text-[#6f3a2a] uppercase tracking-wide font-semibold">
+                    IVA
                   </span>
                 </div>
 

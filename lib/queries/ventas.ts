@@ -171,6 +171,10 @@ function ventaPendienteCompleta(
       cliente_uuid: clienteUuid,
       cliente_id: payload.cliente_id ?? null,
       lista_precio: listaDeVenta(payload.items),
+      // La venta encolada todavía no pasó por fn_crear_venta: la base gravada
+      // y el IVA débito se calculan al sincronizar. Acá solo alimenta el ticket.
+      base_gravada: null,
+      iva_debito: null,
     },
     items: detalleItems(payload.items),
     pagos: payload.pagos,

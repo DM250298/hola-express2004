@@ -36,6 +36,12 @@ export interface BloqueIva {
   ventas_total: number
   /** Neto gravado de ventas (sin IVA). */
   ventas_neto: number
+  /**
+   * Parte del total que NO genera débito fiscal: lo cobrado con medios de pago
+   * marcados como `genera_iva_venta = false` (por defecto, el efectivo).
+   * Se declara aparte, a mano.
+   */
+  ventas_no_gravado: number
   iva_debito: number
   compras_neto: number
   iva_credito: number
@@ -48,7 +54,7 @@ export interface BloqueIva {
 export interface BloqueIibb {
   jurisdiccion: string
   alicuota: number
-  /** Base imponible = ventas netas del período. */
+  /** Base imponible = ventas netas GRAVADAS del período (misma base que el IVA). */
   base: number
   /** IIBB determinado = base × alícuota. */
   determinado: number
@@ -71,11 +77,17 @@ export interface ResumenFiscal {
 
 /**
  * Resumen fiscal de un período (desde inclusive, hastaExcl exclusivo).
- *  · IVA débito  = IVA contenido en las ventas (precio final, alícuota general).
+ *  · IVA débito  = suma de `ventas.iva_debito`, calculado al vender sobre la
+ *    porción cobrada con medios que generan débito fiscal (mig 163). Lo cobrado
+ *    en efectivo queda fuera: se declara aparte, a mano.
  *  · IVA crédito = IVA de las facturas de compra emitidas en el período.
- *  · IIBB        = ventas netas × alícuota − retenciones sufridas.
+ *  · IIBB        = ventas netas GRAVADAS × alícuota − retenciones sufridas
+ *    (misma base que el IVA: lo que no se declara para uno, tampoco para el otro).
  *  · Retenciones sufridas = movimientos de cuenta con categoría 'iibb'
  *    (lo que MP/bancos ya le retuvieron al comercio).
+ *
+ * `alicuotaIvaGeneral` quedó solo como fallback para ventas sin `iva_debito`
+ * (filas que no hayan pasado por el backfill de la mig 163).
  */
 export async function getResumenFiscal(
   desde: string,
@@ -87,18 +99,36 @@ export async function getResumenFiscal(
   const supabase = createClient()
   const factorIva = 1 + alicuotaIvaGeneral / 100
 
-  // Ventas del período
-  const ventas = await traerTodo<{ total: number }>(() =>
+  // Ventas del período. El IVA débito y la base gravada vienen calculados de
+  // fn_crear_venta (mig 163): son el MISMO número que asentó la contabilidad.
+  const ventas = await traerTodo<{
+    total: number
+    base_gravada: number | null
+    iva_debito: number | null
+  }>(() =>
     supabase
       .from('ventas')
-      .select('total')
+      .select('total, base_gravada, iva_debito')
       .eq('estado', 'completada')
       .gte('fecha', desde)
       .lt('fecha', hastaExcl)
   )
   const ventasTotal = ventas.reduce((s, v) => s + Number(v.total), 0)
-  const ventasNeto = ventasTotal / factorIva
-  const ivaDebito = ventasTotal - ventasNeto
+  // Fallback (base_gravada/iva_debito nulos): se comporta como antes de la 163.
+  const ventasGravadoBruto = ventas.reduce(
+    (s, v) => s + Number(v.base_gravada ?? v.total),
+    0
+  )
+  const ivaDebito = ventas.reduce(
+    (s, v) =>
+      s +
+      Number(v.iva_debito ?? Number(v.total) - Number(v.total) / factorIva),
+    0
+  )
+  // Neto GRAVADO: es también la base de IIBB (decisión del dueño — lo que no se
+  // declara para IVA tampoco se declara para IIBB).
+  const ventasNeto = ventasGravadoBruto - ivaDebito
+  const ventasNoGravado = ventasTotal - ventasGravadoBruto
 
   // Facturas de compra emitidas en el período → IVA crédito + percepciones
   const { data: facturas, error } = await supabase
@@ -148,6 +178,7 @@ export async function getResumenFiscal(
     iva: {
       ventas_total: r2(ventasTotal),
       ventas_neto: r2(ventasNeto),
+      ventas_no_gravado: r2(ventasNoGravado),
       iva_debito: r2(ivaDebito),
       compras_neto: r2(comprasNeto),
       iva_credito: r2(ivaCredito),

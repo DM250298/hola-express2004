@@ -1,5 +1,4 @@
 import { createClient } from '@/lib/supabase/client'
-import { traerTodo } from '@/lib/supabase/paginacion'
 import type {
   ActivoFijoRow,
   AsientoItemRow,
@@ -286,62 +285,6 @@ export async function darDeBajaActivo(id: number): Promise<void> {
   if (error) throw error
 }
 
-// ─── Liquidación de IVA ───────────────────────────────────────────
-
-const r2 = (n: number) => Math.round(n * 100) / 100
-
-export interface LiquidacionIva {
-  ventas_total: number
-  iva_debito: number
-  compras_neto: number
-  iva_credito: number
-  /** Posición: > 0 IVA a pagar · < 0 saldo a favor. */
-  posicion: number
-}
-
-/**
- * Liquidación de IVA de un período (desde inclusive, hastaExcl exclusivo).
- *  · IVA Débito  = IVA contenido en las ventas (precio final, 21%).
- *  · IVA Crédito = IVA de las facturas de compra cargadas.
- */
-export async function getLiquidacionIva(
-  desde: string,
-  hastaExcl: string
-): Promise<LiquidacionIva> {
-  const supabase = createClient()
-
-  const ventas = await traerTodo<{ total: number }>(() =>
-    supabase
-      .from('ventas')
-      .select('total')
-      .eq('estado', 'completada')
-      .gte('fecha', desde)
-      .lt('fecha', hastaExcl)
-  )
-  const ventasTotal = ventas.reduce((s, v) => s + Number(v.total), 0)
-  const ivaDebito = ventasTotal - ventasTotal / 1.21
-
-  const { data: facturas, error } = await supabase
-    .from('facturas_compra')
-    .select('neto, iva_total')
-    .gte('fecha', desde)
-    .lt('fecha', hastaExcl)
-  if (error) throw error
-
-  const comprasNeto = (facturas ?? []).reduce(
-    (s, f) => s + Number(f.neto),
-    0
-  )
-  const ivaCredito = (facturas ?? []).reduce(
-    (s, f) => s + Number(f.iva_total),
-    0
-  )
-
-  return {
-    ventas_total: r2(ventasTotal),
-    iva_debito: r2(ivaDebito),
-    compras_neto: r2(comprasNeto),
-    iva_credito: r2(ivaCredito),
-    posicion: r2(ivaDebito - ivaCredito),
-  }
-}
+// La liquidación de IVA vive en lib/queries/fiscal.ts (getResumenFiscal): es la
+// única fuente. Acá había un duplicado con 1.21 hardcodeado que nadie consumía
+// y que, desde la mig 163 (IVA por medio de pago), daría un número distinto.
