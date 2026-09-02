@@ -8,6 +8,7 @@ import { CalendarPlus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { CampoFechaVencimiento } from '@/components/shared/CampoFechaVencimiento'
 import {
   Select,
   SelectContent,
@@ -164,11 +165,6 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
     return clasificarVencimiento(diasHastaVencimiento(fechaVisible))
   }, [fechaVisible])
 
-  const hoy = useMemo(() => {
-    const d = new Date()
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }, [])
-
   function onSubmit(datos: DatosForm) {
     if (!usuario) return
     const validado = esquemaActual.parse(datos)
@@ -272,13 +268,18 @@ export function ModalNuevoLote({ abierto, onCambioAbierto }: Props) {
               Fecha de vencimiento <span className="text-[#c43e2c]">*</span>
             </Label>
             <div className="flex gap-2 items-start">
-              <Input
-                id="fecha_vencimiento"
-                type="date"
-                min={hoy}
-                {...register('fecha_vencimiento')}
-                disabled={crear.isPending}
-                className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums flex-1"
+              <Controller
+                control={control}
+                name="fecha_vencimiento"
+                render={({ field }) => (
+                  <CampoFechaVencimiento
+                    id="fecha_vencimiento"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    disabled={crear.isPending}
+                    className="flex-1"
+                  />
+                )}
               />
               {previewClase && (
                 <div className="pt-1.5">

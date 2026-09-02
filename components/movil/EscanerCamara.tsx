@@ -12,6 +12,19 @@ interface Props {
   /** Texto de ayuda que se muestra bajo el visor cuando la cámara está activa. */
   ayuda?: string
   className?: string
+  /**
+   * Visor bajo (16:9) en vez de 4:3. La detección no cambia: el detector lee
+   * los frames del <video>, no su caja CSS. Sirve donde el escáner comparte
+   * pantalla con una lista y no puede comerse medio viewport.
+   */
+  compacto?: boolean
+  /**
+   * Corta el bucle de detección sin soltar el stream (un modal abierto encima,
+   * por ejemplo). Reabrir `getUserMedia` cuesta cerca de un segundo y en
+   * algunos equipos vuelve a pedir permiso, así que pausar es mejor que
+   * desmontar salvo que otro componente necesite la cámara para sí.
+   */
+  pausado?: boolean
 }
 
 // Formatos típicos de góndola (EAN/UPC) + algunos de respaldo. Se filtran
@@ -73,7 +86,13 @@ async function resolverDetector(): Promise<typeof BarcodeDetector | null> {
  * puede abrir la cámara o se niega el permiso, queda la carga manual (que
  * también sirve para un lector USB/Bluetooth).
  */
-export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
+export function EscanerCamara({
+  onDetectado,
+  ayuda,
+  className,
+  compacto,
+  pausado,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const detectorRef = useRef<BarcodeDetector | null>(null)
@@ -85,6 +104,10 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
   // para no reiniciar la cámara ni el bucle de detección.
   const cbRef = useRef(onDetectado)
   cbRef.current = onDetectado
+  // Se leen por ref para no reiniciar la cámara al pausar/reanudar.
+  const pausadoRef = useRef(false)
+  pausadoRef.current = pausado ?? false
+  const ocultoRef = useRef(false)
 
   const [estado, setEstado] = useState<Estado>('iniciando')
   const [manual, setManual] = useState('')
@@ -147,6 +170,10 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
 
     function bucle(t: number) {
       if (!corriendoRef.current) return
+      if (pausadoRef.current || ocultoRef.current) {
+        rafRef.current = requestAnimationFrame(bucle)
+        return
+      }
       const video = videoRef.current
       const detector = detectorRef.current
       if (
@@ -217,9 +244,23 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
       }
     }
 
+    // Con la pantalla oculta el bucle de rAF se frena solo, pero la cámara
+    // sigue prendida: gasta batería y mantiene alta la presión de memoria, que
+    // es justo lo que hace que Android descarte la pestaña (y con ella toda la
+    // recepción a medio cargar). Apagar la pista es instantáneo de revertir.
+    function alCambiarVisibilidad() {
+      const oculto = document.visibilityState === 'hidden'
+      ocultoRef.current = oculto
+      streamRef.current?.getVideoTracks().forEach((t) => {
+        t.enabled = !oculto
+      })
+    }
+    document.addEventListener('visibilitychange', alCambiarVisibilidad)
+
     void iniciar()
 
     return () => {
+      document.removeEventListener('visibilitychange', alCambiarVisibilidad)
       cancelado = true
       corriendoRef.current = false
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
@@ -239,7 +280,12 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
 
   return (
     <div className={cn('space-y-2', className)}>
-      <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-black">
+      <div
+        className={cn(
+          'relative w-full overflow-hidden rounded-2xl bg-black',
+          compacto ? 'aspect-[16/9]' : 'aspect-[4/3]'
+        )}
+      >
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video
           ref={videoRef}
@@ -249,7 +295,12 @@ export function EscanerCamara({ onDetectado, ayuda, className }: Props) {
         />
         {estado === 'activo' && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="h-24 w-4/5 rounded-xl border-2 border-[#f9b44c] shadow-[0_0_0_9999px_rgba(0,0,0,0.22)]" />
+            <div
+              className={cn(
+                'w-4/5 rounded-xl border-2 border-[#f9b44c] shadow-[0_0_0_9999px_rgba(0,0,0,0.22)]',
+                compacto ? 'h-16' : 'h-24'
+              )}
+            />
           </div>
         )}
         {estado !== 'activo' && (

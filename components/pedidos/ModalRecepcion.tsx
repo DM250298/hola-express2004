@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
+import { CampoFechaVencimiento } from '@/components/shared/CampoFechaVencimiento'
 import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { useRecibirPedido } from '@/lib/hooks/usePedidos'
@@ -709,16 +710,13 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                         <Calendar className="h-3 w-3" />
                         Fecha vencimiento (opc.)
                       </Label>
-                      <Input
-                        type="date"
+                      <CampoFechaVencimiento
                         value={it.fecha_vencimiento}
-                        onChange={(e) =>
-                          actualizarItem(it.item_id, {
-                            fecha_vencimiento: e.target.value,
-                          })
+                        onChange={(iso) =>
+                          actualizarItem(it.item_id, { fecha_vencimiento: iso })
                         }
                         disabled={recibir.isPending}
-                        className="h-10 tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        sinAtajos
                       />
                       {it.fecha_vencimiento && !debajoMinimo && (
                         <p className="text-[10px] text-[#6f3a2a]">

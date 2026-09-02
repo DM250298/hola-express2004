@@ -23,11 +23,17 @@ export interface LoteConProducto extends LoteRow {
 /**
  * Días entre hoy (00:00 local) y la fecha de vencimiento (00:00 local).
  * Negativo = ya vencido.
+ *
+ * El `T00:00:00` no es adorno: `new Date('2027-03-15')` parsea en UTC (así lo
+ * manda la spec) y en Argentina (UTC−3) cae el 14 a las 21:00, así que el
+ * `setHours(0,0,0,0)` posterior lo dejaba en el día ANTERIOR y todo el semáforo
+ * se disparaba un día antes de lo que corresponde. Es la misma trampa que
+ * documenta `rangoDesdeFechas` en lib/utils/periodos.ts.
  */
 export function diasHastaVencimiento(fechaVenc: string): number {
   const hoy = new Date()
   hoy.setHours(0, 0, 0, 0)
-  const venc = new Date(fechaVenc)
+  const venc = new Date(`${fechaVenc.slice(0, 10)}T00:00:00`)
   venc.setHours(0, 0, 0, 0)
   const ms = venc.getTime() - hoy.getTime()
   return Math.round(ms / (1000 * 60 * 60 * 24))

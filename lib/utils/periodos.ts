@@ -92,6 +92,19 @@ export function isoMasDias(base: string, dias: number): string {
   return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * `base` (yyyy-MM-dd) + N meses de CALENDARIO, clampeando al último día del mes
+ * destino (31/01 + 1 mes = 28/02). Para los atajos de vencimiento: "+6 meses"
+ * tiene que caer en el mismo día del mes, no 180 días después.
+ */
+export function isoMasMeses(base: string, meses: number): string {
+  const [y, m, d] = base.split('-').map(Number)
+  const mesDestino = (m ?? 1) - 1 + meses
+  const tope = new Date(y, mesDestino + 1, 0).getDate()
+  const f = new Date(y, mesDestino, Math.min(d ?? 1, tope))
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`
+}
+
 /** Lunes de la semana que contiene la fecha dada (locale es-AR: semana empieza lunes). */
 export function inicioSemana(fecha: Date): Date {
   const d = new Date(fecha)
