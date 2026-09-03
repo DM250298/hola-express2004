@@ -8,6 +8,7 @@ import {
   cerrarOrden,
   crearOrden,
   generarReposicion,
+  getDatosEtiquetaElaboracion,
   getDesfasajes,
   getDisponibilidadInsumos,
   getInsumosAComprar,
@@ -20,10 +21,12 @@ import {
   guardarReceta,
   iniciarOrden,
   previewCostoReceta,
+  produccionRapida,
   type ConsumoReal,
   type FiltrosOrdenes,
   type GuardarRecetaPayload,
   type NuevaOrdenPayload,
+  type ProduccionRapidaPayload,
 } from '@/lib/queries/produccion'
 
 export const RECETAS_KEY = ['recetas'] as const
@@ -103,6 +106,19 @@ export function useOrdenDetalle(id: number | undefined) {
     },
     enabled: !!id,
     staleTime: 30 * 1000,
+  })
+}
+
+/**
+ * Todo lo que va impreso en la etiqueta de una tanda. Se pide por orden: el
+ * lote y las fechas ya están persistidos cuando la orden se cerró.
+ */
+export function useDatosEtiquetaElaboracion(ordenId: number | undefined) {
+  return useQuery({
+    queryKey: ['etiqueta-elaboracion', ordenId],
+    queryFn: () => getDatosEtiquetaElaboracion(ordenId as number),
+    enabled: !!ordenId,
+    staleTime: 60 * 1000,
   })
 }
 
@@ -191,6 +207,28 @@ export function useCerrarOrden() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo cerrar la orden: ${error.message}`)
+    },
+  })
+}
+
+/**
+ * Elaboración de un paso: crea, inicia y cierra la orden en una transacción.
+ * Invalida lo mismo que el cierre, porque hace exactamente eso.
+ */
+export function useProduccionRapida() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ProduccionRapidaPayload) => produccionRapida(payload),
+    onSuccess: () => {
+      invalidarStock(qc)
+      qc.invalidateQueries({ queryKey: ['vencimientos'] })
+      qc.invalidateQueries({ queryKey: ['historial-costos'] })
+      qc.invalidateQueries({ queryKey: ['costo-receta'] })
+      qc.invalidateQueries({ queryKey: ['desfasajes'] })
+      toast.success('Tanda elaborada · stock ingresado')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo elaborar: ${error.message}`)
     },
   })
 }

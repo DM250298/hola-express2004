@@ -1665,6 +1665,11 @@ export type RecetaRow = {
   unidad_rendimiento: string
   vida_util_dias: number
   activa: boolean
+  /** Ficha de elaboración (mig 165). Null = la UI usa el valor por defecto. */
+  pasos: string | null
+  conservacion: string | null
+  alergenos: string | null
+  ingredientes_etiqueta: string | null
   created_at: string
   updated_at: string
 }
@@ -1676,6 +1681,10 @@ export type RecetaInsert = {
   unidad_rendimiento: string
   vida_util_dias?: number
   activa?: boolean
+  pasos?: string | null
+  conservacion?: string | null
+  alergenos?: string | null
+  ingredientes_etiqueta?: string | null
   created_at?: string
   updated_at?: string
 }
@@ -1685,6 +1694,10 @@ export type RecetaUpdate = {
   unidad_rendimiento?: string
   vida_util_dias?: number
   activa?: boolean
+  pasos?: string | null
+  conservacion?: string | null
+  alergenos?: string | null
+  ingredientes_etiqueta?: string | null
   updated_at?: string
 }
 
@@ -4468,6 +4481,22 @@ export interface Database {
           p_cantidad_producida: number
           p_usuario_id: string
           p_consumos?: Json
+        }
+        Returns: {
+          orden_id: number
+          lote_id: number | null
+          costo_unitario: number
+          costo_total: number
+          merma: number
+        }
+      }
+      fn_produccion_rapida: {
+        Args: {
+          p_producto_id: number
+          p_receta_id: number
+          p_cantidad: number
+          p_usuario_id: string
+          p_nota?: string | null
         }
         Returns: {
           orden_id: number

@@ -9,6 +9,20 @@ export function formatearFechaCorta(fecha: string | Date): string {
   return format(new Date(fecha), 'dd/MM/yyyy', { locale: es })
 }
 
+/**
+ * dd/MM/yyyy de una columna `date` de Postgres (yyyy-MM-dd), SIN pasar por
+ * UTC. `new Date('2026-09-04')` se parsea como medianoche UTC y en Argentina
+ * (UTC-3) se muestra como el día anterior — en una etiqueta de vencimiento eso
+ * es un día de menos. Si viene un timestamp completo cae a formatearFechaCorta.
+ */
+export function formatearFechaCortaISO(fecha: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    const [anio, mes, dia] = fecha.split('-')
+    return `${dia}/${mes}/${anio}`
+  }
+  return formatearFechaCorta(fecha)
+}
+
 export function formatearFechaHora(fecha: string | Date): string {
   return format(new Date(fecha), "dd/MM/yyyy 'a las' HH:mm", { locale: es })
 }

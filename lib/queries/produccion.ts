@@ -9,6 +9,7 @@ import type {
   Json,
   OrdenProduccionRow,
   RecetaIngredienteRow,
+  RecetaInsert,
   RecetaRow,
 } from '@/types/database'
 
@@ -20,17 +21,27 @@ export interface ProductoMini {
   unidad: string
 }
 
+/** Producto elaborado, con lo que necesita la tarjeta de receta (margen). */
+export interface ProductoReceta extends ProductoMini {
+  tipo: string
+  precio_venta: number
+  stock_actual: number
+  stock_minimo: number
+}
+
 export interface IngredienteConInsumo extends RecetaIngredienteRow {
   insumo: {
     id: number
     nombre: string
     unidad: string
     tipo: string
+    /** Costo del insumo (embed gateado por RLS: sin permiso vuelve 0). */
+    precio_costo: number
   } | null
 }
 
 export interface RecetaConProducto extends RecetaRow {
-  producto: ProductoMini | null
+  producto: ProductoReceta | null
 }
 
 export interface RecetaCompleta extends RecetaConProducto {
@@ -109,17 +120,26 @@ export async function getProductosProduccion(
 
 // ─── Recetas ────────────────────────────────────────────────────────────────────
 
+/**
+ * Columnas del producido que necesitan la tarjeta y el panel de receta.
+ * `select('*')` sobre recetas es a propósito: las columnas de ficha (pasos,
+ * conservación, alérgenos, texto de ingredientes) son de la migración 165 y si
+ * todavía no se corrió simplemente no vienen, en vez de romper la query.
+ */
+const SELECT_PRODUCTO_RECETA =
+  'productos(id, nombre, unidad, tipo, precio_venta, stock_actual, stock_minimo)'
+
 export async function getRecetas(): Promise<RecetaConProducto[]> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from('recetas')
-    .select('*, productos(id, nombre, unidad)')
+    .select(`*, ${SELECT_PRODUCTO_RECETA}`)
     .eq('activa', true)
     .order('id', { ascending: false })
 
   if (error) throw error
 
-  type Fila = RecetaRow & { productos: ProductoMini | null }
+  type Fila = RecetaRow & { productos: ProductoReceta | null }
   return ((data ?? []) as unknown as Fila[]).map(({ productos, ...resto }) => ({
     ...resto,
     producto: productos,
@@ -133,31 +153,52 @@ export async function getRecetaDeProducto(
 
   const { data: receta, error } = await supabase
     .from('recetas')
-    .select('*, productos(id, nombre, unidad)')
+    .select(`*, ${SELECT_PRODUCTO_RECETA}`)
     .eq('producto_id', productoId)
     .maybeSingle()
 
   if (error) throw error
   if (!receta) return null
 
-  type RecetaCruda = RecetaRow & { productos: ProductoMini | null }
+  type RecetaCruda = RecetaRow & { productos: ProductoReceta | null }
   const r = receta as unknown as RecetaCruda
 
   const { data: ings, error: errIngs } = await supabase
     .from('receta_ingredientes')
-    .select('*, productos:insumo_id(id, nombre, unidad, tipo)')
+    .select(
+      '*, productos:insumo_id(id, nombre, unidad, tipo, costos_producto(precio_costo))'
+    )
     .eq('receta_id', r.id)
     .order('id', { ascending: true })
 
   if (errIngs) throw errIngs
 
   type IngCrudo = RecetaIngredienteRow & {
-    productos: { id: number; nombre: string; unidad: string; tipo: string } | null
+    productos:
+      | {
+          id: number
+          nombre: string
+          unidad: string
+          tipo: string
+          costos_producto: CostoEmbed
+        }
+      | null
   }
 
   const ingredientes: IngredienteConInsumo[] = (
     (ings ?? []) as unknown as IngCrudo[]
-  ).map(({ productos, ...resto }) => ({ ...resto, insumo: productos }))
+  ).map(({ productos, ...resto }) => ({
+    ...resto,
+    insumo: productos
+      ? {
+          id: productos.id,
+          nombre: productos.nombre,
+          unidad: productos.unidad,
+          tipo: productos.tipo,
+          precio_costo: costoDesdeEmbed(productos.costos_producto),
+        }
+      : null,
+  }))
 
   const { productos, ...resto } = r
   return { ...resto, producto: productos, ingredientes }
@@ -170,7 +211,15 @@ export interface IngredientePayload {
   merma_pct: number
 }
 
-export interface GuardarRecetaPayload {
+/** Ficha de elaboración (migración 165). Todo opcional. */
+export interface FichaReceta {
+  pasos?: string | null
+  conservacion?: string | null
+  alergenos?: string | null
+  ingredientes_etiqueta?: string | null
+}
+
+export interface GuardarRecetaPayload extends FichaReceta {
   producto_id: number
   rendimiento: number
   unidad_rendimiento: string
@@ -215,6 +264,37 @@ async function recetaAlcanza(
   return false
 }
 
+/** El error es "esa columna no existe" (migración pendiente), no otra cosa. */
+function esColumnaFaltante(error: { code?: string } | null): boolean {
+  return error?.code === 'PGRST204' || error?.code === '42703'
+}
+
+/**
+ * Guarda la receta con la ficha de elaboración y, si la migración 165 todavía
+ * no se corrió, reintenta sin esas columnas para no bloquear el guardado.
+ */
+async function upsertReceta(
+  supabase: ReturnType<typeof createClient>,
+  base: RecetaInsert,
+  ficha: FichaReceta
+): Promise<RecetaRow> {
+  const { data, error } = await supabase
+    .from('recetas')
+    .upsert({ ...base, ...ficha }, { onConflict: 'producto_id' })
+    .select()
+    .single<RecetaRow>()
+  if (!error) return data
+  if (!esColumnaFaltante(error)) throw error
+
+  const { data: sinFicha, error: error2 } = await supabase
+    .from('recetas')
+    .upsert(base, { onConflict: 'producto_id' })
+    .select()
+    .single<RecetaRow>()
+  if (error2) throw error2
+  return sinFicha
+}
+
 /**
  * Crea o reemplaza la receta de un producto (una receta viva por producto).
  * Valida anti-ciclo (ningún ingrediente puede usar, directa o transitivamente,
@@ -242,22 +322,21 @@ export async function guardarReceta(
     }
   }
 
-  const { data: receta, error } = await supabase
-    .from('recetas')
-    .upsert(
-      {
-        producto_id: payload.producto_id,
-        rendimiento: payload.rendimiento,
-        unidad_rendimiento: payload.unidad_rendimiento,
-        vida_util_dias: payload.vida_util_dias,
-        activa: payload.activa ?? true,
-      },
-      { onConflict: 'producto_id' }
-    )
-    .select()
-    .single<RecetaRow>()
+  const base: RecetaInsert = {
+    producto_id: payload.producto_id,
+    rendimiento: payload.rendimiento,
+    unidad_rendimiento: payload.unidad_rendimiento,
+    vida_util_dias: payload.vida_util_dias,
+    activa: payload.activa ?? true,
+  }
+  const ficha: FichaReceta = {
+    pasos: payload.pasos ?? null,
+    conservacion: payload.conservacion ?? null,
+    alergenos: payload.alergenos ?? null,
+    ingredientes_etiqueta: payload.ingredientes_etiqueta ?? null,
+  }
 
-  if (error) throw error
+  const receta = await upsertReceta(supabase, base, ficha)
 
   // Reemplaza los ingredientes (borra y reinserta).
   const { error: errDel } = await supabase
@@ -680,4 +759,163 @@ export async function getInsumosAComprar(): Promise<InsumoAComprar[]> {
     precio_costo: Number(f.precio_costo),
     costo_estimado: Number(f.costo_estimado),
   }))
+}
+
+// ─── Elaboración rápida (crear + iniciar + cerrar en una transacción) ───────────
+
+export interface ProduccionRapidaPayload {
+  producto_id: number
+  receta_id: number
+  cantidad: number
+  usuario_id: string
+  nota?: string | null
+}
+
+export interface ResultadoProduccionRapida extends ResultadoCerrar {
+  orden_id: number
+}
+
+/**
+ * Elabora una tanda en un solo paso (fn_produccion_rapida, mig 165). Todo o
+ * nada: si el inicio falla, la orden ni siquiera queda creada.
+ */
+export async function produccionRapida(
+  payload: ProduccionRapidaPayload
+): Promise<ResultadoProduccionRapida> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_produccion_rapida', {
+    p_producto_id: payload.producto_id,
+    p_receta_id: payload.receta_id,
+    p_cantidad: payload.cantidad,
+    p_usuario_id: payload.usuario_id,
+    p_nota: payload.nota ?? null,
+  })
+  if (error) throw error
+  if (!data) throw new Error('No se pudo registrar la elaboración.')
+  return data as unknown as ResultadoProduccionRapida
+}
+
+// ─── Etiqueta de elaboración ───────────────────────────────────────────────────
+
+/** Leyenda de conservación cuando la receta no define una propia. */
+export const CONSERVACION_POR_DEFECTO = 'Mantener refrigerado (0 a 5 °C)'
+
+export interface DatosEtiquetaElaboracion {
+  orden_id: number
+  producto_id: number
+  producto_nombre: string
+  unidad: string
+  /** Lo realmente producido (o lo planificado si la orden no se cerró aún). */
+  cantidad: number
+  /** ISO del momento de elaboración (ingreso del lote, o cierre de la orden). */
+  elaborado_en: string
+  /** ISO yyyy-MM-dd. Null si el producto no controla vencimiento ni vida útil. */
+  vence_el: string | null
+  lote_id: number | null
+  vida_util_dias: number
+  ingredientes: string
+  alergenos: string | null
+  conservacion: string
+  elaborado_por: string | null
+}
+
+/** Suma días a un ISO y devuelve yyyy-MM-dd (para el vencimiento sin lote). */
+function sumarDias(desdeISO: string, dias: number): string {
+  const d = new Date(desdeISO)
+  d.setDate(d.getDate() + dias)
+  const mes = String(d.getMonth() + 1).padStart(2, '0')
+  const dia = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${mes}-${dia}`
+}
+
+/**
+ * Junta todo lo que va impreso en la etiqueta de una tanda: producto, lote,
+ * fechas, ingredientes, alérgenos, conservación y quién la elaboró.
+ *
+ * La receta se lee con `select('*')` a propósito: las columnas de ficha son de
+ * la migración 165 y si todavía no se corrió simplemente vienen undefined.
+ */
+export async function getDatosEtiquetaElaboracion(
+  ordenId: number
+): Promise<DatosEtiquetaElaboracion | null> {
+  const supabase = createClient()
+
+  const { data: orden, error } = await supabase
+    .from('ordenes_produccion')
+    .select(
+      '*, productos(id, nombre, unidad), lotes:lote_id(id, fecha_vencimiento, fecha_ingreso)'
+    )
+    .eq('id', ordenId)
+    .maybeSingle()
+  if (error) throw error
+  if (!orden) return null
+
+  type OrdenCruda = OrdenProduccionRow & {
+    productos: ProductoMini | null
+    lotes: {
+      id: number
+      fecha_vencimiento: string
+      fecha_ingreso: string
+    } | null
+  }
+  const o = orden as unknown as OrdenCruda
+
+  // Ficha de la receta activa (vida útil + textos de la etiqueta).
+  const { data: receta } = await supabase
+    .from('recetas')
+    .select('*')
+    .eq('producto_id', o.producto_id)
+    .eq('activa', true)
+    .maybeSingle()
+  const r = (receta ?? null) as Partial<RecetaRow> | null
+
+  // Texto de ingredientes: el override de la receta, o los nombres del BOM.
+  let ingredientes = (r?.ingredientes_etiqueta ?? '').trim()
+  if (!ingredientes && r?.id) {
+    const { data: ings } = await supabase
+      .from('receta_ingredientes')
+      .select('productos:insumo_id(nombre)')
+      .eq('receta_id', r.id)
+      .order('id', { ascending: true })
+    type IngNombre = { productos: { nombre: string } | null }
+    ingredientes = ((ings ?? []) as unknown as IngNombre[])
+      .map((i) => i.productos?.nombre?.trim().toLowerCase())
+      .filter((n): n is string => !!n)
+      .join(', ')
+  }
+
+  // Quién elaboró: quien cerró la orden, o quien la creó.
+  const responsableId = o.usuario_cierre ?? o.usuario_id
+  let elaboradoPor: string | null = null
+  if (responsableId) {
+    const { data: usuario } = await supabase
+      .from('usuarios')
+      .select('nombre')
+      .eq('id', responsableId)
+      .maybeSingle()
+    elaboradoPor = (usuario as { nombre: string } | null)?.nombre ?? null
+  }
+
+  const vidaUtil = r?.vida_util_dias ?? 0
+  const elaboradoEn =
+    o.lotes?.fecha_ingreso ?? o.fecha_cierre ?? o.created_at
+  const venceEl =
+    o.lotes?.fecha_vencimiento ??
+    (vidaUtil > 0 ? sumarDias(elaboradoEn, vidaUtil) : null)
+
+  return {
+    orden_id: o.id,
+    producto_id: o.producto_id,
+    producto_nombre: o.productos?.nombre ?? 'Producto',
+    unidad: o.productos?.unidad ?? 'unidad',
+    cantidad: o.cantidad_producida ?? o.cantidad_planificada,
+    elaborado_en: elaboradoEn,
+    vence_el: venceEl,
+    lote_id: o.lotes?.id ?? o.lote_id,
+    vida_util_dias: vidaUtil,
+    ingredientes,
+    alergenos: (r?.alergenos ?? '').trim() || null,
+    conservacion: (r?.conservacion ?? '').trim() || CONSERVACION_POR_DEFECTO,
+    elaborado_por: elaboradoPor,
+  }
 }

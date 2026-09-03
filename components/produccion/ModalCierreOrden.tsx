@@ -20,6 +20,8 @@ interface Props {
   orden: OrdenConProducto
   open: boolean
   onOpenChange: (v: boolean) => void
+  /** Se llama al cerrar bien, para ofrecer las etiquetas de la tanda. */
+  onCerrada?: (ordenId: number) => void
 }
 
 const MOTIVOS: { value: string; label: string }[] = [
@@ -32,7 +34,12 @@ const MOTIVOS: { value: string; label: string }[] = [
 
 const EPS = 1e-9
 
-export function ModalCierreOrden({ orden, open, onOpenChange }: Props) {
+export function ModalCierreOrden({
+  orden,
+  open,
+  onOpenChange,
+  onCerrada,
+}: Props) {
   const { data: usuario } = useUsuario()
   const { data: detalle, isLoading } = useOrdenDetalle(orden.id)
   const cerrar = useCerrarOrden()
@@ -97,13 +104,18 @@ export function ModalCierreOrden({ orden, open, onOpenChange }: Props) {
         usuario_id: usuario.id,
         consumos: lista,
       },
-      { onSuccess: () => onOpenChange(false) }
+      {
+        onSuccess: () => {
+          onOpenChange(false)
+          onCerrada?.(orden.id)
+        },
+      }
     )
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#391511]">
             Cerrar producción · {orden.producto?.nombre ?? 'Producto'}
@@ -138,7 +150,7 @@ export function ModalCierreOrden({ orden, open, onOpenChange }: Props) {
             ) : items.length === 0 ? (
               <p className="text-sm text-[#c8a58a]">La orden no tiene insumos.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {items.map((it) => {
                   const c = consumos[it.id] ?? {
                     real: it.cantidad_consumida,

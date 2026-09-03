@@ -46,7 +46,7 @@ export function PantallaProduccion({ tabInicial }: Props) {
   )
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5 max-w-[1600px] mx-auto">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold flex items-center gap-2">
@@ -54,8 +54,8 @@ export function PantallaProduccion({ tabInicial }: Props) {
             Producción
           </h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
-            Elaboración de comida: recetas, órdenes de producción con descuento de
-            insumos y costeo automático.
+            Elaboración de comida: recetas con costo en vivo, tandas con descuento
+            de insumos y etiquetas con fecha, lote y vencimiento.
           </p>
         </div>
         <BotonAvisosPush />

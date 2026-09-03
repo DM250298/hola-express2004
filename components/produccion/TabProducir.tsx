@@ -1,21 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { ClipboardList, Play, Plus, RefreshCw, X } from 'lucide-react'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { useMemo, useState } from 'react'
+import { ClipboardList, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
-import { MontoARS } from '@/components/shared/MontoARS'
-import { BadgeEstadoOrden } from './BadgeEstadoOrden'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
+import { ColumnaOrdenes } from './ColumnaOrdenes'
+import { PanelOrden } from './PanelOrden'
+import { PanelElaborarAhora } from './PanelElaborarAhora'
 import { AsistenteNuevaOrden } from './AsistenteNuevaOrden'
 import { ModalCierreOrden } from './ModalCierreOrden'
+import { ModalEtiquetasElaboracion } from './ModalEtiquetasElaboracion'
 import {
   useCancelarOrden,
   useGenerarReposicion,
@@ -23,7 +18,11 @@ import {
   useOrdenes,
 } from '@/lib/hooks/useProduccion'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { fechaLocal, hoyIso } from '@/lib/utils/periodos'
 import type { OrdenConProducto } from '@/lib/queries/produccion'
+
+/** Cuántas tandas cerradas viejas se muestran al abrir el historial. */
+const HISTORIAL_MAX = 40
 
 export function TabProducir() {
   const { data: usuario } = useUsuario()
@@ -34,157 +33,171 @@ export function TabProducir() {
 
   const [asistente, setAsistente] = useState(false)
   const [cierre, setCierre] = useState<OrdenConProducto | null>(null)
+  const [aCancelar, setACancelar] = useState<OrdenConProducto | null>(null)
+  const [seleccionId, setSeleccionId] = useState<number | undefined>()
+  const [etiquetasOrdenId, setEtiquetasOrdenId] = useState<number | undefined>()
+  const [verTodasCerradas, setVerTodasCerradas] = useState(false)
+
+  // El tablero muestra el flujo vivo. Las cerradas se acotan al día porque en
+  // un local 24h el histórico completo son cientos de tandas.
+  const { borradores, enCurso, cerradas } = useMemo(() => {
+    const lista = ordenes ?? []
+    const hoy = hoyIso()
+    const cerradasTodas = lista.filter((o) => o.estado === 'cerrada')
+    const cerradasHoy = cerradasTodas.filter(
+      (o) => o.fecha_cierre && fechaLocal(o.fecha_cierre) === hoy
+    )
+    return {
+      borradores: lista.filter((o) => o.estado === 'borrador'),
+      enCurso: lista.filter((o) => o.estado === 'iniciada'),
+      cerradas: verTodasCerradas
+        ? cerradasTodas.slice(0, HISTORIAL_MAX)
+        : cerradasHoy,
+    }
+  }, [ordenes, verTodasCerradas])
+
+  const seleccionada =
+    (ordenes ?? []).find((o) => o.id === seleccionId) ?? null
 
   function handleIniciar(orden: OrdenConProducto) {
     if (!usuario) return
     iniciar.mutate({ orden_id: orden.id, usuario_id: usuario.id })
   }
 
-  function handleCancelar(orden: OrdenConProducto) {
-    if (!usuario) return
-    if (
-      !confirm(
-        `¿Cancelar la orden de ${orden.producto?.nombre ?? 'producto'}? ` +
-          (orden.estado === 'iniciada'
-            ? 'Se repondrán los insumos consumidos.'
-            : '')
-      )
+  function confirmarCancelacion() {
+    if (!usuario || !aCancelar) return
+    cancelar.mutate(
+      { orden_id: aCancelar.id, usuario_id: usuario.id },
+      { onSuccess: () => setACancelar(null) }
     )
-      return
-    cancelar.mutate({ orden_id: orden.id, usuario_id: usuario.id })
+  }
+
+  /** Recién elaborada o recién cerrada: se selecciona y se ofrecen etiquetas. */
+  function tandaTerminada(ordenId: number) {
+    setSeleccionId(ordenId)
+    setEtiquetasOrdenId(ordenId)
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm text-[#6f3a2a]">
-          Órdenes de producción. Los elaborados bajo el mínimo generan una
-          orden en borrador automáticamente; iniciar descuenta insumos, cerrar
-          ingresa lo producido.
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          <Button
-            variant="outline"
-            onClick={() => reponer.mutate()}
-            disabled={reponer.isPending}
-            className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${reponer.isPending ? 'animate-spin' : ''}`}
-            />
-            Generar reposición
-          </Button>
-          <Button
-            onClick={() => setAsistente(true)}
-            className="bg-[#391511] hover:bg-[#4a1d16] text-white gap-1.5"
-          >
-            <Plus className="h-4 w-4" />
-            Nueva orden
-          </Button>
-        </div>
-      </div>
+      <PanelElaborarAhora
+        onElaborado={tandaTerminada}
+        onNuevaOrden={() => setAsistente(true)}
+      />
 
-      <div className="rounded-xl border border-[#e4c9b0]/60 bg-white overflow-hidden">
-        {isLoading ? (
-          <div className="p-4">
-            <SkeletonTabla filas={5} columnas={5} />
+      {isLoading ? (
+        <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-6 shadow-sm">
+          <SkeletonTabla filas={5} columnas={4} />
+        </div>
+      ) : (ordenes ?? []).length === 0 ? (
+        <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-12 text-center shadow-sm">
+          <div className="inline-flex p-3 rounded-full bg-[#f9d2a2]/40 mb-3">
+            <ClipboardList className="h-6 w-6 text-[#6f3a2a]" />
           </div>
-        ) : !ordenes || ordenes.length === 0 ? (
-          <div className="p-10 text-center text-[#6f3a2a]">
-            <ClipboardList className="h-7 w-7 mx-auto mb-2 text-[#c8a58a]" />
-            No hay órdenes de producción. Creá la primera con “Nueva orden”.
+          <p className="text-[#391511] font-semibold">Todavía no produjiste nada</p>
+          <p className="text-[#6f3a2a] text-sm mt-1">
+            Elegí una receta arriba y tocá “Elaborar ahora”, o planificá una
+            orden para más tarde.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-4 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <ColumnaOrdenes
+              titulo="Para hacer"
+              vacio="No hay nada pendiente de elaborar."
+              ordenes={borradores}
+              seleccionadaId={seleccionId}
+              onSeleccionar={(o) => setSeleccionId(o.id)}
+              accion={
+                <button
+                  type="button"
+                  onClick={() => reponer.mutate()}
+                  disabled={reponer.isPending}
+                  title="Crear órdenes para los elaborados bajo el mínimo"
+                  className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#6f3a2a] hover:text-[#391511] disabled:opacity-50"
+                >
+                  <RefreshCw
+                    className={`h-3 w-3 ${reponer.isPending ? 'animate-spin' : ''}`}
+                  />
+                  Reponer
+                </button>
+              }
+            />
+            <ColumnaOrdenes
+              titulo="En elaboración"
+              vacio="Nada en el mesón ahora mismo."
+              ordenes={enCurso}
+              seleccionadaId={seleccionId}
+              onSeleccionar={(o) => setSeleccionId(o.id)}
+            />
+            <ColumnaOrdenes
+              titulo={verTodasCerradas ? 'Cerradas' : 'Terminadas hoy'}
+              vacio={
+                verTodasCerradas
+                  ? 'No hay tandas cerradas.'
+                  : 'Todavía no terminaste ninguna tanda hoy.'
+              }
+              ordenes={cerradas}
+              seleccionadaId={seleccionId}
+              onSeleccionar={(o) => setSeleccionId(o.id)}
+              accion={
+                <button
+                  type="button"
+                  onClick={() => setVerTodasCerradas((v) => !v)}
+                  className="text-[10px] font-semibold uppercase tracking-wide text-[#6f3a2a] hover:text-[#391511]"
+                >
+                  {verTodasCerradas ? 'Ver hoy' : 'Ver todas'}
+                </button>
+              }
+            />
           </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="border-[#e4c9b0]/40">
-                <TableHead className="text-[#6f3a2a]">Producto</TableHead>
-                <TableHead className="text-[#6f3a2a] text-right">Plan.</TableHead>
-                <TableHead className="text-[#6f3a2a] text-right">Prod.</TableHead>
-                <TableHead className="text-[#6f3a2a]">Estado</TableHead>
-                <TableHead className="text-[#6f3a2a] text-right">Costo</TableHead>
-                <TableHead className="text-right text-[#6f3a2a]">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ordenes.map((o) => (
-                <TableRow key={o.id} className="border-[#e4c9b0]/30">
-                  <TableCell className="font-medium text-[#391511]">
-                    <div className="flex items-center gap-1.5">
-                      <span>{o.producto?.nombre ?? '—'}</span>
-                      {o.nota?.includes('Reposición automática') && (
-                        <span
-                          className="text-[9px] font-semibold uppercase tracking-wide text-[#b07d1e] bg-[#f9b44c]/20 border border-[#f9b44c]/40 rounded px-1 py-0.5"
-                          title="Creada automáticamente por stock bajo el mínimo"
-                        >
-                          Auto
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-[#6f3a2a] tabular-nums">
-                    {o.cantidad_planificada} {o.producto?.unidad ?? ''}
-                  </TableCell>
-                  <TableCell className="text-right text-[#6f3a2a] tabular-nums">
-                    {o.cantidad_producida ?? '—'}
-                  </TableCell>
-                  <TableCell>
-                    <BadgeEstadoOrden estado={o.estado} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <MontoARS monto={o.costo_total} className="text-[#391511]" />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {o.estado === 'borrador' && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleIniciar(o)}
-                          disabled={iniciar.isPending}
-                          className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] gap-1 h-8"
-                        >
-                          <Play className="h-3.5 w-3.5" />
-                          Iniciar
-                        </Button>
-                      )}
-                      {o.estado === 'iniciada' && (
-                        <Button
-                          size="sm"
-                          onClick={() => setCierre(o)}
-                          className="bg-[#2f8f4e] hover:bg-[#267a42] text-white h-8"
-                        >
-                          Cerrar
-                        </Button>
-                      )}
-                      {(o.estado === 'borrador' || o.estado === 'iniciada') && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleCancelar(o)}
-                          disabled={cancelar.isPending}
-                          className="text-[#c43e2c] hover:bg-[#c43e2c]/10 h-8 w-8"
-                          aria-label="Cancelar orden"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </div>
+
+          <div className="xl:sticky xl:top-4">
+            <PanelOrden
+              orden={seleccionada}
+              onIniciar={handleIniciar}
+              onCerrar={setCierre}
+              onCancelar={setACancelar}
+              onImprimirEtiquetas={setEtiquetasOrdenId}
+              procesando={iniciar.isPending || cancelar.isPending}
+            />
+          </div>
+        </div>
+      )}
 
       <AsistenteNuevaOrden open={asistente} onOpenChange={setAsistente} />
+
       {cierre && (
         <ModalCierreOrden
           orden={cierre}
           open={!!cierre}
           onOpenChange={(v) => !v && setCierre(null)}
+          onCerrada={tandaTerminada}
         />
       )}
+
+      <ModalEtiquetasElaboracion
+        ordenId={etiquetasOrdenId}
+        abierto={!!etiquetasOrdenId}
+        onCambioAbierto={(v) => !v && setEtiquetasOrdenId(undefined)}
+      />
+
+      <ConfirmacionAccion
+        abierto={!!aCancelar}
+        onCambioAbierto={(v) => !v && setACancelar(null)}
+        titulo={`¿Cancelar la tanda de ${aCancelar?.producto?.nombre ?? 'producto'}?`}
+        descripcion={
+          aCancelar?.estado === 'iniciada'
+            ? 'Los insumos que ya se descontaron vuelven al stock.'
+            : 'La orden queda cancelada. No se movió stock todavía.'
+        }
+        textoConfirmar="Cancelar la tanda"
+        textoCancelar="Volver"
+        destructiva
+        procesando={cancelar.isPending}
+        onConfirmar={confirmarCancelacion}
+      />
     </div>
   )
 }

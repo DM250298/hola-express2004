@@ -251,6 +251,76 @@
   padding: 4mm 4mm 5mm;
 }
 
+/* ─── Etiqueta de elaboración (80mm) ──────────────────────────────── */
+/* Se pega al producto elaborado (sándwiches, viandas). Dos variantes:
+   `unidad` va en cada pieza y `bandeja` en la bandeja o la docena, con el
+   bloque de cantidad y la lista completa de ingredientes. Hereda de
+   .etiqueta-termica el ancho de 80mm y el corte de rollo por etiqueta. */
+.etiqueta-elab-nombre {
+  font-size: 15pt;
+  font-weight: 800;
+  line-height: 1.1;
+  word-break: break-word;
+  text-transform: uppercase;
+  margin-bottom: 1.5mm;
+}
+.etiqueta-elab-cantidad {
+  font-size: 26pt;
+  font-weight: 800;
+  text-align: center;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  border: 2px solid #000;
+  padding: 1.5mm 0;
+  margin: 0 0 2mm;
+}
+.etiqueta-elab-fila {
+  font-size: 10pt;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.8mm;
+}
+.etiqueta-elab-vence-label {
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  border-top: 1.5px solid #000;
+  padding-top: 1.5mm;
+  margin-top: 1.5mm;
+}
+.etiqueta-elab-vence-fecha {
+  font-size: 30pt;
+  font-weight: 800;
+  letter-spacing: 1px;
+  line-height: 1.05;
+  margin: 0.5mm 0 1.5mm;
+}
+/* Ingredientes: el bloque más largo, va chico y justificado al ancho. */
+.etiqueta-elab-bloque {
+  font-size: 8.5pt;
+  line-height: 1.25;
+  border-top: 1px solid #000;
+  padding-top: 1.5mm;
+  margin-top: 1.5mm;
+  word-break: break-word;
+}
+.etiqueta-elab-alergenos {
+  font-size: 9pt;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  margin-top: 1.2mm;
+  word-break: break-word;
+}
+.etiqueta-elab-conservacion {
+  font-size: 9pt;
+  margin-top: 1.2mm;
+}
+.etiqueta-elab-pie {
+  font-size: 8.5pt;
+  border-top: 1px dashed #000;
+  padding-top: 1.5mm;
+  margin-top: 1.5mm;
+}
+
 /* ─── Comprobante térmico 80mm (cierre de turno) ──────────────────── */
 .comprobante-termico {
   width: 80mm;
@@ -532,5 +602,10 @@
      de vencimiento; va después para ganar sobre el padding de .etiqueta-termica. */
   .etiqueta-precio {
     padding: 4mm 4mm 5mm;
+  }
+  /* La etiqueta de elaboración lleva menos aire que la de precio: entra más
+     texto (ingredientes) y conviene que el corte de rollo sea corto. */
+  .etiqueta-elab {
+    padding: 3mm 3.5mm 4mm;
   }
 }
