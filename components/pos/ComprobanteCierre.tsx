@@ -1,6 +1,10 @@
 'use client'
 
-import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
+import {
+  formatearFechaHora,
+  formatearMonto,
+  formatearNumero,
+} from '@/lib/utils/formato'
 
 export interface ProductoVendidoComprobante {
   nombre: string
@@ -96,7 +100,7 @@ export function ComprobanteCierre({ datos }: Props) {
             <div className="comprobante-fila" key={p.nombre}>
               <span>{p.nombre}</span>
               <span>
-                {p.cantidad} {p.unidad}
+                {formatearNumero(p.cantidad)} {p.unidad}
               </span>
             </div>
           ))

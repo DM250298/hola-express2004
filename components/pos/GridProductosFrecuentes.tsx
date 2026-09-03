@@ -3,6 +3,7 @@
 import { Package, Sparkles } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { formatearCantidad, formatearNumero } from '@/lib/utils/formato'
 import { ImagenProductoPOS } from './ImagenProductoPOS'
 import { useProductosFrecuentesTurno } from '@/lib/hooks/useVentas'
 import { useProductos } from '@/lib/hooks/useProductos'
@@ -121,7 +122,9 @@ export function GridProductosFrecuentes({
                       )}
                     </div>
                     <div className="text-[10px] text-[#c8a58a] mt-0.5">
-                      {d.venta_por_peso ? `${d.stock} kg disp.` : `Stock: ${d.stock}`}
+                      {d.venta_por_peso
+                        ? `${formatearCantidad(d.stock, true)} disp.`
+                        : `Stock: ${formatearNumero(d.stock)}`}
                     </div>
                   </div>
                 </div>

@@ -136,6 +136,8 @@ export interface VentaDetalleCompleta {
     ItemVentaRow & {
       producto_nombre: string | null
       producto_codigo: string | null
+      /** true = la cantidad del ítem está en kg, no en unidades. */
+      producto_por_peso: boolean
     }
   >
   pagos: PagoVentaRow[]
@@ -154,7 +156,7 @@ export async function getVentaDetalle(
       .maybeSingle(),
     supabase
       .from('items_venta')
-      .select('*, productos(nombre, codigo_barras)')
+      .select('*, productos(nombre, codigo_barras, venta_por_peso)')
       .eq('venta_id', id),
     supabase
       .from('pagos_venta')
@@ -182,7 +184,11 @@ export async function getVentaDetalle(
     clientes: { nombre: string } | null
   }
   type ItemCrudo = ItemVentaRow & {
-    productos: { nombre: string; codigo_barras: string | null } | null
+    productos: {
+      nombre: string
+      codigo_barras: string | null
+      venta_por_peso: boolean
+    } | null
   }
 
   const ventaData = resVenta.data as unknown as VentaCruda
@@ -228,6 +234,7 @@ export async function getVentaDetalle(
       ...resto,
       producto_nombre: productos?.nombre ?? null,
       producto_codigo: productos?.codigo_barras ?? null,
+      producto_por_peso: productos?.venta_por_peso ?? false,
     })),
     pagos: pagosData,
   }

@@ -2,6 +2,7 @@
 // (PantallaPOS) — no necesita persistencia entre páginas porque una sesión de
 // venta se completa de inmediato.
 
+import { formatearCantidad } from '@/lib/utils/formato'
 import type { ListaPrecio } from '@/types/database'
 
 export interface ItemCarrito {
@@ -181,12 +182,16 @@ export function contarUnidades(items: ItemCarrito[]): number {
   return items.reduce((acc, it) => acc + (it.venta_por_peso ? 1 : it.cantidad), 0)
 }
 
-/** Formatea la cantidad de un ítem del carrito para mostrar en UI. */
+/**
+ * Formatea la cantidad de un ítem del carrito para mostrar en UI. Abajo de 1 kg
+ * va en GRAMOS: es como piensa el fiambrero y es lo que tipeó en el teclado de
+ * peso. De 1 kg para arriba, kg al gramo (el ticket usa kg siempre).
+ */
 export function formatearCantidadItem(item: ItemCarrito): string {
   if (!item.venta_por_peso) return String(item.cantidad)
   const gramos = Math.round(item.cantidad * 1000)
   if (gramos >= 1000) {
-    return `${(item.cantidad).toFixed(3).replace('.', ',')} kg`
+    return formatearCantidad(item.cantidad, true)
   }
   return `${gramos} g`
 }

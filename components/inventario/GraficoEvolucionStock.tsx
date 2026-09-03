@@ -14,13 +14,20 @@ import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useEvolucionStock } from '@/lib/hooks/useInventario'
+import { formatearCantidad, formatearNumero } from '@/lib/utils/formato'
 
 interface Props {
   producto_id: number
   stock_minimo: number
+  /** true = el stock va en kg: el eje y el tooltip muestran decimales. */
+  porPeso: boolean
 }
 
-export function GraficoEvolucionStock({ producto_id, stock_minimo }: Props) {
+export function GraficoEvolucionStock({
+  producto_id,
+  stock_minimo,
+  porPeso,
+}: Props) {
   const { data, isLoading } = useEvolucionStock(producto_id, 30)
 
   const datosGrafico = useMemo(
@@ -70,9 +77,12 @@ export function GraficoEvolucionStock({ producto_id, stock_minimo }: Props) {
             tick={{ fontSize: 11 }}
             axisLine={{ stroke: '#e4c9b0' }}
             tickLine={{ stroke: '#e4c9b0' }}
-            allowDecimals={false}
+            allowDecimals={porPeso}
+            tickFormatter={(v: number) => formatearNumero(v)}
           />
-          <Tooltip content={<TooltipPersonalizado />} />
+          {/* Recharts clona el elemento inyectando active/payload/label y
+              conserva los props propios. */}
+          <Tooltip content={<TooltipPersonalizado porPeso={porPeso} />} />
           <Line
             type="monotone"
             dataKey="minimo"
@@ -101,9 +111,15 @@ interface PropsTooltip {
   active?: boolean
   label?: string
   payload?: Array<{ dataKey?: string | number; value?: number }>
+  porPeso?: boolean
 }
 
-function TooltipPersonalizado({ active, payload, label }: PropsTooltip) {
+function TooltipPersonalizado({
+  active,
+  payload,
+  label,
+  porPeso = false,
+}: PropsTooltip) {
   if (!active || !payload || payload.length === 0) return null
   const stock = payload.find((p) => p.dataKey === 'stock')?.value
   const minimo = payload.find((p) => p.dataKey === 'minimo')?.value
@@ -115,11 +131,14 @@ function TooltipPersonalizado({ active, payload, label }: PropsTooltip) {
           : null}
       </div>
       <div className="text-[#6f3a2a] mt-0.5 tabular-nums">
-        Stock: <span className="font-bold text-[#391511]">{stock}</span>
+        Stock:{' '}
+        <span className="font-bold text-[#391511]">
+          {stock != null ? formatearCantidad(stock, porPeso) : '—'}
+        </span>
       </div>
       {minimo != null && (
         <div className="text-[#c43e2c] text-[10px] tabular-nums">
-          Mínimo: {minimo}
+          Mínimo: {formatearCantidad(minimo, porPeso)}
         </div>
       )}
     </div>

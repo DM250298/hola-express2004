@@ -111,6 +111,8 @@ export interface TopProductoReporte {
   producto_id: number
   nombre: string
   categoria_nombre: string | null
+  /** true = "unidades" son kg. El % sobre el total sigue mezclando ambas. */
+  venta_por_peso: boolean
   unidades: number
   total_vendido: number
   porcentaje_unidades: number
@@ -130,6 +132,7 @@ export async function getTopProductos(
     productos: {
       id: number
       nombre: string
+      venta_por_peso: boolean
       categorias: { nombre: string } | null
     }
   }
@@ -141,7 +144,7 @@ export async function getTopProductos(
     supabase
       .from('items_venta')
       .select(
-        'cantidad, subtotal, ventas!inner(fecha, estado), productos!inner(id, nombre, categorias(nombre))'
+        'cantidad, subtotal, ventas!inner(fecha, estado), productos!inner(id, nombre, venta_por_peso, categorias(nombre))'
       )
       .gte('ventas.fecha', desde)
       .lte('ventas.fecha', hasta)
@@ -166,6 +169,7 @@ export async function getTopProductos(
         producto_id: p.id,
         nombre: p.nombre,
         categoria_nombre: p.categorias?.nombre ?? null,
+        venta_por_peso: p.venta_por_peso,
         unidades: fila.cantidad,
         total_vendido: Number(fila.subtotal),
         porcentaje_unidades: 0,
@@ -192,6 +196,8 @@ export interface RotacionProducto {
   producto_id: number
   nombre: string
   categoria_nombre: string | null
+  /** true = stock y unidades vendidas van en kg. */
+  venta_por_peso: boolean
   stock_actual: number
   unidades_vendidas: number
   dias_rotacion: number | null // null = sin ventas (dead stock candidate)
@@ -263,6 +269,7 @@ export async function getRotacionInventario(
     id: number
     nombre: string
     stock_actual: number
+    venta_por_peso: boolean
     categorias: { nombre: string } | null
   }
 
@@ -270,7 +277,7 @@ export async function getRotacionInventario(
   const productos = await traerTodo<ProductoFila>(() =>
     supabase
       .from('productos')
-      .select('id, nombre, stock_actual, categorias(nombre)')
+      .select('id, nombre, stock_actual, venta_por_peso, categorias(nombre)')
       .eq('activo', true)
       .order('id', { ascending: true })
   )
@@ -316,6 +323,7 @@ export async function getRotacionInventario(
         producto_id: p.id,
         nombre: p.nombre,
         categoria_nombre: p.categorias?.nombre ?? null,
+        venta_por_peso: p.venta_por_peso,
         stock_actual: p.stock_actual,
         unidades_vendidas: vendidas,
         dias_rotacion,
@@ -335,6 +343,8 @@ export interface DeadStockProducto {
   producto_id: number
   nombre: string
   categoria_nombre: string | null
+  /** true = el stock inmovilizado va en kg. */
+  venta_por_peso: boolean
   stock_actual: number
   precio_costo: number
   ultimo_movimiento: string | null
@@ -355,6 +365,7 @@ export async function getDeadStock(
     id: number
     nombre: string
     stock_actual: number
+    venta_por_peso: boolean
     costos_producto: CostoEmbed
     categorias: { nombre: string } | null
   }
@@ -363,7 +374,9 @@ export async function getDeadStock(
   const productos = await traerTodo<ProductoFila>(() =>
     supabase
       .from('productos')
-      .select('id, nombre, stock_actual, categorias(nombre), costos_producto(precio_costo)')
+      .select(
+        'id, nombre, stock_actual, venta_por_peso, categorias(nombre), costos_producto(precio_costo)'
+      )
       .eq('activo', true)
       .gt('stock_actual', 0)
       .order('id', { ascending: true })
@@ -384,6 +397,7 @@ export async function getDeadStock(
         producto_id: p.id,
         nombre: p.nombre,
         categoria_nombre: p.categorias?.nombre ?? null,
+        venta_por_peso: p.venta_por_peso,
         stock_actual: p.stock_actual,
         precio_costo: costo,
         ultimo_movimiento: ultimo,

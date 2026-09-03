@@ -21,6 +21,7 @@ import {
   getProductoByBarcode,
   getProductos,
 } from '@/lib/queries/productos'
+import { formatearCantidad } from '@/lib/utils/formato'
 import { aProdParaAgregar, type ProdParaAgregar } from './tipos'
 
 interface Props {
@@ -197,7 +198,8 @@ export function ModalAgregarProducto({
                             )}
                           </span>
                           <span className="shrink-0 text-[10px] text-[#6f3a2a]">
-                            Stock: {p.stock_actual}
+                            Stock:{' '}
+                            {formatearCantidad(p.stock_actual, p.venta_por_peso)}
                           </span>
                         </button>
                       </li>

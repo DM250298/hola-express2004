@@ -21,7 +21,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { useVentaDetalle } from '@/lib/hooks/useVentasListado'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { etiquetaMedioFallback } from '@/lib/utils/iconosMedioPago'
-import { formatearFechaHora } from '@/lib/utils/formato'
+import { formatearCantidad, formatearFechaHora } from '@/lib/utils/formato'
 
 interface Props {
   ventaId: number | null
@@ -148,7 +148,7 @@ export function DrawerDetalleVenta({ ventaId, onCambioAbierto }: Props) {
                             )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-[#6f3a2a] text-xs">
-                            {it.cantidad}
+                            {formatearCantidad(it.cantidad, it.producto_por_peso)}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-[#6f3a2a] text-xs">
                             <MontoARS monto={it.precio_unitario} />

@@ -1,7 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ClipboardList, Loader2, ShieldCheck } from 'lucide-react'
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ClipboardList,
+  Loader2,
+  ShieldCheck,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,6 +17,12 @@ import {
   useConteos,
   useGuardarConteoEmpleado,
 } from '@/lib/hooks/useConteos'
+import {
+  formatearCantidad,
+  formatearNumero,
+  pareceGramosEnKg,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import { EscanerCamara } from './EscanerCamara'
 
 interface Props {
@@ -145,6 +157,12 @@ function DetalleConteo({
       toast.error('Ese código no pertenece a este conteo.')
       return
     }
+    // Un pesable se pesa y se carga el total: sumarle 1 kg por escaneo no
+    // tiene sentido (mismo criterio que el conteo rápido).
+    if (item.venta_por_peso) {
+      toast.info(`${item.producto_nombre}: cargá el peso en kg`)
+      return
+    }
     setValores((prev) => {
       const actual = Number(prev[item.id]) || 0
       return { ...prev, [item.id]: String(actual + 1) }
@@ -156,7 +174,10 @@ function DetalleConteo({
     if (!data) return
     const conteos = data.items.map((it) => ({
       itemId: it.id,
-      cantidad: Math.max(0, Number(valores[it.id]) || 0),
+      cantidad: redondearCantidad(
+        Math.max(0, Number(valores[it.id]) || 0),
+        it.venta_por_peso
+      ),
     }))
     guardar.mutate({ conteoId, conteos })
   }
@@ -198,34 +219,88 @@ function DetalleConteo({
           />
 
           <ul className="space-y-2">
-            {data.items.map((it) => (
-              <li
-                key={it.id}
-                className="flex items-center gap-3 rounded-2xl border border-[#e4c9b0]/70 bg-white p-3 shadow-sm"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-[#391511]">
-                    {it.producto_nombre}
-                  </p>
-                  <p className="text-xs text-[#6f3a2a]">
-                    Sistema:{' '}
-                    <span className="tabular-nums">{it.stock_sistema}</span>
-                  </p>
-                </div>
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  inputMode="numeric"
-                  value={valores[it.id] ?? ''}
-                  onChange={(e) =>
-                    setValores((prev) => ({ ...prev, [it.id]: e.target.value }))
-                  }
-                  placeholder="0"
-                  className="h-12 w-24 shrink-0 border-[#e4c9b0] text-center text-lg tabular-nums focus-visible:ring-[#f9b44c]"
-                />
-              </li>
-            ))}
+            {data.items.map((it) => {
+              const crudo = valores[it.id] ?? ''
+              const cantNum = Number(crudo)
+              // Un entero grande tipeado en un campo de KILOS es casi seguro
+              // un peso leído en gramos de la balanza (3805 = 3,805 kg).
+              const esGramos =
+                it.venta_por_peso && cantNum > 0 && pareceGramosEnKg(crudo)
+              return (
+                <li
+                  key={it.id}
+                  className="rounded-2xl border border-[#e4c9b0]/70 bg-white p-3 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium text-[#391511]">
+                        {it.producto_nombre}
+                        {it.venta_por_peso && (
+                          <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                            Por kg
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-[#6f3a2a]">
+                        Sistema:{' '}
+                        <span className="tabular-nums">
+                          {formatearCantidad(it.stock_sistema, it.venta_por_peso)}
+                        </span>
+                      </p>
+                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step={it.venta_por_peso ? '0.001' : '1'}
+                      inputMode={it.venta_por_peso ? 'decimal' : 'numeric'}
+                      value={crudo}
+                      onChange={(e) =>
+                        setValores((prev) => ({
+                          ...prev,
+                          [it.id]: e.target.value,
+                        }))
+                      }
+                      placeholder={it.venta_por_peso ? '0,000' : '0'}
+                      className="h-12 w-24 shrink-0 border-[#e4c9b0] text-center text-lg tabular-nums focus-visible:ring-[#f9b44c]"
+                    />
+                    {it.venta_por_peso && (
+                      <span className="flex h-12 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e4c9b0] bg-[#fdfaf6] text-sm font-bold text-[#9e6b15]">
+                        kg
+                      </span>
+                    )}
+                  </div>
+
+                  {esGramos ? (
+                    <div className="mt-2 space-y-1.5 rounded-lg border-2 border-[#c43e2c]/60 bg-[#c43e2c]/10 p-2">
+                      <p className="flex items-start gap-1 text-[11px] font-bold text-[#c43e2c]">
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />¿
+                        {formatearNumero(cantNum)} KILOS? Parece un peso en
+                        gramos de la balanza.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setValores((prev) => ({
+                            ...prev,
+                            [it.id]: String(cantNum / 1000),
+                          }))
+                        }
+                        className="w-full rounded-md border border-[#c43e2c]/50 bg-white px-2 py-1.5 text-xs font-bold text-[#c43e2c] active:bg-[#c43e2c]/10"
+                      >
+                        Eran gramos → usar {formatearCantidad(cantNum / 1000, true)}
+                      </button>
+                    </div>
+                  ) : (
+                    it.venta_por_peso &&
+                    cantNum > 0 && (
+                      <p className="mt-1 text-[10px] text-[#6f3a2a]">
+                        = {formatearNumero(Math.round(cantNum * 1000))} g
+                      </p>
+                    )
+                  )}
+                </li>
+              )
+            })}
           </ul>
 
           <div className="sticky bottom-4 z-10 space-y-2">

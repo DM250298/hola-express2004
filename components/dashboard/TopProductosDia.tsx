@@ -4,6 +4,7 @@ import { Package, Trophy } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { useTopProductosDia } from '@/lib/hooks/useDashboard'
+import { formatearCantidad } from '@/lib/utils/formato'
 
 const MEDALLA_COLORS = ['#f9b44c', '#c8a58a', '#a07b65', '#6f3a2a', '#6f3a2a']
 
@@ -51,7 +52,7 @@ export function TopProductosDia() {
                   {p.nombre}
                 </div>
                 <div className="text-xs text-[#6f3a2a] tabular-nums">
-                  {p.unidades} {p.unidades === 1 ? 'unidad' : 'unidades'}
+                  {formatearCantidad(p.unidades, p.venta_por_peso)}
                 </div>
               </div>
               <div className="text-right shrink-0">

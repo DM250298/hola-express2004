@@ -5,6 +5,7 @@ import { Loader2, Package, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useProductosProduccion } from '@/lib/hooks/useProduccion'
 import { etiquetaTipo } from '@/lib/tipos-producto'
+import { formatearNumero } from '@/lib/utils/formato'
 import type { ProductoProduccion } from '@/lib/queries/produccion'
 import { cn } from '@/lib/utils'
 
@@ -87,7 +88,7 @@ export function BuscadorInsumo({ tipos, excluidos = [], onSeleccionar }: Props) 
                           {p.nombre}
                         </div>
                         <div className="text-xs text-[#c8a58a] mt-0.5">
-                          {etiquetaTipo(p.tipo)} · stock {p.stock_actual}{' '}
+                          {etiquetaTipo(p.tipo)} · stock {formatearNumero(p.stock_actual)}{' '}
                           {p.unidad}
                         </div>
                       </div>

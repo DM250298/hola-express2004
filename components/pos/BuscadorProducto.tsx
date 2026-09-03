@@ -5,6 +5,7 @@ import { Loader2, Package, Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { formatearCantidad } from '@/lib/utils/formato'
 import { ImagenProductoPOS } from './ImagenProductoPOS'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { getProductoByBarcode } from '@/lib/queries/productos'
@@ -228,7 +229,8 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
                                   : 'text-[#6f3a2a]'
                               }
                             >
-                              Stock: {p.stock_actual}
+                              Stock:{' '}
+                              {formatearCantidad(p.stock_actual, p.venta_por_peso)}
                             </span>
                           </div>
                         </div>

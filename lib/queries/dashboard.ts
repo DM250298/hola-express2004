@@ -194,6 +194,8 @@ export async function getVentasPorHora(): Promise<PuntoHora[]> {
 export interface TopProductoDia {
   producto_id: number
   nombre: string
+  /** true = "unidades" son kg (fiambrería, verdulería). */
+  venta_por_peso: boolean
   unidades: number
   total_vendido: number
 }
@@ -208,7 +210,7 @@ export async function getTopProductosDia(
   const { data, error } = await supabase
     .from('items_venta')
     .select(
-      'cantidad, subtotal, ventas!inner(fecha, estado), productos!inner(id, nombre)'
+      'cantidad, subtotal, ventas!inner(fecha, estado), productos!inner(id, nombre, venta_por_peso)'
     )
     .gte('ventas.fecha', desde)
     .lte('ventas.fecha', hasta)
@@ -219,7 +221,7 @@ export async function getTopProductosDia(
   type Fila = {
     cantidad: number
     subtotal: number
-    productos: { id: number; nombre: string }
+    productos: { id: number; nombre: string; venta_por_peso: boolean }
   }
 
   const acumulado = new Map<number, TopProductoDia>()
@@ -232,6 +234,7 @@ export async function getTopProductosDia(
       acumulado.set(fila.productos.id, {
         producto_id: fila.productos.id,
         nombre: fila.productos.nombre,
+        venta_por_peso: fila.productos.venta_por_peso,
         unidades: fila.cantidad,
         total_vendido: Number(fila.subtotal),
       })

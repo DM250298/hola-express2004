@@ -125,7 +125,7 @@ export function PanelElaborarAhora({ onElaborado, onNuevaOrden }: Props) {
             </option>
             {(recetas ?? []).map((r) => (
               <option key={r.id} value={r.id}>
-                {r.producto?.nombre ?? 'Producto'} · rinde {r.rendimiento}{' '}
+                {r.producto?.nombre ?? 'Producto'} · rinde {formatearNumero(r.rendimiento)}{' '}
                 {r.unidad_rendimiento}
               </option>
             ))}

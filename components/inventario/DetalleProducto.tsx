@@ -43,7 +43,12 @@ import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { calcularEstadoStock } from '@/lib/queries/inventario'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
-import { formatearCantidad, formatearFechaHora } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaHora,
+  formatearNumero,
+  redondearCantidad,
+} from '@/lib/utils/formato'
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalEliminarProducto } from './ModalEliminarProducto'
 import { ModalCodigoBarras } from '@/components/movil/ModalCodigoBarras'
@@ -373,7 +378,7 @@ export function DetalleProducto({ productoId }: Props) {
       </div>
 
       {/* Velocidad de venta */}
-      <PanelCobertura cobertura={cobertura ?? null} />
+      <PanelCobertura cobertura={cobertura ?? null} porPeso={porPeso} />
 
       {/* Gráfico de evolución */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">
@@ -385,6 +390,7 @@ export function DetalleProducto({ productoId }: Props) {
         <GraficoEvolucionStock
           producto_id={producto.id}
           stock_minimo={producto.stock_minimo}
+          porPeso={porPeso}
         />
       </div>
 
@@ -589,7 +595,9 @@ export function DetalleProducto({ productoId }: Props) {
 
 function PanelCobertura({
   cobertura,
+  porPeso,
 }: {
+  porPeso: boolean
   cobertura:
     | {
         promedio_diario: number
@@ -653,8 +661,16 @@ function PanelCobertura({
             Promedio diario
           </span>
           <span className="text-[#391511] font-extrabold text-xl tabular-nums">
-            {promedio.toFixed(1)}
-            <span className="text-xs font-medium text-[#6f3a2a] ml-1">unid/día</span>
+            {/* Por peso el promedio va al gramo: 0,112 kg/día redondeado a
+                "0,1" oculta la mitad del movimiento de una fiambrería. */}
+            {formatearNumero(
+              porPeso
+                ? redondearCantidad(promedio, true)
+                : Math.round(promedio * 10) / 10
+            )}
+            <span className="text-xs font-medium text-[#6f3a2a] ml-1">
+              {porPeso ? 'kg/día' : 'unid/día'}
+            </span>
           </span>
         </div>
 
@@ -663,7 +679,7 @@ function PanelCobertura({
             Total 14 días
           </span>
           <span className="text-[#391511] font-extrabold text-xl tabular-nums">
-            {Math.round(ventas14d)}
+            {formatearCantidad(ventas14d, porPeso)}
           </span>
         </div>
 

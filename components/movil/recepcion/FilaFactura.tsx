@@ -85,7 +85,6 @@ export function FilaFactura({
             ) : (
               <span className="font-semibold tabular-nums text-[#391511]">
                 {formatearCantidad(cantidad, item.venta_por_peso)}
-                {item.venta_por_peso ? ' kg' : ' u.'}
               </span>
             )}
 

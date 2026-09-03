@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { TicketTermico } from './TicketTermico'
-import { formatearFechaHora } from '@/lib/utils/formato'
+import { formatearCantidad, formatearFechaHora } from '@/lib/utils/formato'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
 import { etiquetaMedioFallback } from '@/lib/utils/iconosMedioPago'
 import type { VentaCompleta } from '@/lib/queries/ventas'
@@ -97,8 +97,10 @@ export function TicketResumen({
                 key={it.producto_id}
                 className="flex items-baseline gap-2"
               >
-                <span className="text-[#6f3a2a] tabular-nums shrink-0 w-8">
-                  {it.cantidad}×
+                <span className="text-[#6f3a2a] tabular-nums shrink-0 min-w-8">
+                  {it.venta_por_peso
+                    ? formatearCantidad(it.cantidad, true)
+                    : `${it.cantidad}×`}
                 </span>
                 <span className="text-[#391511] flex-1 truncate">
                   {it.nombre}

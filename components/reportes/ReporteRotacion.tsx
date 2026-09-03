@@ -12,7 +12,11 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
-import { formatearMonto, formatearFechaCorta } from '@/lib/utils/formato'
+import {
+  formatearCantidad,
+  formatearFechaCorta,
+  formatearMonto,
+} from '@/lib/utils/formato'
 import { useDeadStock, useRotacionInventario } from '@/lib/hooks/useReportes'
 import {
   agregarBloqueKPIs,
@@ -62,8 +66,8 @@ export function ReporteRotacion({ desde, hasta }: Props) {
       rotacion.map((p) => [
         p.nombre,
         p.categoria_nombre ?? '—',
-        p.stock_actual,
-        p.unidades_vendidas,
+        formatearCantidad(p.stock_actual, p.venta_por_peso),
+        formatearCantidad(p.unidades_vendidas, p.venta_por_peso),
         formatearDiasRotacion(p.dias_rotacion),
       ]),
       {
@@ -104,7 +108,7 @@ export function ReporteRotacion({ desde, hasta }: Props) {
       dead.map((p) => [
         p.nombre,
         p.categoria_nombre ?? '—',
-        p.stock_actual,
+        formatearCantidad(p.stock_actual, p.venta_por_peso),
         formatearMonto(p.precio_costo),
         formatearMonto(p.valor_inmovilizado),
         p.ultimo_movimiento
@@ -196,10 +200,10 @@ export function ReporteRotacion({ desde, hasta }: Props) {
                         )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-[#391511]">
-                        {p.stock_actual}
+                        {formatearCantidad(p.stock_actual, p.venta_por_peso)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                        {p.unidades_vendidas}
+                        {formatearCantidad(p.unidades_vendidas, p.venta_por_peso)}
                       </TableCell>
                       <TableCell
                         className={cn(
@@ -318,7 +322,7 @@ export function ReporteRotacion({ desde, hasta }: Props) {
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#391511]">
-                      {p.stock_actual}
+                      {formatearCantidad(p.stock_actual, p.venta_por_peso)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#6f3a2a]">
                       <MontoARS monto={p.precio_costo} />

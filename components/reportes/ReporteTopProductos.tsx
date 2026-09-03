@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
-import { formatearMonto } from '@/lib/utils/formato'
+import { formatearCantidad, formatearMonto } from '@/lib/utils/formato'
 import { useTopProductosReporte } from '@/lib/hooks/useReportes'
 import {
   agregarTabla,
@@ -60,7 +60,7 @@ export function ReporteTopProductos({ desde, hasta }: Props) {
         i + 1,
         p.nombre,
         p.categoria_nombre ?? '—',
-        p.unidades,
+        formatearCantidad(p.unidades, p.venta_por_peso),
         formatearMonto(p.total_vendido),
         `${(criterio === 'unidades' ? p.porcentaje_unidades : p.porcentaje_monto).toFixed(1)}%`,
       ]),
@@ -183,7 +183,7 @@ export function ReporteTopProductos({ desde, hasta }: Props) {
                           : 'text-[#6f3a2a]'
                       )}
                     >
-                      {p.unidades}
+                      {formatearCantidad(p.unidades, p.venta_por_peso)}
                     </TableCell>
                     <TableCell
                       className={cn(

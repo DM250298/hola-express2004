@@ -4,7 +4,7 @@ import { CheckCircle2, Download, PackageX } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
-import { formatearMonto } from '@/lib/utils/formato'
+import { formatearMonto, formatearNumero } from '@/lib/utils/formato'
 import { useMermasPorCategoria } from '@/lib/hooks/useReportes'
 import {
   agregarBloqueKPIs,
@@ -120,9 +120,9 @@ export function ReporteMermas({ desde, hasta }: Props) {
                   Total mermas
                 </div>
                 <div className="text-xs text-[#6f3a2a]">
-                  {data.total_unidades}{' '}
-                  {data.total_unidades === 1 ? 'unidad' : 'unidades'} dadas de
-                  baja
+                  {/* Total mixto: suma kg de fiambrería con unidades de
+                      góndola, por eso el rótulo "u. + kg" y no una sola. */}
+                  {formatearNumero(data.total_unidades)} u. + kg dados de baja
                 </div>
               </div>
             </div>
@@ -162,7 +162,7 @@ export function ReporteMermas({ desde, hasta }: Props) {
                       />
                     </div>
                     <div className="text-[10px] text-[#c8a58a] tabular-nums">
-                      {c.unidades} {c.unidades === 1 ? 'unidad' : 'unidades'}
+                      {formatearNumero(c.unidades)} u. + kg
                     </div>
                   </li>
                 )

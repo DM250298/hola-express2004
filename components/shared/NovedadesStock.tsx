@@ -6,6 +6,7 @@ import { ArrowDownRight, ArrowUpRight, Bell, ChevronDown } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { getMovimientosStock } from '@/lib/queries/movimientosStock'
+import { formatearCantidad } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
 const LS_VISTO = 'hola-novedades-stock-visto'
@@ -149,11 +150,11 @@ export function NovedadesStock({ limite = 30, className }: Props) {
                         positivo ? 'text-[#2f7d4f]' : 'text-[#c43e2c]'
                       )}
                     >
-                      {positivo ? '+' : ''}
-                      {delta}
+                      {positivo ? '+' : '−'}
+                      {formatearCantidad(Math.abs(delta), m.producto_por_peso)}
                     </p>
                     <p className="text-[10px] text-[#c8a58a]">
-                      queda {m.stock_nuevo}
+                      queda {formatearCantidad(m.stock_nuevo, m.producto_por_peso)}
                     </p>
                   </div>
                 </li>

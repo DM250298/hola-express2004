@@ -17,6 +17,7 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { InputNumero } from './InputNumero'
 import { useInsumosAComprar } from '@/lib/hooks/useProduccion'
 import { guardarHandoffReposicion } from '@/lib/compras/handoffReposicion'
+import { formatearNumero } from '@/lib/utils/formato'
 import type { InsumoAComprar } from '@/lib/queries/produccion'
 import { cn } from '@/lib/utils'
 
@@ -240,10 +241,10 @@ export function TabComprarInsumos() {
                                 )}
                               </TableCell>
                               <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                                {i.requerido} {i.unidad}
+                                {formatearNumero(i.requerido)} {i.unidad}
                               </TableCell>
                               <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-                                {i.stock_actual} {i.unidad}
+                                {formatearNumero(i.stock_actual)} {i.unidad}
                               </TableCell>
                               <TableCell>
                                 <InputNumero

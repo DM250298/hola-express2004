@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { formatearCantidad, formatearNumero } from '@/lib/utils/formato'
 import { etiquetaTipo } from '@/lib/tipos-producto'
 import { DrawerProducto } from './DrawerProducto'
 import { ModalVencimientoMinimoMasivo } from './ModalVencimientoMinimoMasivo'
@@ -420,10 +421,11 @@ export function TablaProductos() {
                                 : 'text-[#391511]'
                             }
                           >
-                            {p.stock_actual}
+                            {formatearCantidad(p.stock_actual, p.venta_por_peso)}
                           </span>
                           <span className="text-[#c8a58a] text-xs">
-                            / {p.stock_minimo}
+                            {/* el sufijo ya lo puso el stock actual */}
+                            / {formatearNumero(p.stock_minimo)}
                           </span>
                         </div>
                       </TableCell>

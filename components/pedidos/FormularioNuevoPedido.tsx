@@ -865,7 +865,8 @@ export function FormularioNuevoPedido({ pedidoId }: Props) {
                       // Fallback legacy (migración 151 sin correr)
                       <div className="text-xs text-[#6f3a2a] mt-0.5 inline-flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3 text-[#e4a42a]" />
-                        Stock {s.stock_actual} / mín {s.stock_minimo}
+                        Stock {formatearCantidad(s.stock_actual, s.venta_por_peso)}{' '}
+                        / mín {formatearNumero(s.stock_minimo)}
                       </div>
                     )}
                   </div>

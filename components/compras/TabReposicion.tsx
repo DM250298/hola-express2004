@@ -40,6 +40,7 @@ import {
   generarCotizacionExcel,
   generarCotizacionPDF,
 } from '@/lib/utils/cotizacion'
+import { formatearCantidad, formatearNumero } from '@/lib/utils/formato'
 import { guardarHandoffReposicion } from '@/lib/compras/handoffReposicion'
 import { cn } from '@/lib/utils'
 
@@ -56,6 +57,7 @@ interface FilaReposicionProps {
   proveedor_nombre: string | null
   stock_actual: number
   stock_minimo: number
+  venta_por_peso: boolean
   marcado: boolean
   cantidad: string
   onToggle: (id: number) => void
@@ -71,6 +73,7 @@ const FilaReposicion = memo(function FilaReposicion({
   proveedor_nombre,
   stock_actual,
   stock_minimo,
+  venta_por_peso,
   marcado,
   cantidad,
   onToggle,
@@ -99,15 +102,17 @@ const FilaReposicion = memo(function FilaReposicion({
         )}
       </TableCell>
       <TableCell className="text-right tabular-nums font-bold text-[#c43e2c]">
-        {stock_actual}
+        {formatearCantidad(stock_actual, venta_por_peso)}
       </TableCell>
       <TableCell className="text-right tabular-nums text-[#6f3a2a]">
-        {stock_minimo}
+        {formatearNumero(stock_minimo)}
       </TableCell>
       <TableCell>
         <Input
           type="number"
           min="0"
+          step={venta_por_peso ? '0.001' : '1'}
+          inputMode={venta_por_peso ? 'decimal' : 'numeric'}
           value={cantidad}
           onChange={(e) => onCantidad(id, e.target.value)}
           className="h-8 w-24 text-center tabular-nums border-[#e4c9b0]"
@@ -416,6 +421,7 @@ export function TabReposicion() {
                       proveedor_nombre={p.proveedor_nombre}
                       stock_actual={p.stock_actual}
                       stock_minimo={p.stock_minimo}
+                      venta_por_peso={p.venta_por_peso}
                       marcado={!desmarcados.has(p.id)}
                       cantidad={
                         cantidades[p.id] ?? String(p.cantidad_sugerida)

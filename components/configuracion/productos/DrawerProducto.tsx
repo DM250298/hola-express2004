@@ -306,7 +306,7 @@ function BuscadorComponente({
                         {p.nombre}
                       </div>
                       <div className="text-xs text-[#c8a58a] mt-0.5">
-                        Stock {p.stock_actual} {p.unidad}
+                        Stock {formatearNumero(p.stock_actual)} {p.unidad}
                         {p.precio_costo > 0 && (
                           <>
                             {' · costo '}
@@ -1013,7 +1013,7 @@ export function DrawerProducto({
                               {c.nombre}
                             </div>
                             <div className="text-[11px] text-[#c8a58a]">
-                              Stock {c.stock_actual} {c.unidad}
+                              Stock {formatearNumero(c.stock_actual)} {c.unidad}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 sm:contents">

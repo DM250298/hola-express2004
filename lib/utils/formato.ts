@@ -53,20 +53,20 @@ export function formatearNumero(numero: number): string {
   return new Intl.NumberFormat('es-AR').format(numero)
 }
 
-// 1 decimal en PANTALLA: "18.014,574 kg" era ilegible (punto de miles + tres
-// decimales de gramos). El valor exacto vive en la base y en los INPUTS de
-// carga (recepción, conteo, ajustes), que siguen aceptando 3 decimales; esto
-// solo simplifica cómo se muestra en listados y exportaciones.
+// Al GRAMO en pantalla: hasta 3 decimales, sin ceros de relleno (1,56 kg /
+// 0,2 kg / 3 kg). Antes se redondeaba a 1 decimal por prolijidad del listado,
+// pero mostrar "1,6 kg" cuando hay 1,56 kg hacía que el conteo físico y la
+// recepción no cerraran contra la balanza: en fiambrería el gramo es plata.
 const formateadorKg = new Intl.NumberFormat('es-AR', {
-  maximumFractionDigits: 1,
+  maximumFractionDigits: 3,
 })
 
 /**
  * Formatea una cantidad de producto según su unidad de medida.
- * Por peso: 1 decimal con sufijo "kg" (ej: 4,7 kg — el valor exacto al gramo
- * se conserva en la base). Por unidad: entero con "u." (ej: 3 u.). Se usa
- * para que la recepción, el pedido y las diferencias muestren la unidad
- * correcta de cada producto.
+ * Por peso: hasta 3 decimales con sufijo "kg" (ej: 1,56 kg — el gramo es la
+ * unidad mínima que guarda la base, numeric(12,3)). Por unidad: entero con
+ * "u." (ej: 3 u.). Se usa para que la recepción, el pedido y las diferencias
+ * muestren la unidad correcta de cada producto.
  */
 export function formatearCantidad(cantidad: number, porPeso: boolean): string {
   if (porPeso) return `${formateadorKg.format(cantidad)} kg`
