@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import type { VentaCompleta } from '@/lib/queries/ventas'
 import type {
   ItemVentaRow,
   ListaPrecio,
@@ -237,5 +238,39 @@ export async function getVentaDetalle(
       producto_por_peso: productos?.venta_por_peso ?? false,
     })),
     pagos: pagosData,
+  }
+}
+
+/**
+ * Rearma la `VentaCompleta` que consumen el ticket térmico y el resumen del
+ * POS a partir de una venta YA guardada. Es lo que permite REIMPRIMIR: el
+ * ticket original se arma con el payload del cobro, que deja de existir apenas
+ * se cierra la venta.
+ *
+ * Dos datos quedan afuera a propósito porque no se guardan o ya no son
+ * ciertos:
+ *  · el vuelto (lo resuelve el cajero en el momento, no va a la base);
+ *  · la deuda total del fiado, que es un saldo VIVO — imprimir el de hoy en la
+ *    copia de un ticket de ayer sería mentir. La copia dice a quién se fió,
+ *    sin el total adeudado.
+ */
+export function aVentaCompleta(d: VentaDetalleCompleta): VentaCompleta {
+  return {
+    venta: d.venta,
+    items: d.items.map((it) => ({
+      producto_id: it.producto_id,
+      nombre: it.producto_nombre ?? `Producto #${it.producto_id}`,
+      cantidad: it.cantidad,
+      precio_unitario: it.precio_unitario,
+      subtotal: it.subtotal,
+      venta_por_peso: it.producto_por_peso,
+      lista_precio: it.lista_precio,
+    })),
+    pagos: d.pagos.map((p) => ({ medio_pago: p.medio_pago, monto: p.monto })),
+    total: d.venta.total,
+    listaPrecio: d.venta.lista_precio,
+    cliente: d.cliente_nombre
+      ? { nombre: d.cliente_nombre, fiado: d.fiada, deudaTotal: null }
+      : null,
   }
 }

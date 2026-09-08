@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Ban, Eye, Loader2, Receipt } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Ban, Eye, Loader2, Printer, Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,14 +10,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { toast } from 'sonner'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
 import { DrawerDetalleVenta } from '@/components/ventas/DrawerDetalleVenta'
+import { TicketTermico } from './TicketTermico'
 import {
   useAnularVenta,
+  useVentaDetalle,
   useVentasListado,
 } from '@/lib/hooks/useVentasListado'
-import { formatearFechaHora } from '@/lib/utils/formato'
+import { aVentaCompleta } from '@/lib/queries/ventas-listado'
+import { formatearFechaHora, formatearNumero } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -36,6 +40,42 @@ export function ModalVentasTurno({
   const { data: ventas, isLoading } = useVentasListado({ turno_id: turnoId })
   const anular = useAnularVenta()
   const [ventaVer, setVentaVer] = useState<number | null>(null)
+  const [reimprimirId, setReimprimirId] = useState<number | null>(null)
+
+  // Reimpresión: el ticket original se arma con el payload del cobro, que ya
+  // no existe. Se trae el detalle guardado y se rearma la venta para el mismo
+  // TicketTermico de siempre (una sola plantilla de ticket en todo el POS).
+  const {
+    data: detalleReimpresion,
+    isError: errorReimpresion,
+    isSuccess: llegoReimpresion,
+  } = useVentaDetalle(reimprimirId)
+  const ventaReimpresion =
+    detalleReimpresion && detalleReimpresion.venta.id === reimprimirId
+      ? aVentaCompleta(detalleReimpresion)
+      : null
+
+  // El ticket tiene que estar en el DOM antes de abrir el diálogo de impresión
+  // (el CSS de @media print oculta todo lo demás). Dep primitiva: el objeto se
+  // rearma en cada render y dispararía el effect de nuevo.
+  useEffect(() => {
+    if (!ventaReimpresion) return
+    const t = setTimeout(() => {
+      window.print()
+      setReimprimirId(null)
+    }, 80)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ventaReimpresion?.venta.id])
+
+  // Sin detalle (se cortó la red, o la venta ya no está) hay que destrabar el
+  // botón: si no, queda girando el spinner y ninguna venta se puede reimprimir.
+  useEffect(() => {
+    if (reimprimirId === null) return
+    if (!errorReimpresion && !(llegoReimpresion && !detalleReimpresion)) return
+    toast.error('No se pudo traer la venta para reimprimir el ticket.')
+    setReimprimirId(null)
+  }, [reimprimirId, errorReimpresion, llegoReimpresion, detalleReimpresion])
 
   function handleAnular(ventaId: number) {
     if (
@@ -103,7 +143,10 @@ export function ModalVentasTurno({
                           )}
                         </div>
                         <div className="text-[11px] text-[#6f3a2a] tabular-nums">
-                          {formatearFechaHora(v.fecha)} · {v.cantidad_items}{' '}
+                          {/* formatearNumero corta la basura del float: los
+                              productos por peso hacían salir "454.29999999" */}
+                          {formatearFechaHora(v.fecha)} ·{' '}
+                          {formatearNumero(v.cantidad_items)}{' '}
                           {v.cantidad_items === 1 ? 'ítem' : 'ítems'}
                         </div>
                       </div>
@@ -127,6 +170,25 @@ export function ModalVentasTurno({
                         title="Ver detalle"
                       >
                         <Eye className="h-3.5 w-3.5" />
+                      </Button>
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setReimprimirId(v.id)}
+                        disabled={anulada || reimprimirId !== null}
+                        className="h-8 w-8 p-0 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 disabled:opacity-30"
+                        title={
+                          anulada
+                            ? 'Venta anulada: no se reimprime'
+                            : 'Reimprimir ticket'
+                        }
+                      >
+                        {reimprimirId === v.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Printer className="h-3.5 w-3.5" />
+                        )}
                       </Button>
 
                       <Button
@@ -158,6 +220,16 @@ export function ModalVentasTurno({
         ventaId={ventaVer}
         onCambioAbierto={(v) => !v && setVentaVer(null)}
       />
+
+      {/* Copia del ticket, fuera de pantalla hasta que se imprime. */}
+      {ventaReimpresion && (
+        <TicketTermico
+          venta={ventaReimpresion}
+          vuelto={null}
+          nombreCajero={detalleReimpresion?.cajero_nombre ?? '—'}
+          copia
+        />
+      )}
     </>
   )
 }

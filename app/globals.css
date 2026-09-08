@@ -440,6 +440,13 @@
   border-radius: 1.5mm;
   padding: 1.2mm;
 }
+/* Copia de un ticket ya entregado: tiene que cantar a la vista. */
+.ticket-copia {
+  text-align: center;
+  font-weight: 800;
+  font-size: 8.5pt;
+  letter-spacing: 0.5pt;
+}
 .ticket-item {
   display: flex;
   align-items: flex-start;

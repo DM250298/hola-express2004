@@ -13,6 +13,11 @@ interface Props {
   venta: VentaCompleta
   vuelto: number | null
   nombreCajero: string
+  /**
+   * true = es la COPIA de un ticket ya entregado. Se aclara en el papel para
+   * que un duplicado no se pueda hacer pasar por una compra nueva.
+   */
+  copia?: boolean
 }
 
 /**
@@ -22,7 +27,12 @@ interface Props {
  * `@media print` en globals.css lo hace visible y oculta el resto al
  * ejecutar `window.print()`.
  */
-export function TicketTermico({ venta, vuelto, nombreCajero }: Props) {
+export function TicketTermico({
+  venta,
+  vuelto,
+  nombreCajero,
+  copia = false,
+}: Props) {
   const { data: medios } = useMediosPago()
 
   function etiquetaMedio(codigo: string): string {
@@ -52,6 +62,7 @@ export function TicketTermico({ venta, vuelto, nombreCajero }: Props) {
           ) : (
             <div className="ticket-meta-num">Ticket N° {venta.venta.id}</div>
           )}
+          {copia && <div className="ticket-copia">— REIMPRESIÓN —</div>}
           <div>{formatearFechaHora(venta.venta.fecha)}</div>
           <div>Atendió: {nombreCajero}</div>
           {venta.listaPrecio === 'mayorista' && <div>Lista: MAYORISTA</div>}
