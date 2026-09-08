@@ -89,6 +89,13 @@ export interface LineaFacturaPayload extends EntradaLinea {
    * les pisaría el vencimiento cargado en el depósito.
    */
   fecha_vencimiento?: string | null
+  /**
+   * true = las alícuotas de esta línea se guardan también en la ficha del
+   * producto (mig 168). Clave opcional: sin la migración corrida el RPC la
+   * ignora, y sin este flag el server no pisa nada — así un cliente viejo no
+   * puede estampar su 21 hardcodeado sobre un producto que está al 10,5.
+   */
+  aplicar_iva?: boolean
 }
 
 /** Datos formales del comprobante (cabecera AFIP). Todos opcionales. */
@@ -506,6 +513,7 @@ export async function guardarFacturaCompra(
       iva_venta_porcentaje: l.iva_venta_porcentaje,
       precio_venta: l.precio_venta ?? null,
       fecha_vencimiento: l.fecha_vencimiento ?? null,
+      aplicar_iva: l.aplicar_iva ?? false,
     })) as unknown as Json,
     // Solo se manda si hay gastos: así, antes de correr la migración 086, las
     // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.

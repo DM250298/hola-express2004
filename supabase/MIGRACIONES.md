@@ -265,3 +265,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 165 | `165_produccion_ficha_y_rapida.sql` | ✅ aplicada | 2026-09-03 | en este commit |
 | 166 | `166_factura_extras_mueven_stock.sql` | ✅ aplicada | 2026-09-07 | en este commit |
 | 167 | `167_recepcion_no_toca_costo.sql` | ✅ aplicada | verificada 2026-09-08 | `cd21662` |
+| 168 | `168_factura_guarda_iva_producto.sql` | ⏳ pendiente | — | en este commit |

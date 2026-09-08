@@ -1462,6 +1462,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           iva_venta_porcentaje: Number(l.iva_venta) || 0,
           precio_venta:
             l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
+          // Las alícuotas vuelven a la ficha del producto (mig 168) — así
+          // corregir un 10,5 acá no se pierde. Un campo VACÍO no es un 0: es
+          // "no lo definí", y no tiene que pisar la ficha con 0% (exento).
+          aplicar_iva:
+            l.iva_venta.trim() !== '' && l.iva_compra.trim() !== '',
           // Solo el EXTRA manda vencimiento (mig 166): el renglón de la orden
           // ya tiene su lote de la recepción y mandarlo se lo pisaría.
           fecha_vencimiento:
