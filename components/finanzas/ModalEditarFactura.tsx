@@ -115,6 +115,12 @@ interface LineaFactura {
   modoVenta: 'margen' | 'precio'
   /** Precio final CON IVA tipeado a mano. Solo manda en modo 'precio'. */
   precio: string
+  /**
+   * Vencimiento del lote (yyyy-MM-dd). Solo se carga en los renglones EXTRA
+   * (mig 166): nadie los recibió, así que es acá donde se pide la fecha.
+   * Vacío = entra a stock sin lote, como un ajuste de inventario.
+   */
+  fecha_vencimiento: string
 }
 
 type CampoEditable =
@@ -479,7 +485,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         )
         setIntentoGuardar(false)
         setAfectaVenta(borrador.afectaVenta)
-        setLineas(borrador.lineas)
+        // Un borrador anterior a la mig 166 no trae fecha_vencimiento: sin el
+        // fallback el input de la línea quedaría sin controlar.
+        setLineas(
+          borrador.lineas.map((l) => ({
+            ...l,
+            fecha_vencimiento: l.fecha_vencimiento || '',
+          }))
+        )
         setBusqueda('')
         setBorradorRestaurado(true)
         initRef.current = claveInit
@@ -592,8 +605,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             key: `prod-${g.producto_id}`,
             item_pedido_id: it?.id ?? null,
             producto_id: g.producto_id,
-            nombre: it?.producto?.nombre ?? `Producto #${g.producto_id}`,
-            codigo_barras: it?.producto?.codigo_barras ?? null,
+            // Un renglón EXTRA no está en items_pedido: su nombre sale del
+            // embed de la factura (mig 166) y el id pelado es el último
+            // recurso (producto borrado).
+            nombre:
+              it?.producto?.nombre ??
+              g.producto_nombre ??
+              `Producto #${g.producto_id}`,
+            codigo_barras:
+              it?.producto?.codigo_barras ?? g.producto_codigo ?? null,
             cantidad_recibida: it?.cantidad_recibida ?? null,
             cantidad_pedida: it?.cantidad_pedida ?? null,
             cantidad: String(g.cantidad),
@@ -606,6 +626,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               | 'margen'
               | 'precio',
             precio: esPrecioManual ? String(precioGuardado) : '',
+            // El vencimiento vive en `lotes`, no en la factura: al reabrir
+            // vuelve vacío, y vacío no toca el lote que ya se creó.
+            fecha_vencimiento: '',
           }
         })
     } else {
@@ -640,6 +663,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           margen: margenInicial(it.producto_id),
           modoVenta: 'margen' as const,
           precio: '',
+          fecha_vencimiento: '',
         }))
     }
     setLineas(nuevas)
@@ -798,6 +822,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     )
   }
 
+  /** Vencimiento del lote de un renglón extra (mig 166). */
+  function setVencimientoLinea(key: string, valor: string) {
+    setLineas((prev) =>
+      prev.map((l) => (l.key === key ? { ...l, fecha_vencimiento: valor } : l))
+    )
+  }
+
   function quitarLinea(key: string) {
     setLineas((prev) => prev.filter((l) => l.key !== key))
   }
@@ -835,6 +866,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         margen: margenInicial(p.id),
         modoVenta: 'margen' as const,
         precio: '',
+        fecha_vencimiento: '',
       },
     ])
     setBusqueda('')
@@ -1402,6 +1434,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           iva_venta_porcentaje: Number(l.iva_venta) || 0,
           precio_venta:
             l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
+          // Solo el EXTRA manda vencimiento (mig 166): el renglón de la orden
+          // ya tiene su lote de la recepción y mandarlo se lo pisaría.
+          fecha_vencimiento:
+            l.item_pedido_id === null ? l.fecha_vencimiento || null : null,
         })),
         // Pagos en el mismo acto (mig 145) o programados (mig 146), según el
         // MODO elegido (mig 155). Todos con la misma fecha; en "ahora" con
@@ -1508,7 +1544,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             traiga y agregá los que falten. El costo guardado es el neto (sin
             IVA). <span className="font-semibold text-[#9e6b15]">Al guardar, si
             cambiás una cantidad se ajusta el stock por la diferencia contra lo
-            recibido.</span>
+            recibido, y los productos extra (que no estaban en la orden) entran
+            al stock por lo facturado.</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -1623,13 +1660,29 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       )}
                       {l.item_pedido_id === null && (
                         <span className="mt-0.5 inline-block text-[10px] font-semibold text-[#9e6b15]">
-                          Extra (no pedido)
+                          Extra (no pedido) · entra a stock
                         </span>
                       )}
                       {productosMap.get(l.producto_id)?.pendiente_precio && (
                         <span className="mt-0.5 ml-1 inline-block text-[10px] font-semibold uppercase tracking-wider text-[#c43e2c] bg-[#c43e2c]/12 rounded-full px-1.5 py-0.5">
                           Nuevo · completá precio
                         </span>
+                      )}
+                      {/* El extra no pasó por la recepción: su lote (y el
+                          semáforo de vencimientos) sale de esta fecha. */}
+                      {l.item_pedido_id === null && (
+                        <label className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#6f3a2a]">
+                          Vence
+                          <Input
+                            type="date"
+                            value={l.fecha_vencimiento}
+                            onChange={(ev) =>
+                              setVencimientoLinea(l.key, ev.target.value)
+                            }
+                            title="Vencimiento del lote (opcional): sin fecha entra a stock sin lote."
+                            className="h-9 w-[150px] rounded-lg border-[#e4c9b0] px-2 text-xs tabular-nums"
+                          />
+                        </label>
                       )}
                       {l.item_pedido_id !== null && l.cantidad_recibida != null && (
                         <div className="mt-1 flex flex-wrap gap-1">
@@ -1971,13 +2024,29 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             )}
                             {l.item_pedido_id === null && (
                               <span className="block text-[10px] font-semibold text-[#9e6b15]">
-                                Extra (no pedido)
+                                Extra (no pedido) · entra a stock
                               </span>
                             )}
                             {productosMap.get(l.producto_id)?.pendiente_precio && (
                               <span className="mt-0.5 inline-block text-[10px] font-semibold uppercase tracking-wider text-[#c43e2c] bg-[#c43e2c]/12 rounded-full px-1.5 py-0.5">
                                 Nuevo · completá precio
                               </span>
+                            )}
+                            {/* El extra no pasó por la recepción: su lote (y el
+                                semáforo de vencimientos) sale de esta fecha. */}
+                            {l.item_pedido_id === null && (
+                              <label className="mt-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#6f3a2a]">
+                                Vence
+                                <Input
+                                  type="date"
+                                  value={l.fecha_vencimiento}
+                                  onChange={(ev) =>
+                                    setVencimientoLinea(l.key, ev.target.value)
+                                  }
+                                  title="Vencimiento del lote (opcional): sin fecha entra a stock sin lote."
+                                  className="h-7 w-[130px] rounded-lg border-[#e4c9b0] px-1.5 text-[11px] tabular-nums"
+                                />
+                              </label>
                             )}
                           </div>
                         </div>

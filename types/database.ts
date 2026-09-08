@@ -2999,6 +2999,10 @@ export type ItemFacturaCompraRow = {
   iva_venta_porcentaje: number
   precio_sin_iva: number
   precio_con_iva: number
+  /** Unidades que ESTA línea metió al stock por sí sola (renglones extra sin
+   *  fila en items_pedido, mig 166). Los de la orden reconcilian por
+   *  items_pedido.cantidad_facturada y quedan en 0. */
+  cantidad_stock_aplicada: number
 }
 
 export type ItemFacturaCompraInsert = {
@@ -3015,6 +3019,7 @@ export type ItemFacturaCompraInsert = {
   iva_venta_porcentaje?: number
   precio_sin_iva?: number
   precio_con_iva?: number
+  cantidad_stock_aplicada?: number
 }
 
 export type ItemFacturaCompraUpdate = Partial<ItemFacturaCompraInsert>

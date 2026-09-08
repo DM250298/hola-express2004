@@ -82,6 +82,13 @@ export interface LineaFacturaPayload extends EntradaLinea {
    * motor, redondeando al múltiplo de arriba.
    */
   precio_venta?: number | null
+  /**
+   * Vencimiento del lote (yyyy-MM-dd) para un renglón EXTRA (mig 166): como
+   * nadie lo recibió, es la factura la que crea el lote. Los renglones de la
+   * orden ya tienen el suyo de la recepción y mandan null — mandarles fecha
+   * les pisaría el vencimiento cargado en el depósito.
+   */
+  fecha_vencimiento?: string | null
 }
 
 /** Datos formales del comprobante (cabecera AFIP). Todos opcionales. */
@@ -156,9 +163,19 @@ export interface GuardarFacturaPayload {
   cuotas?: CuotaPlanPayload[] | null
 }
 
+/**
+ * Línea de factura + el nombre vivo del producto. Hace falta porque un renglón
+ * EXTRA (agregado en la factura, sin fila en items_pedido) no tiene de dónde
+ * sacar el nombre: sin esto el modal mostraba "Producto #123" (mig 166).
+ */
+export interface ItemFacturaCompraConProducto extends ItemFacturaCompraRow {
+  producto_nombre: string | null
+  producto_codigo: string | null
+}
+
 export interface FacturaCompraCompleta {
   factura: FacturaCompraRow
-  items: ItemFacturaCompraRow[]
+  items: ItemFacturaCompraConProducto[]
 }
 
 export interface ComprobanteCargado {
@@ -349,14 +366,29 @@ export async function getFacturaCompra(
   if (error) throw error
   if (!factura) return null
 
+  // El nombre del producto viaja embebido por la FK
+  // items_factura_compra_producto_id_fkey (mig 012): es la única fuente para
+  // los renglones extra, que no están en items_pedido.
   const { data: items, error: errItems } = await supabase
     .from('items_factura_compra')
-    .select('*')
+    .select('*, productos(nombre, codigo_barras)')
     .eq('factura_id', factura.id)
     .order('id', { ascending: true })
   if (errItems) throw errItems
 
-  return { factura, items: (items ?? []) as ItemFacturaCompraRow[] }
+  type FilaItem = ItemFacturaCompraRow & {
+    productos: { nombre: string; codigo_barras: string | null } | null
+  }
+  return {
+    factura,
+    items: ((items ?? []) as unknown as FilaItem[]).map(
+      ({ productos, ...it }) => ({
+        ...it,
+        producto_nombre: productos?.nombre ?? null,
+        producto_codigo: productos?.codigo_barras ?? null,
+      })
+    ),
+  }
 }
 
 /**
@@ -464,6 +496,7 @@ export async function guardarFacturaCompra(
       margen_porcentaje: l.margen_porcentaje,
       iva_venta_porcentaje: l.iva_venta_porcentaje,
       precio_venta: l.precio_venta ?? null,
+      fecha_vencimiento: l.fecha_vencimiento ?? null,
     })) as unknown as Json,
     // Solo se manda si hay gastos: así, antes de correr la migración 086, las
     // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.

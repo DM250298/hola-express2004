@@ -263,3 +263,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 163 | `163_iva_venta_por_medio_pago.sql` | ✅ aplicada | 2026-09-01 | en este commit |
 | 164 | `164_precio_bonificadas_costo_lista.sql` | ✅ aplicada | 2026-09-01 | `29847cb` |
 | 165 | `165_produccion_ficha_y_rapida.sql` | ✅ aplicada | 2026-09-03 | en este commit |
+| 166 | `166_factura_extras_mueven_stock.sql` | ✅ aplicada | 2026-09-07 | en este commit |
