@@ -183,7 +183,10 @@ export interface ComprobanteCargado {
   cuenta_id: number | null
   pedido_id: number | null
   proveedor_id: number | null
+  /** Fecha de EMISIÓN del comprobante (el papel). Es un `date`: no tiene hora. */
   fecha: string
+  /** Cuándo se cargó al sistema. Es la única fecha con horario. */
+  created_at: string
   tipo_comprobante: string | null
   punto_venta: string | null
   numero_comprobante: string | null
@@ -211,9 +214,14 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
   const { data, error } = await supabase
     .from('facturas_compra')
     .select(
-      'id, cuenta_id, pedido_id, proveedor_id, fecha, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, cuit_proveedor, usuarios(nombre)'
+      'id, cuenta_id, pedido_id, proveedor_id, fecha, created_at, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, cuit_proveedor, usuarios(nombre)'
     )
-    .order('fecha', { ascending: false })
+    // Por fecha de CARGA, no de emisión: la emisión es un `date` sin hora, así
+    // que dentro del mismo día el orden quedaba al azar y una factura vieja
+    // cargada recién se perdía a mitad de lista. El id desempata dos cargas
+    // hechas en el mismo segundo.
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
   if (error) throw error
 
   type Fila = Omit<ComprobanteCargado, 'usuario_nombre'> & {
@@ -225,6 +233,7 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
     pedido_id: f.pedido_id,
     proveedor_id: f.proveedor_id,
     fecha: f.fecha,
+    created_at: f.created_at,
     tipo_comprobante: f.tipo_comprobante,
     punto_venta: f.punto_venta,
     numero_comprobante: f.numero_comprobante,

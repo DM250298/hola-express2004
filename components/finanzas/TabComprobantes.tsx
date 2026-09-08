@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   CheckCircle2,
   FileText,
@@ -15,13 +15,18 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { MontoARS } from '@/components/shared/MontoARS'
-import { formatearFechaCorta } from '@/lib/utils/formato'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
+import { formatearFechaCorta, formatearFechaHora } from '@/lib/utils/formato'
+import { fechaLocal, hoyIso, isoMasDias } from '@/lib/utils/periodos'
+import { fechaLocalDesdeIso } from '@/lib/utils/fechaCorta'
 import { toast } from 'sonner'
 import {
   useBuscarCuentaAPagar,
@@ -45,6 +50,18 @@ function nroComprobante(
   const ptoFmt = pto ? pto.padStart(4, '0') : '----'
   const nroFmt = nro ? nro.padStart(8, '0') : '--------'
   return `${tipo ?? '?'} ${ptoFmt}-${nroFmt}`
+}
+
+/**
+ * Título del bloque de un día de carga: "Hoy · lunes 8/09", "Ayer · domingo
+ * 7/09" o, más atrás, "viernes 5/09". Recibe el día LOCAL (yyyy-MM-dd).
+ */
+function tituloDia(dia: string): string {
+  const d = fechaLocalDesdeIso(dia)
+  const nombre = d ? format(d, 'EEEE d/MM', { locale: es }) : dia
+  if (dia === hoyIso()) return `Hoy · ${nombre}`
+  if (dia === isoMasDias(hoyIso(), -1)) return `Ayer · ${nombre}`
+  return nombre
 }
 
 /** ¿La fecha (date o timestamp) cae dentro del rango [desde, hasta]? */
@@ -133,8 +150,12 @@ export function TabComprobantes({ desde, hasta }: Props) {
 
   const q = busqueda.trim().toLowerCase()
   const comprobantesFiltrados = (comprobantes ?? []).filter((c) => {
-    // El período filtra las facturas YA cargadas (por fecha de emisión).
-    if (!enRango(c.fecha, desde, hasta)) return false
+    // El período mide la CARGA, no la emisión: así lo último cargado siempre
+    // aparece (una factura vieja cargada hoy quedaba afuera del mes actual).
+    // La mirada fiscal por emisión vive en Impuestos › Libro IVA de compras.
+    // fechaLocal pasa el timestamptz UTC al día de La Rioja: sin eso, todo lo
+    // cargado después de las 21:00 caería en el día siguiente.
+    if (!enRango(fechaLocal(c.created_at), desde, hasta)) return false
     if (!q) return true
     const nro = nroComprobante(
       c.tipo_comprobante,
@@ -146,6 +167,27 @@ export function TabComprobantes({ desde, hasta }: Props) {
       (nro ?? '').toLowerCase().includes(q)
     )
   })
+
+  // Bloques por día de carga, en el orden que ya trae la query (lo más nuevo
+  // primero). Cada bloque muestra cuántas facturas entraron ese día y cuánto
+  // suman, para leer la jornada de un vistazo.
+  const porDia: [string, ComprobanteCargado[]][] = []
+  for (const c of comprobantesFiltrados) {
+    const dia = fechaLocal(c.created_at)
+    const ultimo = porDia[porDia.length - 1]
+    if (ultimo && ultimo[0] === dia) ultimo[1].push(c)
+    else porDia.push([dia, [c]])
+  }
+
+  // Totales del período filtrado (los mismos que se ven en pantalla).
+  const totales = comprobantesFiltrados.reduce(
+    (acc, c) => ({
+      neto: acc.neto + c.neto,
+      iva: acc.iva + c.iva_total,
+      total: acc.total + c.total,
+    }),
+    { neto: 0, iva: 0, total: 0 }
+  )
 
   const cargando = cargandoCuentas || cargandoSinFactura || cargandoComp
 
@@ -296,7 +338,8 @@ export function TabComprobantes({ desde, hasta }: Props) {
               Facturas cargadas
             </h3>
             <span className="text-[10px] text-[#c8a58a] font-medium">
-              del período elegido
+              del período elegido · ordenadas por fecha de carga, la última
+              arriba
             </span>
           </div>
           <div className="relative w-full sm:w-64">
@@ -332,7 +375,10 @@ export function TabComprobantes({ desde, hasta }: Props) {
                     Comprobante
                   </TableHead>
                   <TableHead className="text-[#391511] font-semibold">
-                    Emisión
+                    Cargada
+                  </TableHead>
+                  <TableHead className="text-[#391511] font-semibold">
+                    Emisión (papel)
                   </TableHead>
                   <TableHead className="text-right text-[#391511] font-semibold">
                     Neto
@@ -347,64 +393,143 @@ export function TabComprobantes({ desde, hasta }: Props) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {comprobantesFiltrados.map((c, i) => {
-                  const nro = nroComprobante(
-                    c.tipo_comprobante,
-                    c.punto_venta,
-                    c.numero_comprobante
-                  )
-                  return (
-                    <TableRow
-                      key={`${c.cuenta_id}-${i}`}
-                      className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
-                    >
-                      <TableCell className="font-medium text-[#391511]">
-                        {nombreProveedor(c) ?? (
-                          <span className="text-[#c8a58a] italic">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {nro ? (
-                          <span className="font-mono text-xs text-[#391511]">
-                            {nro}
+                {porDia.map(([dia, delDia]) => (
+                  <Fragment key={dia}>
+                    {/* Separador del día de carga, con su total */}
+                    <TableRow className="border-b-[#e4c9b0]/60 bg-[#fdfaf6] hover:bg-[#fdfaf6]">
+                      <TableCell colSpan={8} className="py-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wide text-[#6f3a2a]">
+                            {tituloDia(dia)}
                           </span>
-                        ) : (
-                          <span className="text-[10px] text-[#c43e2c] bg-[#c43e2c]/10 rounded-full px-2 py-0.5">
-                            sin datos formales
+                          <span className="text-xs text-[#6f3a2a]">
+                            {delDia.length}{' '}
+                            {delDia.length === 1 ? 'factura' : 'facturas'} ·{' '}
+                            <span className="font-semibold text-[#391511] tabular-nums">
+                              <MontoARS
+                                monto={delDia.reduce((s, x) => s + x.total, 0)}
+                              />
+                            </span>
                           </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-[#6f3a2a] tabular-nums">
-                        {formatearFechaCorta(c.fecha)}
-                      </TableCell>
-                      <TableCell className="text-right text-[#6f3a2a] tabular-nums">
-                        <MontoARS monto={c.neto} />
-                      </TableCell>
-                      <TableCell className="text-right text-[#6f3a2a] tabular-nums">
-                        <MontoARS monto={c.iva_total} />
-                      </TableCell>
-                      <TableCell className="text-right font-bold text-[#391511] tabular-nums">
-                        <MontoARS monto={c.total} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={c.cuenta_id == null && !c.es_directa}
-                          onClick={() => {
-                            if (c.es_directa) setCompraControlar(c)
-                            else if (c.cuenta_id != null)
-                              abrirComprobante(c.cuenta_id)
-                          }}
-                          className="h-8 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] text-xs"
-                        >
-                          Ver
-                        </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  )
-                })}
+                    {delDia.map((c) => {
+                      const nro = nroComprobante(
+                        c.tipo_comprobante,
+                        c.punto_venta,
+                        c.numero_comprobante
+                      )
+                      return (
+                        <TableRow
+                          key={c.id}
+                          className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
+                        >
+                          <TableCell className="font-medium text-[#391511]">
+                            {nombreProveedor(c) ?? (
+                              <span className="text-[#c8a58a] italic">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {nro ? (
+                              <span className="font-mono text-xs text-[#391511]">
+                                {nro}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-[#c43e2c] bg-[#c43e2c]/10 rounded-full px-2 py-0.5">
+                                sin datos formales
+                              </span>
+                            )}
+                            {/* De dónde viene: orden de compra o compra directa
+                                del POS (y si esa directa falta controlar). */}
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              {c.es_directa ? (
+                                <span className="rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[10px] font-semibold text-[#9e6b15]">
+                                  Compra directa
+                                </span>
+                              ) : c.pedido_id != null ? (
+                                <span className="rounded-full bg-[#e4c9b0]/40 px-1.5 py-0.5 text-[10px] font-medium text-[#6f3a2a]">
+                                  Orden #{c.pedido_id}
+                                </span>
+                              ) : null}
+                              {c.es_directa && !c.controlada && (
+                                <span className="rounded-full bg-[#c43e2c]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#c43e2c]">
+                                  sin controlar
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell
+                            className="text-sm text-[#6f3a2a] whitespace-nowrap"
+                            title={`Cargada el ${formatearFechaHora(c.created_at)}`}
+                          >
+                            <span className="tabular-nums">
+                              {format(new Date(c.created_at), 'HH:mm')}
+                            </span>
+                            {c.usuario_nombre && (
+                              <span className="block text-[10px] text-[#c8a58a]">
+                                por {c.usuario_nombre}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-[#6f3a2a] tabular-nums">
+                            {formatearFechaCorta(c.fecha)}
+                          </TableCell>
+                          <TableCell className="text-right text-[#6f3a2a] tabular-nums">
+                            <MontoARS monto={c.neto} />
+                          </TableCell>
+                          <TableCell className="text-right text-[#6f3a2a] tabular-nums">
+                            <MontoARS monto={c.iva_total} />
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-[#391511] tabular-nums">
+                            <MontoARS monto={c.total} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={c.cuenta_id == null && !c.es_directa}
+                              onClick={() => {
+                                if (c.es_directa) setCompraControlar(c)
+                                else if (c.cuenta_id != null)
+                                  abrirComprobante(c.cuenta_id)
+                              }}
+                              className="h-8 text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] text-xs"
+                            >
+                              Ver
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </Fragment>
+                ))}
               </TableBody>
+              {/* Totales de lo que se ve: sirve para cruzar contra el Libro IVA */}
+              <TableFooter className="bg-[#fdfaf6] border-t-[#e4c9b0]/60">
+                <TableRow className="hover:bg-[#fdfaf6]">
+                  <TableCell
+                    colSpan={4}
+                    className="font-semibold text-[#391511]"
+                  >
+                    {comprobantesFiltrados.length}{' '}
+                    {comprobantesFiltrados.length === 1
+                      ? 'factura'
+                      : 'facturas'}{' '}
+                    en el período
+                  </TableCell>
+                  <TableCell className="text-right font-semibold text-[#6f3a2a] tabular-nums">
+                    <MontoARS monto={totales.neto} />
+                  </TableCell>
+                  <TableCell className="text-right font-semibold text-[#6f3a2a] tabular-nums">
+                    <MontoARS monto={totales.iva} />
+                  </TableCell>
+                  <TableCell className="text-right font-bold text-[#391511] tabular-nums">
+                    <MontoARS monto={totales.total} />
+                  </TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
             </Table>
           )}
         </div>
