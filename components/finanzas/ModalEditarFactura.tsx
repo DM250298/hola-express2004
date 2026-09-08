@@ -116,6 +116,13 @@ interface LineaFactura {
   /** Precio final CON IVA tipeado a mano. Solo manda en modo 'precio'. */
   precio: string
   /**
+   * Precio con el que se SEMBRÓ la fila: el VIGENTE en el POS, o el guardado
+   * en la factura al reabrirla. '' = el producto no tenía precio. No se toca
+   * al editar, así que comparar `precio` contra esto dice —sin heurísticos
+   * de floats— si el administrativo lo cambió en esta sesión.
+   */
+  precioVigente: string
+  /**
    * Vencimiento del lote (yyyy-MM-dd). Solo se carga en los renglones EXTRA
    * (mig 166): nadie los recibió, así que es acá donde se pide la fecha.
    * Vacío = entra a stock sin lote, como un ajuste de inventario.
@@ -131,6 +138,24 @@ type CampoEditable =
   | 'margen'
   | 'iva_venta'
 
+/**
+ * Lo mínimo que hace falta de un producto para sembrar el lado venta de una
+ * fila. Lo cumplen tanto el embed de `items_pedido.producto` como un
+ * `ProductoConRelaciones` entero del buscador.
+ */
+type ProductoVenta = {
+  precio_venta?: number | null
+  margen?: number | null
+  iva_venta?: number | null
+  iva_compra?: number | null
+  pendiente_precio?: boolean | null
+}
+
+/**
+ * Último recurso: solo se usan si el producto no vino con el dato (borrado del
+ * catálogo). Lo normal es que precio, margen e IVAs salgan del producto —ver
+ * `semillaVenta`—, no de estas constantes.
+ */
 const DEFAULTS = {
   descuento: '0',
   iva_compra: '21',
@@ -192,8 +217,12 @@ interface BorradorFactura {
  */
 type ModoPago = 'ahora' | 'programado' | 'cuenta_corriente'
 
-/** Versión del formato del borrador: si cambia la forma, los viejos se ignoran. */
-const BORRADOR_V = 1
+/**
+ * Versión del formato del borrador: si cambia la forma, los viejos se ignoran.
+ * v2: las filas ganaron `precioVigente` y ahora nacen en modo 'precio'. Un
+ * borrador v1 las tiene todas en modo 'margen' → restaurarlo repreciaría todo.
+ */
+const BORRADOR_V = 2
 
 function claveBorrador(cuentaId: number): string {
   return `factura-c${cuentaId}`
@@ -365,14 +394,34 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     useState<ProductoConRelaciones | null>(null)
 
   /**
-   * Margen a precargar en una línea: el margen guardado del producto (desde
-   * el repricing del motor, cada producto tiene el suyo) o el default. Es
-   * best-effort: si el catálogo todavía no cargó, cae al default y el
-   * usuario lo puede ajustar a mano.
+   * Semilla del lado VENTA de un renglón:
+   *  · el producto YA tiene precio → arranca en modo PRECIO con el precio
+   *    VIGENTE (el que cobra el POS hoy). Guardar la factura NO lo mueve, suba
+   *    lo que suba el costo, y el margen queda como quede —incluso negativo,
+   *    que hay productos así a propósito—. Solo cambia si alguien tipea otro
+   *    precio o toca el margen de esa fila.
+   *  · el producto NO tiene precio (alta al vuelo, pendiente_precio) → modo
+   *    MARGEN, que es el único caso donde el margen debe fijar el precio.
+   * Los impuestos salen del PRODUCTO, no de un 21 hardcodeado. `??` y no
+   * `||`: un exento tiene iva_venta = 0 y `||` lo pisaría con 21.
    */
-  function margenInicial(productoId: number): string {
-    const m = productosMap.get(productoId)?.margen
-    return m && m > 0 ? String(m) : DEFAULTS.margen
+  function semillaVenta(
+    p: ProductoVenta | null | undefined,
+    /** Respaldo: el precio ya guardado en la factura que se está reabriendo. */
+    precioRespaldo = 0
+  ) {
+    const vigente = Number(p?.precio_venta ?? 0) || precioRespaldo
+    const congelar = vigente > 0 && p?.pendiente_precio !== true
+    return {
+      margen:
+        p?.margen != null && p.margen > 0 ? String(p.margen) : DEFAULTS.margen,
+      iva_venta: p?.iva_venta != null ? String(p.iva_venta) : DEFAULTS.iva_venta,
+      iva_compra:
+        p?.iva_compra != null ? String(p.iva_compra) : DEFAULTS.iva_compra,
+      modoVenta: (congelar ? 'precio' : 'margen') as 'margen' | 'precio',
+      precio: congelar ? String(vigente) : '',
+      precioVigente: congelar ? String(vigente) : '',
+    }
   }
 
   // Ficha del proveedor de la cuenta → autocompleta el comprobante y se muestra
@@ -491,6 +540,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           borrador.lineas.map((l) => ({
             ...l,
             fecha_vencimiento: l.fecha_vencimiento || '',
+            precioVigente: l.precioVigente ?? '',
           }))
         )
         setBusqueda('')
@@ -554,20 +604,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     setInitListo(claveInit)
     let nuevas: LineaFactura[]
     if (facturaGuardada && facturaGuardada.items.length > 0) {
-      // Factor de gastos con el que se guardó esta factura: hace falta para
-      // reconstruir el costo landed y detectar si el precio guardado fue puesto
-      // a mano (no coincide con el que sale del margen).
-      const netoGuardado = facturaGuardada.items.reduce((acc, g) => {
-        const neto = r2(
-          Number(g.costo_sin_iva) * (1 - Number(g.descuento_porcentaje) / 100)
-        )
-        return acc + neto * Number(g.cantidad)
-      }, 0)
-      const gastosGuardados = Number(
-        facturaGuardada.factura.gastos_no_debitables ?? 0
-      )
-      const factorGuardado =
-        netoGuardado > 0 ? 1 + gastosGuardados / netoGuardado : 1
       // Las facturas de este flujo siempre tienen producto (las líneas sin
       // producto son solo de la compra directa, que no se edita acá).
       nuevas = facturaGuardada.items
@@ -576,31 +612,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         )
         .map((g) => {
           const it = items.find((i) => i.producto_id === g.producto_id)
-          // ¿El precio guardado salió del margen o lo puso alguien a mano?
-          // Mismo criterio que el drawer de producto: si difiere del que
-          // recalcula el motor, la línea vuelve en modo precio con el valor
-          // GUARDADO (nunca el recalculado, que subiría por el redondeo).
-          const costoLanded = r2(
-            r2(
-              Number(g.costo_sin_iva) *
-                (1 - Number(g.descuento_porcentaje) / 100)
-            ) * factorGuardado
-          )
-          // Misma cascada que `calculadas` (v22): una bonificada (landed $0)
-          // se pricea con el costo de LISTA — sin esto, el recalc daría $0,
-          // nunca coincidiría con el precio guardado y la línea reabriría
-          // en modo precio (rompiendo el round-trip "re-guardar es delta 0").
-          const costoListaLanded = r2(Number(g.costo_sin_iva) * factorGuardado)
-          const recalc = pricing.calcular(
-            costoLanded > 0 ? costoLanded : costoListaLanded,
-            Number(g.margen_porcentaje) || 0,
-            Number(g.iva_venta_porcentaje) || 0
-          )
+          // Ya no hay que adivinar si el precio guardado fue manual: TODA fila
+          // con precio vuelve en modo precio. Manda el VIGENTE del producto
+          // (respeta una corrección hecha después desde el Drawer) y el
+          // guardado en la factura es el respaldo.
           const precioGuardado = Number(g.precio_con_iva) || 0
-          const esPrecioManual =
-            recalc.desglose != null &&
-            precioGuardado > 0 &&
-            Math.abs(precioGuardado - recalc.desglose.precioRedondeado) > 0.5
           return {
             key: `prod-${g.producto_id}`,
             item_pedido_id: it?.id ?? null,
@@ -618,14 +634,16 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             cantidad_pedida: it?.cantidad_pedida ?? null,
             cantidad: String(g.cantidad),
             costo: String(g.costo_sin_iva),
+            ...semillaVenta(
+              it?.producto ?? productosMap.get(g.producto_id),
+              precioGuardado
+            ),
+            // Lo que quedó GUARDADO en esta factura manda sobre la ficha del
+            // producto: son los porcentajes del papel que se cargó ese día, y
+            // así re-guardarla es delta 0.
             descuento: String(g.descuento_porcentaje),
             iva_compra: String(g.iva_compra_porcentaje),
-            margen: String(g.margen_porcentaje),
             iva_venta: String(g.iva_venta_porcentaje),
-            modoVenta: (esPrecioManual ? 'precio' : 'margen') as
-              | 'margen'
-              | 'precio',
-            precio: esPrecioManual ? String(precioGuardado) : '',
             // El vencimiento vive en `lotes`, no en la factura: al reabrir
             // vuelve vacío, y vacío no toca el lote que ya se creó.
             fecha_vencimiento: '',
@@ -659,10 +677,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           // re-guardar es delta 0); si no, de lo recibido.
           cantidad: String(it.cantidad_facturada ?? it.cantidad_recibida ?? 0),
           costo: String(it.precio_costo || 0),
-          ...DEFAULTS,
-          margen: margenInicial(it.producto_id),
-          modoVenta: 'margen' as const,
-          precio: '',
+          descuento: DEFAULTS.descuento,
+          // El precio VIGENTE viaja dentro del pedido (embed de items_pedido),
+          // no en `productosMap`: esa query resuelve después y sembraría en
+          // modo margen —repreciando— en la primera pasada del effect.
+          ...semillaVenta(it.producto ?? productosMap.get(it.producto_id)),
           fecha_vencimiento: '',
         }))
     }
@@ -833,12 +852,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     setLineas((prev) => prev.filter((l) => l.key !== key))
   }
 
-  function agregarProducto(p: {
-    id: number
-    nombre: string
-    codigo_barras: string | null
-    precio_costo?: number | null
-  }) {
+  function agregarProducto(
+    p: {
+      id: number
+      nombre: string
+      codigo_barras: string | null
+      precio_costo?: number | null
+    } & ProductoVenta
+  ) {
     if (lineas.some((l) => l.producto_id === p.id)) {
       toast.info('Ese producto ya está en la factura.')
       setBusqueda('')
@@ -862,10 +883,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               ? String(it.cantidad_recibida)
               : '1',
         costo: String((it?.precio_costo ?? p.precio_costo ?? 0) || 0),
-        ...DEFAULTS,
-        margen: margenInicial(p.id),
-        modoVenta: 'margen' as const,
-        precio: '',
+        descuento: DEFAULTS.descuento,
+        // `p` viene entero del buscador (select '*'), así que trae precio,
+        // margen e IVAs; el renglón de la orden es el respaldo.
+        ...semillaVenta(p.precio_venta != null ? p : it?.producto),
         fecha_vencimiento: '',
       },
     ])
@@ -940,17 +961,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       // lista, y aun así NO es error — el precio manda y el server guarda
       // igual (y desde la mig 156 conserva el último costo real).
       const bonificada = calc.costoFinal <= 0 && precioFinal > 0
+      // ¿El precio es el VIGENTE tal cual se sembró, o lo tipearon ahora?
+      const precioTocado = l.precio !== l.precioVigente
       const error =
         inv.error ??
         (precioFinal <= 0
           ? 'Poné un precio, o tocá el margen para volver al automático.'
           : pricing.config === null
             ? null // config de pricing todavía cargando: sin veredicto
-            : bonificada
-              ? null
-              : margenPct == null
-                ? 'Sin costo no se puede deducir el margen de ese precio.'
-                : null)
+            : // Sin NINGÚN costo (ni final ni de lista) el margen no se puede
+              // deducir. Con el precio tipeado a mano se acepta igual (es la
+              // bonificación deliberada de la mig 164); con el precio apenas
+              // sembrado sería un renglón al que le falta el costo del papel.
+              costoPricing <= 0 && !precioTocado
+              ? 'Este renglón no tiene costo: poné el Costo s/IVA (o tipeá el precio de venta para confirmar que es una bonificación).'
+              : null)
       return {
         l,
         calc,
@@ -959,6 +984,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         precioFinal,
         margenPct,
         bonificada,
+        precioTocado,
         error,
       }
     }
@@ -979,6 +1005,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       precioFinal: venta.desglose?.precioRedondeado ?? 0,
       margenPct: Number(l.margen) || 0,
       bonificada,
+      // En modo margen el precio lo pone el motor, no la mano.
+      precioTocado: false,
       error:
         venta.error ??
         (bonificada && costoPricing <= 0
@@ -1582,14 +1610,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               la ficha del proveedor y el comprobante viven en la columna
               derecha. */}
           <p className="shrink-0 text-[11px] text-[#c8a58a]">
-            Poné el <strong>margen</strong> y el precio se calcula solo
-            (asegura el margen después de IIBB, imp. créd/déb y la comisión de
-            Mercado Pago —peor caso—, y redondea para arriba
+            Cada renglón arranca con el <strong>precio que rige hoy</strong> en
+            el punto de venta: guardar la factura <strong>no lo mueve</strong>,
+            aunque el costo haya subido (el margen queda como quede, incluso
+            negativo). Cambialo tipeando otro <strong>precio de venta</strong>, o
+            tocá el <strong>margen</strong> para que se recalcule solo (asegura
+            el margen después de IIBB, imp. créd/déb y la comisión de Mercado
+            Pago —peor caso—, y redondea para arriba
             {pricing.config
               ? ` a múltiplos de $${pricing.config.redondeoMultiplo}`
               : ''}
-            ), o tipeá el <strong>precio de venta</strong> que querés y el
-            margen real se deduce solo.
+            ).
           </p>
           {/* Buscador para agregar un producto a la factura */}
           <div className="relative shrink-0">
@@ -1642,7 +1673,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             {/* Mobile (< md): cada línea como tarjeta apilada, compra arriba y
                 venta abajo, para no tener que hacer scroll horizontal. */}
             <div className="space-y-3 md:hidden">
-              {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, error }) => (
+              {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, precioTocado, error }) => (
                 <div
                   key={l.key}
                   className="overflow-hidden rounded-xl border border-[#e4c9b0] bg-white"
@@ -1845,7 +1876,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     ) : l.modoVenta === 'precio' ? (
                       <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
                         <span className="text-[#6f3a2a]">
-                          Precio fijado a mano
+                          {precioTocado ? 'Precio nuevo' : 'Precio vigente'}
                         </span>
                         <span
                           className={
@@ -1989,7 +2020,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </tr>
                 </thead>
                 <tbody>
-                  {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, error }) => (
+                  {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, precioTocado, error }) => (
                     <tr
                       key={l.key}
                       className="border-b border-[#e4c9b0]/40 bg-white"
@@ -2182,7 +2213,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         className="p-2 text-right tabular-nums text-[#6f3a2a]"
                         title={
                           l.modoVenta === 'precio'
-                            ? 'Precio fijado a mano'
+                            ? precioTocado
+                              ? 'Precio nuevo: al guardar reemplaza al vigente'
+                              : 'Precio vigente en el punto de venta: guardar la factura no lo mueve'
                             : (error ??
                               (bonificada
                                 ? 'Bonificada: precio calculado sobre el costo de lista (sin descuento)'
@@ -2226,12 +2259,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             setPrecioLinea(l.key, ev.target.value)
                           }
                           placeholder={error ? '—' : '0'}
-                          title="Tipealo para fijar el precio final; el margen se deduce solo"
+                          title={
+                            precioTocado
+                              ? 'Precio nuevo: al guardar reemplaza al vigente.'
+                              : l.modoVenta === 'precio'
+                                ? 'Precio VIGENTE en el punto de venta. Guardar la factura no lo mueve. Tipeá otro para cambiarlo, o tocá el margen para recalcularlo.'
+                                : 'Tipealo para fijar el precio final; el margen se deduce solo'
+                          }
                           className={cn(
                             inputCls,
                             'font-bold',
-                            l.modoVenta === 'precio' &&
-                              'border-[#f9b44c] bg-[#f9b44c]/10',
+                            // Dorado = lo cambiaron en esta carga. Con el
+                            // precio apenas sembrado no se pinta: si no,
+                            // quedarían dorados TODOS los renglones y el
+                            // resaltado dejaría de decir nada.
+                            precioTocado && 'border-[#f9b44c] bg-[#f9b44c]/10',
                             error && 'border-[#c43e2c]'
                           )}
                         />

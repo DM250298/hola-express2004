@@ -73,6 +73,11 @@ export function useUpdateProducto() {
       queryClient.invalidateQueries({
         queryKey: ['producto-detalle', variables.id],
       })
+      // El detalle del pedido embebe precio/margen/IVAs del producto y con eso
+      // la carga de factura siembra cada renglón. Sin esto, corregir el precio
+      // con el lápiz DESDE la factura dejaba el renglón con el valor viejo
+      // (la query cachea 30 s).
+      queryClient.invalidateQueries({ queryKey: ['pedido-detalle'] })
       toast.success('Producto actualizado')
     },
     onError: (error: Error) => {
