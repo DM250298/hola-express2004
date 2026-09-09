@@ -24,6 +24,18 @@ export interface CompraDirectaLinea {
   iva_compra_porcentaje: number
   margen_porcentaje: number
   iva_venta_porcentaje: number
+  /**
+   * Precio de venta final (CON IVA) fijado a mano (mig 169). Si viene, EL
+   * PRECIO MANDA: el RPC lo respeta tal cual y deduce el margen real, aunque
+   * dé negativo. Null = el margen manda y repricia el motor.
+   */
+  precio_venta?: number | null
+  /**
+   * true = las alícuotas de esta línea se guardan también en la ficha del
+   * producto (mig 169). Clave opcional: sin ella el server no pisa nada, así
+   * un cliente viejo no estampa su 21 sobre un producto al 10,5.
+   */
+  aplicar_iva?: boolean
 }
 
 export interface CompraDirectaFiscal {

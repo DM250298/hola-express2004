@@ -71,6 +71,16 @@ interface LineaStock {
   margen: string
   /** IVA de venta % del producto (para el recálculo del precio). */
   iva_venta: string
+  /**
+   * Qué manda del lado venta, igual que en la carga de factura:
+   *  · 'precio' → el precio tipeado se respeta tal cual (y el margen se deduce)
+   *  · 'margen' → el motor calcula el precio y lo redondea para arriba
+   */
+  modoVenta: 'margen' | 'precio'
+  /** Precio final CON IVA. Solo manda en modo 'precio'. */
+  precio: string
+  /** Con el que se sembró la fila ('' = el producto no tenía). No se edita. */
+  precioVigente: string
 }
 
 interface Props {
@@ -232,11 +242,19 @@ export function ModalCompraFactura({
     nombre: string
     margen?: number | null
     iva_venta?: number | null
+    precio_venta?: number | null
+    pendiente_precio?: boolean | null
   }) {
     // El margen viene del producto: antes se mandaba 0 hardcodeado y, con
     // "actualizar precio de venta" tildado, el RPC repriceaba el producto SIN
     // ganancia (precio = costo + cargas) y le pisaba el margen a 0.
     const margenProd = prod.margen ?? 0
+    // Misma regla que la carga de factura: si el producto YA tiene precio, la
+    // fila arranca en modo PRECIO con el VIGENTE, así tildar "actualizar
+    // precio de venta" no se lo dispara solo cuando sube el costo. El modo
+    // margen queda para el que todavía no tiene precio.
+    const vigente = Number(prod.precio_venta ?? 0) || 0
+    const congelar = vigente > 0 && prod.pendiente_precio !== true
     setLineas((prev) =>
       prev.some((l) => l.producto_id === prod.id)
         ? prev
@@ -249,6 +267,9 @@ export function ModalCompraFactura({
               costo_sin_iva: '',
               margen: String(margenProd > 0 ? margenProd : 30),
               iva_venta: String(prod.iva_venta ?? 21),
+              modoVenta: congelar ? 'precio' : 'margen',
+              precio: congelar ? String(vigente) : '',
+              precioVigente: congelar ? String(vigente) : '',
             },
           ]
     )
@@ -257,11 +278,21 @@ export function ModalCompraFactura({
 
   function editarLinea(
     id: number,
-    campo: 'cantidad' | 'costo_sin_iva' | 'margen',
+    campo: 'cantidad' | 'costo_sin_iva' | 'margen' | 'precio',
     valor: string
   ) {
     setLineas((prev) =>
-      prev.map((l) => (l.producto_id === id ? { ...l, [campo]: valor } : l))
+      prev.map((l) =>
+        l.producto_id === id
+          ? {
+              ...l,
+              [campo]: valor,
+              // Tocar el margen vuelve al automático; tipear el precio lo fija.
+              ...(campo === 'margen' ? { modoVenta: 'margen' as const } : {}),
+              ...(campo === 'precio' ? { modoVenta: 'precio' as const } : {}),
+            }
+          : l
+      )
     )
   }
 
@@ -470,6 +501,12 @@ export function ModalCompraFactura({
               iva_compra_porcentaje: Number(ivaPct) || 0,
               margen_porcentaje: Number(l.margen) || 0,
               iva_venta_porcentaje: Number(l.iva_venta) || 21,
+              // El precio tipeado MANDA (el RPC deduce el margen real, aunque
+              // dé negativo). Sin precio, repricia el motor desde el margen.
+              precio_venta:
+                l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
+              // La alícuota vuelve a la ficha del producto (mig 168/169).
+              aplicar_iva: l.iva_venta.trim() !== '',
             }))
           : [],
         gasto: mueveStock
@@ -668,6 +705,8 @@ export function ModalCompraFactura({
                             nombre: p.nombre,
                             margen: p.margen,
                             iva_venta: p.iva_venta,
+                            precio_venta: p.precio_venta,
+                            pendiente_precio: p.pendiente_precio,
                           })
                         }
                         className="w-full text-left px-3 py-2 text-sm text-[#391511] hover:bg-[#fdfaf6]"
@@ -694,9 +733,17 @@ export function ModalCompraFactura({
                         {afectaPrecio && (
                           <th
                             className="p-2 w-20"
-                            title="Margen % para recalcular el precio de venta"
+                            title="Tocalo para que el precio se recalcule solo desde el margen"
                           >
                             Margen %
+                          </th>
+                        )}
+                        {afectaPrecio && (
+                          <th
+                            className="p-2 w-28"
+                            title="El precio que va a cobrar el punto de venta. Arranca con el vigente: guardar no lo mueve salvo que tipees otro."
+                          >
+                            Precio venta
                           </th>
                         )}
                         <th className="p-2 w-9" aria-label="Quitar" />
@@ -751,6 +798,37 @@ export function ModalCompraFactura({
                               </div>
                             </td>
                           )}
+                          {afectaPrecio && (
+                            <td className="p-1">
+                              <div className="relative">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#c8a58a] text-xs">$</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={l.precio}
+                                  onChange={(e) =>
+                                    editarLinea(l.producto_id, 'precio', e.target.value)
+                                  }
+                                  placeholder="Precio"
+                                  title={
+                                    l.modoVenta === 'precio' && l.precio === l.precioVigente
+                                      ? 'Precio VIGENTE en el punto de venta: guardar no lo mueve. Tipeá otro para cambiarlo, o tocá el margen para recalcularlo.'
+                                      : l.modoVenta === 'precio'
+                                        ? 'Precio nuevo: al guardar reemplaza al vigente.'
+                                        : 'Lo calcula el motor desde el margen (redondea para arriba). Tipealo para fijarlo a mano.'
+                                  }
+                                  className={cn(
+                                    'w-full h-8 pl-5 text-right text-sm font-semibold tabular-nums border-[#e4c9b0]',
+                                    // Dorado = lo cambiaron en esta carga.
+                                    l.modoVenta === 'precio' &&
+                                      l.precio !== l.precioVigente &&
+                                      'border-[#f9b44c] bg-[#f9b44c]/10'
+                                  )}
+                                />
+                              </div>
+                            </td>
+                          )}
                           <td className="p-1 text-center">
                             <button
                               type="button"
@@ -778,7 +856,7 @@ export function ModalCompraFactura({
                           }).format(totalUnidades)}{' '}
                           u.
                         </td>
-                        <td className="p-2" colSpan={afectaPrecio ? 3 : 2} />
+                        <td className="p-2" colSpan={afectaPrecio ? 4 : 2} />
                       </tr>
                     </tfoot>
                   </table>
@@ -792,8 +870,15 @@ export function ModalCompraFactura({
                   onChange={(e) => setAfectaPrecio(e.target.checked)}
                   className="accent-[#f9b44c] h-3.5 w-3.5"
                 />
-                Actualizar también el precio de venta con estos costos
+                Actualizar también el precio de venta
               </label>
+              {afectaPrecio && (
+                <p className="text-[11px] text-[#c8a58a] shrink-0">
+                  Cada fila arranca con el <strong>precio que rige hoy</strong>:
+                  guardar <strong>no lo mueve</strong>. Tipeá otro precio, o
+                  tocá el margen para que se recalcule solo.
+                </p>
+              )}
             </div>
           ) : null}
 
