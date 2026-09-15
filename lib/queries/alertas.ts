@@ -33,6 +33,7 @@ export const ETIQUETA_SEVERIDAD: Record<SeveridadAlerta, string> = {
 export interface DetalleAlerta {
   stock?: number
   sin_stock_desde?: string | null
+  ultima_venta?: string | null
   venta_diaria?: number
   clase_abc?: string | null
   es_critico?: boolean
@@ -64,6 +65,7 @@ export interface ParametrosRegla {
   margen_minimo_pct?: number
   dias_sin_venta?: number
   valor_minimo?: number
+  dias_venta_reciente?: number
 }
 
 export type ReglaAlerta = Omit<ReglaAlertaRow, 'parametros'> & { parametros: ParametrosRegla }

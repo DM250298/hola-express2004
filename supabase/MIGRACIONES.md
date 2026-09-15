@@ -280,10 +280,12 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 180 | `180_fn_metricas_agrupadas.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
 | 181 | `181_fn_tablero_skus.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
 | 182 | `182_fn_tablero_gerencial.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
-| 183 | `183_alertas_tablas.sql` | ⏳ pendiente | — | en este commit |
-| 184 | `184_alertas_reglas_productos.sql` | ⏳ pendiente | — | en este commit |
-| 185 | `185_alertas_reglas_catalogo.sql` | ⏳ pendiente | — | en este commit |
-| 186 | `186_fn_evaluar_alertas.sql` | ⏳ pendiente | — | en este commit |
-| 187 | `187_fn_alertas_lectura.sql` | ⏳ pendiente | — | en este commit |
-| 188 | `188_fn_alertas_acciones.sql` | ⏳ pendiente | — | en este commit |
+| 183 | `183_alertas_tablas.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
+| 184 | `184_alertas_reglas_productos.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 191) | `fd529f8` |
+| 185 | `185_alertas_reglas_catalogo.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 190) | `fd529f8` |
+| 186 | `186_fn_evaluar_alertas.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
+| 187 | `187_fn_alertas_lectura.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
+| 188 | `188_fn_alertas_acciones.sql` | ⏳ pendiente | — | `fd529f8` |
 | 189 | `189_fn_actualizar_regla_alerta.sql` | ⏳ pendiente | — | en este commit |
+| 190 | `190_alertas_reglas_stock_real.sql` | ⏳ pendiente | — | en este commit |
+| 191 | `191_alertas_quiebre_vs_desfasaje.sql` | ⏳ pendiente | — | en este commit |

@@ -50,7 +50,8 @@ begin
            or case when jsonb_typeof(n.value) = 'number'
                    then (n.value)::text::numeric < 0
                         or (n.value)::text::numeric > 1000000000
-                        or (n.key in ('dias', 'dias_cobertura', 'dias_sin_venta')
+                        or (n.key in ('dias', 'dias_cobertura', 'dias_sin_venta',
+                                      'dias_venta_reciente')
                             and ((n.value)::text::numeric > 3650
                                  or (n.value)::text::numeric <> trunc((n.value)::text::numeric)))
                    else false end)

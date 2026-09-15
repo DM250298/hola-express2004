@@ -53,6 +53,16 @@ export interface AccionRegla {
 
 export const ACCION_REGLA: Record<string, AccionRegla> = {
   quiebre_clave: { etiqueta: 'Ir a compras', href: '/compras', verbo: 'Reponer' },
+  stock_desfasado: {
+    etiqueta: 'Ir a control de stock',
+    href: '/inventario/control',
+    verbo: 'Contar y ajustar',
+  },
+  lote_vencido: {
+    etiqueta: 'Ir a vencimientos',
+    href: '/vencimientos',
+    verbo: 'Dar de baja',
+  },
   por_quebrar: { etiqueta: 'Ir a compras', href: '/compras', verbo: 'Pedir' },
   vencimiento_proximo: {
     etiqueta: 'Ir a vencimientos',
@@ -91,6 +101,9 @@ export const ACCION_REGLA: Record<string, AccionRegla> = {
 export const SUGERENCIA_REGLA: Record<string, string> = {
   quiebre_clave:
     'Pedir al proveedor o traer del depósito. Si el proveedor no entrega, buscar una alternativa.',
+  stock_desfasado:
+    'Contar el producto y ajustar el stock: el sistema dice cero o negativo, pero se sigue vendiendo.',
+  lote_vencido: 'Retirarlos de la góndola y darlos de baja como merma.',
   por_quebrar: 'Sumarlos al próximo pedido antes de que se terminen.',
   vencimiento_proximo:
     'Pasarlos adelante en la góndola o hacer una promo; si ya vencieron, darlos de baja.',
@@ -129,12 +142,23 @@ export function describirAlerta(a: Alerta): string {
       else if (d.clase_abc) partes.push(`clase ${d.clase_abc}`)
       if (d.proveedor) partes.push(d.proveedor)
       break
+    case 'stock_desfasado':
+      partes.push(
+        d.stock != null && d.stock < 0
+          ? `stock negativo: ${cant(d.stock)}`
+          : 'el sistema dice cero'
+      )
+      if (d.ultima_venta) partes.push(`se vendió ${hace(d.ultima_venta)}`)
+      if (d.venta_diaria) partes.push(`vende ${cant(d.venta_diaria)} por día`)
+      if (d.clase_abc) partes.push(`clase ${d.clase_abc}`)
+      break
     case 'por_quebrar':
       if (d.stock != null) partes.push(`quedan ${cant(d.stock)}`)
       if (d.dias_cobertura != null)
         partes.push(`alcanza para ${formatoUnDecimal.format(d.dias_cobertura)} días`)
       if (d.proveedor) partes.push(d.proveedor)
       break
+    case 'lote_vencido':
     case 'vencimiento_proximo': {
       const dias = d.dias_para_vencer ?? 0
       if (dias < 0) partes.push(`venció hace ${conCantidad(-dias, 'día', 'días')}`)
@@ -187,7 +211,7 @@ export function tituloTareaSugerido(alertas: Alerta[]): string {
   if (reglas.size > 1) return `Resolver ${alertas.length} alertas`
   const codigo = alertas[0].regla_codigo
   const cosa =
-    codigo === 'vencimiento_proximo'
+    codigo === 'vencimiento_proximo' || codigo === 'lote_vencido'
       ? conCantidad(alertas.length, 'lote', 'lotes')
       : conCantidad(alertas.length, 'producto', 'productos')
   const enGrupo = grupos.size === 1 && alertas[0].grupo ? ` (${alertas[0].grupo})` : ''
@@ -242,9 +266,18 @@ export const CAMPOS_REGLA: Record<string, CampoParametro[]> = {
     },
     { clave: 'clases', etiqueta: 'Solo clases ABC', tipo: 'clases' },
   ],
+  stock_desfasado: [
+    {
+      clave: 'dias_venta_reciente',
+      etiqueta: 'Se considera que sigue vendiéndose si vendió en los últimos',
+      tipo: 'numero',
+      sufijo: 'días',
+    },
+  ],
   vencimiento_proximo: [
     { clave: 'dias', etiqueta: 'Avisar con', tipo: 'numero', sufijo: 'días de anticipación' },
   ],
+  lote_vencido: [],
   margen_bajo: [
     {
       clave: 'margen_minimo_pct',
