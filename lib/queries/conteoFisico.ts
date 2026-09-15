@@ -198,6 +198,11 @@ export interface ZonaNueva {
   nombre: string
   responsable_user_id: string | null
   orden: number
+  /**
+   * Ancla opcional al árbol físico (migs 170/175/176): al cerrar la zona,
+   * los productos contados se asignan a esta ubicación en el mapa.
+   */
+  ubicacion_id?: number | null
 }
 
 export interface AbrirSesionPayload {

@@ -23,12 +23,17 @@ import {
 } from '@/components/ui/select'
 import { useAbrirSesionConteo } from '@/lib/hooks/useConteoFisico'
 import { useUsuariosActivos } from '@/lib/hooks/useConteos'
+import { useArbolUbicaciones } from '@/lib/hooks/useMapa'
+import { rutaUbicacion } from '@/lib/queries/ubicaciones'
 
 const SIN_RESPONSABLE = '__sin__'
+const SIN_UBICACION = '__sin__'
 
 interface ZonaBorrador {
   nombre: string
   responsable: string
+  /** Nodo del mapa (mig 176). SIN_UBICACION = zona sin anclar. */
+  ubicacion: string
 }
 
 interface Props {
@@ -42,15 +47,29 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
   const [umbral, setUmbral] = useState('5000')
   const [notas, setNotas] = useState('')
   const [zonas, setZonas] = useState<ZonaBorrador[]>([
-    { nombre: '', responsable: SIN_RESPONSABLE },
+    { nombre: '', responsable: SIN_RESPONSABLE, ubicacion: SIN_UBICACION },
   ])
 
   const { data: usuarios } = useUsuariosActivos()
+  const { data: arbol } = useArbolUbicaciones()
   const abrir = useAbrirSesionConteo()
 
   const itemsResponsable: Record<string, string> = {
     [SIN_RESPONSABLE]: 'Sin asignar (la toma quien la inicia)',
     ...Object.fromEntries((usuarios ?? []).map((u) => [u.id, u.nombre])),
+  }
+
+  // Anclar la zona a un nodo del mapa (mig 176): opcional; con ancla, al
+  // cerrar la zona los productos contados quedan asignados en el mapa.
+  const hayMapa = !!arbol && arbol.planas.length > 0
+  const itemsUbicacion: Record<string, string> = {
+    [SIN_UBICACION]: 'Sin anclar al mapa',
+    ...Object.fromEntries(
+      (arbol?.planas ?? [])
+        .filter((u) => u.activo && u.tipo !== 'sucursal')
+        .map((u) => [String(u.id), rutaUbicacion(u.id, arbol?.planas ?? [])])
+        .sort((a, b) => a[1].localeCompare(b[1], 'es-AR'))
+    ),
   }
 
   function actualizarZona(indice: number, cambio: Partial<ZonaBorrador>) {
@@ -71,6 +90,10 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
         responsable_user_id:
           z.responsable === SIN_RESPONSABLE ? null : z.responsable,
         orden: i,
+        ubicacion_id:
+          z.ubicacion === SIN_UBICACION
+            ? null
+            : Number.parseInt(z.ubicacion, 10) || null,
       }))
       .filter((z) => z.nombre !== '')
     if (zonasValidas.length === 0) {
@@ -90,7 +113,9 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
           onCambioAbierto(false)
           setNombre('')
           setNotas('')
-          setZonas([{ nombre: '', responsable: SIN_RESPONSABLE }])
+          setZonas([
+            { nombre: '', responsable: SIN_RESPONSABLE, ubicacion: SIN_UBICACION },
+          ])
         },
       }
     )
@@ -132,7 +157,8 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
             <p className="text-xs text-[#6f3a2a]">
               Góndolas, heladeras, fiambrería, depósito, trastienda,
               exhibidores de caja… Un producto puede aparecer en varias zonas:
-              el total es la suma.
+              el total es la suma. Si anclás la zona al mapa del local, al
+              cerrarla los productos contados quedan ubicados solos.
             </p>
             <div className="space-y-2">
               {zonas.map((zona, i) => (
@@ -165,6 +191,26 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
                         ))}
                       </SelectContent>
                     </Select>
+                    {hayMapa && (
+                      <Select
+                        value={zona.ubicacion}
+                        onValueChange={(v) =>
+                          actualizarZona(i, { ubicacion: String(v ?? SIN_UBICACION) })
+                        }
+                        items={itemsUbicacion}
+                      >
+                        <SelectTrigger className="h-9 flex-1 border-[#e4c9b0] sm:w-44 sm:flex-none">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(itemsUbicacion).map(([valor, etiqueta]) => (
+                            <SelectItem key={valor} value={valor}>
+                              {etiqueta}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <button
                       type="button"
                       onClick={() => setZonas((prev) => prev.filter((_, j) => j !== i))}
@@ -183,7 +229,10 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
               variant="outline"
               size="sm"
               onClick={() =>
-                setZonas((prev) => [...prev, { nombre: '', responsable: SIN_RESPONSABLE }])
+                setZonas((prev) => [
+                  ...prev,
+                  { nombre: '', responsable: SIN_RESPONSABLE, ubicacion: SIN_UBICACION },
+                ])
               }
               className="border-[#e4c9b0] text-[#6f3a2a]"
             >

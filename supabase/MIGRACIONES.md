@@ -273,3 +273,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 173 | `173_metricas_sku_diarias.sql` | ⏳ pendiente | — | en este commit |
 | 174 | `174_fix_snapshot_costo_null.sql` | ⏳ pendiente | — | en este commit |
 | 175 | `175_conteo_zonas_ubicacion.sql` | ⏳ pendiente | — | en este commit |
+| 176 | `176_conteo_ancla_mapa.sql` | ⏳ pendiente | — | en este commit |
