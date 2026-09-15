@@ -271,3 +271,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 171 | `171_costo_congelado_en_venta.sql` | ⏳ pendiente | — | en este commit |
 | 172 | `172_quiebres_stock.sql` | ⏳ pendiente | — | en este commit |
 | 173 | `173_metricas_sku_diarias.sql` | ⏳ pendiente | — | en este commit |
+| 174 | `174_fix_snapshot_costo_null.sql` | ⏳ pendiente | — | en este commit |
