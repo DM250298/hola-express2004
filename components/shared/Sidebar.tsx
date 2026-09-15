@@ -28,6 +28,7 @@ import {
   ListChecks,
   Gauge,
   Smartphone,
+  Map,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MOSTRAR_CONTABILIDAD } from '@/lib/config/navegacion'
@@ -138,6 +139,13 @@ const SECCIONES: Seccion[] = [
         icono: ClipboardList,
         permiso: 'conteo_cierre',
         nota: 'Inventario por zonas',
+      },
+      {
+        href: '/mapa',
+        etiqueta: 'Mapa del local',
+        icono: Map,
+        permiso: 'inventario',
+        nota: 'Góndolas y ubicaciones',
       },
       {
         href: '/produccion',

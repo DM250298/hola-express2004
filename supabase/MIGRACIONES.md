@@ -272,3 +272,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 172 | `172_quiebres_stock.sql` | ⏳ pendiente | — | en este commit |
 | 173 | `173_metricas_sku_diarias.sql` | ⏳ pendiente | — | en este commit |
 | 174 | `174_fix_snapshot_costo_null.sql` | ⏳ pendiente | — | en este commit |
+| 175 | `175_conteo_zonas_ubicacion.sql` | ⏳ pendiente | — | en este commit |

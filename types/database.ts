@@ -3310,6 +3310,8 @@ export type ConteoZonaRow = {
   ts_inicio: string | null
   ts_fin: string | null
   orden: number
+  /** Nodo del árbol físico anclado a la zona (mig 175). NULL = sin anclar. */
+  ubicacion_id: number | null
   created_at: string
 }
 
@@ -3323,6 +3325,7 @@ export type ConteoZonaInsert = {
   ts_inicio?: string | null
   ts_fin?: string | null
   orden?: number
+  ubicacion_id?: number | null
   created_at?: string
 }
 
@@ -3334,6 +3337,7 @@ export type ConteoZonaUpdate = {
   ts_inicio?: string | null
   ts_fin?: string | null
   orden?: number
+  ubicacion_id?: number | null
 }
 
 export type ConteoDetalleRow = {

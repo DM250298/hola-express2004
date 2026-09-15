@@ -56,6 +56,7 @@ import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
 import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
+import { PanelUbicacionProducto } from '@/components/mapa/PanelUbicacionProducto'
 import { Sparkline } from './Sparkline'
 import { cn } from '@/lib/utils'
 import type { TipoMovimiento } from '@/types/database'
@@ -379,6 +380,9 @@ export function DetalleProducto({ productoId }: Props) {
 
       {/* Velocidad de venta */}
       <PanelCobertura cobertura={cobertura ?? null} porPeso={porPeso} />
+
+      {/* Ubicación física (Fase B; se oculta solo si la mig 170 no corrió) */}
+      <PanelUbicacionProducto productoId={producto.id} />
 
       {/* Gráfico de evolución */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">
