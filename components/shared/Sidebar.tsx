@@ -29,6 +29,7 @@ import {
   Gauge,
   Smartphone,
   Map,
+  TrendingUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MOSTRAR_CONTABILIDAD } from '@/lib/config/navegacion'
@@ -92,6 +93,18 @@ const SECCIONES: Seccion[] = [
         etiqueta: 'Tableros',
         icono: FolderKanban,
         permiso: 'proyectos',
+      },
+    ],
+  },
+  {
+    titulo: 'Gestión',
+    items: [
+      {
+        href: '/tablero',
+        etiqueta: 'Tablero del dueño',
+        icono: TrendingUp,
+        permiso: 'tablero',
+        nota: 'Márgenes, quiebres y decisiones',
       },
     ],
   },

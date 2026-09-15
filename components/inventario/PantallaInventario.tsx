@@ -6,7 +6,7 @@ import { Plus, SlidersHorizontal } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { TabStockInventario } from './TabStockInventario'
-import { TabAnalisisSku } from './TabAnalisisSku'
+import { TabAnalisisSku, type PropsAnalisisSku } from './TabAnalisisSku'
 import { PantallaABC } from './clasificacion-abc/PantallaABC'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { BotonesImportExport } from '@/components/import/BotonesImportExport'
@@ -16,9 +16,11 @@ import { cn } from '@/lib/utils'
 interface Props {
   /** Pestaña inicial (viene de ?tab= en la URL). */
   tabInicial?: 'stock' | 'ranking' | 'analisis'
+  /** Estado inicial del tab Análisis (drill-down desde el tablero). */
+  analisis?: PropsAnalisisSku
 }
 
-export function PantallaInventario({ tabInicial = 'stock' }: Props) {
+export function PantallaInventario({ tabInicial = 'stock', analisis }: Props) {
   const [nuevoAbierto, setNuevoAbierto] = useState(false)
 
   return (
@@ -88,7 +90,7 @@ export function PantallaInventario({ tabInicial = 'stock' }: Props) {
           <PantallaABC embebido />
         </TabsContent>
         <TabsContent value="analisis">
-          <TabAnalisisSku />
+          <TabAnalisisSku {...analisis} />
         </TabsContent>
       </Tabs>
     </div>

@@ -32,6 +32,7 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'finanzas', etiqueta: 'Finanzas', grupo: 'Análisis' },
   { clave: 'contabilidad', etiqueta: 'Contabilidad', grupo: 'Análisis' },
   { clave: 'reportes', etiqueta: 'Reportes', grupo: 'Análisis' },
+  { clave: 'tablero', etiqueta: 'Tablero del dueño (márgenes y decisiones)', grupo: 'Análisis' },
   { clave: 'rrhh', etiqueta: 'Recursos Humanos (operativo, sin sueldos)', grupo: 'Análisis' },
   { clave: 'rrhh_sueldos', etiqueta: 'RRHH · Sueldos y liquidaciones', grupo: 'Análisis' },
   { clave: 'tareas_gestion', etiqueta: 'Tareas · Asignar y controlar cumplimiento', grupo: 'Análisis' },
@@ -121,6 +122,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
 /** Permiso → ruta del módulo. Para resolver la pantalla de inicio. */
 const RUTA_POR_PERMISO: Record<string, string> = {
   dashboard: '/',
+  tablero: '/tablero',
   pos: '/pos',
   ventas: '/ventas',
   clientes: '/clientes',
@@ -144,6 +146,7 @@ const RUTA_POR_PERMISO: Record<string, string> = {
 /** Orden de prioridad para elegir la pantalla de inicio según el rol. */
 const PRIORIDAD_INICIO: string[] = [
   'dashboard',
+  'tablero',
   'pos',
   'ventas',
   'inventario',

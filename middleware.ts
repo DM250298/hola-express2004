@@ -58,6 +58,7 @@ const PERMISO_RUTA: Record<string, string[]> = {
   mi_panel: ['/rrhh/mi-panel', '/rrhh/mis-tareas', '/rrhh/mi-cuenta', '/movil'],
   terminales: ['/terminales'],
   reportes: ['/reportes'],
+  tablero: ['/tablero'],
   configuracion: ['/configuracion'],
 }
 
@@ -159,6 +160,19 @@ export async function middleware(request: NextRequest) {
       ) {
         const url = request.nextUrl.clone()
         url.pathname = '/movil'
+        return NextResponse.redirect(url)
+      }
+
+      // Recién logueado (?desde=login, lo pone FormLogin): quien tiene el
+      // tablero del dueño aterriza ahí. Solo al entrar — el dashboard
+      // operativo '/' sigue accesible desde el menú.
+      if (
+        pathname === '/' &&
+        request.nextUrl.searchParams.get('desde') === 'login'
+      ) {
+        const url = request.nextUrl.clone()
+        url.search = ''
+        url.pathname = permisos.includes('tablero') ? '/tablero' : '/'
         return NextResponse.redirect(url)
       }
 

@@ -267,12 +267,16 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 167 | `167_recepcion_no_toca_costo.sql` | ✅ aplicada | verificada 2026-09-08 | `cd21662` |
 | 168 | `168_factura_guarda_iva_producto.sql` | ✅ aplicada | verificada 2026-09-08 | `c75b919` |
 | 169 | `169_compra_directa_precio_congelado.sql` | ⏳ pendiente | — | en este commit |
-| 170 | `170_ubicaciones_fisicas.sql` | ⏳ pendiente | — | en este commit |
-| 171 | `171_costo_congelado_en_venta.sql` | ⏳ pendiente | — | en este commit |
-| 172 | `172_quiebres_stock.sql` | ⏳ pendiente | — | en este commit |
-| 173 | `173_metricas_sku_diarias.sql` | ⏳ pendiente | — | en este commit |
-| 174 | `174_fix_snapshot_costo_null.sql` | ⏳ pendiente | — | en este commit |
-| 175 | `175_conteo_zonas_ubicacion.sql` | ⏳ pendiente | — | en este commit |
-| 176 | `176_conteo_ancla_mapa.sql` | ⏳ pendiente | — | en este commit |
-| 177 | `177_marcas.sql` | ⏳ pendiente | — | en este commit |
-| 178 | `178_rpcs_metricas_sku.sql` | ⏳ pendiente | — | en este commit |
+| 170 | `170_ubicaciones_fisicas.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 171 | `171_costo_congelado_en_venta.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 172 | `172_quiebres_stock.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 173 | `173_metricas_sku_diarias.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 174 | `174_fix_snapshot_costo_null.sql` | ✅ aplicada | verificada 2026-09-15 | `970a91e` |
+| 175 | `175_conteo_zonas_ubicacion.sql` | ✅ aplicada | verificada 2026-09-15 | `c2beabc` |
+| 176 | `176_conteo_ancla_mapa.sql` | ✅ aplicada | verificada 2026-09-15 | `b08b521` |
+| 177 | `177_marcas.sql` | ✅ aplicada | verificada 2026-09-15 | `137ddf9` |
+| 178 | `178_rpcs_metricas_sku.sql` | ✅ aplicada | verificada 2026-09-15 | `137ddf9` |
+| 179 | `179_permiso_tablero_ventas_diarias.sql` | ⏳ pendiente | — | en este commit |
+| 180 | `180_fn_metricas_agrupadas.sql` | ⏳ pendiente | — | en este commit |
+| 181 | `181_fn_tablero_skus.sql` | ⏳ pendiente | — | en este commit |
+| 182 | `182_fn_tablero_gerencial.sql` | ⏳ pendiente | — | en este commit |

@@ -43,7 +43,9 @@ export function FormLogin() {
       // arrastrar la pantalla de otra persona si se corta internet.
       await purgarShellSW()
 
-      router.push('/')
+      // La marca `desde=login` le avisa al middleware que es la entrada:
+      // quien tiene el tablero del dueño aterriza ahí.
+      router.push('/?desde=login')
       router.refresh()
     } catch {
       toast.error('Error inesperado. Revisá tu conexión e intentá de nuevo.')

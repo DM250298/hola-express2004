@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Download, FileText, Search } from 'lucide-react'
+import { Download, FileText, Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -29,9 +29,40 @@ import {
 import { exportarTablaExcel, exportarTablaPDF } from '@/lib/utils/exportarTabla'
 import { useResumenSkus } from '@/lib/hooks/useMetricasSku'
 import type { ResumenSku } from '@/lib/queries/metricasSku'
+import {
+  ETIQUETA_DIMENSION,
+  SIN_VALOR_DIMENSION,
+  type DimensionTablero,
+} from '@/lib/queries/tablero'
 
-type Vista = 'todos' | 'con_venta' | 'quiebres' | 'sin_venta' | 'margen_negativo'
-type Orden = 'ingresos' | 'margen' | 'unidades' | 'cobertura' | 'perdida' | 'sin_venta'
+export type Vista = 'todos' | 'con_venta' | 'quiebres' | 'sin_venta' | 'margen_negativo'
+export type Orden = 'ingresos' | 'margen' | 'unidades' | 'cobertura' | 'perdida' | 'sin_venta'
+
+/** Estado inicial del tab, para el drill-down desde el tablero del dueño. */
+export interface PropsAnalisisSku {
+  filtroDimension?: { dimension: DimensionTablero; valor: string } | null
+  vistaInicial?: Vista
+  ordenInicial?: Orden
+  periodoInicial?: ClavePeriodo
+  desdeInicial?: string
+  hastaInicial?: string
+}
+
+/** Mismo texto que fn_metricas_agrupadas usa para agrupar (mig 180). */
+function valorDimension(f: ResumenSku, dimension: DimensionTablero): string {
+  switch (dimension) {
+    case 'categoria':
+      return f.categoria ?? SIN_VALOR_DIMENSION.categoria
+    case 'marca':
+      return f.marca ?? SIN_VALOR_DIMENSION.marca
+    case 'proveedor':
+      return f.proveedor ?? SIN_VALOR_DIMENSION.proveedor
+    case 'gondola':
+      return f.gondola ?? SIN_VALOR_DIMENSION.gondola
+    case 'clase_abc':
+      return f.clase_abc ?? SIN_VALOR_DIMENSION.clase_abc
+  }
+}
 
 const VISTAS: Record<Vista, string> = {
   todos: 'Todos',
@@ -61,14 +92,39 @@ const CLASE_COLOR: Record<string, string> = {
  * período — ventas, margen real (costo congelado), cobertura, quiebres,
  * última venta y ubicación. Todo agregado en SQL (fn_resumen_skus).
  */
-export function TabAnalisisSku() {
-  const [periodo, setPeriodo] = useState<ClavePeriodo>('mes_actual')
-  const [desdeP, setDesdeP] = useState('')
-  const [hastaP, setHastaP] = useState('')
+export function TabAnalisisSku({
+  filtroDimension = null,
+  vistaInicial,
+  ordenInicial,
+  periodoInicial,
+  desdeInicial,
+  hastaInicial,
+}: PropsAnalisisSku = {}) {
+  // Clase ABC no es un filtro de texto: se traduce a los botones A/B/C
+  // (o a la vista "sin ventas" para el grupo sin clase).
+  const esClase = filtroDimension?.dimension === 'clase_abc'
+  const [periodo, setPeriodo] = useState<ClavePeriodo>(periodoInicial ?? 'mes_actual')
+  const [desdeP, setDesdeP] = useState(desdeInicial ?? '')
+  const [hastaP, setHastaP] = useState(hastaInicial ?? '')
   const [busqueda, setBusqueda] = useState('')
-  const [vista, setVista] = useState<Vista>('con_venta')
-  const [clases, setClases] = useState<Set<string>>(new Set())
-  const [orden, setOrden] = useState<Orden>('ingresos')
+  const [vista, setVista] = useState<Vista>(
+    vistaInicial ??
+      (esClase && filtroDimension?.valor === SIN_VALOR_DIMENSION.clase_abc
+        ? 'sin_venta'
+        : filtroDimension
+          ? 'todos'
+          : 'con_venta')
+  )
+  const [clases, setClases] = useState<Set<string>>(
+    () =>
+      new Set(
+        esClase && filtroDimension && ['A', 'B', 'C'].includes(filtroDimension.valor)
+          ? [filtroDimension.valor]
+          : []
+      )
+  )
+  const [filtroDim, setFiltroDim] = useState(esClase ? null : filtroDimension)
+  const [orden, setOrden] = useState<Orden>(ordenInicial ?? 'ingresos')
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(50)
 
@@ -104,6 +160,11 @@ export function TabAnalisisSku() {
           (f.gondola ?? '').toLowerCase().includes(q)
       )
     }
+    if (filtroDim) {
+      lista = lista.filter(
+        (f) => valorDimension(f, filtroDim.dimension) === filtroDim.valor
+      )
+    }
     if (clases.size > 0) {
       lista = lista.filter((f) => f.clase_abc != null && clases.has(f.clase_abc))
     }
@@ -132,7 +193,7 @@ export function TabAnalisisSku() {
       sin_venta: (a, b) => (b.dias_sin_venta ?? -1) - (a.dias_sin_venta ?? -1),
     }
     return [...lista].sort(ordenar[orden])
-  }, [data, busqueda, clases, vista, orden])
+  }, [data, busqueda, filtroDim, clases, vista, orden])
 
   const kpis = useMemo(() => {
     const conVenta = (data ?? []).filter((f) => f.ingresos > 0)
@@ -368,6 +429,22 @@ export function TabAnalisisSku() {
             </button>
           ))}
         </div>
+        {filtroDim && (
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#391511] px-2.5 py-1 text-xs font-semibold text-white">
+            {ETIQUETA_DIMENSION[filtroDim.dimension]}: {filtroDim.valor}
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroDim(null)
+                setPagina(0)
+              }}
+              aria-label="Quitar filtro"
+              className="rounded hover:bg-white/20"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        )}
         <span className="ml-auto text-xs text-[#6f3a2a] tabular-nums">
           {formatearNumero(filtrados.length)} productos
         </span>

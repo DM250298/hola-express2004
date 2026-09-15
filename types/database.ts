@@ -3625,6 +3625,25 @@ export type ResumenSkuRow = {
   costo_estimado: boolean
 }
 
+/** Fila de fn_metricas_agrupadas (mig 180): el negocio por una dimensión. */
+export type MetricaAgrupadaRow = {
+  clave: string
+  skus: number
+  skus_con_venta: number
+  skus_sin_movimiento: number
+  ingresos: number
+  participacion_ingresos: number | null
+  costo_ventas: number | null
+  margen_pesos: number | null
+  margen_pct: number | null
+  participacion_margen: number | null
+  stock_valorizado: number | null
+  dias_inventario: number | null
+  quiebres: number
+  venta_perdida_pesos: number
+  costo_estimado: boolean
+}
+
 // ─── metricas_sku_diarias (snapshot diario, mig 173) ─────────────────────────
 // Gateada por RLS 'costos'. Derivados que NO se guardan: margen = ingresos −
 // costo_ventas · valor stock = stock_fin_dia × costo_unitario.
@@ -5319,6 +5338,14 @@ export interface Database {
       }
       fn_metricas_sku: {
         Args: { p_producto_id: number; p_desde: string; p_hasta: string }
+        Returns: Json
+      }
+      fn_metricas_agrupadas: {
+        Args: { p_dimension: string; p_desde: string; p_hasta: string }
+        Returns: MetricaAgrupadaRow[]
+      }
+      fn_tablero_gerencial: {
+        Args: { p_desde: string; p_hasta: string }
         Returns: Json
       }
     }
