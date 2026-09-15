@@ -30,6 +30,7 @@ import {
   Smartphone,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { MOSTRAR_CONTABILIDAD } from '@/lib/config/navegacion'
 import { BadgeProduccionPendiente } from '@/components/produccion/BadgeProduccionPendiente'
 
 interface ItemNav {
@@ -294,8 +295,9 @@ export function Sidebar({ permisos }: SidebarProps) {
     ...s,
     items: s.items.filter(
       (i) =>
-        permisos.includes(i.permiso) ||
-        (i.permisosAlt?.some((p) => permisos.includes(p)) ?? false)
+        (i.href !== '/contabilidad' || MOSTRAR_CONTABILIDAD) &&
+        (permisos.includes(i.permiso) ||
+          (i.permisosAlt?.some((p) => permisos.includes(p)) ?? false))
     ),
   })).filter((s) => s.items.length > 0)
 
