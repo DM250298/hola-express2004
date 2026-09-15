@@ -276,7 +276,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 176 | `176_conteo_ancla_mapa.sql` | ✅ aplicada | verificada 2026-09-15 | `b08b521` |
 | 177 | `177_marcas.sql` | ✅ aplicada | verificada 2026-09-15 | `137ddf9` |
 | 178 | `178_rpcs_metricas_sku.sql` | ✅ aplicada | verificada 2026-09-15 | `137ddf9` |
-| 179 | `179_permiso_tablero_ventas_diarias.sql` | ⏳ pendiente | — | en este commit |
-| 180 | `180_fn_metricas_agrupadas.sql` | ⏳ pendiente | — | en este commit |
-| 181 | `181_fn_tablero_skus.sql` | ⏳ pendiente | — | en este commit |
-| 182 | `182_fn_tablero_gerencial.sql` | ⏳ pendiente | — | en este commit |
+| 179 | `179_permiso_tablero_ventas_diarias.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 180 | `180_fn_metricas_agrupadas.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 181 | `181_fn_tablero_skus.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 182 | `182_fn_tablero_gerencial.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
