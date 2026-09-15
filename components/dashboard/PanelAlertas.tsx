@@ -7,22 +7,32 @@ import {
   ChevronRight,
   CircleCheck,
   Package,
+  Timer,
   Wallet,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAlertasDashboard } from '@/lib/hooks/useDashboard'
+import { useQuiebresActivos } from '@/lib/hooks/useQuiebres'
 import { cn } from '@/lib/utils'
 
 export function PanelAlertas() {
   const { data, isLoading, isError } = useAlertasDashboard()
+  // Quiebres de stock (mig 172): `null` = la migración aún no corrió → el
+  // tile no se muestra y el panel se comporta como antes.
+  const { data: quiebres } = useQuiebresActivos()
 
   if (isLoading) {
     return <Skeleton className="h-40 rounded-2xl bg-[#f9d2a2]/30" />
   }
   if (isError || !data) return null
 
+  const hayQuiebres = quiebres != null
+  const quiebresActivos = quiebres?.length ?? 0
   const totalAlertas =
-    data.productos_bajo_stock + data.lotes_por_vencer + data.cuentas_vencidas
+    data.productos_bajo_stock +
+    data.lotes_por_vencer +
+    data.cuentas_vencidas +
+    quiebresActivos
   const sinAlertas = totalAlertas === 0
 
   return (
@@ -61,7 +71,12 @@ export function PanelAlertas() {
           vencidas. Buen trabajo.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div
+          className={cn(
+            'grid grid-cols-1 gap-2',
+            hayQuiebres ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-3'
+          )}
+        >
           <ItemAlerta
             href="/inventario"
             icono={Package}
@@ -69,6 +84,15 @@ export function PanelAlertas() {
             cantidad={data.productos_bajo_stock}
             color="#e4a42a"
           />
+          {hayQuiebres && (
+            <ItemAlerta
+              href="/inventario"
+              icono={Timer}
+              etiqueta="Quiebres de stock activos"
+              cantidad={quiebresActivos}
+              color="#9e2f25"
+            />
+          )}
           <ItemAlerta
             href="/vencimientos"
             icono={Calendar}

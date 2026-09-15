@@ -3400,6 +3400,216 @@ export type ResumenCierreConteo = {
   sobrante_pesos: number
 }
 
+// ─── ubicaciones (árbol físico del local, mig 170) ───────────────────────────
+
+export type TipoUbicacion =
+  | 'sucursal'
+  | 'sector'
+  | 'gondola'
+  | 'modulo'
+  | 'estante'
+
+export type UbicacionRow = {
+  id: number
+  parent_id: number | null
+  tipo: TipoUbicacion
+  nombre: string
+  /** Código corto para etiqueta física / QR (ej. G03-M2-E1). */
+  codigo: string | null
+  orden: number
+  activo: boolean
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type UbicacionInsert = {
+  id?: number
+  parent_id?: number | null
+  tipo: TipoUbicacion
+  nombre: string
+  codigo?: string | null
+  orden?: number
+  activo?: boolean
+  notas?: string | null
+}
+
+export type UbicacionUpdate = {
+  parent_id?: number | null
+  tipo?: TipoUbicacion
+  nombre?: string
+  codigo?: string | null
+  orden?: number
+  activo?: boolean
+  notas?: string | null
+}
+
+// ─── producto_ubicacion (N:M producto ↔ ubicación, mig 170) ──────────────────
+
+export type ProductoUbicacionRow = {
+  id: number
+  producto_id: number
+  ubicacion_id: number
+  /** La ubicación "de venta": a esta se atribuye el análisis por góndola. */
+  es_principal: boolean
+  /** Posición dentro del estante (izquierda→derecha). */
+  orden: number
+  capacidad: number | null
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProductoUbicacionInsert = {
+  id?: number
+  producto_id: number
+  ubicacion_id: number
+  es_principal?: boolean
+  orden?: number
+  capacidad?: number | null
+  notas?: string | null
+}
+
+export type ProductoUbicacionUpdate = {
+  ubicacion_id?: number
+  es_principal?: boolean
+  orden?: number
+  capacidad?: number | null
+  notas?: string | null
+}
+
+// ─── costos_item_venta / costos_item_devolucion (mig 171) ────────────────────
+// Costo congelado al momento de la operación. Gateadas por RLS 'costos':
+// sin permiso, el select devuelve 0 filas. Fila ausente = costo desconocido
+// en ese momento (venta pre-171 o sin costo cargado) — tratar como
+// estimación, nunca como 0. Escriben solo las RPCs (sin Insert/Update aptos
+// para el cliente, pero se declaran para que supabase-js no colapse a never).
+
+export type CostoItemVentaRow = {
+  item_venta_id: number
+  costo_unitario: number
+}
+
+export type CostoItemVentaInsert = {
+  item_venta_id: number
+  costo_unitario: number
+}
+
+export type CostoItemVentaUpdate = {
+  costo_unitario?: number
+}
+
+export type CostoItemDevolucionRow = {
+  item_devolucion_id: number
+  costo_unitario: number
+}
+
+export type CostoItemDevolucionInsert = {
+  item_devolucion_id: number
+  costo_unitario: number
+}
+
+export type CostoItemDevolucionUpdate = {
+  costo_unitario?: number
+}
+
+// ─── quiebres_stock (mig 172) ────────────────────────────────────────────────
+
+export type QuiebreStockRow = {
+  id: number
+  producto_id: number
+  inicio_at: string
+  /** NULL = quiebre activo. */
+  fin_at: string | null
+  mov_inicio_id: number | null
+  mov_fin_id: number | null
+  /** ESTIMACIÓN congelada al cierre (velocity 30d previa × días). */
+  venta_perdida_unid: number | null
+  venta_perdida_pesos: number | null
+  created_at: string
+}
+
+export type QuiebreStockInsert = {
+  id?: number
+  producto_id: number
+  inicio_at: string
+  fin_at?: string | null
+  mov_inicio_id?: number | null
+  mov_fin_id?: number | null
+  venta_perdida_unid?: number | null
+  venta_perdida_pesos?: number | null
+}
+
+export type QuiebreStockUpdate = {
+  fin_at?: string | null
+  mov_fin_id?: number | null
+  venta_perdida_unid?: number | null
+  venta_perdida_pesos?: number | null
+}
+
+/** Fila de fn_quiebres (mig 173): evento + producto + estimación al vuelo. */
+export type QuiebreConProducto = {
+  id: number
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  inicio_at: string
+  fin_at: string | null
+  abierto: boolean
+  duracion_horas: number
+  venta_perdida_unid: number | null
+  venta_perdida_pesos: number | null
+}
+
+// ─── metricas_sku_diarias (snapshot diario, mig 173) ─────────────────────────
+// Gateada por RLS 'costos'. Derivados que NO se guardan: margen = ingresos −
+// costo_ventas · valor stock = stock_fin_dia × costo_unitario.
+
+export type MetricaSkuDiariaRow = {
+  fecha: string
+  producto_id: number
+  unidades_vendidas: number
+  unidades_via_combo: number
+  ingresos: number
+  costo_ventas: number
+  stock_fin_dia: number
+  costo_unitario: number
+  precio_venta: number
+  clase_abc: string | null
+  gondola_id: number | null
+  /** true = costo actual retro-aplicado (backfill / ítems sin satélite). */
+  costo_estimado: boolean
+}
+
+export type MetricaSkuDiariaInsert = {
+  fecha: string
+  producto_id: number
+  unidades_vendidas?: number
+  unidades_via_combo?: number
+  ingresos?: number
+  costo_ventas?: number
+  stock_fin_dia?: number
+  costo_unitario?: number
+  precio_venta?: number
+  clase_abc?: string | null
+  gondola_id?: number | null
+  costo_estimado?: boolean
+}
+
+export type MetricaSkuDiariaUpdate = {
+  unidades_vendidas?: number
+  unidades_via_combo?: number
+  ingresos?: number
+  costo_ventas?: number
+  stock_fin_dia?: number
+  costo_unitario?: number
+  precio_venta?: number
+  clase_abc?: string | null
+  gondola_id?: number | null
+  costo_estimado?: boolean
+}
+
 // ─── Tipo Database (compatible con el cliente de Supabase) ───────────────────
 
 export interface Database {
@@ -4096,6 +4306,96 @@ export interface Database {
         Insert: ActivoFijoInsert
         Update: ActivoFijoUpdate
         Relationships: []
+      }
+      ubicaciones: {
+        Row: UbicacionRow
+        Insert: UbicacionInsert
+        Update: UbicacionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'ubicaciones_parent_id_fkey'
+            columns: ['parent_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      producto_ubicacion: {
+        Row: ProductoUbicacionRow
+        Insert: ProductoUbicacionInsert
+        Update: ProductoUbicacionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'producto_ubicacion_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'producto_ubicacion_ubicacion_id_fkey'
+            columns: ['ubicacion_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      costos_item_venta: {
+        Row: CostoItemVentaRow
+        Insert: CostoItemVentaInsert
+        Update: CostoItemVentaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'costos_item_venta_item_venta_id_fkey'
+            columns: ['item_venta_id']
+            referencedRelation: 'items_venta'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      costos_item_devolucion: {
+        Row: CostoItemDevolucionRow
+        Insert: CostoItemDevolucionInsert
+        Update: CostoItemDevolucionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'costos_item_devolucion_item_devolucion_id_fkey'
+            columns: ['item_devolucion_id']
+            referencedRelation: 'items_devolucion'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      quiebres_stock: {
+        Row: QuiebreStockRow
+        Insert: QuiebreStockInsert
+        Update: QuiebreStockUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'quiebres_stock_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      metricas_sku_diarias: {
+        Row: MetricaSkuDiariaRow
+        Insert: MetricaSkuDiariaInsert
+        Update: MetricaSkuDiariaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'metricas_sku_diarias_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'metricas_sku_diarias_gondola_id_fkey'
+            columns: ['gondola_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
       }
     }
     Views: {
@@ -4927,6 +5227,22 @@ export interface Database {
       fn_importar_proveedores: {
         Args: { p_filas: Json }
         Returns: Json
+      }
+      fn_snapshot_metricas_diarias: {
+        Args: { p_fecha?: string | null }
+        Returns: number
+      }
+      fn_backfill_metricas_diarias: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: number
+      }
+      fn_quiebres: {
+        Args: {
+          p_desde?: string | null
+          p_hasta?: string | null
+          p_solo_abiertos?: boolean
+        }
+        Returns: QuiebreConProducto[]
       }
     }
     Enums: {

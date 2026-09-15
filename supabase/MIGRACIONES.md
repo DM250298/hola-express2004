@@ -267,3 +267,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 167 | `167_recepcion_no_toca_costo.sql` | ✅ aplicada | verificada 2026-09-08 | `cd21662` |
 | 168 | `168_factura_guarda_iva_producto.sql` | ✅ aplicada | verificada 2026-09-08 | `c75b919` |
 | 169 | `169_compra_directa_precio_congelado.sql` | ⏳ pendiente | — | en este commit |
+| 170 | `170_ubicaciones_fisicas.sql` | ⏳ pendiente | — | en este commit |
+| 171 | `171_costo_congelado_en_venta.sql` | ⏳ pendiente | — | en este commit |
+| 172 | `172_quiebres_stock.sql` | ⏳ pendiente | — | en este commit |
+| 173 | `173_metricas_sku_diarias.sql` | ⏳ pendiente | — | en este commit |
