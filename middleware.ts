@@ -59,6 +59,7 @@ const PERMISO_RUTA: Record<string, string[]> = {
   terminales: ['/terminales'],
   reportes: ['/reportes'],
   tablero: ['/tablero'],
+  alertas: ['/alertas'],
   configuracion: ['/configuracion'],
 }
 

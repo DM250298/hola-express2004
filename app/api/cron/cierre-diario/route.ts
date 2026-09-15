@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 /**
- * Cron diario (Vercel Cron, 09:00 UTC = 06:00 AR). Hace 4 cosas:
+ * Cron diario (Vercel Cron, 09:00 UTC = 06:00 AR). Hace 5 cosas:
  *  1. Cierra la asistencia de AYER (marca ausentes injustificados).
  *  2. Materializa las tareas recurrentes de HOY (antes del turno mañana).
  *  3. Marca vencidas las tareas de días pasados sin completar.
@@ -11,6 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
  *     un cron propio porque el plan Hobby de Vercel tope en 2 cron jobs.
  *     Es tolerante: si la migración 173 no corrió todavía, avisa en la
  *     respuesta sin hacer fallar los otros 3 pasos.
+ *  5. Evalúa las alertas (mig 186), también tolerante.
  *
  * Lo dispara Vercel con GET + header Authorization Bearer CRON_SECRET
  * (Vercel → Settings → Environment Variables). Si querés correrlo a mano:
@@ -74,6 +75,12 @@ export async function GET(request: Request) {
     if (e4) snapshotError = e4.message
     else filasSnapshot = filas ?? 0
 
+    // 5. Alertas (mig 186): corre después del snapshot. Tolerante igual que
+    // el paso 4 — fn_evaluar_alertas ya devuelve el error en el jsonb.
+    const { data: alertas, error: e5 } = await supabase.rpc('fn_evaluar_alertas', {
+      p_origen: 'cron',
+    })
+
     return NextResponse.json({
       ok: true,
       ayer,
@@ -83,6 +90,7 @@ export async function GET(request: Request) {
       tareas_vencidas: vencidas ?? 0,
       filas_snapshot: filasSnapshot,
       snapshot_error: snapshotError,
+      alertas: e5 ? { error: e5.message } : alertas,
     })
   } catch (e) {
     return NextResponse.json(

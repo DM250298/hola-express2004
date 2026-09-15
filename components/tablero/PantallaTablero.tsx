@@ -34,6 +34,8 @@ import {
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
 import { useTableroGerencial } from '@/lib/hooks/useTablero'
+import { useResumenAlertas } from '@/lib/hooks/useAlertas'
+import type { ResumenAlertas } from '@/lib/queries/alertas'
 import type {
   CategoriaCantidad,
   GondolaTablero,
@@ -73,9 +75,31 @@ function detalleCategorias(lista: CategoriaCantidad[]): string | undefined {
 }
 
 /**
+ * Situaciones desde el motor de alertas (Fase F): una fila por regla con
+ * alertas abiertas, agrupada, que lleva a /alertas para decidir. Las
+ * informativas no llegan al tablero.
+ */
+function situacionesDesdeAlertas(r: ResumenAlertas): Situacion[] {
+  return r.reglas
+    .filter((g) => g.abiertas > 0 && g.severidad !== 'informativo')
+    .map((g) => {
+      const grupos = g.grupos.map((x) => `${x.grupo} ${formatearNumero(x.cantidad)}`).join(' · ')
+      const conTarea = g.en_curso > 0 ? `${formatearNumero(g.en_curso)} ya con tarea` : ''
+      return {
+        severidad: g.severidad as Severidad,
+        texto: `${g.regla}: ${formatearNumero(g.abiertas)}`,
+        detalle: [grupos, conTarea].filter(Boolean).join(' · ') || undefined,
+        accion: 'Decidir',
+        href: '/alertas',
+      }
+    })
+}
+
+/**
  * DATO → DIAGNÓSTICO → ACCIÓN. Solo situaciones que piden intervención,
  * agrupadas (nunca una fila por producto) y con el lugar donde se actúa.
- * El motor de alertas configurable (Fase F) reemplaza estas reglas fijas.
+ * Respaldo con reglas fijas para quien no tiene el permiso 'alertas' o
+ * mientras las migraciones 183-189 no corrieron.
  */
 function armarSituaciones(t: TableroGerencial, paramsPeriodo: string): Situacion[] {
   const s = t.situaciones
@@ -128,7 +152,7 @@ function armarSituaciones(t: TableroGerencial, paramsPeriodo: string): Situacion
   return lista
 }
 
-export function PantallaTablero() {
+export function PantallaTablero({ puedeVerAlertas }: { puedeVerAlertas: boolean }) {
   const [periodo, setPeriodo] = useState<ClavePeriodo>('mes_actual')
   const [desdeP, setDesdeP] = useState('')
   const [hastaP, setHastaP] = useState('')
@@ -192,7 +216,11 @@ export function PantallaTablero() {
           </p>
         </div>
       ) : (
-        <CuerpoTablero datos={data} paramsPeriodo={paramsPeriodo} />
+        <CuerpoTablero
+          datos={data}
+          paramsPeriodo={paramsPeriodo}
+          puedeVerAlertas={puedeVerAlertas}
+        />
       )}
     </div>
   )
@@ -201,14 +229,28 @@ export function PantallaTablero() {
 function CuerpoTablero({
   datos,
   paramsPeriodo,
+  puedeVerAlertas,
 }: {
   datos: TableroGerencial
   paramsPeriodo: string
+  puedeVerAlertas: boolean
 }) {
   const v = datos.ventas
   const m = datos.margen
   const costos = datos.puede_ver_costos
-  const situaciones = armarSituaciones(datos, paramsPeriodo)
+  const alertas = useResumenAlertas({ habilitado: puedeVerAlertas })
+  // Solo si el evaluador corrió bien hace poco: si nunca corrió o viene
+  // fallando, una lista vacía diría "todo en orden" sin serlo.
+  const ultimaEvaluacion = alertas.data?.ultima_evaluacion
+  const desdeAlertas =
+    puedeVerAlertas &&
+    !alertas.isError &&
+    !!ultimaEvaluacion &&
+    Date.now() - new Date(ultimaEvaluacion).getTime() < 26 * 60 * 60 * 1000
+  const cargandoAlertas = puedeVerAlertas && alertas.isLoading
+  const situaciones = desdeAlertas
+    ? situacionesDesdeAlertas(alertas.data as ResumenAlertas)
+    : armarSituaciones(datos, paramsPeriodo)
   const urgentes = situaciones.filter((s) => s.severidad !== 'oportunidad').slice(0, 5)
   const oportunidades = situaciones.filter((s) => s.severidad === 'oportunidad')
   const snapshotAtrasado =
@@ -381,8 +423,21 @@ function CuerpoTablero({
           <AlertTriangle className="h-4 w-4 text-[#f9b44c]" />
           <h2 className="text-sm font-semibold text-[#391511]">Requiere intervención</h2>
           <span className="text-xs text-[#c8a58a]">· solo lo que pide una acción</span>
+          {desdeAlertas && (
+            <Link
+              href="/alertas"
+              className="ml-auto text-xs text-[#6f3a2a] underline underline-offset-2 hover:text-[#391511]"
+            >
+              Todas las alertas
+            </Link>
+          )}
         </div>
-        {urgentes.length === 0 ? (
+        {cargandoAlertas ? (
+          <div className="space-y-2 px-4 py-3">
+            <Skeleton className="h-5 w-2/3 bg-[#f9d2a2]/30" />
+            <Skeleton className="h-5 w-1/2 bg-[#f9d2a2]/30" />
+          </div>
+        ) : urgentes.length === 0 ? (
           <div className="flex items-center gap-2 px-4 py-4 text-sm text-[#2f7d4f]">
             <CheckCircle2 className="h-4 w-4" />
             Todo en orden: no hay nada urgente para resolver.

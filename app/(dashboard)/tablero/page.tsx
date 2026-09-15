@@ -8,5 +8,5 @@ export const metadata = { title: 'Tablero del dueño — ¡Hola! Express' }
 export default async function PaginaTablero() {
   const { permisos } = await getPermisosUsuario()
   if (!tienePermiso(permisos, 'tablero')) redirect('/')
-  return <PantallaTablero />
+  return <PantallaTablero puedeVerAlertas={tienePermiso(permisos, 'alertas')} />
 }

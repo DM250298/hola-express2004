@@ -3644,6 +3644,106 @@ export type MetricaAgrupadaRow = {
   costo_estimado: boolean
 }
 
+// ─── Alertas (Fase F, migs 183-189) ──────────────────────────────────────────
+// reglas_alerta se lee con RLS 'alertas'; alertas y alertas_evaluaciones solo
+// por RPC (fn_alertas / fn_resumen_alertas), porque el detalle trae costos.
+
+export type SeveridadAlerta = 'critico' | 'atencion' | 'oportunidad' | 'informativo'
+export type EstadoAlerta = 'abierta' | 'en_curso' | 'pospuesta' | 'resuelta'
+
+export type ReglaAlertaRow = {
+  codigo: string
+  nombre: string
+  descripcion: string
+  severidad: SeveridadAlerta
+  activa: boolean
+  parametros: Json
+  orden: number
+  updated_by: string | null
+  updated_at: string
+}
+
+export type ReglaAlertaInsert = {
+  codigo: string
+  nombre: string
+  descripcion: string
+  severidad: SeveridadAlerta
+  activa?: boolean
+  parametros?: Json
+  orden?: number
+  updated_by?: string | null
+  updated_at?: string
+}
+
+export type ReglaAlertaUpdate = Partial<ReglaAlertaInsert>
+
+export type AlertaRow = {
+  id: number
+  regla_codigo: string
+  severidad: SeveridadAlerta
+  dedupe_key: string
+  entidad_tipo: 'producto' | 'lote'
+  entidad_id: number
+  producto_id: number | null
+  grupo: string | null
+  titulo: string
+  detalle: Json
+  impacto: number | null
+  estado: EstadoAlerta
+  detectada_at: string
+  ultima_deteccion_at: string
+  decision: 'tarea' | 'posponer' | null
+  decidida_por: string | null
+  decidida_at: string | null
+  nota_decision: string | null
+  pospuesta_hasta: string | null
+  tarea_id: number | null
+  resuelta_at: string | null
+  resolucion: 'condicion_superada' | 'regla_desactivada' | null
+}
+
+export type AlertaInsert = Omit<Partial<AlertaRow>, 'id'> & {
+  regla_codigo: string
+  severidad: SeveridadAlerta
+  dedupe_key: string
+  entidad_tipo: 'producto' | 'lote'
+  entidad_id: number
+  titulo: string
+}
+
+export type AlertaUpdate = Partial<AlertaInsert>
+
+/** Fila de fn_alertas (mig 187): alerta + regla + decisión + tarea. */
+export type AlertaListadoRow = {
+  id: number
+  regla_codigo: string
+  regla_nombre: string
+  severidad: SeveridadAlerta
+  entidad_tipo: 'producto' | 'lote'
+  entidad_id: number
+  producto_id: number | null
+  grupo: string | null
+  titulo: string
+  detalle: Json
+  impacto: number | null
+  estado: EstadoAlerta
+  detectada_at: string
+  ultima_deteccion_at: string
+  decision: 'tarea' | 'posponer' | null
+  decidida_por_nombre: string | null
+  decidida_at: string | null
+  nota_decision: string | null
+  pospuesta_hasta: string | null
+  tarea_id: number | null
+  tarea_titulo: string | null
+  tarea_estado: string | null
+  tarea_responsable: string | null
+  tarea_fecha_limite: string | null
+  tarea_completada_at: string | null
+  resuelta_at: string | null
+  resolucion: 'condicion_superada' | 'regla_desactivada' | null
+}
+
 // ─── metricas_sku_diarias (snapshot diario, mig 173) ─────────────────────────
 // Gateada por RLS 'costos'. Derivados que NO se guardan: margen = ingresos −
 // costo_ventas · valor stock = stock_fin_dia × costo_unitario.
@@ -4482,6 +4582,25 @@ export interface Database {
             columns: ['gondola_id']
             referencedRelation: 'ubicaciones'
             referencedColumns: ['id']
+          },
+        ]
+      }
+      reglas_alerta: {
+        Row: ReglaAlertaRow
+        Insert: ReglaAlertaInsert
+        Update: ReglaAlertaUpdate
+        Relationships: []
+      }
+      alertas: {
+        Row: AlertaRow
+        Insert: AlertaInsert
+        Update: AlertaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'alertas_regla_codigo_fkey'
+            columns: ['regla_codigo']
+            referencedRelation: 'reglas_alerta'
+            referencedColumns: ['codigo']
           },
         ]
       }
@@ -5347,6 +5466,46 @@ export interface Database {
       fn_tablero_gerencial: {
         Args: { p_desde: string; p_hasta: string }
         Returns: Json
+      }
+      fn_evaluar_alertas: {
+        Args: { p_origen?: string; p_si_antiguedad_min?: number | null }
+        Returns: Json
+      }
+      fn_alertas: {
+        Args: { p_dias_resueltas?: number }
+        Returns: AlertaListadoRow[]
+      }
+      fn_resumen_alertas: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      fn_crear_tarea_alertas: {
+        Args: {
+          p_alerta_ids: number[]
+          p_titulo: string
+          p_descripcion: string
+          p_responsable_id: string
+          p_fecha_limite: string | null
+          p_prioridad: string
+        }
+        Returns: number
+      }
+      fn_posponer_alertas: {
+        Args: { p_alerta_ids: number[]; p_dias: number; p_motivo: string }
+        Returns: number
+      }
+      fn_reabrir_alertas: {
+        Args: { p_alerta_ids: number[] }
+        Returns: number
+      }
+      fn_actualizar_regla_alerta: {
+        Args: {
+          p_codigo: string
+          p_activa: boolean
+          p_severidad: string
+          p_parametros: Json
+        }
+        Returns: undefined
       }
     }
     Enums: {

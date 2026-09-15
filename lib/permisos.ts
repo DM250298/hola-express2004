@@ -33,6 +33,7 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'contabilidad', etiqueta: 'Contabilidad', grupo: 'Análisis' },
   { clave: 'reportes', etiqueta: 'Reportes', grupo: 'Análisis' },
   { clave: 'tablero', etiqueta: 'Tablero del dueño (márgenes y decisiones)', grupo: 'Análisis' },
+  { clave: 'alertas', etiqueta: 'Alertas: ver y decidir (crear tarea, posponer)', grupo: 'Análisis' },
   { clave: 'rrhh', etiqueta: 'Recursos Humanos (operativo, sin sueldos)', grupo: 'Análisis' },
   { clave: 'rrhh_sueldos', etiqueta: 'RRHH · Sueldos y liquidaciones', grupo: 'Análisis' },
   { clave: 'tareas_gestion', etiqueta: 'Tareas · Asignar y controlar cumplimiento', grupo: 'Análisis' },
@@ -78,6 +79,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'reportes',
     'rrhh',
     'tareas_gestion',
+    'alertas',
   ],
   // Mostrador: cajeros y fiambreros comparten el mismo set operativo (nivel
   // encargada SIN los módulos que muestran costo: compras, pedidos, reportes,
@@ -123,6 +125,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
 const RUTA_POR_PERMISO: Record<string, string> = {
   dashboard: '/',
   tablero: '/tablero',
+  alertas: '/alertas',
   pos: '/pos',
   ventas: '/ventas',
   clientes: '/clientes',

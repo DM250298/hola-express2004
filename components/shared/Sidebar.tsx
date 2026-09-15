@@ -30,6 +30,7 @@ import {
   Smartphone,
   Map,
   TrendingUp,
+  BellRing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MOSTRAR_CONTABILIDAD } from '@/lib/config/navegacion'
@@ -105,6 +106,13 @@ const SECCIONES: Seccion[] = [
         icono: TrendingUp,
         permiso: 'tablero',
         nota: 'Márgenes, quiebres y decisiones',
+      },
+      {
+        href: '/alertas',
+        etiqueta: 'Alertas',
+        icono: BellRing,
+        permiso: 'alertas',
+        nota: 'Qué resolver y quién lo hace',
       },
     ],
   },
