@@ -1129,6 +1129,8 @@ export type ProductoRow = {
   codigo_interno: string | null
   nombre: string
   marca: string | null
+  /** Marca normalizada (mig 177). El texto `marca` queda legacy. */
+  marca_id: number | null
   categoria_id: number | null
   subcategoria: string | null
   proveedor_id: number | null
@@ -1173,6 +1175,7 @@ export type ProductoInsert = {
   codigo_interno?: string | null
   nombre: string
   marca?: string | null
+  marca_id?: number | null
   categoria_id?: number | null
   subcategoria?: string | null
   proveedor_id?: number | null
@@ -1211,6 +1214,7 @@ export type ProductoUpdate = {
   codigo_interno?: string | null
   nombre?: string
   marca?: string | null
+  marca_id?: number | null
   categoria_id?: number | null
   subcategoria?: string | null
   proveedor_id?: number | null
@@ -3404,6 +3408,24 @@ export type ResumenCierreConteo = {
   sobrante_pesos: number
 }
 
+// ─── marcas (mig 177) ────────────────────────────────────────────────────────
+
+export type MarcaRow = {
+  id: number
+  nombre: string
+  created_at: string
+}
+
+export type MarcaInsert = {
+  id?: number
+  nombre: string
+  created_at?: string
+}
+
+export type MarcaUpdate = {
+  nombre?: string
+}
+
 // ─── ubicaciones (árbol físico del local, mig 170) ───────────────────────────
 
 export type TipoUbicacion =
@@ -3564,6 +3586,43 @@ export type QuiebreConProducto = {
   duracion_horas: number
   venta_perdida_unid: number | null
   venta_perdida_pesos: number | null
+}
+
+/**
+ * Fila de fn_resumen_skus (mig 178): la tabla-madre del análisis por SKU.
+ * Las columnas de costo/margen vienen NULL sin el permiso 'costos'.
+ */
+export type ResumenSkuRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  activo: boolean
+  es_critico: boolean
+  marca: string | null
+  categoria: string | null
+  proveedor: string | null
+  gondola: string | null
+  stock_actual: number
+  stock_minimo: number
+  unidades_vendidas: number
+  unidades_via_combo: number
+  ingresos: number
+  venta_diaria: number
+  dias_cobertura: number | null
+  ultima_venta: string | null
+  ultima_compra: string | null
+  dias_sin_venta: number | null
+  clase_abc: string | null
+  quiebres_periodo: number
+  venta_perdida_pesos: number
+  precio_venta: number
+  costo_actual: number | null
+  costo_ventas: number | null
+  margen_pesos: number | null
+  margen_pct: number | null
+  stock_valorizado: number | null
+  costo_estimado: boolean
 }
 
 // ─── metricas_sku_diarias (snapshot diario, mig 173) ─────────────────────────
@@ -4309,6 +4368,12 @@ export interface Database {
         Row: ActivoFijoRow
         Insert: ActivoFijoInsert
         Update: ActivoFijoUpdate
+        Relationships: []
+      }
+      marcas: {
+        Row: MarcaRow
+        Insert: MarcaInsert
+        Update: MarcaUpdate
         Relationships: []
       }
       ubicaciones: {
@@ -5247,6 +5312,14 @@ export interface Database {
           p_solo_abiertos?: boolean
         }
         Returns: QuiebreConProducto[]
+      }
+      fn_resumen_skus: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: ResumenSkuRow[]
+      }
+      fn_metricas_sku: {
+        Args: { p_producto_id: number; p_desde: string; p_hasta: string }
+        Returns: Json
       }
     }
     Enums: {

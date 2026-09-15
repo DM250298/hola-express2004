@@ -57,6 +57,7 @@ import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
 import { PanelUbicacionProducto } from '@/components/mapa/PanelUbicacionProducto'
+import { PanelInteligenciaSku } from './PanelInteligenciaSku'
 import { Sparkline } from './Sparkline'
 import { cn } from '@/lib/utils'
 import type { TipoMovimiento } from '@/types/database'
@@ -383,6 +384,9 @@ export function DetalleProducto({ productoId }: Props) {
 
       {/* Ubicación física (Fase B; se oculta solo si la mig 170 no corrió) */}
       <PanelUbicacionProducto productoId={producto.id} />
+
+      {/* Margen real y quiebres (Fase C; se oculta si la mig 178 no corrió) */}
+      <PanelInteligenciaSku productoId={producto.id} />
 
       {/* Gráfico de evolución */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-5 shadow-sm">

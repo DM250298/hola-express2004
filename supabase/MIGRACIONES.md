@@ -274,3 +274,5 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 174 | `174_fix_snapshot_costo_null.sql` | ⏳ pendiente | — | en este commit |
 | 175 | `175_conteo_zonas_ubicacion.sql` | ⏳ pendiente | — | en este commit |
 | 176 | `176_conteo_ancla_mapa.sql` | ⏳ pendiente | — | en este commit |
+| 177 | `177_marcas.sql` | ⏳ pendiente | — | en este commit |
+| 178 | `178_rpcs_metricas_sku.sql` | ⏳ pendiente | — | en este commit |
