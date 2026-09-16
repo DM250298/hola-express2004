@@ -289,4 +289,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 189 | `189_fn_actualizar_regla_alerta.sql` | ⏳ pendiente | — | en este commit |
 | 190 | `190_alertas_reglas_stock_real.sql` | ✅ aplicada | verificada 2026-09-15 | `4bad2e7` |
 | 191 | `191_alertas_quiebre_vs_desfasaje.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 192) | `4bad2e7` |
-| 192 | `192_stock_desfasado_por_clase.sql` | ⏳ pendiente | — | en este commit |
+| 192 | `192_stock_desfasado_por_clase.sql` | ✅ aplicada | verificada 2026-09-15 | `99077e9` |
