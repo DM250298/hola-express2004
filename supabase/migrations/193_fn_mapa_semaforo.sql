@@ -33,7 +33,6 @@ as $$
 declare
   v_costos boolean := public.fn_tiene_permiso('costos');
   v_dias integer := greatest(p_hasta - p_desde + 1, 1);
-  v_resultado jsonb;
 begin
   if not public.fn_tiene_permiso('inventario') then
     raise exception 'No tenés permiso para ver el mapa del local.';

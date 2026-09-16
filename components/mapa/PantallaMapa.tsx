@@ -94,7 +94,7 @@ export function PantallaMapa() {
     return { desde: fechaLocal(r.desde), hasta: fechaLocal(r.hasta) }
   }, [periodo, desdeP, hastaP, personalizadoCompleto])
 
-  const { data: mapa } = useMapaSemaforo(rango.desde, rango.hasta)
+  const { data: mapa, isError: fallaMapa } = useMapaSemaforo(rango.desde, rango.hasta)
   const metricas = useMemo(() => {
     const m = new Map<number, NodoMapa>()
     for (const n of mapa?.nodos ?? []) m.set(n.id, n)
@@ -119,8 +119,36 @@ export function PantallaMapa() {
     }
   }, [mapa])
 
-  const nodoSeleccionado =
-    nodoAbierto != null ? (metricas.get(nodoAbierto) ?? null) : null
+  // Sin números (mig 193 pendiente o consulta caída) el panel tiene que
+  // abrir igual: la lista de productos viene de otra función.
+  const nodoSeleccionado = useMemo<NodoMapa | null>(() => {
+    if (nodoAbierto == null) return null
+    const conNumeros = metricas.get(nodoAbierto)
+    if (conNumeros) return conNumeros
+    const plano = arbol?.planas.find((u) => u.id === nodoAbierto)
+    if (!plano) return null
+    return {
+      id: plano.id,
+      parent_id: plano.parent_id,
+      tipo: plano.tipo,
+      nombre: plano.nombre,
+      codigo: plano.codigo,
+      activo: plano.activo,
+      skus: 0,
+      skus_directos: 0,
+      ingresos: 0,
+      margen: null,
+      margen_pct: null,
+      stock_valorizado: null,
+      dias_inventario: null,
+      quiebres: 0,
+      sin_stock: 0,
+      sin_movimiento: 0,
+      alertas_criticas: 0,
+      alertas_atencion: 0,
+      semaforo: 'gris',
+    }
+  }, [nodoAbierto, metricas, arbol])
 
   if (isLoading) {
     return (
@@ -222,11 +250,19 @@ export function PantallaMapa() {
         />
       </div>
 
-      {mapa === null && (
-        <p className="rounded-xl border border-[#e4a42a]/50 bg-[#f9b44c]/10 px-3 py-2 text-xs text-[#6f3a2a]">
-          Faltan correr las migraciones 193 y 194: el mapa funciona igual, pero todavía sin
-          ventas, márgenes ni semáforo por ubicación.
+      {fallaMapa ? (
+        <p className="flex items-center gap-2 rounded-xl border border-[#c43e2c]/40 bg-[#c43e2c]/[0.06] px-3 py-2 text-xs text-[#9e2f25]">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          No pudimos calcular los números por ubicación. Los que se ven arriba están en cero
+          por eso, no porque no haya ventas. Probá con un período más corto o volvé a entrar.
         </p>
+      ) : (
+        mapa === null && (
+          <p className="rounded-xl border border-[#e4a42a]/50 bg-[#f9b44c]/10 px-3 py-2 text-xs text-[#6f3a2a]">
+            Faltan correr las migraciones 193 y 194: el mapa funciona igual, pero todavía sin
+            ventas, márgenes ni semáforo por ubicación.
+          </p>
+        )
       )}
 
       {nodoSeleccionado && (
