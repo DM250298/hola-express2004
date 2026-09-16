@@ -2396,6 +2396,8 @@ export type ConfigComprasRow = {
   umbral_sobrestock_dias: number | null
   /** Tope de la corrección por quiebres (mig 195). 1 = sin corrección. */
   factor_maximo_correccion_quiebre: number
+  /** Días sin stock desde los que un quebrado sin ventas se vuelve a pedir (mig 197). */
+  dias_quiebre_reposicion_minimo: number
 }
 
 export type ConfigComprasInsert = {
@@ -2407,9 +2409,11 @@ export type ConfigComprasInsert = {
   frecuencia_reposicion_default?: number
   umbral_sobrestock_dias?: number | null
   factor_maximo_correccion_quiebre?: number
+  dias_quiebre_reposicion_minimo?: number
 }
 
 export type ConfigComprasUpdate = {
+  dias_quiebre_reposicion_minimo?: number
   umbral_variacion_costo?: number
   exige_factura?: boolean
   dias_cobertura_objetivo_default?: number

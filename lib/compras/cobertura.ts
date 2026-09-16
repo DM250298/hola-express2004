@@ -78,11 +78,14 @@ export function calcularVentaDiaria(venta30d: number): number {
 /** Tope por defecto de la corrección por quiebres (config_compras, mig 195). */
 export const FACTOR_MAXIMO_QUIEBRE_DEFAULT = 3
 
+/** Días sin stock desde los que un quebrado sin ventas vuelve a pedirse (mig 198). */
+export const DIAS_QUIEBRE_REPOSICION_DEFAULT = 10
+
 /**
  * Días de la ventana en que el producto REALMENTE se pudo vender: 30 menos
- * los que estuvo sin stock, con piso para no multiplicar al infinito la
- * velocidad de algo que estuvo quebrado casi todo el mes.
- * Espejo de la mig 196.
+ * los días en que NO pudo vender (quebrado y sin ventas ese día, mig 197),
+ * con piso para no multiplicar al infinito la velocidad de algo que estuvo
+ * quebrado casi todo el mes. Espejo de las migs 196 + 197.
  */
 export function diasConStock(
   diasSinStock: number | null | undefined,
@@ -320,7 +323,12 @@ export function calcularCobertura(
         (objetivoManual > 0 && disponible < objetivoManual - TOLERANCIA)
       : objetivoManual > 0
         ? disponible < objetivoManual - TOLERANCIA
-        : (input.esCritico === true || input.productoNuevo === true) &&
+        : // v4 (mig 198): el que dejó de venderse porque nunca se repuso
+          // vuelve a pedirse con el mínimo de piso, igual que un crítico.
+          (input.esCritico === true ||
+            input.productoNuevo === true ||
+            (input.diasSinStock30d ?? 0) >=
+              (params.diasQuiebreReposicionMinimo ?? DIAS_QUIEBRE_REPOSICION_DEFAULT)) &&
           stockMinimo > 0 &&
           disponible < stockMinimo - TOLERANCIA
 

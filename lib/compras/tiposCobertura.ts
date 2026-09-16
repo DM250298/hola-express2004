@@ -30,6 +30,11 @@ export interface ParametrosReposicion {
    * multiplicarse la venta diaria. 1 = sin corrección. Default 3.
    */
   factorMaximoCorreccionQuiebre?: number | null
+  /**
+   * Días sin stock (netos de los días en que igual se vendió) desde los que
+   * un producto sin ventas vuelve a pedirse por stock_minimo (mig 198).
+   */
+  diasQuiebreReposicionMinimo?: number | null
 }
 
 /** Datos de un producto que entran al cálculo de cobertura. */
@@ -49,8 +54,9 @@ export interface InputCobertura {
   /** Unidades por bulto del proveedor (caja x6 = 6). null = suelto. */
   multiploCompra?: number | null
   /**
-   * Días de los últimos 30 en que estuvo sin stock (mig 195). La venta se
-   * divide por los días en que REALMENTE se pudo vender, no por 30.
+   * Días de los últimos 30 en que estuvo sin stock Y ADEMÁS no vendió nada
+   * (migs 195 + 197). Los días en que se vendió con el stock del sistema en
+   * cero o negativo NO cuentan: si vendió, había mercadería en la góndola.
    */
   diasSinStock30d?: number | null
   /** Piso fijo de exhibición en unidades: el objetivo nunca baja de acá. */

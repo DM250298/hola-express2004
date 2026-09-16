@@ -1,62 +1,48 @@
 -- ╔════════════════════════════════════════════════════════════════════╗
--- ║  Migration 196 · Fase G (2/2): fn_sugerencias_compra v3              ║
+-- ║  Migration 198 · fn_sugerencias_compra v4: el quebrado crónico      ║
+-- ║  vuelve a pedirse                                                   ║
+-- ║  Base: la v3 de la mig 196 ÍNTEGRA, con UN cambio de lógica.        ║
 -- ║                                                                     ║
--- ║  Base: la v2 de la mig 152 ÍNTEGRA, con tres cambios:                ║
--- ║  1. VELOCIDAD CORREGIDA POR QUIEBRES: si estuvo 12 días sin stock,   ║
--- ║     vendió en 18, así que vende u30/18, no u30/30. Sin esto se       ║
--- ║     sub-compra justo lo que más se quiebra (el tope de               ║
--- ║     config_compras evita que un quebrado crónico pida de más).       ║
--- ║  2. CASCADA POR SKU: producto → proveedor → global.                  ║
--- ║  3. stock_objetivo_manual: piso fijo de exhibición.                  ║
--- ║  Columnas nuevas al final: dias_sin_stock_30d, venta_diaria_base,   ║
--- ║  factor_quiebre, origen_parametros → DROP+CREATE (cambia el tipo).   ║
--- ║  ⚠️ OJO: este encabezado decía que un quebrado 30/30 no vendió nada, ║
--- ║  y es FALSO — quiebres_stock mide el stock del SISTEMA, no la       ║
--- ║  góndola, así que se sigue vendiendo con el quiebre abierto. Eso     ║
--- ║  inflaba la velocidad hasta 3x. Lo arregla la mig 197; el quebrado   ║
--- ║  que de verdad dejó de venderse, la 198.                             ║
--- ║  Espejo TS: lib/compras/cobertura.ts.                                ║
--- ║  REQUIERE: migs 151, 152, 172 y 195. Ejecutar UNA sola vez.          ║
+-- ║  El producto que se quedó sin stock hace rato y POR ESO dejó de     ║
+-- ║  venderse tiene venta 30d = 0 → velocidad 0 → ninguna de las tres   ║
+-- ║  ramas de "requiere compra" da true → sugiere 0 para siempre. Y     ║
+-- ║  tampoco lo levanta la alerta crítica: sin ventas no tiene clase    ║
+-- ║  ABC, y quiebre_clave filtra por clase. Queda invisible.            ║
+-- ║                                                                     ║
+-- ║  v4: si estuvo sin stock (y sin vender) N días o más — N =          ║
+-- ║  config_compras.dias_quiebre_reposicion_minimo, 10 por defecto —    ║
+-- ║  vuelve a pedirse con stock_minimo de piso, igual que un crítico.   ║
+-- ║  No hace ruido: quiebres_stock abre evento solo cuando el stock     ║
+-- ║  CRUZÓ de >0 a <=0 (mig 172), así que llegar a esa rama ya prueba   ║
+-- ║  que el producto tuvo mercadería y se agotó; el catálogo que nunca  ║
+-- ║  se stockeó no entra. Además exige stock_minimo > 0.                ║
+-- ║                                                                     ║
+-- ║  LÍMITE REAL (el comentario de la 196 decía lo contrario y era      ║
+-- ║  falso): quiebres_stock mide el stock del SISTEMA, no la góndola;   ║
+-- ║  un producto puede figurar quebrado y seguir vendiendo. Por eso la  ║
+-- ║  mig 197 descuenta del quiebre los días en que igual se vendió.     ║
+-- ║                                                                     ║
+-- ║  Firma y columnas de salida idénticas → create or replace, sin      ║
+-- ║  drop (el chequeo T1 de duplicadas sigue en 0).                     ║
+-- ║  Espejo TS: lib/compras/cobertura.ts · REQUIERE: migs 151, 152,     ║
+-- ║  172, 195, 196 y 197. Ejecutar UNA sola vez, COMPLETO.              ║
 -- ╚════════════════════════════════════════════════════════════════════╝
 
-drop function if exists public.fn_sugerencias_compra(integer);
-
-create function public.fn_sugerencias_compra(p_proveedor_id integer default null)
+create or replace function public.fn_sugerencias_compra(p_proveedor_id integer default null)
 returns table (
-  producto_id integer,
-  nombre text,
-  codigo_barras text,
-  proveedor_id integer,
-  proveedor_nombre text,
-  venta_por_peso boolean,
-  es_critico boolean,
-  producto_nuevo boolean,
-  stock_actual numeric,
-  stock_minimo numeric,
-  venta_30d numeric,
-  venta_diaria numeric,
-  dias_stock numeric,
-  stock_en_transito numeric,
-  borrador_pendiente numeric,
-  dias_cobertura_objetivo numeric,
-  dias_seguridad numeric,
-  frecuencia_reposicion_dias numeric,
-  punto_reposicion numeric,
-  stock_objetivo numeric,
-  requiere_compra boolean,
-  cantidad_sugerida numeric,
-  multiplo_compra numeric,
-  cantidad_sugerida_redondeada numeric,
-  clase_abc text,
-  precio_costo numeric,
-  ultimo_costo numeric,
-  variacion_costo_pct numeric,
-  precio_venta numeric,
-  margen_pct numeric,
-  dias_sin_stock_30d numeric,
-  venta_diaria_base numeric,
-  factor_quiebre numeric,
-  origen_parametros text
+  producto_id integer, nombre text, codigo_barras text,
+  proveedor_id integer, proveedor_nombre text, venta_por_peso boolean,
+  es_critico boolean, producto_nuevo boolean,
+  stock_actual numeric, stock_minimo numeric, venta_30d numeric,
+  venta_diaria numeric, dias_stock numeric, stock_en_transito numeric,
+  borrador_pendiente numeric, dias_cobertura_objetivo numeric,
+  dias_seguridad numeric, frecuencia_reposicion_dias numeric,
+  punto_reposicion numeric, stock_objetivo numeric, requiere_compra boolean,
+  cantidad_sugerida numeric, multiplo_compra numeric,
+  cantidad_sugerida_redondeada numeric, clase_abc text, precio_costo numeric,
+  ultimo_costo numeric, variacion_costo_pct numeric, precio_venta numeric,
+  margen_pct numeric, dias_sin_stock_30d numeric, venta_diaria_base numeric,
+  factor_quiebre numeric, origen_parametros text
 )
 language sql
 stable
@@ -68,7 +54,9 @@ as $$
       coalesce(min(cc.dias_cobertura_objetivo_default), 14) as d_cob_def,
       coalesce(min(cc.dias_seguridad_default), 2) as d_seg_def,
       coalesce(min(cc.frecuencia_reposicion_default), 7) as d_frec_def,
-      greatest(coalesce(min(cc.factor_maximo_correccion_quiebre), 3), 1) as factor_max
+      greatest(coalesce(min(cc.factor_maximo_correccion_quiebre), 3), 1) as factor_max,
+      -- v4: a partir de acá, el quebrado sin ventas vuelve a pedirse.
+      greatest(coalesce(min(cc.dias_quiebre_reposicion_minimo), 10), 1) as d_quiebre
     from public.config_compras cc
     where cc.id = 1
   ),
@@ -79,8 +67,7 @@ as $$
     join public.ventas v on v.id = iv.venta_id
     where v.estado = 'completada' and v.fecha >= now() - interval '30 days'
   ),
-  expandido as (
-    -- la venta de un combo cuenta como venta de sus componentes
+  expandido as ( -- la venta de un combo cuenta como venta de sus componentes
     select pc.componente_id as pid, vf.cantidad * pc.cantidad as cantidad
     from ventas_fisicas vf
     join public.producto_componentes pc on pc.producto_id = vf.pid
@@ -117,9 +104,7 @@ as $$
     where pe.estado = 'borrador'
     group by ip.producto_id
   ),
-  quiebres as (
-    -- v3: días de la ventana en que NO se pudo vender (mig 195)
-    -- alias pid: `producto_id` suelto chocaría con la columna de salida
+  quiebres as ( -- días quebrado Y sin vender: lo único que no se pudo vender
     select d.producto_id as pid, d.dias_sin_stock as dsin
     from public.fn__dias_sin_stock(30) d
   ),
@@ -133,6 +118,7 @@ as $$
       coalesce(v.u30, 0) as u30,
       coalesce(q.dsin, 0) as dias_sin_stock,
       greatest(30 - coalesce(q.dsin, 0), 30.0 / cfg.factor_max) as dias_con_stock,
+      cfg.d_quiebre as d_quiebre_min,
       coalesce(t.en_transito, 0) as en_transito,
       coalesce(b.pendiente, 0) as borrador_pend,
       coalesce(p.dias_cobertura_objetivo, pr.dias_cobertura_objetivo, cfg.d_cob_def) as d_cobertura,
@@ -186,7 +172,6 @@ as $$
       velocidad.stock_actual + velocidad.en_transito as disponible,
       case
         when velocidad.vdiaria > 0
-          -- llegó al punto, o cayó bajo el piso de exhibición
           then (velocidad.stock_actual + velocidad.en_transito)
                  <= round(velocidad.vdiaria * (velocidad.d_frecuencia + velocidad.d_seguridad), 3)
                or (velocidad.objetivo_manual > 0
@@ -194,7 +179,10 @@ as $$
                          < velocidad.objetivo_manual)
         when velocidad.objetivo_manual > 0
           then (velocidad.stock_actual + velocidad.en_transito) < velocidad.objetivo_manual
+        -- v4: crítico, nuevo, o QUEBRADO HACE RATO (el que dejó de vender
+        -- porque nunca se repuso: sin esto sugería 0 para siempre).
         when velocidad.es_critico or velocidad.es_nuevo
+             or velocidad.dias_sin_stock >= velocidad.d_quiebre_min
           then velocidad.stock_minimo > 0
                  and (velocidad.stock_actual + velocidad.en_transito) < velocidad.stock_minimo
         else false
@@ -242,10 +230,7 @@ as $$
       then round((s.precio_venta - coalesce(s.costo_actual, 0))
                  / nullif(s.precio_venta, 0) * 100, 1)
       else null end,
-    s.dias_sin_stock,
-    s.vdiaria_base,
-    s.factor,
-    s.origen::text
+    s.dias_sin_stock, s.vdiaria_base, s.factor, s.origen::text
   from sugerido s
   order by s.prov_nombre nulls last, lower(s.nombre), s.id
 $$;
@@ -255,6 +240,10 @@ grant execute on function public.fn_sugerencias_compra(integer) to authenticated
 
 notify pgrst, 'reload schema';
 
--- Verificación: debe dar true. Después, el chequeo T1 y ver qué corrigió
--- (las dos consultas van en el mensaje del chat).
-select to_regprocedure('public.fn_sugerencias_compra(integer)') is not null as creada;
+-- Verificación: los que vuelven a pedirse por quiebre largo (antes: 0 filas).
+select nombre, dias_sin_stock_30d, stock_minimo, stock_actual,
+       cantidad_sugerida_redondeada
+from public.fn_sugerencias_compra()
+where venta_diaria = 0 and dias_sin_stock_30d >= 10
+order by dias_sin_stock_30d desc, nombre
+limit 20;

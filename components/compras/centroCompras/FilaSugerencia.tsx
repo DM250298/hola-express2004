@@ -55,7 +55,10 @@ export const FilaSugerencia = memo(function FilaSugerencia({
     marcado && esAjusteFuerte(f.cantidad_sugerida_redondeada, cantidadNum)
 
   // v3 (mig 196): la velocidad se mide sobre los días en que hubo stock.
-  const corregida = f.factor_quiebre > 1 && f.dias_sin_stock_30d > 0
+  // Solo se avisa si la corrección movió el número: un producto que no
+  // vendió nada tiene factor 3 sobre cero, y decir "corregido" sería mentir.
+  const corregida = f.venta_diaria > f.venta_diaria_base + 0.0005
+  const sinHistorial = f.venta_diaria === 0 && f.dias_sin_stock_30d >= 10
   const detalleQuiebre = corregida
     ? ` · corregido: vendía ${formatearNumero(f.venta_diaria_base)}/día contando los ${formatearNumero(f.dias_sin_stock_30d)} días que estuvo sin stock`
     : ''
@@ -151,9 +154,17 @@ export const FilaSugerencia = memo(function FilaSugerencia({
         {corregida && (
           <div
             className="text-[10px] text-[#a15c2f]"
-            title={`Vendía ${formatearNumero(f.venta_diaria_base)}/día si se cuentan los días sin stock. Estuvo ${formatearNumero(f.dias_sin_stock_30d)} de los últimos 30 días quebrado, así que su venta real es más alta.`}
+            title={`Vendía ${formatearNumero(f.venta_diaria_base)}/día si se cuentan los días sin stock. Estuvo ${formatearNumero(f.dias_sin_stock_30d)} de los últimos 30 días sin poder venderse, así que su venta real es más alta.`}
           >
             corregido ×{formatearNumero(f.factor_quiebre)}
+          </div>
+        )}
+        {!corregida && sinHistorial && (
+          <div
+            className="text-[10px] text-[#9e2f25]"
+            title="No vendió nada en 30 días porque no tuvo stock. No hay velocidad que medir: se pide por el stock mínimo."
+          >
+            sin stock {formatearNumero(f.dias_sin_stock_30d)} de 30 días
           </div>
         )}
       </TableCell>
