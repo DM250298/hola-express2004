@@ -273,6 +273,12 @@ export const CAMPOS_REGLA: Record<string, CampoParametro[]> = {
       tipo: 'numero',
       sufijo: 'días',
     },
+    { clave: 'clases', etiqueta: 'Solo clases ABC', tipo: 'clases' },
+    {
+      clave: 'solo_con_ventas',
+      etiqueta: 'Solo los que vendieron en 30 días',
+      tipo: 'booleano',
+    },
   ],
   vencimiento_proximo: [
     { clave: 'dias', etiqueta: 'Avisar con', tipo: 'numero', sufijo: 'días de anticipación' },

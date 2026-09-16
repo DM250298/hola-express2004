@@ -66,6 +66,7 @@ export interface ParametrosRegla {
   dias_sin_venta?: number
   valor_minimo?: number
   dias_venta_reciente?: number
+  solo_con_ventas?: boolean
 }
 
 export type ReglaAlerta = Omit<ReglaAlertaRow, 'parametros'> & { parametros: ParametrosRegla }
