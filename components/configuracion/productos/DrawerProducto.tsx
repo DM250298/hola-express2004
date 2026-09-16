@@ -893,10 +893,25 @@ export function DrawerProducto({
       controlar_stock: validado.controlar_stock,
       no_ofrecer_ventas: validado.no_ofrecer_ventas,
       es_critico: validado.es_critico,
-      // Reposición por SKU (mig 195): null = manda el proveedor.
-      dias_cobertura_objetivo: validado.dias_cobertura_objetivo,
-      dias_seguridad: validado.dias_seguridad,
-      stock_objetivo_manual: esComboFinal ? null : validado.stock_objetivo_manual,
+      // Reposición por SKU (mig 195): null = manda el proveedor. Solo se
+      // mandan si hay algo que guardar (valor nuevo, o había uno y se
+      // borró): sin la migración corrida, mandar columnas que no existen
+      // rompería el alta y la edición de CUALQUIER producto.
+      ...(validado.dias_cobertura_objetivo != null ||
+      producto?.dias_cobertura_objetivo != null
+        ? { dias_cobertura_objetivo: validado.dias_cobertura_objetivo }
+        : {}),
+      ...(validado.dias_seguridad != null || producto?.dias_seguridad != null
+        ? { dias_seguridad: validado.dias_seguridad }
+        : {}),
+      ...(validado.stock_objetivo_manual != null ||
+      producto?.stock_objetivo_manual != null
+        ? {
+            stock_objetivo_manual: esComboFinal
+              ? null
+              : validado.stock_objetivo_manual,
+          }
+        : {}),
       // Sin precio de venta cargado → queda "pendiente de precio": visible en
       // el POS pero bloqueado para vender hasta que se complete (factura o
       // carga manual). Con precio > 0 se habilita.

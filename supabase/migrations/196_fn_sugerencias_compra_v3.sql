@@ -1,16 +1,17 @@
 -- ╔════════════════════════════════════════════════════════════════════╗
 -- ║  Migration 196 · Fase G (2/2): fn_sugerencias_compra v3              ║
 -- ║                                                                     ║
--- ║  Base: la v2 de la mig 152 ÍNTEGRA. Tres cambios:                   ║
+-- ║  Base: la v2 de la mig 152 ÍNTEGRA, con tres cambios:                ║
 -- ║  1. VELOCIDAD CORREGIDA POR QUIEBRES: si estuvo 12 días sin stock,   ║
 -- ║     vendió en 18, así que vende u30/18, no u30/30. Sin esto se       ║
--- ║     sub-compra justo lo que más se quiebra. El tope de config_       ║
--- ║     compras evita que un quebrado crónico pida de más.               ║
+-- ║     sub-compra justo lo que más se quiebra (el tope de               ║
+-- ║     config_compras evita que un quebrado crónico pida de más).       ║
 -- ║  2. CASCADA POR SKU: producto → proveedor → global.                  ║
 -- ║  3. stock_objetivo_manual: piso fijo de exhibición.                  ║
--- ║                                                                     ║
--- ║  Columnas NUEVAS al final: dias_sin_stock_30d, venta_diaria_base,   ║
+-- ║  Columnas nuevas al final: dias_sin_stock_30d, venta_diaria_base,   ║
 -- ║  factor_quiebre, origen_parametros → DROP+CREATE (cambia el tipo).   ║
+-- ║  LÍMITE: quebrado los 30 días no vendió nada, así que no hay         ║
+-- ║  velocidad que corregir; ese caso lo levanta la alerta crítica.      ║
 -- ║  Espejo TS: lib/compras/cobertura.ts.                                ║
 -- ║  REQUIERE: migs 151, 152, 172 y 195. Ejecutar UNA sola vez.          ║
 -- ╚════════════════════════════════════════════════════════════════════╝
@@ -113,8 +114,12 @@ as $$
     where pe.estado = 'borrador'
     group by ip.producto_id
   ),
-  -- v3: días de la ventana en que NO se pudo vender (mig 195)
-  quiebres as (select * from public.fn__dias_sin_stock(30)),
+  quiebres as (
+    -- v3: días de la ventana en que NO se pudo vender (mig 195)
+    -- alias pid: `producto_id` suelto chocaría con la columna de salida
+    select d.producto_id as pid, d.dias_sin_stock as dsin
+    from public.fn__dias_sin_stock(30) d
+  ),
   base as (
     select
       p.id, p.nombre, p.codigo_barras,
@@ -123,12 +128,10 @@ as $$
       (p.created_at >= now() - interval '30 days') as es_nuevo,
       p.stock_actual, p.stock_minimo, p.precio_venta,
       coalesce(v.u30, 0) as u30,
-      coalesce(q.dias_sin_stock, 0) as dias_sin_stock,
-      -- días en que realmente se pudo vender, con el tope de corrección
-      greatest(30 - coalesce(q.dias_sin_stock, 0), 30.0 / cfg.factor_max) as dias_con_stock,
+      coalesce(q.dsin, 0) as dias_sin_stock,
+      greatest(30 - coalesce(q.dsin, 0), 30.0 / cfg.factor_max) as dias_con_stock,
       coalesce(t.en_transito, 0) as en_transito,
       coalesce(b.pendiente, 0) as borrador_pend,
-      -- v3: cascada SKU → proveedor → global
       coalesce(p.dias_cobertura_objetivo, pr.dias_cobertura_objetivo, cfg.d_cob_def) as d_cobertura,
       coalesce(p.dias_seguridad, pr.dias_seguridad, cfg.d_seg_def) as d_seguridad,
       coalesce(
@@ -136,9 +139,8 @@ as $$
         pr.frecuencia_reposicion_dias,
         cfg.d_frec_def
       ) as d_frecuencia,
-      case
-        when p.dias_cobertura_objetivo is not null or p.dias_seguridad is not null
-             or p.stock_objetivo_manual is not null then 'sku'
+      case -- de dónde salieron los DÍAS (el piso manual no entra acá)
+        when p.dias_cobertura_objetivo is not null or p.dias_seguridad is not null then 'sku'
         when pr.dias_cobertura_objetivo is not null or pr.dias_seguridad is not null
           then 'proveedor'
         else 'global'
@@ -149,7 +151,7 @@ as $$
     from public.productos p
     cross join cfg
     left join venta30 v on v.pid = p.id
-    left join quiebres q on q.producto_id = p.id
+    left join quiebres q on q.pid = p.id
     left join transito t on t.pid = p.id
     left join borradores b on b.pid = p.id
     left join abc a on a.pid = p.id
@@ -173,8 +175,7 @@ as $$
   calculado as (
     select velocidad.*,
       round(velocidad.vdiaria * (velocidad.d_frecuencia + velocidad.d_seguridad), 3) as punto,
-      -- objetivo: fórmula, nunca por debajo del punto ni del piso manual
-      greatest(
+      greatest( -- objetivo: ni por debajo del punto ni del piso manual
         round(velocidad.vdiaria * velocidad.d_cobertura, 3),
         round(velocidad.vdiaria * (velocidad.d_frecuencia + velocidad.d_seguridad), 3),
         velocidad.objetivo_manual
@@ -182,8 +183,12 @@ as $$
       velocidad.stock_actual + velocidad.en_transito as disponible,
       case
         when velocidad.vdiaria > 0
+          -- llegó al punto, o cayó bajo el piso de exhibición
           then (velocidad.stock_actual + velocidad.en_transito)
                  <= round(velocidad.vdiaria * (velocidad.d_frecuencia + velocidad.d_seguridad), 3)
+               or (velocidad.objetivo_manual > 0
+                   and (velocidad.stock_actual + velocidad.en_transito)
+                         < velocidad.objetivo_manual)
         when velocidad.objetivo_manual > 0
           then (velocidad.stock_actual + velocidad.en_transito) < velocidad.objetivo_manual
         when velocidad.es_critico or velocidad.es_nuevo

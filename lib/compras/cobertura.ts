@@ -314,7 +314,10 @@ export function calcularCobertura(
   const stockMinimo = input.stockMinimo ?? 0
   const requiereCompra =
     ventaDiaria > 0
-      ? disponible <= puntoReposicion + TOLERANCIA
+      ? // llegó al punto de reposición, o cayó por debajo del piso de
+        // exhibición (que manda aunque el producto venda bien)
+        disponible <= puntoReposicion + TOLERANCIA ||
+        (objetivoManual > 0 && disponible < objetivoManual - TOLERANCIA)
       : objetivoManual > 0
         ? disponible < objetivoManual - TOLERANCIA
         : (input.esCritico === true || input.productoNuevo === true) &&
