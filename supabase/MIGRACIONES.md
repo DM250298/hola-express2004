@@ -292,3 +292,5 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 192 | `192_stock_desfasado_por_clase.sql` | ✅ aplicada | verificada 2026-09-15 | `99077e9` |
 | 193 | `193_fn_mapa_semaforo.sql` | ⏳ pendiente | — | en este commit |
 | 194 | `194_fn_mapa_nodo_skus.sql` | ⏳ pendiente | — | en este commit |
+| 195 | `195_reposicion_por_sku_y_quiebres.sql` | ⏳ pendiente | — | en este commit |
+| 196 | `196_fn_sugerencias_compra_v3.sql` | ⏳ pendiente | — | en este commit |

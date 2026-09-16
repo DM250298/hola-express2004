@@ -1162,6 +1162,11 @@ export type ProductoRow = {
   pendiente_precio: boolean
   /** No puede faltar (mig 151): sugiere compra aun sin ventas recientes. */
   es_critico: boolean
+  /** Reposición por SKU (mig 195). NULL = cascada proveedor → global. */
+  dias_cobertura_objetivo: number | null
+  dias_seguridad: number | null
+  /** Piso fijo de exhibición en unidades; NULL = solo la fórmula. */
+  stock_objetivo_manual: number | null
   notas: string | null
   imagen_url: string | null
   created_at: string
@@ -1202,6 +1207,10 @@ export type ProductoInsert = {
   no_ofrecer_ventas?: boolean
   pendiente_precio?: boolean
   es_critico?: boolean
+  /** Reposición por SKU (mig 195). null = cascada proveedor → global. */
+  dias_cobertura_objetivo?: number | null
+  dias_seguridad?: number | null
+  stock_objetivo_manual?: number | null
   notas?: string | null
   imagen_url?: string | null
   created_at?: string
@@ -1209,6 +1218,10 @@ export type ProductoInsert = {
 }
 
 export type ProductoUpdate = {
+  /** Reposición por SKU (mig 195). null = cascada proveedor → global. */
+  dias_cobertura_objetivo?: number | null
+  dias_seguridad?: number | null
+  stock_objetivo_manual?: number | null
   codigo_barras?: string | null
   codigo_barras_2?: string | null
   codigo_interno?: string | null
@@ -2381,6 +2394,8 @@ export type ConfigComprasRow = {
   frecuencia_reposicion_default: number
   /** Umbral fijo de sobrestock en días; null = 2 × cobertura objetivo. */
   umbral_sobrestock_dias: number | null
+  /** Tope de la corrección por quiebres (mig 195). 1 = sin corrección. */
+  factor_maximo_correccion_quiebre: number
 }
 
 export type ConfigComprasInsert = {
@@ -2391,6 +2406,7 @@ export type ConfigComprasInsert = {
   dias_seguridad_default?: number
   frecuencia_reposicion_default?: number
   umbral_sobrestock_dias?: number | null
+  factor_maximo_correccion_quiebre?: number
 }
 
 export type ConfigComprasUpdate = {
@@ -2400,6 +2416,7 @@ export type ConfigComprasUpdate = {
   dias_seguridad_default?: number
   frecuencia_reposicion_default?: number
   umbral_sobrestock_dias?: number | null
+  factor_maximo_correccion_quiebre?: number
 }
 
 // ─── config_ventas (singleton) ───────────────────────────────────────────────
@@ -4990,6 +5007,11 @@ export interface Database {
           variacion_costo_pct: number | null
           precio_venta: number
           margen_pct: number | null
+          /** v3 (mig 196): por qué el sugerido es el que es. */
+          dias_sin_stock_30d: number
+          venta_diaria_base: number
+          factor_quiebre: number
+          origen_parametros: string
         }[]
       }
       fn_costo_receta: {

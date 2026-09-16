@@ -75,6 +75,47 @@ export function calcularVentaDiaria(venta30d: number): number {
   return redondear3(Math.max(venta30d, 0) / DIAS_VENTANA_VENTAS)
 }
 
+/** Tope por defecto de la corrección por quiebres (config_compras, mig 195). */
+export const FACTOR_MAXIMO_QUIEBRE_DEFAULT = 3
+
+/**
+ * Días de la ventana en que el producto REALMENTE se pudo vender: 30 menos
+ * los que estuvo sin stock, con piso para no multiplicar al infinito la
+ * velocidad de algo que estuvo quebrado casi todo el mes.
+ * Espejo de la mig 196.
+ */
+export function diasConStock(
+  diasSinStock: number | null | undefined,
+  factorMaximo?: number | null
+): number {
+  const tope = Math.max(factorMaximo ?? FACTOR_MAXIMO_QUIEBRE_DEFAULT, 1)
+  const sin = Math.min(Math.max(diasSinStock ?? 0, 0), DIAS_VENTANA_VENTAS)
+  return Math.max(DIAS_VENTANA_VENTAS - sin, DIAS_VENTANA_VENTAS / tope)
+}
+
+/**
+ * Venta diaria corregida por quiebres: lo vendido dividido por los días en
+ * que hubo stock. Un producto que vendió 30 unidades en 18 días vende 1,7
+ * por día, no 1: comprarle por 1 es garantizar que se vuelva a quebrar.
+ */
+export function calcularVentaDiariaCorregida(
+  venta30d: number,
+  diasSinStock: number | null | undefined,
+  factorMaximo?: number | null
+): number {
+  return redondear3(Math.max(venta30d, 0) / diasConStock(diasSinStock, factorMaximo))
+}
+
+/** Cuánto se multiplicó la velocidad por los días sin stock (1 = nada). */
+export function calcularFactorQuiebre(
+  diasSinStock: number | null | undefined,
+  factorMaximo?: number | null
+): number {
+  return (
+    Math.round((DIAS_VENTANA_VENTAS / diasConStock(diasSinStock, factorMaximo)) * 100) / 100
+  )
+}
+
 /**
  * Días de cobertura actual. null si no hay ventas recientes: NUNCA se divide
  * por cero, y la UI muestra "Sin ventas recientes".
@@ -241,7 +282,17 @@ export function calcularCobertura(
   input: InputCobertura,
   params: ParametrosReposicion
 ): ResultadoCobertura {
-  const ventaDiaria = calcularVentaDiaria(input.venta30d)
+  const ventaDiariaBase = calcularVentaDiaria(input.venta30d)
+  // v3 (mig 196): la velocidad se mide sobre los días en que hubo stock.
+  const ventaDiaria = calcularVentaDiariaCorregida(
+    input.venta30d,
+    input.diasSinStock30d,
+    params.factorMaximoCorreccionQuiebre
+  )
+  const factorQuiebre = calcularFactorQuiebre(
+    input.diasSinStock30d,
+    params.factorMaximoCorreccionQuiebre
+  )
   const diasStock = calcularDiasStock(input.stockActual, ventaDiaria)
   const puntoReposicion = calcularPuntoReposicion(
     ventaDiaria,
@@ -251,9 +302,12 @@ export function calcularCobertura(
   // El objetivo nunca queda debajo del punto: con una config incoherente
   // (cobertura < frecuencia + seguridad) la fila diría "requiere compra"
   // con sugerido 0. Mismo clamp que fn_sugerencias_compra (mig 151).
+  // El piso manual de exhibición (mig 195) también levanta el objetivo.
+  const objetivoManual = input.stockObjetivoManual ?? 0
   const stockObjetivo = Math.max(
     calcularStockObjetivo(ventaDiaria, params.diasCoberturaObjetivo),
-    puntoReposicion
+    puntoReposicion,
+    objetivoManual
   )
   const disponible = input.stockActual + input.stockEnTransito
 
@@ -261,15 +315,17 @@ export function calcularCobertura(
   const requiereCompra =
     ventaDiaria > 0
       ? disponible <= puntoReposicion + TOLERANCIA
-      : (input.esCritico === true || input.productoNuevo === true) &&
-        stockMinimo > 0 &&
-        disponible < stockMinimo - TOLERANCIA
+      : objetivoManual > 0
+        ? disponible < objetivoManual - TOLERANCIA
+        : (input.esCritico === true || input.productoNuevo === true) &&
+          stockMinimo > 0 &&
+          disponible < stockMinimo - TOLERANCIA
 
   const cantidadSugerida = !requiereCompra
     ? 0
     : ventaDiaria > 0
       ? redondear3(Math.max(stockObjetivo - disponible, 0))
-      : redondear3(Math.max(stockMinimo - disponible, 0))
+      : redondear3(Math.max(Math.max(stockMinimo, objetivoManual) - disponible, 0))
 
   const { cantidadFinal, paquetes } = redondearPorPresentacion(
     cantidadSugerida,
@@ -279,6 +335,8 @@ export function calcularCobertura(
 
   return {
     ventaDiaria,
+    ventaDiariaBase,
+    factorQuiebre,
     diasStock,
     puntoReposicion,
     stockObjetivo,
