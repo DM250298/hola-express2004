@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Boxes,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Map as MapIcon,
+  CircleDollarSign,
   Package,
   Pencil,
   Plus,
   Trash2,
+  Warehouse,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Input } from '@/components/ui/input'
@@ -22,8 +23,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { EstadoError } from '@/components/shared/EstadoError'
+import { SelectorPeriodo } from '@/components/reportes/SelectorPeriodo'
 import { cn } from '@/lib/utils'
-import { formatearNumero } from '@/lib/utils/formato'
+import { formatearMontoEntero, formatearNumero } from '@/lib/utils/formato'
+import {
+  fechaLocal,
+  rangoDesdeFechas,
+  rangoPredefinido,
+  type ClavePeriodo,
+} from '@/lib/utils/periodos'
 import { tienePermiso } from '@/lib/permisos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
@@ -31,13 +39,25 @@ import {
   useArbolUbicaciones,
   useCrearUbicacion,
   useEliminarUbicacion,
+  useMapaSemaforo,
 } from '@/lib/hooks/useMapa'
 import {
   ETIQUETA_TIPO,
   TIPOS_HIJO,
+  rutaUbicacion,
   type NodoUbicacion,
 } from '@/lib/queries/ubicaciones'
+import type { ColorSemaforo, NodoMapa } from '@/lib/queries/mapa'
 import type { TipoUbicacion, UbicacionRow } from '@/types/database'
+import { PanelNodoMapa } from './PanelNodoMapa'
+
+/** Rojo = alguna alerta crítica viva · amarillo = atención · gris = sin mapear. */
+const COLOR_SEMAFORO: Record<ColorSemaforo, string> = {
+  rojo: 'bg-[#c43e2c]',
+  amarillo: 'bg-[#e4a42a]',
+  verde: 'bg-[#2f7d4f]',
+  gris: 'bg-[#e4c9b0]',
+}
 
 /** Colores por tipo de nodo (paleta del sistema). */
 const COLOR_TIPO: Record<TipoUbicacion, string> = {
@@ -61,6 +81,46 @@ export function PantallaMapa() {
   const { data: arbol, isLoading, isError, refetch } = useArbolUbicaciones()
   const puedeEditar = tienePermiso(usuario?.permisos, 'configuracion')
   const [modal, setModal] = useState<EdicionModal | null>(null)
+  const [periodo, setPeriodo] = useState<ClavePeriodo>('mes_actual')
+  const [desdeP, setDesdeP] = useState('')
+  const [hastaP, setHastaP] = useState('')
+  const [nodoAbierto, setNodoAbierto] = useState<number | null>(null)
+
+  const personalizadoCompleto = periodo === 'personalizado' && !!desdeP && !!hastaP
+  const rango = useMemo(() => {
+    const r = personalizadoCompleto
+      ? rangoDesdeFechas(desdeP, hastaP)
+      : rangoPredefinido(periodo === 'personalizado' ? 'mes_actual' : periodo)
+    return { desde: fechaLocal(r.desde), hasta: fechaLocal(r.hasta) }
+  }, [periodo, desdeP, hastaP, personalizadoCompleto])
+
+  const { data: mapa } = useMapaSemaforo(rango.desde, rango.hasta)
+  const metricas = useMemo(() => {
+    const m = new Map<number, NodoMapa>()
+    for (const n of mapa?.nodos ?? []) m.set(n.id, n)
+    return m
+  }, [mapa])
+
+  const totales = useMemo(() => {
+    // Las raíces ya traen el rollup de todo lo que cuelga de ellas: sumando
+    // solo esas, nada se cuenta dos veces.
+    const raices = (mapa?.nodos ?? []).filter((n) => n.parent_id == null)
+    const sumar = (f: (n: NodoMapa) => number | null) =>
+      raices.reduce((s, n) => s + (f(n) ?? 0), 0)
+    const hayCostos = !!mapa?.puede_ver_costos
+    return {
+      ingresos: sumar((n) => n.ingresos),
+      margen: hayCostos ? sumar((n) => n.margen) : null,
+      stock: hayCostos ? sumar((n) => n.stock_valorizado) : null,
+      criticas: sumar((n) => n.alertas_criticas),
+      atencion: sumar((n) => n.alertas_atencion),
+      sinStock: sumar((n) => n.sin_stock),
+      sinMovimiento: sumar((n) => n.sin_movimiento),
+    }
+  }, [mapa])
+
+  const nodoSeleccionado =
+    nodoAbierto != null ? (metricas.get(nodoAbierto) ?? null) : null
 
   if (isLoading) {
     return (
@@ -110,36 +170,75 @@ export function PantallaMapa() {
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">Mapa del local</h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
-            Dónde vive cada producto: sucursal → sector → góndola → módulo →
-            estante
+            Qué vende y qué inmoviliza cada parte del local. Tocá una ubicación para ver
+            sus productos.
           </p>
         </div>
+        <SelectorPeriodo
+          periodo={periodo}
+          onCambioPeriodo={setPeriodo}
+          desdePersonalizado={desdeP}
+          hastaPersonalizado={hastaP}
+          onCambioDesde={setDesdeP}
+          onCambioHasta={setHastaP}
+        />
       </header>
 
-      {/* Avance del mapeo */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Avance del mapeo y qué mueve lo ubicado */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <TarjetaKpi
           icono={Package}
           etiqueta="SKUs con ubicación"
           valor={`${formatearNumero(arbol.productos_ubicados)} / ${formatearNumero(arbol.productos_activos)}`}
-          detalle={`${pct}% del catálogo activo`}
+          detalle={`${pct}% del catálogo · ${formatearNumero(Math.max(arbol.productos_activos - arbol.productos_ubicados, 0))} sin ubicar`}
           destacado={pct < 60}
         />
         <TarjetaKpi
-          icono={Boxes}
-          etiqueta="Góndolas y zonas"
-          valor={formatearNumero(gondolas.length)}
-          detalle="nodos tipo góndola activos"
+          icono={CircleDollarSign}
+          etiqueta="Ventas de lo ubicado"
+          valor={formatearMontoEntero(totales.ingresos)}
+          detalle={
+            mapa?.puede_ver_costos && totales.margen != null
+              ? `${formatearMontoEntero(totales.margen)} de margen`
+              : `${formatearNumero(gondolas.length)} góndolas activas`
+          }
         />
         <TarjetaKpi
-          icono={MapIcon}
-          etiqueta="Sin ubicar"
-          valor={formatearNumero(
-            Math.max(arbol.productos_activos - arbol.productos_ubicados, 0)
-          )}
-          detalle="se asignan desde la ficha del producto o contando por zonas"
+          icono={Warehouse}
+          etiqueta="Stock a costo ubicado"
+          valor={
+            mapa?.puede_ver_costos && totales.stock != null
+              ? formatearMontoEntero(totales.stock)
+              : '—'
+          }
+          detalle={`${formatearNumero(totales.sinMovimiento)} productos sin vender en el período`}
+        />
+        <TarjetaKpi
+          icono={AlertTriangle}
+          etiqueta="Alertas en el local"
+          valor={`${formatearNumero(totales.criticas)} críticas`}
+          detalle={`${formatearNumero(totales.atencion)} de atención · ${formatearNumero(totales.sinStock)} sin stock`}
+          destacado={totales.criticas > 0}
         />
       </div>
+
+      {mapa === null && (
+        <p className="rounded-xl border border-[#e4a42a]/50 bg-[#f9b44c]/10 px-3 py-2 text-xs text-[#6f3a2a]">
+          Faltan correr las migraciones 193 y 194: el mapa funciona igual, pero todavía sin
+          ventas, márgenes ni semáforo por ubicación.
+        </p>
+      )}
+
+      {nodoSeleccionado && (
+        <PanelNodoMapa
+          nodo={nodoSeleccionado}
+          ruta={rutaUbicacion(nodoSeleccionado.id, arbol.planas)}
+          desde={rango.desde}
+          hasta={rango.hasta}
+          puedeVerCostos={!!mapa?.puede_ver_costos}
+          onCerrar={() => setNodoAbierto(null)}
+        />
+      )}
 
       {/* Árbol */}
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-4 shadow-sm">
@@ -155,6 +254,12 @@ export function PantallaMapa() {
                 nodo={n}
                 nivel={0}
                 puedeEditar={puedeEditar}
+                metricas={metricas}
+                puedeVerCostos={!!mapa?.puede_ver_costos}
+                seleccionado={nodoAbierto}
+                onSeleccionar={(id) =>
+                  setNodoAbierto((actual) => (actual === id ? null : id))
+                }
                 onCrearHijo={(padre, tipo) =>
                   setModal({ modo: 'crear', nodo: padre, tipo })
                 }
@@ -216,15 +321,24 @@ function NodoArbol({
   nodo,
   nivel,
   puedeEditar,
+  metricas,
+  puedeVerCostos,
+  seleccionado,
+  onSeleccionar,
   onCrearHijo,
   onEditar,
 }: {
   nodo: NodoUbicacion
   nivel: number
   puedeEditar: boolean
+  metricas: Map<number, NodoMapa>
+  puedeVerCostos: boolean
+  seleccionado: number | null
+  onSeleccionar: (id: number) => void
   onCrearHijo: (padre: UbicacionRow, tipo: TipoUbicacion) => void
   onEditar: (nodo: UbicacionRow) => void
 }) {
+  const m = metricas.get(nodo.id)
   // Sucursal y sectores arrancan abiertos; góndolas cerradas.
   const [abierto, setAbierto] = useState(nivel < 2)
   const [confirmando, setConfirmando] = useState(false)
@@ -259,33 +373,80 @@ function NodoArbol({
           )}
         </button>
 
-        <span
-          className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md text-white"
-          style={{ backgroundColor: COLOR_TIPO[nodo.tipo] }}
+        {m && (
+          <span
+            className={cn('shrink-0 h-2.5 w-2.5 rounded-full', COLOR_SEMAFORO[m.semaforo])}
+            title={
+              m.semaforo === 'rojo'
+                ? 'Tiene alertas críticas'
+                : m.semaforo === 'amarillo'
+                  ? 'Tiene alertas de atención'
+                  : m.semaforo === 'verde'
+                    ? 'Sin alertas'
+                    : 'Todavía sin productos ubicados'
+            }
+          />
+        )}
+
+        <button
+          type="button"
+          onClick={() => onSeleccionar(nodo.id)}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          {ETIQUETA_TIPO[nodo.tipo]}
-        </span>
-
-        <span className="font-medium text-[#391511] truncate">
-          {nodo.nombre}
-        </span>
-        {nodo.codigo && (
-          <span className="text-[10px] text-[#c8a58a] font-mono shrink-0">
-            {nodo.codigo}
+          <span
+            className="shrink-0 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md text-white"
+            style={{ backgroundColor: COLOR_TIPO[nodo.tipo] }}
+          >
+            {ETIQUETA_TIPO[nodo.tipo]}
           </span>
-        )}
-        {!nodo.activo && (
-          <span className="text-[10px] text-[#9e2f25] shrink-0">inactiva</span>
-        )}
 
-        <span className="ml-auto shrink-0 text-xs text-[#6f3a2a] tabular-nums">
-          {nodo.productos_total > 0 && (
-            <>
-              {formatearNumero(nodo.productos_total)}{' '}
-              <span className="text-[#c8a58a]">prod.</span>
-            </>
+          <span
+            className={cn(
+              'font-medium text-[#391511] truncate',
+              seleccionado === nodo.id && 'underline decoration-[#e4a42a] decoration-2'
+            )}
+          >
+            {nodo.nombre}
+          </span>
+          {nodo.codigo && (
+            <span className="text-[10px] text-[#c8a58a] font-mono shrink-0">
+              {nodo.codigo}
+            </span>
           )}
-        </span>
+          {!nodo.activo && (
+            <span className="text-[10px] text-[#9e2f25] shrink-0">inactiva</span>
+          )}
+
+          <span className="ml-auto shrink-0 flex items-center gap-2 text-xs tabular-nums">
+            {m && m.alertas_criticas > 0 && (
+              <span className="rounded-full bg-[#c43e2c]/10 px-1.5 font-semibold text-[#9e2f25]">
+                {formatearNumero(m.alertas_criticas)}
+              </span>
+            )}
+            {m && m.alertas_atencion > 0 && (
+              <span className="rounded-full bg-[#f9b44c]/25 px-1.5 font-semibold text-[#a06b00]">
+                {formatearNumero(m.alertas_atencion)}
+              </span>
+            )}
+            {m && m.ingresos > 0 && (
+              <span className="text-[#391511] font-semibold">
+                {formatearMontoEntero(m.ingresos)}
+                {puedeVerCostos && m.margen_pct != null && (
+                  <span className="font-normal text-[#6f3a2a]">
+                    {' '}
+                    · {m.margen_pct.toFixed(1)}%
+                  </span>
+                )}
+              </span>
+            )}
+            {nodo.productos_total > 0 && (
+              <span className="text-[#6f3a2a]">
+                {formatearNumero(nodo.productos_total)}{' '}
+                <span className="text-[#c8a58a]">prod.</span>
+              </span>
+            )}
+          </span>
+        </button>
 
         {puedeEditar && (
           <span className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -342,6 +503,10 @@ function NodoArbol({
               nodo={h}
               nivel={nivel + 1}
               puedeEditar={puedeEditar}
+              metricas={metricas}
+              puedeVerCostos={puedeVerCostos}
+              seleccionado={seleccionado}
+              onSeleccionar={onSeleccionar}
               onCrearHijo={onCrearHijo}
               onEditar={onEditar}
             />

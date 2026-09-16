@@ -12,9 +12,36 @@ import {
   getUbicacionesProducto,
   quitarUbicacionProducto,
 } from '@/lib/queries/ubicaciones'
+import { getMapaSemaforo, getSkusNodo } from '@/lib/queries/mapa'
 import type { UbicacionInsert, UbicacionUpdate } from '@/types/database'
 
 export const MAPA_KEY = ['mapa'] as const
+
+/** Números y semáforo por nodo (mig 193). Pesado: se recalcula cada 2 min. */
+export function useMapaSemaforo(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: [...MAPA_KEY, 'semaforo', desde, hasta],
+    queryFn: () => getMapaSemaforo(desde, hasta),
+    staleTime: 2 * 60 * 1000,
+  })
+}
+
+/** Productos de un nodo y sus descendientes (mig 194). */
+export function useSkusNodo(
+  ubicacionId: number | null,
+  desde: string,
+  hasta: string
+) {
+  return useQuery({
+    queryKey: [...MAPA_KEY, 'nodo', ubicacionId, desde, hasta],
+    queryFn: () => {
+      if (ubicacionId == null) return null
+      return getSkusNodo(ubicacionId, desde, hasta)
+    },
+    enabled: ubicacionId != null,
+    staleTime: 60 * 1000,
+  })
+}
 
 /** Árbol completo del local. `data === null` = migración 170 pendiente. */
 export function useArbolUbicaciones() {

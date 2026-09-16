@@ -3644,6 +3644,28 @@ export type MetricaAgrupadaRow = {
   costo_estimado: boolean
 }
 
+/** Fila de fn_mapa_nodo_skus (mig 194): el último escalón del drill-down. */
+export type MapaSkuRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  ubicacion_id: number
+  ubicacion_nombre: string
+  stock_actual: number
+  unidades_vendidas: number
+  ingresos: number
+  margen_pesos: number | null
+  margen_pct: number | null
+  stock_valorizado: number | null
+  dias_cobertura: number | null
+  dias_sin_venta: number | null
+  clase_abc: string | null
+  quiebres_periodo: number
+  alertas_criticas: number
+  alertas_atencion: number
+}
+
 // ─── Alertas (Fase F, migs 183-189) ──────────────────────────────────────────
 // reglas_alerta se lee con RLS 'alertas'; alertas y alertas_evaluaciones solo
 // por RPC (fn_alertas / fn_resumen_alertas), porque el detalle trae costos.
@@ -5466,6 +5488,14 @@ export interface Database {
       fn_tablero_gerencial: {
         Args: { p_desde: string; p_hasta: string }
         Returns: Json
+      }
+      fn_mapa_semaforo: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: Json
+      }
+      fn_mapa_nodo_skus: {
+        Args: { p_ubicacion_id: number; p_desde: string; p_hasta: string }
+        Returns: MapaSkuRow[]
       }
       fn_evaluar_alertas: {
         Args: { p_origen?: string; p_si_antiguedad_min?: number | null }
