@@ -303,3 +303,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 203 | `203_gm01_modulos_con_6_estantes.sql` | ✅ aplicada | 2026-09-17 | `d63b96d` |
 | 204 | `204_isla_y_limpieza_estantes.sql` | ✅ aplicada | 2026-09-17 | `b4bfc99` |
 | 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
+| 206 | `206_fix_178_join_costos_item_venta.sql` | ⏳ pendiente | — | en este commit |
