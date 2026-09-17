@@ -303,4 +303,19 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 203 | `203_gm01_modulos_con_6_estantes.sql` | ✅ aplicada | 2026-09-17 | `d63b96d` |
 | 204 | `204_isla_y_limpieza_estantes.sql` | ✅ aplicada | 2026-09-17 | `b4bfc99` |
 | 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
-| 206 | `206_fix_178_join_costos_item_venta.sql` | ⏳ pendiente | — | en este commit |
+| 206 | `206_fix_178_join_costos_item_venta.sql` | ✅ aplicada | 2026-09-17 | `d447cda` |
+
+## Dos bases de Supabase (2026-09-17)
+
+Hay **dos proyectos** y hasta hoy este registro solo reflejaba el de prueba:
+
+| Proyecto | Ref | Uso |
+|---|---|---|
+| HEX-V1 | `itpgftqnxfscdvuzcvpl` | **Producción.** Es la que usa `hola-express2004.vercel.app` y donde están las ventas reales |
+| (prueba) | `ykveptiqlzdqjhfslpap` | Copia de trabajo, la del `.env.local` del repo |
+
+El 2026-09-17 producción estaba en la **169** y se le corrieron las **170 a 206** (salteando la
+178, rota, reemplazada por la 206). Ambas bases quedaron en la 206.
+
+**Regla:** una migración no está terminada hasta correrla en las DOS. Antes de dar una fase por
+cerrada, verificar contra producción, no contra la copia.
