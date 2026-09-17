@@ -58,6 +58,7 @@ export function HubMovil({
   const puedeRecibir =
     tienePermiso(permisos, 'recepcion') || tienePermiso(permisos, 'pedidos')
   const puedeVerVencimientos = tienePermiso(permisos, 'vencimientos')
+  const puedeUbicar = tienePermiso(permisos, 'inventario')
   const primerNombre = nombre.split(' ')[0]
 
   return (
@@ -221,6 +222,28 @@ export function HubMovil({
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
         </Link>
+
+        {/* Ubicar productos: carga del mapa del local por escaneo en cadena
+            (Fase B2). Mismo permiso que mover productos en el mapa. */}
+        {puedeUbicar && (
+          <Link
+            href="/movil/ubicaciones"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#1e5fb0]/10 text-[#1e5fb0]">
+              <MapPin className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                Ubicar productos
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Parate en una góndola y escaneá lo que hay
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        )}
       </div>
     </section>
   )

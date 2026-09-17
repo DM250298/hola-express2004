@@ -67,6 +67,66 @@ test('Caso 2 — en el punto de reposición: sugiere hasta el objetivo', () => {
   assert.equal(r.estado, 'rojo')
 })
 
+// ── Quiebres (migs 195/197/198) ──────────────────────────────────────────
+// La corrección por quiebres NO tenía un solo test: diasSinStock30d es
+// opcional, así que los 10 casos originales pasaban sin ejercitarla nunca.
+
+test('Quiebre real — la velocidad se mide sobre los días en que hubo stock', () => {
+  const r = calcularCobertura(
+    { ...BASE, stockActual: 4, venta30d: 36, diasSinStock30d: 12 },
+    PARAMS
+  )
+  // 36 unidades vendidas en los 18 días que sí pudo venderse.
+  assert.equal(r.ventaDiariaBase, 1.2)
+  assert.equal(r.ventaDiaria, 2)
+  assert.equal(r.factorQuiebre, 1.67)
+  assert.equal(r.requiereCompra, true)
+})
+
+test('Quiebre trucho — vendió todos los días, así que no se corrige nada', () => {
+  // El caso del Alfajor: el quiebre figuraba abierto los 30 días, pero se
+  // vendió igual. Desde la mig 197 esos días no cuentan → diasSinStock30d 0.
+  const r = calcularCobertura(
+    { ...BASE, stockActual: 0, venta30d: 17, diasSinStock30d: 0 },
+    PARAMS
+  )
+  assert.equal(r.ventaDiaria, 0.567)
+  assert.equal(r.ventaDiaria, r.ventaDiariaBase)
+  assert.equal(r.factorQuiebre, 1)
+})
+
+test('Quiebre largo — la corrección no pasa del tope', () => {
+  const r = calcularCobertura(
+    { ...BASE, stockActual: 0, venta30d: 17, diasSinStock30d: 28 },
+    PARAMS
+  )
+  // 30 - 28 = 2 días, pero el piso es 30/3: el factor queda clavado en 3.
+  assert.equal(r.factorQuiebre, 3)
+  assert.equal(r.ventaDiaria, 1.7)
+})
+
+test('Quebrado crónico — sin ventas por falta de stock, se pide por el mínimo', () => {
+  // Bombón Tofi y compañía: 30 días sin stock, 0 ventas. Antes de la mig 198
+  // sugería 0 para siempre y tampoco lo levantaba ninguna alerta.
+  const r = calcularCobertura(
+    { ...BASE, stockActual: 0, venta30d: 0, diasSinStock30d: 30, stockMinimo: 5 },
+    PARAMS
+  )
+  assert.equal(r.ventaDiaria, 0)
+  assert.equal(r.requiereCompra, true)
+  assert.equal(r.cantidadSugerida, 5)
+  assert.equal(r.cantidadSugeridaRedondeada, 5)
+})
+
+test('Quebrado poco — todavía no entra por el mínimo', () => {
+  const r = calcularCobertura(
+    { ...BASE, stockActual: 0, venta30d: 0, diasSinStock30d: 3, stockMinimo: 5 },
+    PARAMS
+  )
+  assert.equal(r.requiereCompra, false)
+  assert.equal(r.cantidadSugerida, 0)
+})
+
 // ── Caso 3 — Mercadería en tránsito → se descuenta del pedido ────────────
 test('Caso 3 — tránsito descuenta la sugerencia', () => {
   const r = calcularCobertura(

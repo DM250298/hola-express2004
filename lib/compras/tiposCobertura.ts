@@ -25,6 +25,16 @@ export interface ParametrosReposicion {
   frecuenciaReposicionDias: number
   /** Umbral fijo de sobrestock en días. null/undefined = 2 × cobertura objetivo. */
   umbralSobrestockDias?: number | null
+  /**
+   * Tope de la corrección por quiebres (mig 195): cuánto puede como máximo
+   * multiplicarse la venta diaria. 1 = sin corrección. Default 3.
+   */
+  factorMaximoCorreccionQuiebre?: number | null
+  /**
+   * Días sin stock (netos de los días en que igual se vendió) desde los que
+   * un producto sin ventas vuelve a pedirse por stock_minimo (mig 198).
+   */
+  diasQuiebreReposicionMinimo?: number | null
 }
 
 /** Datos de un producto que entran al cálculo de cobertura. */
@@ -43,6 +53,14 @@ export interface InputCobertura {
   stockMinimo?: number
   /** Unidades por bulto del proveedor (caja x6 = 6). null = suelto. */
   multiploCompra?: number | null
+  /**
+   * Días de los últimos 30 en que estuvo sin stock Y ADEMÁS no vendió nada
+   * (migs 195 + 197). Los días en que se vendió con el stock del sistema en
+   * cero o negativo NO cuentan: si vendió, había mercadería en la góndola.
+   */
+  diasSinStock30d?: number | null
+  /** Piso fijo de exhibición en unidades: el objetivo nunca baja de acá. */
+  stockObjetivoManual?: number | null
 }
 
 /** Resultado del redondeo por presentación de compra. */
@@ -55,7 +73,12 @@ export interface RedondeoPresentacion {
 
 /** Resultado completo del cálculo de cobertura para un producto. */
 export interface ResultadoCobertura {
+  /** Venta diaria YA corregida por los días sin stock. */
   ventaDiaria: number
+  /** Venta diaria sin corregir (unidades 30d / 30). */
+  ventaDiariaBase: number
+  /** Cuánto se multiplicó la velocidad por los días sin stock (1 = nada). */
+  factorQuiebre: number
   /** null = sin ventas recientes (no dividir por cero). */
   diasStock: number | null
   puntoReposicion: number

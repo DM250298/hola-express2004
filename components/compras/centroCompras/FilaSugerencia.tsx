@@ -54,10 +54,19 @@ export const FilaSugerencia = memo(function FilaSugerencia({
   const ajusteFuerte =
     marcado && esAjusteFuerte(f.cantidad_sugerida_redondeada, cantidadNum)
 
+  // v3 (mig 196): la velocidad se mide sobre los días en que hubo stock.
+  // Solo se avisa si la corrección movió el número: un producto que no
+  // vendió nada tiene factor 3 sobre cero, y decir "corregido" sería mentir.
+  const corregida = f.venta_diaria > f.venta_diaria_base + 0.0005
+  const sinHistorial = f.venta_diaria === 0 && f.dias_sin_stock_30d >= 10
+  const detalleQuiebre = corregida
+    ? ` · corregido: vendía ${formatearNumero(f.venta_diaria_base)}/día contando los ${formatearNumero(f.dias_sin_stock_30d)} días que estuvo sin stock`
+    : ''
+
   // Trazabilidad de la sugerencia (spec §29): qué datos usó el cálculo.
   const explicacion =
     f.venta_diaria > 0
-      ? `${formatearNumero(f.venta_diaria)}/día × ${formatearNumero(f.dias_cobertura_objetivo)} días objetivo = ${formatearCantidad(f.stock_objetivo, f.venta_por_peso)} − ${formatearCantidad(f.stock_actual, f.venta_por_peso)} stock − ${formatearCantidad(f.stock_en_transito, f.venta_por_peso)} en camino`
+      ? `${formatearNumero(f.venta_diaria)}/día × ${formatearNumero(f.dias_cobertura_objetivo)} días objetivo = ${formatearCantidad(f.stock_objetivo, f.venta_por_peso)} − ${formatearCantidad(f.stock_actual, f.venta_por_peso)} stock − ${formatearCantidad(f.stock_en_transito, f.venta_por_peso)} en camino${detalleQuiebre}`
       : f.requiere_compra
         ? `Sin ventas 30d: piso = stock mínimo ${formatearCantidad(f.stock_minimo, f.venta_por_peso)}`
         : 'Sin ventas en los últimos 30 días'
@@ -142,6 +151,22 @@ export const FilaSugerencia = memo(function FilaSugerencia({
       </TableCell>
       <TableCell className="text-right tabular-nums text-[#6f3a2a]">
         {f.venta_diaria > 0 ? formatearNumero(f.venta_diaria) : '—'}
+        {corregida && (
+          <div
+            className="text-[10px] text-[#a15c2f]"
+            title={`Vendía ${formatearNumero(f.venta_diaria_base)}/día si se cuentan los días sin stock. Estuvo ${formatearNumero(f.dias_sin_stock_30d)} de los últimos 30 días sin poder venderse, así que su venta real es más alta.`}
+          >
+            corregido ×{formatearNumero(f.factor_quiebre)}
+          </div>
+        )}
+        {!corregida && sinHistorial && (
+          <div
+            className="text-[10px] text-[#9e2f25]"
+            title="No vendió nada en 30 días porque no tuvo stock. No hay velocidad que medir: se pide por el stock mínimo."
+          >
+            sin stock {formatearNumero(f.dias_sin_stock_30d)} de 30 días
+          </div>
+        )}
       </TableCell>
       <TableCell className="text-right tabular-nums">
         {f.dias_stock == null ? (

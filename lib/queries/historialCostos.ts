@@ -70,6 +70,10 @@ export interface ConfigCompras {
   frecuencia_reposicion_default: number
   /** Umbral fijo de sobrestock en días; null = 2 × cobertura objetivo. */
   umbral_sobrestock_dias: number | null
+  /** Tope de la corrección por quiebres (mig 195). 1 = sin corrección. */
+  factor_maximo_correccion_quiebre: number
+  /** Días sin stock desde los que un quebrado sin ventas se vuelve a pedir (mig 197). */
+  dias_quiebre_reposicion_minimo: number
 }
 
 export async function getConfigCompras(): Promise<ConfigCompras> {
@@ -96,6 +100,12 @@ export async function getConfigCompras(): Promise<ConfigCompras> {
       data?.umbral_sobrestock_dias != null
         ? Number(data.umbral_sobrestock_dias)
         : null,
+    factor_maximo_correccion_quiebre: Number(
+      data?.factor_maximo_correccion_quiebre ?? 3
+    ),
+    dias_quiebre_reposicion_minimo: Number(
+      data?.dias_quiebre_reposicion_minimo ?? 10
+    ),
   }
 }
 

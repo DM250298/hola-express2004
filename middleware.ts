@@ -26,7 +26,7 @@ const PERMISO_RUTA: Record<string, string[]> = {
   clientes: ['/clientes'],
   // El modo móvil de la encargada (/movil) agrupa conteo de stock y recepción;
   // lo habilitan los permisos operativos de stock/abastecimiento.
-  inventario: ['/inventario', '/movil'],
+  inventario: ['/inventario', '/movil', '/mapa'],
   // El módulo de Conteo Físico (hub, zona y revisión) se PRESENTA a quien
   // tiene 'conteo_cierre' (item de menú y tarjeta del hub móvil), así que la
   // ruta también tiene que estar habilitada por ese permiso — si no, el
@@ -58,6 +58,8 @@ const PERMISO_RUTA: Record<string, string[]> = {
   mi_panel: ['/rrhh/mi-panel', '/rrhh/mis-tareas', '/rrhh/mi-cuenta', '/movil'],
   terminales: ['/terminales'],
   reportes: ['/reportes'],
+  tablero: ['/tablero'],
+  alertas: ['/alertas'],
   configuracion: ['/configuracion'],
 }
 
@@ -159,6 +161,19 @@ export async function middleware(request: NextRequest) {
       ) {
         const url = request.nextUrl.clone()
         url.pathname = '/movil'
+        return NextResponse.redirect(url)
+      }
+
+      // Recién logueado (?desde=login, lo pone FormLogin): quien tiene el
+      // tablero del dueño aterriza ahí. Solo al entrar — el dashboard
+      // operativo '/' sigue accesible desde el menú.
+      if (
+        pathname === '/' &&
+        request.nextUrl.searchParams.get('desde') === 'login'
+      ) {
+        const url = request.nextUrl.clone()
+        url.search = ''
+        url.pathname = permisos.includes('tablero') ? '/tablero' : '/'
         return NextResponse.redirect(url)
       }
 

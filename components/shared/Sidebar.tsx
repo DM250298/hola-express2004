@@ -28,6 +28,9 @@ import {
   ListChecks,
   Gauge,
   Smartphone,
+  Map,
+  TrendingUp,
+  BellRing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MOSTRAR_CONTABILIDAD } from '@/lib/config/navegacion'
@@ -95,6 +98,25 @@ const SECCIONES: Seccion[] = [
     ],
   },
   {
+    titulo: 'Gestión',
+    items: [
+      {
+        href: '/tablero',
+        etiqueta: 'Tablero del dueño',
+        icono: TrendingUp,
+        permiso: 'tablero',
+        nota: 'Márgenes, quiebres y decisiones',
+      },
+      {
+        href: '/alertas',
+        etiqueta: 'Alertas',
+        icono: BellRing,
+        permiso: 'alertas',
+        nota: 'Qué resolver y quién lo hace',
+      },
+    ],
+  },
+  {
     titulo: 'Ventas',
     items: [
       {
@@ -138,6 +160,13 @@ const SECCIONES: Seccion[] = [
         icono: ClipboardList,
         permiso: 'conteo_cierre',
         nota: 'Inventario por zonas',
+      },
+      {
+        href: '/mapa',
+        etiqueta: 'Mapa del local',
+        icono: Map,
+        permiso: 'inventario',
+        nota: 'Góndolas y ubicaciones',
       },
       {
         href: '/produccion',

@@ -37,6 +37,15 @@ export interface SugerenciaCompra {
   variacion_costo_pct: number | null
   precio_venta: number
   margen_pct: number | null
+  // ─── v3 (mig 196): por qué el sugerido es el que es ───
+  /** Días de los últimos 30 en que el producto estuvo sin stock. */
+  dias_sin_stock_30d: number
+  /** Venta diaria sin corregir (unidades 30d / 30). */
+  venta_diaria_base: number
+  /** Cuánto se multiplicó la velocidad por los días sin stock (1 = nada). */
+  factor_quiebre: number
+  /** De dónde salieron los días de cobertura: 'sku' | 'proveedor' | 'global'. */
+  origen_parametros: string
 }
 
 /**

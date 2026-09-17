@@ -113,6 +113,31 @@ const esquemaProducto = z.object({
   controlar_stock: z.boolean().default(true),
   no_ofrecer_ventas: z.boolean().default(false),
   es_critico: z.boolean().default(false),
+  // Reposición por SKU (mig 195): vacío = cascada proveedor → global.
+  dias_cobertura_objetivo: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) && n > 0 ? n : null
+    }),
+  dias_seguridad: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) && n >= 0 ? n : null
+    }),
+  stock_objetivo_manual: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) && n >= 0 ? n : null
+    }),
   notas: z.string().trim().max(500).optional().or(z.literal('')),
   dias_vencimiento_minimo: z
     .union([z.string(), z.number(), z.null()])
@@ -488,6 +513,16 @@ export function DrawerProducto({
       controlar_stock: producto?.controlar_stock ?? true,
       no_ofrecer_ventas: producto?.no_ofrecer_ventas ?? false,
       es_critico: producto?.es_critico ?? false,
+      dias_cobertura_objetivo:
+        producto?.dias_cobertura_objetivo != null
+          ? String(producto.dias_cobertura_objetivo)
+          : '',
+      dias_seguridad:
+        producto?.dias_seguridad != null ? String(producto.dias_seguridad) : '',
+      stock_objetivo_manual:
+        producto?.stock_objetivo_manual != null
+          ? String(producto.stock_objetivo_manual)
+          : '',
       notas: producto?.notas ?? '',
     })
 
@@ -858,6 +893,25 @@ export function DrawerProducto({
       controlar_stock: validado.controlar_stock,
       no_ofrecer_ventas: validado.no_ofrecer_ventas,
       es_critico: validado.es_critico,
+      // Reposición por SKU (mig 195): null = manda el proveedor. Solo se
+      // mandan si hay algo que guardar (valor nuevo, o había uno y se
+      // borró): sin la migración corrida, mandar columnas que no existen
+      // rompería el alta y la edición de CUALQUIER producto.
+      ...(validado.dias_cobertura_objetivo != null ||
+      producto?.dias_cobertura_objetivo != null
+        ? { dias_cobertura_objetivo: validado.dias_cobertura_objetivo }
+        : {}),
+      ...(validado.dias_seguridad != null || producto?.dias_seguridad != null
+        ? { dias_seguridad: validado.dias_seguridad }
+        : {}),
+      ...(validado.stock_objetivo_manual != null ||
+      producto?.stock_objetivo_manual != null
+        ? {
+            stock_objetivo_manual: esComboFinal
+              ? null
+              : validado.stock_objetivo_manual,
+          }
+        : {}),
       // Sin precio de venta cargado → queda "pendiente de precio": visible en
       // el POS pero bloqueado para vender hasta que se complete (factura o
       // carga manual). Con precio > 0 se habilita.
@@ -2074,6 +2128,75 @@ export function DrawerProducto({
                             {errors.stock_minimo.message}
                           </p>
                         )}
+                      </div>
+                    </div>
+
+                    {/* Reposición de ESTE producto (mig 195). Vacío = manda
+                        el proveedor y, si no tiene, la configuración general. */}
+                    <div className="rounded-xl border border-[#e4c9b0]/60 bg-[#fdfaf6] p-3 space-y-2">
+                      <p className="text-[#391511] text-sm font-medium">
+                        Compra de este producto
+                      </p>
+                      <p className="text-[#6f3a2a] text-xs">
+                        Dejalos vacíos y se usa lo del proveedor. Completalos solo para
+                        los que necesitan un trato distinto.
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="dias_cobertura_objetivo"
+                            className="text-[#391511] text-xs font-medium"
+                          >
+                            Días a cubrir al comprar
+                          </Label>
+                          <Input
+                            id="dias_cobertura_objetivo"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="del proveedor"
+                            {...register('dias_cobertura_objetivo')}
+                            disabled={guardando}
+                            className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="dias_seguridad"
+                            className="text-[#391511] text-xs font-medium"
+                          >
+                            Días de colchón
+                          </Label>
+                          <Input
+                            id="dias_seguridad"
+                            type="number"
+                            min="0"
+                            step="1"
+                            placeholder="del proveedor"
+                            {...register('dias_seguridad')}
+                            disabled={guardando}
+                            className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="stock_objetivo_manual"
+                            className="text-[#391511] text-xs font-medium"
+                          >
+                            Mínimo en góndola
+                            {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}
+                          </Label>
+                          <Input
+                            id="stock_objetivo_manual"
+                            type="number"
+                            min="0"
+                            step={porPeso ? '0.001' : '1'}
+                            placeholder="sin piso"
+                            {...register('stock_objetivo_manual')}
+                            disabled={guardando}
+                            className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                          />
+                        </div>
                       </div>
                     </div>
 

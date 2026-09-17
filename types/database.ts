@@ -1129,6 +1129,8 @@ export type ProductoRow = {
   codigo_interno: string | null
   nombre: string
   marca: string | null
+  /** Marca normalizada (mig 177). El texto `marca` queda legacy. */
+  marca_id: number | null
   categoria_id: number | null
   subcategoria: string | null
   proveedor_id: number | null
@@ -1160,6 +1162,11 @@ export type ProductoRow = {
   pendiente_precio: boolean
   /** No puede faltar (mig 151): sugiere compra aun sin ventas recientes. */
   es_critico: boolean
+  /** Reposición por SKU (mig 195). NULL = cascada proveedor → global. */
+  dias_cobertura_objetivo: number | null
+  dias_seguridad: number | null
+  /** Piso fijo de exhibición en unidades; NULL = solo la fórmula. */
+  stock_objetivo_manual: number | null
   notas: string | null
   imagen_url: string | null
   created_at: string
@@ -1173,6 +1180,7 @@ export type ProductoInsert = {
   codigo_interno?: string | null
   nombre: string
   marca?: string | null
+  marca_id?: number | null
   categoria_id?: number | null
   subcategoria?: string | null
   proveedor_id?: number | null
@@ -1199,6 +1207,10 @@ export type ProductoInsert = {
   no_ofrecer_ventas?: boolean
   pendiente_precio?: boolean
   es_critico?: boolean
+  /** Reposición por SKU (mig 195). null = cascada proveedor → global. */
+  dias_cobertura_objetivo?: number | null
+  dias_seguridad?: number | null
+  stock_objetivo_manual?: number | null
   notas?: string | null
   imagen_url?: string | null
   created_at?: string
@@ -1206,11 +1218,16 @@ export type ProductoInsert = {
 }
 
 export type ProductoUpdate = {
+  /** Reposición por SKU (mig 195). null = cascada proveedor → global. */
+  dias_cobertura_objetivo?: number | null
+  dias_seguridad?: number | null
+  stock_objetivo_manual?: number | null
   codigo_barras?: string | null
   codigo_barras_2?: string | null
   codigo_interno?: string | null
   nombre?: string
   marca?: string | null
+  marca_id?: number | null
   categoria_id?: number | null
   subcategoria?: string | null
   proveedor_id?: number | null
@@ -2377,6 +2394,10 @@ export type ConfigComprasRow = {
   frecuencia_reposicion_default: number
   /** Umbral fijo de sobrestock en días; null = 2 × cobertura objetivo. */
   umbral_sobrestock_dias: number | null
+  /** Tope de la corrección por quiebres (mig 195). 1 = sin corrección. */
+  factor_maximo_correccion_quiebre: number
+  /** Días sin stock desde los que un quebrado sin ventas se vuelve a pedir (mig 197). */
+  dias_quiebre_reposicion_minimo: number
 }
 
 export type ConfigComprasInsert = {
@@ -2387,15 +2408,19 @@ export type ConfigComprasInsert = {
   dias_seguridad_default?: number
   frecuencia_reposicion_default?: number
   umbral_sobrestock_dias?: number | null
+  factor_maximo_correccion_quiebre?: number
+  dias_quiebre_reposicion_minimo?: number
 }
 
 export type ConfigComprasUpdate = {
+  dias_quiebre_reposicion_minimo?: number
   umbral_variacion_costo?: number
   exige_factura?: boolean
   dias_cobertura_objetivo_default?: number
   dias_seguridad_default?: number
   frecuencia_reposicion_default?: number
   umbral_sobrestock_dias?: number | null
+  factor_maximo_correccion_quiebre?: number
 }
 
 // ─── config_ventas (singleton) ───────────────────────────────────────────────
@@ -3310,6 +3335,8 @@ export type ConteoZonaRow = {
   ts_inicio: string | null
   ts_fin: string | null
   orden: number
+  /** Nodo del árbol físico anclado a la zona (mig 175). NULL = sin anclar. */
+  ubicacion_id: number | null
   created_at: string
 }
 
@@ -3323,6 +3350,7 @@ export type ConteoZonaInsert = {
   ts_inicio?: string | null
   ts_fin?: string | null
   orden?: number
+  ubicacion_id?: number | null
   created_at?: string
 }
 
@@ -3334,6 +3362,7 @@ export type ConteoZonaUpdate = {
   ts_inicio?: string | null
   ts_fin?: string | null
   orden?: number
+  ubicacion_id?: number | null
 }
 
 export type ConteoDetalleRow = {
@@ -3398,6 +3427,436 @@ export type ResumenCierreConteo = {
   faltante_pesos: number
   sobrante_unidades: number
   sobrante_pesos: number
+}
+
+// ─── marcas (mig 177) ────────────────────────────────────────────────────────
+
+export type MarcaRow = {
+  id: number
+  nombre: string
+  created_at: string
+}
+
+export type MarcaInsert = {
+  id?: number
+  nombre: string
+  created_at?: string
+}
+
+export type MarcaUpdate = {
+  nombre?: string
+}
+
+// ─── ubicaciones (árbol físico del local, mig 170) ───────────────────────────
+
+export type TipoUbicacion =
+  | 'sucursal'
+  | 'sector'
+  | 'gondola'
+  | 'modulo'
+  | 'estante'
+
+/** Qué mueble es la ubicación (mig 199). heladera y freezer = frío. */
+export type TipoMueble =
+  | 'gondola'
+  | 'isla'
+  | 'heladera'
+  | 'freezer'
+  | 'mostrador'
+  | 'exhibidor'
+  | 'estanteria'
+  | 'mesa'
+
+export type UbicacionRow = {
+  id: number
+  parent_id: number | null
+  tipo: TipoUbicacion
+  nombre: string
+  /** Código corto para etiqueta física / QR (ej. G03-M2-E1). */
+  codigo: string | null
+  orden: number
+  activo: boolean
+  notas: string | null
+  /** Mig 199: mueble, categoría esperada, marca exclusiva y responsable. */
+  tipo_mueble: TipoMueble | null
+  categoria_id: number | null
+  marca_exclusiva_id: number | null
+  responsable_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type UbicacionInsert = {
+  id?: number
+  parent_id?: number | null
+  tipo: TipoUbicacion
+  nombre: string
+  codigo?: string | null
+  orden?: number
+  activo?: boolean
+  notas?: string | null
+  tipo_mueble?: TipoMueble | null
+  categoria_id?: number | null
+  marca_exclusiva_id?: number | null
+  responsable_id?: string | null
+}
+
+export type UbicacionUpdate = {
+  tipo_mueble?: TipoMueble | null
+  categoria_id?: number | null
+  marca_exclusiva_id?: number | null
+  responsable_id?: string | null
+  parent_id?: number | null
+  tipo?: TipoUbicacion
+  nombre?: string
+  codigo?: string | null
+  orden?: number
+  activo?: boolean
+  notas?: string | null
+}
+
+// ─── producto_ubicacion (N:M producto ↔ ubicación, mig 170) ──────────────────
+
+export type ProductoUbicacionRow = {
+  id: number
+  producto_id: number
+  ubicacion_id: number
+  /** La ubicación "de venta": a esta se atribuye el análisis por góndola. */
+  es_principal: boolean
+  /** Posición dentro del estante (izquierda→derecha). */
+  orden: number
+  capacidad: number | null
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProductoUbicacionInsert = {
+  id?: number
+  producto_id: number
+  ubicacion_id: number
+  es_principal?: boolean
+  orden?: number
+  capacidad?: number | null
+  notas?: string | null
+}
+
+export type ProductoUbicacionUpdate = {
+  ubicacion_id?: number
+  es_principal?: boolean
+  orden?: number
+  capacidad?: number | null
+  notas?: string | null
+}
+
+// ─── costos_item_venta / costos_item_devolucion (mig 171) ────────────────────
+// Costo congelado al momento de la operación. Gateadas por RLS 'costos':
+// sin permiso, el select devuelve 0 filas. Fila ausente = costo desconocido
+// en ese momento (venta pre-171 o sin costo cargado) — tratar como
+// estimación, nunca como 0. Escriben solo las RPCs (sin Insert/Update aptos
+// para el cliente, pero se declaran para que supabase-js no colapse a never).
+
+export type CostoItemVentaRow = {
+  item_venta_id: number
+  costo_unitario: number
+}
+
+export type CostoItemVentaInsert = {
+  item_venta_id: number
+  costo_unitario: number
+}
+
+export type CostoItemVentaUpdate = {
+  costo_unitario?: number
+}
+
+export type CostoItemDevolucionRow = {
+  item_devolucion_id: number
+  costo_unitario: number
+}
+
+export type CostoItemDevolucionInsert = {
+  item_devolucion_id: number
+  costo_unitario: number
+}
+
+export type CostoItemDevolucionUpdate = {
+  costo_unitario?: number
+}
+
+// ─── quiebres_stock (mig 172) ────────────────────────────────────────────────
+
+export type QuiebreStockRow = {
+  id: number
+  producto_id: number
+  inicio_at: string
+  /** NULL = quiebre activo. */
+  fin_at: string | null
+  mov_inicio_id: number | null
+  mov_fin_id: number | null
+  /** ESTIMACIÓN congelada al cierre (velocity 30d previa × días). */
+  venta_perdida_unid: number | null
+  venta_perdida_pesos: number | null
+  created_at: string
+}
+
+export type QuiebreStockInsert = {
+  id?: number
+  producto_id: number
+  inicio_at: string
+  fin_at?: string | null
+  mov_inicio_id?: number | null
+  mov_fin_id?: number | null
+  venta_perdida_unid?: number | null
+  venta_perdida_pesos?: number | null
+}
+
+export type QuiebreStockUpdate = {
+  fin_at?: string | null
+  mov_fin_id?: number | null
+  venta_perdida_unid?: number | null
+  venta_perdida_pesos?: number | null
+}
+
+/** Fila de fn_quiebres (mig 173): evento + producto + estimación al vuelo. */
+export type QuiebreConProducto = {
+  id: number
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  inicio_at: string
+  fin_at: string | null
+  abierto: boolean
+  duracion_horas: number
+  venta_perdida_unid: number | null
+  venta_perdida_pesos: number | null
+}
+
+/**
+ * Fila de fn_resumen_skus (mig 178): la tabla-madre del análisis por SKU.
+ * Las columnas de costo/margen vienen NULL sin el permiso 'costos'.
+ */
+export type ResumenSkuRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  activo: boolean
+  es_critico: boolean
+  marca: string | null
+  categoria: string | null
+  proveedor: string | null
+  gondola: string | null
+  stock_actual: number
+  stock_minimo: number
+  unidades_vendidas: number
+  unidades_via_combo: number
+  ingresos: number
+  venta_diaria: number
+  dias_cobertura: number | null
+  ultima_venta: string | null
+  ultima_compra: string | null
+  dias_sin_venta: number | null
+  clase_abc: string | null
+  quiebres_periodo: number
+  venta_perdida_pesos: number
+  precio_venta: number
+  costo_actual: number | null
+  costo_ventas: number | null
+  margen_pesos: number | null
+  margen_pct: number | null
+  stock_valorizado: number | null
+  costo_estimado: boolean
+}
+
+/** Fila de fn_metricas_agrupadas (mig 180): el negocio por una dimensión. */
+export type MetricaAgrupadaRow = {
+  clave: string
+  skus: number
+  skus_con_venta: number
+  skus_sin_movimiento: number
+  ingresos: number
+  participacion_ingresos: number | null
+  costo_ventas: number | null
+  margen_pesos: number | null
+  margen_pct: number | null
+  participacion_margen: number | null
+  stock_valorizado: number | null
+  dias_inventario: number | null
+  quiebres: number
+  venta_perdida_pesos: number
+  costo_estimado: boolean
+}
+
+/** Fila de fn_mapa_nodo_skus (mig 194): el último escalón del drill-down. */
+export type MapaSkuRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  ubicacion_id: number
+  ubicacion_nombre: string
+  stock_actual: number
+  unidades_vendidas: number
+  ingresos: number
+  margen_pesos: number | null
+  margen_pct: number | null
+  stock_valorizado: number | null
+  dias_cobertura: number | null
+  dias_sin_venta: number | null
+  clase_abc: string | null
+  quiebres_periodo: number
+  alertas_criticas: number
+  alertas_atencion: number
+}
+
+// ─── Alertas (Fase F, migs 183-189) ──────────────────────────────────────────
+// reglas_alerta se lee con RLS 'alertas'; alertas y alertas_evaluaciones solo
+// por RPC (fn_alertas / fn_resumen_alertas), porque el detalle trae costos.
+
+export type SeveridadAlerta = 'critico' | 'atencion' | 'oportunidad' | 'informativo'
+export type EstadoAlerta = 'abierta' | 'en_curso' | 'pospuesta' | 'resuelta'
+
+export type ReglaAlertaRow = {
+  codigo: string
+  nombre: string
+  descripcion: string
+  severidad: SeveridadAlerta
+  activa: boolean
+  parametros: Json
+  orden: number
+  updated_by: string | null
+  updated_at: string
+}
+
+export type ReglaAlertaInsert = {
+  codigo: string
+  nombre: string
+  descripcion: string
+  severidad: SeveridadAlerta
+  activa?: boolean
+  parametros?: Json
+  orden?: number
+  updated_by?: string | null
+  updated_at?: string
+}
+
+export type ReglaAlertaUpdate = Partial<ReglaAlertaInsert>
+
+export type AlertaRow = {
+  id: number
+  regla_codigo: string
+  severidad: SeveridadAlerta
+  dedupe_key: string
+  entidad_tipo: 'producto' | 'lote'
+  entidad_id: number
+  producto_id: number | null
+  grupo: string | null
+  titulo: string
+  detalle: Json
+  impacto: number | null
+  estado: EstadoAlerta
+  detectada_at: string
+  ultima_deteccion_at: string
+  decision: 'tarea' | 'posponer' | null
+  decidida_por: string | null
+  decidida_at: string | null
+  nota_decision: string | null
+  pospuesta_hasta: string | null
+  tarea_id: number | null
+  resuelta_at: string | null
+  resolucion: 'condicion_superada' | 'regla_desactivada' | null
+}
+
+export type AlertaInsert = Omit<Partial<AlertaRow>, 'id'> & {
+  regla_codigo: string
+  severidad: SeveridadAlerta
+  dedupe_key: string
+  entidad_tipo: 'producto' | 'lote'
+  entidad_id: number
+  titulo: string
+}
+
+export type AlertaUpdate = Partial<AlertaInsert>
+
+/** Fila de fn_alertas (mig 187): alerta + regla + decisión + tarea. */
+export type AlertaListadoRow = {
+  id: number
+  regla_codigo: string
+  regla_nombre: string
+  severidad: SeveridadAlerta
+  entidad_tipo: 'producto' | 'lote'
+  entidad_id: number
+  producto_id: number | null
+  grupo: string | null
+  titulo: string
+  detalle: Json
+  impacto: number | null
+  estado: EstadoAlerta
+  detectada_at: string
+  ultima_deteccion_at: string
+  decision: 'tarea' | 'posponer' | null
+  decidida_por_nombre: string | null
+  decidida_at: string | null
+  nota_decision: string | null
+  pospuesta_hasta: string | null
+  tarea_id: number | null
+  tarea_titulo: string | null
+  tarea_estado: string | null
+  tarea_responsable: string | null
+  tarea_fecha_limite: string | null
+  tarea_completada_at: string | null
+  resuelta_at: string | null
+  resolucion: 'condicion_superada' | 'regla_desactivada' | null
+}
+
+// ─── metricas_sku_diarias (snapshot diario, mig 173) ─────────────────────────
+// Gateada por RLS 'costos'. Derivados que NO se guardan: margen = ingresos −
+// costo_ventas · valor stock = stock_fin_dia × costo_unitario.
+
+export type MetricaSkuDiariaRow = {
+  fecha: string
+  producto_id: number
+  unidades_vendidas: number
+  unidades_via_combo: number
+  ingresos: number
+  costo_ventas: number
+  stock_fin_dia: number
+  costo_unitario: number
+  precio_venta: number
+  clase_abc: string | null
+  gondola_id: number | null
+  /** true = costo actual retro-aplicado (backfill / ítems sin satélite). */
+  costo_estimado: boolean
+}
+
+export type MetricaSkuDiariaInsert = {
+  fecha: string
+  producto_id: number
+  unidades_vendidas?: number
+  unidades_via_combo?: number
+  ingresos?: number
+  costo_ventas?: number
+  stock_fin_dia?: number
+  costo_unitario?: number
+  precio_venta?: number
+  clase_abc?: string | null
+  gondola_id?: number | null
+  costo_estimado?: boolean
+}
+
+export type MetricaSkuDiariaUpdate = {
+  unidades_vendidas?: number
+  unidades_via_combo?: number
+  ingresos?: number
+  costo_ventas?: number
+  stock_fin_dia?: number
+  costo_unitario?: number
+  precio_venta?: number
+  clase_abc?: string | null
+  gondola_id?: number | null
+  costo_estimado?: boolean
 }
 
 // ─── Tipo Database (compatible con el cliente de Supabase) ───────────────────
@@ -4097,6 +4556,121 @@ export interface Database {
         Update: ActivoFijoUpdate
         Relationships: []
       }
+      marcas: {
+        Row: MarcaRow
+        Insert: MarcaInsert
+        Update: MarcaUpdate
+        Relationships: []
+      }
+      ubicaciones: {
+        Row: UbicacionRow
+        Insert: UbicacionInsert
+        Update: UbicacionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'ubicaciones_parent_id_fkey'
+            columns: ['parent_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      producto_ubicacion: {
+        Row: ProductoUbicacionRow
+        Insert: ProductoUbicacionInsert
+        Update: ProductoUbicacionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'producto_ubicacion_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'producto_ubicacion_ubicacion_id_fkey'
+            columns: ['ubicacion_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      costos_item_venta: {
+        Row: CostoItemVentaRow
+        Insert: CostoItemVentaInsert
+        Update: CostoItemVentaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'costos_item_venta_item_venta_id_fkey'
+            columns: ['item_venta_id']
+            referencedRelation: 'items_venta'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      costos_item_devolucion: {
+        Row: CostoItemDevolucionRow
+        Insert: CostoItemDevolucionInsert
+        Update: CostoItemDevolucionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'costos_item_devolucion_item_devolucion_id_fkey'
+            columns: ['item_devolucion_id']
+            referencedRelation: 'items_devolucion'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      quiebres_stock: {
+        Row: QuiebreStockRow
+        Insert: QuiebreStockInsert
+        Update: QuiebreStockUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'quiebres_stock_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      metricas_sku_diarias: {
+        Row: MetricaSkuDiariaRow
+        Insert: MetricaSkuDiariaInsert
+        Update: MetricaSkuDiariaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'metricas_sku_diarias_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'metricas_sku_diarias_gondola_id_fkey'
+            columns: ['gondola_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      reglas_alerta: {
+        Row: ReglaAlertaRow
+        Insert: ReglaAlertaInsert
+        Update: ReglaAlertaUpdate
+        Relationships: []
+      }
+      alertas: {
+        Row: AlertaRow
+        Insert: AlertaInsert
+        Update: AlertaUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'alertas_regla_codigo_fkey'
+            columns: ['regla_codigo']
+            referencedRelation: 'reglas_alerta'
+            referencedColumns: ['codigo']
+          },
+        ]
+      }
     }
     Views: {
       vista_clientes: {
@@ -4461,6 +5035,11 @@ export interface Database {
           variacion_costo_pct: number | null
           precio_venta: number
           margen_pct: number | null
+          /** v3 (mig 196): por qué el sugerido es el que es. */
+          dias_sin_stock_30d: number
+          venta_diaria_base: number
+          factor_quiebre: number
+          origen_parametros: string
         }[]
       }
       fn_costo_receta: {
@@ -4927,6 +5506,86 @@ export interface Database {
       fn_importar_proveedores: {
         Args: { p_filas: Json }
         Returns: Json
+      }
+      fn_snapshot_metricas_diarias: {
+        Args: { p_fecha?: string | null }
+        Returns: number
+      }
+      fn_backfill_metricas_diarias: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: number
+      }
+      fn_quiebres: {
+        Args: {
+          p_desde?: string | null
+          p_hasta?: string | null
+          p_solo_abiertos?: boolean
+        }
+        Returns: QuiebreConProducto[]
+      }
+      fn_resumen_skus: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: ResumenSkuRow[]
+      }
+      fn_metricas_sku: {
+        Args: { p_producto_id: number; p_desde: string; p_hasta: string }
+        Returns: Json
+      }
+      fn_metricas_agrupadas: {
+        Args: { p_dimension: string; p_desde: string; p_hasta: string }
+        Returns: MetricaAgrupadaRow[]
+      }
+      fn_tablero_gerencial: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: Json
+      }
+      fn_mapa_semaforo: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: Json
+      }
+      fn_mapa_nodo_skus: {
+        Args: { p_ubicacion_id: number; p_desde: string; p_hasta: string }
+        Returns: MapaSkuRow[]
+      }
+      fn_evaluar_alertas: {
+        Args: { p_origen?: string; p_si_antiguedad_min?: number | null }
+        Returns: Json
+      }
+      fn_alertas: {
+        Args: { p_dias_resueltas?: number }
+        Returns: AlertaListadoRow[]
+      }
+      fn_resumen_alertas: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      fn_crear_tarea_alertas: {
+        Args: {
+          p_alerta_ids: number[]
+          p_titulo: string
+          p_descripcion: string
+          p_responsable_id: string
+          p_fecha_limite: string | null
+          p_prioridad: string
+        }
+        Returns: number
+      }
+      fn_posponer_alertas: {
+        Args: { p_alerta_ids: number[]; p_dias: number; p_motivo: string }
+        Returns: number
+      }
+      fn_reabrir_alertas: {
+        Args: { p_alerta_ids: number[] }
+        Returns: number
+      }
+      fn_actualizar_regla_alerta: {
+        Args: {
+          p_codigo: string
+          p_activa: boolean
+          p_severidad: string
+          p_parametros: Json
+        }
+        Returns: undefined
       }
     }
     Enums: {

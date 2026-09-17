@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   ShoppingCart,
   Tag,
+  Timer,
   XOctagon,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -17,6 +18,7 @@ import { useResumenAlertasStock } from '@/lib/hooks/useInventario'
 import { useResumenVencimientos } from '@/lib/hooks/useVencimientos'
 import { useConteos } from '@/lib/hooks/useConteos'
 import { useEtiquetasPendientes } from '@/lib/hooks/useEtiquetas'
+import { useQuiebresActivos } from '@/lib/hooks/useQuiebres'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import type { EstadoStock } from '@/lib/queries/inventario'
@@ -37,6 +39,7 @@ export function PanelPendientes({ estadoFiltro, onCambiarFiltro }: Props) {
   const { data: venc } = useResumenVencimientos()
   const { data: conteos } = useConteos()
   const { data: etiquetas } = useEtiquetasPendientes()
+  const { data: quiebres } = useQuiebresActivos()
 
   const puedeVencimientos = tienePermiso(usuario?.permisos, 'vencimientos')
   const puedeConteos = tienePermiso(usuario?.permisos, 'conteo_gestion')
@@ -49,6 +52,18 @@ export function PanelPendientes({ estadoFiltro, onCambiarFiltro }: Props) {
   const porVencer = Math.round(venc?.unidades_por_vencer ?? 0)
   const conteosPorAprobar = (conteos ?? []).filter((c) => c.estado === 'contado').length
   const etiquetasPend = etiquetas?.length ?? 0
+  // Quiebres = eventos con duración (mig 172). `null` = la migración aún
+  // no corrió → la tarjeta no se muestra. A diferencia de "Sin stock"
+  // (foto de hoy), acá el dato es HACE CUÁNTO falta el más viejo.
+  const quiebresActivos = quiebres?.length ?? 0
+  const horasQuiebreMasViejo = quiebres?.length
+    ? Math.max(...quiebres.map((q) => q.duracion_horas))
+    : 0
+  // < 24 h se muestra en horas: "hace 0 d" se leería como "ninguno".
+  const antiguedadMasViejo =
+    horasQuiebreMasViejo >= 24
+      ? `hace ${formatearNumero(Math.floor(horasQuiebreMasViejo / 24))} d`
+      : `hace ${formatearNumero(Math.max(1, Math.round(horasQuiebreMasViejo)))} h`
 
   if (isLoading) {
     return (
@@ -87,6 +102,24 @@ export function PanelPendientes({ estadoFiltro, onCambiarFiltro }: Props) {
           onCambiarFiltro(estadoFiltro === 'critico' ? null : 'critico')
         }
       />
+      {quiebres != null && (
+        <Tarjeta
+          etiqueta="Quiebres activos"
+          valor={quiebresActivos}
+          sufijo={
+            quiebresActivos > 0
+              ? `el más viejo: ${antiguedadMasViejo}`
+              : 'sin quiebres ahora'
+          }
+          icono={Timer}
+          color="#9e2f25"
+          activo={estadoFiltro === 'critico'}
+          destacar={quiebresActivos > 0}
+          onClick={() =>
+            onCambiarFiltro(estadoFiltro === 'critico' ? null : 'critico')
+          }
+        />
+      )}
       {puedeVencimientos && (
         <Tarjeta
           etiqueta="Por vencer"

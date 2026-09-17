@@ -267,3 +267,39 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 167 | `167_recepcion_no_toca_costo.sql` | ✅ aplicada | verificada 2026-09-08 | `cd21662` |
 | 168 | `168_factura_guarda_iva_producto.sql` | ✅ aplicada | verificada 2026-09-08 | `c75b919` |
 | 169 | `169_compra_directa_precio_congelado.sql` | ⏳ pendiente | — | en este commit |
+| 170 | `170_ubicaciones_fisicas.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 171 | `171_costo_congelado_en_venta.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 172 | `172_quiebres_stock.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 173 | `173_metricas_sku_diarias.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
+| 174 | `174_fix_snapshot_costo_null.sql` | ✅ aplicada | verificada 2026-09-15 | `970a91e` |
+| 175 | `175_conteo_zonas_ubicacion.sql` | ✅ aplicada | verificada 2026-09-15 | `c2beabc` |
+| 176 | `176_conteo_ancla_mapa.sql` | ✅ aplicada | verificada 2026-09-15 | `b08b521` |
+| 177 | `177_marcas.sql` | ✅ aplicada | verificada 2026-09-15 | `137ddf9` |
+| 178 | `178_rpcs_metricas_sku.sql` | ✅ aplicada | verificada 2026-09-15 | `137ddf9` |
+| 179 | `179_permiso_tablero_ventas_diarias.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 180 | `180_fn_metricas_agrupadas.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 181 | `181_fn_tablero_skus.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 182 | `182_fn_tablero_gerencial.sql` | ✅ aplicada | verificada 2026-09-15 | `0e28417` |
+| 183 | `183_alertas_tablas.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
+| 184 | `184_alertas_reglas_productos.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 191) | `fd529f8` |
+| 185 | `185_alertas_reglas_catalogo.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 190) | `fd529f8` |
+| 186 | `186_fn_evaluar_alertas.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
+| 187 | `187_fn_alertas_lectura.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
+| 188 | `188_fn_alertas_acciones.sql` | ⏳ pendiente | — | `fd529f8` |
+| 189 | `189_fn_actualizar_regla_alerta.sql` | ⏳ pendiente | — | en este commit |
+| 190 | `190_alertas_reglas_stock_real.sql` | ✅ aplicada | verificada 2026-09-15 | `4bad2e7` |
+| 191 | `191_alertas_quiebre_vs_desfasaje.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 192) | `4bad2e7` |
+| 192 | `192_stock_desfasado_por_clase.sql` | ✅ aplicada | verificada 2026-09-15 | `99077e9` |
+| 193 | `193_fn_mapa_semaforo.sql` | ✅ aplicada | 2026-09-17 | `69dc397` |
+| 194 | `194_fn_mapa_nodo_skus.sql` | ✅ aplicada | 2026-09-17 | `69dc397` |
+| 195 | `195_reposicion_por_sku_y_quiebres.sql` | ✅ aplicada | 2026-09-16 | `f7c7d5d` |
+| 196 | `196_fn_sugerencias_compra_v3.sql` | ✅ aplicada | 2026-09-16 · ⚠️ la corrección por quiebres sobre-estima cuando el producto vendió con stock negativo (se corrige en la 197) | `f7c7d5d` |
+| 197 | `197_dias_sin_stock_por_dia.sql` | ✅ aplicada | 2026-09-17 | `2b609b3` |
+| 198 | `198_fn_sugerencias_compra_v4.sql` | ✅ aplicada | 2026-09-17 | `2b609b3` |
+| 199 | `199_ubicaciones_mueble_categoria_marca_responsable.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
+| 200 | `200_seed_local_real.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
+| 201 | `201_alertas_reglas_espacio.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
+| 202 | `202_alertas_catalogo_llama_espacio.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
+| 203 | `203_gm01_modulos_con_6_estantes.sql` | ✅ aplicada | 2026-09-17 | `d63b96d` |
+| 204 | `204_isla_y_limpieza_estantes.sql` | ✅ aplicada | 2026-09-17 | `b4bfc99` |
+| 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
