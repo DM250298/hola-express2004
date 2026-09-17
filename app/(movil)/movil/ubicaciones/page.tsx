@@ -30,7 +30,10 @@ export default async function PaginaUbicacionesMovil() {
       <h1 className="mb-3 text-xl font-extrabold text-[#391511]">
         Ubicar productos
       </h1>
-      <AsignarUbicacionMovil />
+      <AsignarUbicacionMovil
+        usuarioId={userId}
+        puedeAjustar={tienePermiso(permisos, 'inventario_ajustes')}
+      />
     </div>
   )
 }

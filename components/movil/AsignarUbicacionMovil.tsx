@@ -14,11 +14,20 @@ import {
 import { useArbolUbicaciones, MAPA_KEY } from '@/lib/hooks/useMapa'
 import { useQueryClient } from '@tanstack/react-query'
 import { EscanerCamara } from './EscanerCamara'
+import { ContarProductoMovil, type ProductoEnConteo } from './ContarProductoMovil'
 
 interface Asignado {
   id: number
   nombre: string
   como: 'principal' | 'secundaria' | 'ya estaba'
+  /** 'ok' = el conteo coincidió; número = diferencia ajustada. */
+  conteo?: 'ok' | number
+}
+
+interface Props {
+  usuarioId: string | null
+  /** Permiso 'inventario_ajustes': habilita contar al escanear. */
+  puedeAjustar: boolean
 }
 
 /**
@@ -27,12 +36,13 @@ interface Asignado {
  * anclado: PRINCIPAL si el producto no tenía ninguna; si ya tenía, queda
  * como secundaria (no se pisan asignaciones hechas a mano).
  */
-export function AsignarUbicacionMovil() {
+export function AsignarUbicacionMovil({ usuarioId, puedeAjustar }: Props) {
   const { data: arbol } = useArbolUbicaciones()
   const qc = useQueryClient()
   const [ubicacion, setUbicacion] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [asignados, setAsignados] = useState<Asignado[]>([])
+  const [enConteo, setEnConteo] = useState<ProductoEnConteo | null>(null)
 
   const opciones = useMemo(() => {
     if (!arbol) return []
@@ -90,6 +100,23 @@ export function AsignarUbicacionMovil() {
       } else {
         toast.success(`${prod.nombre} → ${como}`)
       }
+      if (puedeAjustar) {
+        // Si quedó un conteo tipeado sin guardar, avisar antes de reemplazarlo.
+        if (enConteo && enConteo.producto_id !== prod.id && enConteo.contado.trim() !== '') {
+          toast.warning(`No se guardó el conteo de ${enConteo.nombre}`)
+        }
+        const esCombo =
+          prod.tipo === 'combo' || (prod.componentes?.length ?? 0) > 0
+        setEnConteo({
+          producto_id: prod.id,
+          nombre: prod.nombre,
+          stock_sistema: Number(prod.stock_actual),
+          precio_costo: Number(prod.precio_costo ?? 0),
+          venta_por_peso: prod.venta_por_peso,
+          lleva_stock: !esCombo && prod.controlar_stock !== false,
+          contado: '',
+        })
+      }
       qc.invalidateQueries({ queryKey: [...MAPA_KEY, 'arbol'] })
       qc.invalidateQueries({ queryKey: [...MAPA_KEY, 'producto', prod.id] })
     } catch (e) {
@@ -133,7 +160,30 @@ export function AsignarUbicacionMovil() {
       {ubicacion !== '' && (
         <EscanerCamara
           onDetectado={alEscanear}
-          ayuda="Escaneá los productos de esta ubicación, uno atrás de otro"
+          ayuda={
+            puedeAjustar
+              ? 'Escaneá, y si querés contá todo lo que hay de ese producto en el local'
+              : 'Escaneá los productos de esta ubicación, uno atrás de otro'
+          }
+        />
+      )}
+
+      {enConteo && (
+        <ContarProductoMovil
+          producto={enConteo}
+          usuarioId={usuarioId}
+          ruta={arbol ? rutaUbicacion(Number(ubicacion), arbol.planas) : ''}
+          onContado={(valor) =>
+            setEnConteo((prev) => (prev ? { ...prev, contado: valor } : prev))
+          }
+          onListo={(resultado) => {
+            const id = enConteo.producto_id
+            setAsignados((prev) =>
+              prev.map((a) => (a.id === id ? { ...a, conteo: resultado } : a))
+            )
+            setEnConteo(null)
+          }}
+          onSaltear={() => setEnConteo(null)}
         />
       )}
 
@@ -157,6 +207,20 @@ export function AsignarUbicacionMovil() {
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#391511]">
                   {a.nombre}
                 </span>
+                {a.conteo !== undefined && (
+                  <span
+                    className={cn(
+                      'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
+                      a.conteo === 'ok'
+                        ? 'bg-[#2f7d4f]/10 text-[#2f7d4f]'
+                        : 'bg-[#c43e2c]/10 text-[#9e2f25]'
+                    )}
+                  >
+                    {a.conteo === 'ok'
+                      ? 'stock ok'
+                      : `ajustado ${a.conteo > 0 ? '+' : ''}${a.conteo}`}
+                  </span>
+                )}
                 <span
                   className={cn(
                     'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider',
