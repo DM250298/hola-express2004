@@ -18,7 +18,9 @@ import type {
 export const TIPOS_HIJO: Record<TipoUbicacion, TipoUbicacion[]> = {
   sucursal: ['sector'],
   sector: ['gondola'],
-  gondola: ['modulo', 'estante'],
+  // Módulo ya no se ofrece al crear (el local se ordena góndola › estante);
+  // los módulos que existen siguen válidos para el trigger y admiten estantes.
+  gondola: ['estante'],
   modulo: ['estante'],
   estante: [],
 }
@@ -252,5 +254,63 @@ export async function quitarUbicacionProducto(filaId: number): Promise<void> {
     .from('producto_ubicacion')
     .delete()
     .eq('id', filaId)
+  if (error) throw new Error(error.message)
+}
+
+// ─── Asignar desde el mapa (escritorio) ──────────────────────────────────────
+
+export interface ProductoUbicable {
+  id: number
+  nombre: string
+  codigo_barras: string | null
+}
+
+/** Buscador del modal "Asignar productos": nombre o código, activos, top 10. */
+export async function buscarProductosUbicables(
+  termino: string
+): Promise<ProductoUbicable[]> {
+  const t = termino.trim().replace(/[,()]/g, ' ')
+  if (t.length < 2) return []
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('productos')
+    .select('id, nombre, codigo_barras')
+    .eq('activo', true)
+    .or(`nombre.ilike.%${t}%,codigo_barras.ilike.%${t}%`)
+    .order('nombre')
+    .limit(10)
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ProductoUbicable[]
+}
+
+/**
+ * Ubica un producto en un nodo con la misma regla que el escaneo móvil:
+ * PRINCIPAL si no tenía ninguna ubicación, si no SECUNDARIA.
+ */
+export async function asignarAUbicacion(
+  productoId: number,
+  ubicacionId: number
+): Promise<'principal' | 'secundaria' | 'ya estaba'> {
+  const filas = (await getUbicacionesProducto(productoId)) ?? []
+  if (filas.some((f) => f.ubicacion_id === ubicacionId)) return 'ya estaba'
+  if (!filas.some((f) => f.es_principal)) {
+    await asignarUbicacionPrincipal(productoId, ubicacionId)
+    return 'principal'
+  }
+  await agregarUbicacionSecundaria(productoId, ubicacionId)
+  return 'secundaria'
+}
+
+/** Saca un producto de una ubicación puntual. */
+export async function quitarProductoDeUbicacion(
+  productoId: number,
+  ubicacionId: number
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('producto_ubicacion')
+    .delete()
+    .eq('producto_id', productoId)
+    .eq('ubicacion_id', ubicacionId)
   if (error) throw new Error(error.message)
 }

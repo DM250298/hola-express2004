@@ -50,6 +50,9 @@ import {
 import type { ColorSemaforo, NodoMapa } from '@/lib/queries/mapa'
 import type { TipoUbicacion, UbicacionRow } from '@/types/database'
 import { PanelNodoMapa } from './PanelNodoMapa'
+import { ArbolUbicaciones } from './ArbolUbicaciones'
+import { VistaUbicaciones, type ModoVista } from './VistaUbicaciones'
+import { ModalAsignarProductos } from './ModalAsignarProductos'
 
 /** Rojo = alguna alerta crítica viva · amarillo = atención · gris = sin mapear. */
 const COLOR_SEMAFORO: Record<ColorSemaforo, string> = {
@@ -85,6 +88,28 @@ export function PantallaMapa() {
   const [desdeP, setDesdeP] = useState('')
   const [hastaP, setHastaP] = useState('')
   const [nodoAbierto, setNodoAbierto] = useState<number | null>(null)
+  const [modo, setModo] = useState<ModoVista>('mapa')
+  const [asignando, setAsignando] = useState(false)
+  const eliminar = useEliminarUbicacion()
+
+  // Todos los nodos por id (con hijos), para acciones del panel de detalle.
+  const nodosPorId = useMemo(() => {
+    const m = new Map<number, NodoUbicacion>()
+    const recorrer = (ns: NodoUbicacion[]) =>
+      ns.forEach((n) => {
+        m.set(n.id, n)
+        recorrer(n.hijos)
+      })
+    recorrer(arbol?.raices ?? [])
+    return m
+  }, [arbol])
+
+  // Sin selección, arranca en la primera góndola (o la raíz).
+  const seleccionId =
+    nodoAbierto ??
+    arbol?.planas.find((u) => u.tipo === 'gondola' && u.activo)?.id ??
+    arbol?.raices[0]?.id ??
+    null
 
   const personalizadoCompleto = periodo === 'personalizado' && !!desdeP && !!hastaP
   const rango = useMemo(() => {
@@ -122,10 +147,10 @@ export function PantallaMapa() {
   // Sin números (mig 193 pendiente o consulta caída) el panel tiene que
   // abrir igual: la lista de productos viene de otra función.
   const nodoSeleccionado = useMemo<NodoMapa | null>(() => {
-    if (nodoAbierto == null) return null
-    const conNumeros = metricas.get(nodoAbierto)
+    if (seleccionId == null) return null
+    const conNumeros = metricas.get(seleccionId)
     if (conNumeros) return conNumeros
-    const plano = arbol?.planas.find((u) => u.id === nodoAbierto)
+    const plano = arbol?.planas.find((u) => u.id === seleccionId)
     if (!plano) return null
     return {
       id: plano.id,
@@ -148,7 +173,7 @@ export function PantallaMapa() {
       alertas_atencion: 0,
       semaforo: 'gris',
     }
-  }, [nodoAbierto, metricas, arbol])
+  }, [seleccionId, metricas, arbol])
 
   if (isLoading) {
     return (
@@ -265,48 +290,124 @@ export function PantallaMapa() {
         )
       )}
 
-      {nodoSeleccionado && (
-        <PanelNodoMapa
-          nodo={nodoSeleccionado}
-          ruta={rutaUbicacion(nodoSeleccionado.id, arbol.planas)}
-          desde={rango.desde}
-          hasta={rango.hasta}
-          puedeVerCostos={!!mapa?.puede_ver_costos}
-          onCerrar={() => setNodoAbierto(null)}
-        />
+      {pct < 20 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#e4a42a]/50 bg-[#f9b44c]/10 px-4 py-3">
+          <Package className="h-5 w-5 shrink-0 text-[#9e6b15]" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-[#391511]">Empezá a organizar tu local</p>
+            <p className="text-sm text-[#6f3a2a]">
+              Elegí una góndola y tocá “Asignar productos”, o escaneá desde el celular en
+              Ubicar productos.
+            </p>
+          </div>
+        </div>
       )}
 
-      {/* Árbol */}
-      <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-4 shadow-sm">
-        {arbol.raices.length === 0 ? (
-          <p className="text-sm text-[#6f3a2a] p-4">
-            Todavía no hay ubicaciones cargadas.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {arbol.raices.map((n) => (
-              <NodoArbol
-                key={n.id}
-                nodo={n}
-                nivel={0}
-                puedeEditar={puedeEditar}
-                metricas={metricas}
-                puedeVerCostos={!!mapa?.puede_ver_costos}
-                seleccionado={nodoAbierto}
-                onSeleccionar={(id) =>
-                  setNodoAbierto((actual) => (actual === id ? null : id))
-                }
-                onCrearHijo={(padre, tipo) =>
-                  setModal({ modo: 'crear', nodo: padre, tipo })
-                }
-                onEditar={(nodo) =>
-                  setModal({ modo: 'editar', nodo, tipo: nodo.tipo })
-                }
-              />
-            ))}
-          </ul>
-        )}
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[280px_minmax(0,1fr)_340px]">
+        <ArbolUbicaciones
+          arbol={arbol}
+          metricas={metricas}
+          seleccionado={seleccionId}
+          onSeleccionar={setNodoAbierto}
+          puedeEditar={puedeEditar}
+          onAgregarSector={() => {
+            const raiz = arbol.raices.find((r) => r.tipo === 'sucursal') ?? null
+            setModal({ modo: 'crear', nodo: raiz, tipo: raiz ? 'sector' : 'sucursal' })
+          }}
+        />
+
+        <VistaUbicaciones
+          arbol={arbol}
+          metricas={metricas}
+          seleccionado={seleccionId}
+          onSeleccionar={setNodoAbierto}
+          puedeEditar={puedeEditar}
+          onCrear={(padre, tipo) => setModal({ modo: 'crear', nodo: padre, tipo })}
+          modo={modo}
+          onModo={setModo}
+          lista={
+            arbol.raices.length === 0 ? (
+              <p className="p-4 text-sm text-[#6f3a2a]">Todavía no hay ubicaciones cargadas.</p>
+            ) : (
+              <ul className="space-y-1">
+                {arbol.raices.map((n) => (
+                  <NodoArbol
+                    key={n.id}
+                    nodo={n}
+                    nivel={0}
+                    puedeEditar={puedeEditar}
+                    metricas={metricas}
+                    puedeVerCostos={!!mapa?.puede_ver_costos}
+                    seleccionado={seleccionId}
+                    onSeleccionar={setNodoAbierto}
+                    onCrearHijo={(padre, tipo) => setModal({ modo: 'crear', nodo: padre, tipo })}
+                    onEditar={(nodo) => setModal({ modo: 'editar', nodo, tipo: nodo.tipo })}
+                  />
+                ))}
+              </ul>
+            )
+          }
+        />
+
+        <div className="xl:sticky xl:top-4">
+          {nodoSeleccionado ? (
+            (() => {
+              const nodoArbol = nodosPorId.get(nodoSeleccionado.id)
+              const tipoHijo = nodoArbol ? TIPOS_HIJO[nodoArbol.tipo][0] : undefined
+              const eliminable =
+                !!nodoArbol &&
+                nodoArbol.hijos.length === 0 &&
+                nodoArbol.productos_directos === 0 &&
+                nodoArbol.tipo !== 'sucursal'
+              return (
+                <PanelNodoMapa
+                  nodo={nodoSeleccionado}
+                  ruta={rutaUbicacion(nodoSeleccionado.id, arbol.planas)}
+                  desde={rango.desde}
+                  hasta={rango.hasta}
+                  puedeVerCostos={!!mapa?.puede_ver_costos}
+                  puedeEditar={puedeEditar}
+                  onAsignar={
+                    nodoSeleccionado.tipo === 'sucursal' || nodoSeleccionado.tipo === 'sector'
+                      ? undefined
+                      : () => setAsignando(true)
+                  }
+                  onAgregarHijo={
+                    nodoArbol && tipoHijo
+                      ? () => setModal({ modo: 'crear', nodo: nodoArbol, tipo: tipoHijo })
+                      : undefined
+                  }
+                  etiquetaHijo={tipoHijo ? ETIQUETA_TIPO[tipoHijo].toLowerCase() : undefined}
+                  onEditar={
+                    nodoArbol
+                      ? () => setModal({ modo: 'editar', nodo: nodoArbol, tipo: nodoArbol.tipo })
+                      : undefined
+                  }
+                  onEliminar={
+                    eliminable
+                      ? () =>
+                          eliminar.mutate(nodoSeleccionado.id, {
+                            onSuccess: () => setNodoAbierto(null),
+                          })
+                      : undefined
+                  }
+                />
+              )
+            })()
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[#e4c9b0] bg-white p-6 text-center text-sm text-[#6f3a2a]">
+              Elegí una ubicación para ver sus productos.
+            </div>
+          )}
+        </div>
       </div>
+
+      {asignando && nodoSeleccionado && (
+        <ModalAsignarProductos
+          ubicacion={{ id: nodoSeleccionado.id, nombre: nodoSeleccionado.nombre }}
+          onCerrar={() => setAsignando(false)}
+        />
+      )}
 
       {modal && (
         <ModalUbicacion edicion={modal} onCerrar={() => setModal(null)} />

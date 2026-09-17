@@ -11,6 +11,8 @@ import {
   getArbolUbicaciones,
   getUbicacionesProducto,
   quitarUbicacionProducto,
+  asignarAUbicacion,
+  quitarProductoDeUbicacion,
 } from '@/lib/queries/ubicaciones'
 import { getMapaSemaforo, getSkusNodo } from '@/lib/queries/mapa'
 import type { UbicacionInsert, UbicacionUpdate } from '@/types/database'
@@ -167,6 +169,36 @@ export function useQuitarUbicacionProducto() {
     onSuccess: (_d, v) => {
       invalidar(v.productoId)
       toast.success('Ubicación quitada')
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo quitar: ${error.message}`)
+    },
+  })
+}
+
+/** Asignar desde el mapa: invalida árbol, semáforo y listas de nodos. */
+export function useAsignarAUbicacion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productoId, ubicacionId }: { productoId: number; ubicacionId: number }) =>
+      asignarAUbicacion(productoId, ubicacionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: MAPA_KEY })
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo asignar: ${error.message}`)
+    },
+  })
+}
+
+export function useQuitarProductoDeUbicacion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ productoId, ubicacionId }: { productoId: number; ubicacionId: number }) =>
+      quitarProductoDeUbicacion(productoId, ubicacionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: MAPA_KEY })
+      toast.success('Producto quitado de la ubicación')
     },
     onError: (error: Error) => {
       toast.error(`No se pudo quitar: ${error.message}`)

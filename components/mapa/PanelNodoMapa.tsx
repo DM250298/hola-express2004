@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { AlertTriangle, ArrowRight, X } from 'lucide-react'
+import { AlertTriangle, ArrowRight, PackagePlus, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EstadoError } from '@/components/shared/EstadoError'
 import { cn } from '@/lib/utils'
@@ -11,7 +12,8 @@ import {
   formatearMontoEntero,
   formatearNumero,
 } from '@/lib/utils/formato'
-import { useSkusNodo } from '@/lib/hooks/useMapa'
+import { useQuitarProductoDeUbicacion, useSkusNodo } from '@/lib/hooks/useMapa'
+import { ETIQUETA_TIPO } from '@/lib/queries/ubicaciones'
 import type { NodoMapa } from '@/lib/queries/mapa'
 
 const VISIBLES = 25
@@ -19,8 +21,8 @@ const VISIBLES = 25
 const formatoUnDecimal = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 })
 
 /**
- * El último escalón del drill-down: qué productos viven acá y cómo andan.
- * Se abre al tocar cualquier nodo del árbol.
+ * Panel derecho del mapa: el nodo elegido, sus números, las acciones
+ * (asignar productos, agregar estante, editar) y qué productos viven acá.
  */
 export function PanelNodoMapa({
   nodo,
@@ -29,14 +31,30 @@ export function PanelNodoMapa({
   hasta,
   puedeVerCostos,
   onCerrar,
+  puedeEditar = false,
+  onAsignar,
+  onAgregarHijo,
+  etiquetaHijo,
+  onEditar,
+  onEliminar,
 }: {
   nodo: NodoMapa
   ruta: string
   desde: string
   hasta: string
   puedeVerCostos: boolean
-  onCerrar: () => void
+  onCerrar?: () => void
+  puedeEditar?: boolean
+  onAsignar?: () => void
+  onAgregarHijo?: () => void
+  /** "estante", "góndola"… para el botón de agregar. */
+  etiquetaHijo?: string
+  onEditar?: () => void
+  /** Solo si se puede borrar (sin hijos ni productos). */
+  onEliminar?: () => void
 }) {
+  const quitar = useQuitarProductoDeUbicacion()
+  const [confirmando, setConfirmando] = useState(false)
   const [verTodos, setVerTodos] = useState(false)
   const { data, isLoading, isError, refetch } = useSkusNodo(nodo.id, desde, hasta)
   const skus = data ?? []
@@ -46,23 +64,64 @@ export function PanelNodoMapa({
     <section className="rounded-2xl border-2 border-[#e4a42a]/50 bg-white shadow-sm">
       <header className="flex flex-wrap items-start gap-3 border-b border-[#e4c9b0]/60 bg-[#fdfaf6] px-4 py-3">
         <div className="min-w-0 flex-1">
+          <span className="mb-1 inline-block rounded-md bg-[#391511]/5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#6f3a2a]">
+            {ETIQUETA_TIPO[nodo.tipo]}
+          </span>
           <h2 className="font-bold text-[#391511]">{nodo.nombre}</h2>
           <p className="text-xs text-[#6f3a2a]">
             {ruta || 'Todo el local'} · {formatearNumero(nodo.skus)}{' '}
             {nodo.skus === 1 ? 'producto' : 'productos'}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onCerrar}
-          className="shrink-0 rounded-md p-1 text-[#6f3a2a] hover:bg-[#f9b44c]/30"
-          aria-label="Cerrar"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {puedeEditar && onEditar && (
+          <button
+            type="button"
+            onClick={onEditar}
+            className="shrink-0 rounded-md p-1 text-[#6f3a2a] hover:bg-[#f9b44c]/30"
+            aria-label="Editar ubicación"
+            title="Editar ubicación"
+          >
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+        {puedeEditar &&
+          onEliminar &&
+          (confirmando ? (
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmando(false)
+                onEliminar()
+              }}
+              onBlur={() => setConfirmando(false)}
+              className="shrink-0 rounded-md bg-[#c43e2c] px-2 py-0.5 text-xs font-semibold text-white"
+            >
+              ¿Eliminar?
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmando(true)}
+              className="shrink-0 rounded-md p-1 text-[#9e2f25] hover:bg-[#c43e2c]/10"
+              aria-label="Eliminar ubicación"
+              title="Eliminar ubicación"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ))}
+        {onCerrar && (
+          <button
+            type="button"
+            onClick={onCerrar}
+            className="shrink-0 rounded-md p-1 text-[#6f3a2a] hover:bg-[#f9b44c]/30"
+            aria-label="Cerrar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </header>
 
-      <div className="grid grid-cols-2 gap-px border-b border-[#e4c9b0]/60 bg-[#e4c9b0]/40 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px border-b border-[#e4c9b0]/60 bg-[#e4c9b0]/40">
         <Dato etiqueta="Ventas" valor={formatearMontoEntero(nodo.ingresos)} />
         <Dato
           etiqueta="Margen"
@@ -96,6 +155,30 @@ export function PanelNodoMapa({
         />
       </div>
 
+      {(onAsignar || (puedeEditar && onAgregarHijo)) && (
+        <div className="space-y-2 border-b border-[#e4c9b0]/60 p-4">
+          {onAsignar && (
+            <Button
+              type="button"
+              onClick={onAsignar}
+              className="h-10 w-full rounded-xl bg-[#f9b44c] font-bold text-[#391511] hover:bg-[#e4a42a]"
+            >
+              <PackagePlus className="mr-1.5 h-4 w-4" /> Asignar productos
+            </Button>
+          )}
+          {puedeEditar && onAgregarHijo && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onAgregarHijo}
+              className="h-10 w-full rounded-xl"
+            >
+              <Plus className="mr-1.5 h-4 w-4" /> Agregar {etiquetaHijo ?? 'ubicación'}
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="p-4">
         {isLoading ? (
           <div className="space-y-2">
@@ -113,10 +196,12 @@ export function PanelNodoMapa({
             Falta correr la migración 194 para ver los productos de cada ubicación.
           </p>
         ) : skus.length === 0 ? (
-          <p className="text-sm text-[#6f3a2a]">
-            Todavía no hay productos ubicados acá. Se asignan desde la ficha del producto,
-            contando por zonas o escaneando desde el celular.
-          </p>
+          <div className="text-center">
+            <p className="font-semibold text-[#391511]">Dale un lugar a tus productos</p>
+            <p className="mt-1 text-sm text-[#6f3a2a]">
+              Asignalos acá, desde la ficha del producto o escaneando desde el celular.
+            </p>
+          </div>
         ) : (
           <>
             <ul className="divide-y divide-[#e4c9b0]/40">
@@ -162,6 +247,18 @@ export function PanelNodoMapa({
                       <div className="text-[11px] text-[#6f3a2a]">
                         {formatoUnDecimal.format(s.margen_pct)}% margen
                       </div>
+                    )}
+                    {onAsignar && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          quitar.mutate({ productoId: s.producto_id, ubicacionId: s.ubicacion_id })
+                        }
+                        disabled={quitar.isPending}
+                        className="mt-0.5 text-[11px] font-semibold text-[#9e2f25] hover:underline disabled:opacity-50"
+                      >
+                        Quitar de acá
+                      </button>
                     )}
                   </div>
                 </li>
