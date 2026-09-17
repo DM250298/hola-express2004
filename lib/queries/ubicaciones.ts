@@ -19,9 +19,8 @@ import type {
 export const TIPOS_HIJO: Record<TipoUbicacion, TipoUbicacion[]> = {
   sucursal: ['sector'],
   sector: ['gondola'],
-  // Módulo ya no se ofrece al crear (el local se ordena góndola › estante);
-  // los módulos que existen siguen válidos para el trigger y admiten estantes.
-  gondola: ['estante'],
+  // Góndola › módulo (divisor) › estante, o estantes directos si no tiene divisores.
+  gondola: ['modulo', 'estante'],
   modulo: ['estante'],
   estante: [],
 }

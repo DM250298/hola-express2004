@@ -27,9 +27,68 @@ function recolectar(nodos: NodoUbicacion[], tipo: NodoUbicacion['tipo']): NodoUb
   return salida
 }
 
-/** Estantes de una góndola, directos o dentro de un módulo existente. */
-function estantesDe(g: NodoUbicacion): NodoUbicacion[] {
-  return g.hijos.flatMap((h) => (h.tipo === 'modulo' ? [h, ...h.hijos] : [h]))
+/** Una fila de chips con los hijos de un nodo (módulos o estantes). */
+function HijosDe({
+  padre,
+  titulo,
+  tipoNuevo,
+  metricas,
+  seleccionado,
+  marcado,
+  onSeleccionar,
+  puedeEditar,
+  onCrear,
+}: {
+  padre: NodoUbicacion
+  titulo: string
+  tipoNuevo: NodoUbicacion['tipo']
+  metricas: Map<number, NodoMapa>
+  seleccionado: number | null
+  marcado: number | null
+  onSeleccionar: (id: number) => void
+  puedeEditar: boolean
+  onCrear: (padre: NodoUbicacion, tipo: NodoUbicacion['tipo']) => void
+}) {
+  const hijos = padre.hijos.filter((h) => h.activo)
+  return (
+    <div className="mt-4 border-t border-[#e4c9b0]/60 pt-3">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+        {titulo}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {hijos.map((e) => {
+          const m = metricas.get(e.id)
+          return (
+            <button
+              key={e.id}
+              type="button"
+              onClick={() => onSeleccionar(e.id)}
+              className={cn(
+                'rounded-lg border-2 bg-white px-3 py-2 text-left text-sm',
+                BORDE[m?.semaforo ?? 'gris'],
+                (seleccionado === e.id || marcado === e.id) && 'ring-2 ring-[#f9b44c]'
+              )}
+            >
+              <span className="font-semibold text-[#391511]">{e.nombre}</span>
+              <span className="ml-1.5 text-xs text-[#6f3a2a]">
+                {formatearNumero(e.productos_total)}
+              </span>
+            </button>
+          )
+        })}
+        {hijos.length === 0 && <span className="text-sm text-[#c8a58a]">Todavía vacío.</span>}
+        {puedeEditar && (
+          <button
+            type="button"
+            onClick={() => onCrear(padre, tipoNuevo)}
+            className="flex items-center gap-1 rounded-lg border-2 border-dashed border-[#e4c9b0] px-3 py-2 text-sm text-[#6f3a2a] hover:border-[#e4a42a]"
+          >
+            <Plus className="h-4 w-4" /> Agregar {tipoNuevo === 'modulo' ? 'módulo' : 'estante'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -69,6 +128,28 @@ export function VistaUbicaciones({
   const pasaFiltro = (g: NodoUbicacion) =>
     filtro === 'todo' || (filtro === 'frio' ? esFrio(g.tipo_mueble) : !esFrio(g.tipo_mueble))
   const raiz = arbol.raices[0]
+
+  // Módulo activo: el seleccionado, o el que contiene al estante seleccionado.
+  const moduloActivo = useMemo(() => {
+    const porId = new Map(arbol.planas.map((u) => [u.id, u]))
+    const sel = seleccionado != null ? porId.get(seleccionado) : undefined
+    if (sel?.tipo === 'modulo') return sel.id
+    if (sel?.tipo === 'estante' && sel.parent_id != null) {
+      return porId.get(sel.parent_id)?.tipo === 'modulo' ? sel.parent_id : null
+    }
+    return null
+  }, [arbol, seleccionado])
+  const moduloNodo = useMemo(() => {
+    const buscar = (ns: NodoUbicacion[]): NodoUbicacion | null => {
+      for (const n of ns) {
+        if (n.id === moduloActivo) return n
+        const h = buscar(n.hijos)
+        if (h) return h
+      }
+      return null
+    }
+    return moduloActivo == null ? null : buscar(arbol.raices)
+  }, [arbol, moduloActivo])
 
   // Góndola activa: la seleccionada o la que contiene al nodo seleccionado.
   const gondolaActiva = useMemo(() => {
@@ -196,8 +277,10 @@ export function VistaUbicaciones({
                           {g.productos_total > 0
                             ? `${formatearNumero(g.productos_total)} productos`
                             : 'Sin productos'}
-                          {estantesDe(g).length > 0 &&
-                            ` · ${formatearNumero(estantesDe(g).length)} estantes`}
+                          {g.hijos.some((h) => h.activo) &&
+                            ` · ${formatearNumero(g.hijos.filter((h) => h.activo).length)} ${
+                              g.hijos.some((h) => h.tipo === 'modulo') ? 'módulos' : 'estantes'
+                            }`}
                         </p>
                         {m && m.ingresos > 0 && (
                           <p className="mt-1 text-sm font-semibold tabular-nums text-[#391511]">
@@ -224,45 +307,30 @@ export function VistaUbicaciones({
                 </div>
 
                 {activa && (
-                  <div className="mt-4 border-t border-[#e4c9b0]/60 pt-3">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
-                      Estantes de {activa.nombre}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {estantesDe(activa).filter((e) => e.activo).map((e) => {
-                        const m = metricas.get(e.id)
-                        return (
-                          <button
-                            key={e.id}
-                            type="button"
-                            onClick={() => onSeleccionar(e.id)}
-                            className={cn(
-                              'rounded-lg border-2 bg-white px-3 py-2 text-left text-sm',
-                              BORDE[m?.semaforo ?? 'gris'],
-                              seleccionado === e.id && 'ring-2 ring-[#f9b44c]'
-                            )}
-                          >
-                            <span className="font-semibold text-[#391511]">{e.nombre}</span>
-                            <span className="ml-1.5 text-xs text-[#6f3a2a]">
-                              {formatearNumero(e.productos_total)}
-                            </span>
-                          </button>
-                        )
-                      })}
-                      {estantesDe(activa).length === 0 && (
-                        <span className="text-sm text-[#c8a58a]">Todavía sin estantes.</span>
-                      )}
-                      {puedeEditar && (
-                        <button
-                          type="button"
-                          onClick={() => onCrear(activa, 'estante')}
-                          className="flex items-center gap-1 rounded-lg border-2 border-dashed border-[#e4c9b0] px-3 py-2 text-sm text-[#6f3a2a] hover:border-[#e4a42a]"
-                        >
-                          <Plus className="h-4 w-4" /> Agregar estante
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                  <HijosDe
+                    padre={activa}
+                    titulo={`${activa.hijos.some((h) => h.tipo === 'modulo') ? 'Módulos' : 'Estantes'} de ${activa.nombre}`}
+                    tipoNuevo={activa.hijos.some((h) => h.tipo === 'modulo') ? 'modulo' : 'estante'}
+                    metricas={metricas}
+                    seleccionado={seleccionado}
+                    marcado={moduloActivo}
+                    onSeleccionar={onSeleccionar}
+                    puedeEditar={puedeEditar}
+                    onCrear={onCrear}
+                  />
+                )}
+                {activa && moduloNodo && moduloNodo.parent_id === activa.id && (
+                  <HijosDe
+                    padre={moduloNodo}
+                    titulo={`Estantes de ${moduloNodo.nombre}`}
+                    tipoNuevo="estante"
+                    metricas={metricas}
+                    seleccionado={seleccionado}
+                    marcado={null}
+                    onSeleccionar={onSeleccionar}
+                    puedeEditar={puedeEditar}
+                    onCrear={onCrear}
+                  />
                 )}
               </div>
             )

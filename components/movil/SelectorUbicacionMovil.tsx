@@ -28,22 +28,20 @@ function recolectarGondolas(nodos: NodoUbicacion[], sector = ''): OpcionGondola[
   return salida
 }
 
-/** Estantes de una góndola: directos o dentro de un módulo existente. */
-function estantesDe(gondola: NodoUbicacion): OpcionEstante[] {
-  const salida: OpcionEstante[] = []
-  for (const h of gondola.hijos) {
-    if (!h.activo) continue
-    if (h.tipo === 'estante') salida.push({ id: h.id, etiqueta: h.nombre })
-    if (h.tipo === 'modulo') {
-      salida.push({ id: h.id, etiqueta: h.nombre })
-      for (const e of h.hijos) {
-        if (e.activo && e.tipo === 'estante') {
-          salida.push({ id: e.id, etiqueta: `${h.nombre} › ${e.nombre}` })
-        }
-      }
-    }
+/** Hijos activos de un nodo (módulos o estantes). */
+function hijosDe(n: NodoUbicacion): OpcionEstante[] {
+  return n.hijos.filter((h) => h.activo).map((h) => ({ id: h.id, etiqueta: h.nombre }))
+}
+
+/** Busca un nodo por id dentro del árbol. */
+function buscarNodo(nodos: NodoUbicacion[], id: number | null): NodoUbicacion | null {
+  if (id == null) return null
+  for (const n of nodos) {
+    if (n.id === id) return n
+    const h = buscarNodo(n.hijos, id)
+    if (h) return h
   }
-  return salida
+  return null
 }
 
 /**
@@ -64,9 +62,15 @@ export function SelectorUbicacionMovil({
   const [gondolaId, setGondolaId] = useState<number | null>(null)
   const [filtro, setFiltro] = useState('')
 
+  const [moduloId, setModuloId] = useState<number | null>(null)
   const gondola = gondolas.find((g) => g.nodo.id === gondolaId) ?? null
-  const estantes = gondola ? estantesDe(gondola.nodo) : []
-  const estanteElegido = estantes.find((e) => e.id === valor)
+  const modulo = gondola ? buscarNodo(gondola.nodo.hijos, moduloId) : null
+  const elegido = gondola ? buscarNodo([gondola.nodo], valor) : null
+  const migas = [
+    gondola?.nodo.nombre,
+    modulo && modulo.id !== valor ? modulo.nombre : null,
+    elegido && elegido.id !== gondola?.nodo.id ? elegido.nombre : 'Toda la góndola',
+  ].filter(Boolean)
 
   if (gondolas.length === 0) {
     return (
@@ -82,15 +86,14 @@ export function SelectorUbicacionMovil({
       <div className="flex items-center gap-2 rounded-2xl border-2 border-[#f9b44c]/60 bg-white px-4 py-3 shadow-sm">
         <MapPin className="h-4 w-4 shrink-0 text-[#9e6b15]" />
         <p className="min-w-0 flex-1 truncate font-semibold text-[#391511]">
-          {gondola.nodo.nombre}
-          <span className="font-normal text-[#6f3a2a]">
-            {' › '}
-            {estanteElegido ? estanteElegido.etiqueta : 'Toda la góndola'}
-          </span>
+          {migas.join(' › ')}
         </p>
         <button
           type="button"
-          onClick={() => onCambio(null)}
+          onClick={() => {
+            setModuloId(null)
+            onCambio(null)
+          }}
           className="shrink-0 text-sm font-semibold text-[#9e6b15] underline underline-offset-2"
         >
           Cambiar
@@ -99,13 +102,46 @@ export function SelectorUbicacionMovil({
     )
   }
 
-  // ── Paso 2: estante ──
-  if (gondola) {
+  // ── Paso 2b: estante dentro de un módulo ──
+  if (gondola && modulo) {
+    const estantes = hijosDe(modulo)
     return (
       <div className="rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-center justify-between gap-2">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
-            {gondola.nodo.nombre} · ¿en qué estante?
+            {modulo.nombre} · ¿qué estante?
+          </p>
+          <button
+            type="button"
+            onClick={() => setModuloId(null)}
+            className="text-xs font-semibold text-[#9e6b15] underline underline-offset-2"
+          >
+            Otro módulo
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {estantes.map((e) => (
+            <BotonOpcion key={e.id} onClick={() => onCambio(e.id)}>
+              {e.etiqueta}
+            </BotonOpcion>
+          ))}
+          <BotonOpcion onClick={() => onCambio(modulo.id)} className="col-span-3" secundario>
+            Todo el módulo
+          </BotonOpcion>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Paso 2: módulo o estante de la góndola ──
+  if (gondola) {
+    const hijos = gondola.nodo.hijos.filter((h) => h.activo)
+    return (
+      <div className="rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+            {gondola.nodo.nombre} ·{' '}
+            {hijos.some((h) => h.tipo === 'modulo') ? '¿qué módulo?' : '¿qué estante?'}
           </p>
           <button
             type="button"
@@ -116,14 +152,22 @@ export function SelectorUbicacionMovil({
           </button>
         </div>
         <div className="grid grid-cols-2 gap-2">
-          {estantes.map((e) => (
-            <BotonOpcion key={e.id} onClick={() => onCambio(e.id)}>
-              {e.etiqueta}
+          {hijos.map((h) => (
+            <BotonOpcion
+              key={h.id}
+              onClick={() => {
+                const tieneEstantes = h.hijos.some((e) => e.activo)
+                if (h.tipo === 'modulo' && tieneEstantes) setModuloId(h.id)
+                else onCambio(h.id)
+              }}
+              conFlecha={h.tipo === 'modulo' && h.hijos.some((e) => e.activo)}
+            >
+              {h.nombre}
             </BotonOpcion>
           ))}
           <BotonOpcion
             onClick={() => onCambio(gondola.nodo.id)}
-            className={cn(estantes.length % 2 === 0 && 'col-span-2')}
+            className={cn(hijos.length % 2 === 0 && 'col-span-2')}
             secundario
           >
             Toda la góndola
@@ -176,14 +220,14 @@ export function SelectorUbicacionMovil({
                     key={g.nodo.id}
                     onClick={() => {
                       // Sin estantes no hay segundo paso: queda toda la góndola.
-                      if (estantesDe(g.nodo).length === 0) {
+                      if (hijosDe(g.nodo).length === 0) {
                         setGondolaId(g.nodo.id)
                         onCambio(g.nodo.id)
                       } else {
                         setGondolaId(g.nodo.id)
                       }
                     }}
-                    conFlecha={estantesDe(g.nodo).length > 0}
+                    conFlecha={hijosDe(g.nodo).length > 0}
                   >
                     {g.nodo.nombre}
                   </BotonOpcion>

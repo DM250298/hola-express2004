@@ -300,3 +300,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 200 | `200_seed_local_real.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
 | 201 | `201_alertas_reglas_espacio.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
 | 202 | `202_alertas_catalogo_llama_espacio.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
+| 203 | `203_gm01_modulos_con_6_estantes.sql` | ⏳ pendiente | — | en este commit |
