@@ -1,4 +1,4 @@
-# Registro de migraciones — Hola Express
+﻿# Registro de migraciones — Hola Express
 
 Este archivo existe porque **no hay migration runner**: las migraciones se corren a mano en el
 SQL Editor de Supabase, y hasta ahora no quedaba registro de cuáles se aplicaron. Sin ese
@@ -302,4 +302,4 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 202 | `202_alertas_catalogo_llama_espacio.sql` | ✅ aplicada | 2026-09-17 | `471a3fe` |
 | 203 | `203_gm01_modulos_con_6_estantes.sql` | ✅ aplicada | 2026-09-17 | `d63b96d` |
 | 204 | `204_isla_y_limpieza_estantes.sql` | ✅ aplicada | 2026-09-17 | `b4bfc99` |
-| 205 | `205_punteras_isla_estantes.sql` | ⏳ pendiente | — | en este commit |
+| 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
