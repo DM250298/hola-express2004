@@ -290,7 +290,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 190 | `190_alertas_reglas_stock_real.sql` | ✅ aplicada | verificada 2026-09-15 | `4bad2e7` |
 | 191 | `191_alertas_quiebre_vs_desfasaje.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 192) | `4bad2e7` |
 | 192 | `192_stock_desfasado_por_clase.sql` | ✅ aplicada | verificada 2026-09-15 | `99077e9` |
-| 193 | `193_fn_mapa_semaforo.sql` | ⏳ pendiente | — | en este commit |
+| 193 | `193_fn_mapa_semaforo.sql` | ✅ aplicada | 2026-09-17 | `69dc397` |
 | 194 | `194_fn_mapa_nodo_skus.sql` | ⏳ pendiente | — | en este commit |
 | 195 | `195_reposicion_por_sku_y_quiebres.sql` | ✅ aplicada | 2026-09-16 | `f7c7d5d` |
 | 196 | `196_fn_sugerencias_compra_v3.sql` | ✅ aplicada | 2026-09-16 · ⚠️ la corrección por quiebres sobre-estima cuando el producto vendió con stock negativo (se corrige en la 197) | `f7c7d5d` |
