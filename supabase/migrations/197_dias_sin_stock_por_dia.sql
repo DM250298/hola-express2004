@@ -111,7 +111,9 @@ cross join lateral (
   join public.ventas v on v.id = iv.venta_id
   where iv.producto_id = p.id
     and v.estado = 'completada'
-    and v.fecha >= now() - interval '30 days'
+    -- misma ventana que la función: 30 días calendario de La Rioja
+    and v.fecha >= (((now() at time zone 'America/Argentina/La_Rioja')::date - 29)::timestamp
+                    at time zone 'America/Argentina/La_Rioja')
 ) u
 where p.activo
 order by d.dias_sin_stock desc, u.unidades_30d desc

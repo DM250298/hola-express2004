@@ -294,5 +294,5 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 194 | `194_fn_mapa_nodo_skus.sql` | ⏳ pendiente | — | en este commit |
 | 195 | `195_reposicion_por_sku_y_quiebres.sql` | ✅ aplicada | 2026-09-16 | `f7c7d5d` |
 | 196 | `196_fn_sugerencias_compra_v3.sql` | ✅ aplicada | 2026-09-16 · ⚠️ la corrección por quiebres sobre-estima cuando el producto vendió con stock negativo (se corrige en la 197) | `f7c7d5d` |
-| 197 | `197_dias_sin_stock_por_dia.sql` | ⏳ pendiente | — | en este commit |
+| 197 | `197_dias_sin_stock_por_dia.sql` | ✅ aplicada | 2026-09-17 | `2b609b3` |
 | 198 | `198_fn_sugerencias_compra_v4.sql` | ⏳ pendiente | — | en este commit |
