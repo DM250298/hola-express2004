@@ -63,6 +63,8 @@ export const ACCION_REGLA: Record<string, AccionRegla> = {
     href: '/vencimientos',
     verbo: 'Dar de baja',
   },
+  marca_ajena: { etiqueta: 'Ir al mapa', href: '/mapa', verbo: 'Sacar de la heladera de marca' },
+  fuera_de_lugar: { etiqueta: 'Ir al mapa', href: '/mapa', verbo: 'Reubicar' },
   por_quebrar: { etiqueta: 'Ir a compras', href: '/compras', verbo: 'Pedir' },
   vencimiento_proximo: {
     etiqueta: 'Ir a vencimientos',
@@ -104,6 +106,10 @@ export const SUGERENCIA_REGLA: Record<string, string> = {
   stock_desfasado:
     'Contar el producto y ajustar el stock: el sistema dice cero o negativo, pero se sigue vendiendo.',
   lote_vencido: 'Retirarlos de la góndola y darlos de baja como merma.',
+  marca_ajena:
+    'Pasarlos a otra heladera: la marca exige exclusividad en su equipo y puede quitar bonificaciones.',
+  fuera_de_lugar:
+    'Llevarlos a su espacio o, si están bien ahí, corregir la categoría del espacio en el mapa.',
   por_quebrar: 'Sumarlos al próximo pedido antes de que se terminen.',
   vencimiento_proximo:
     'Pasarlos adelante en la góndola o hacer una promo; si ya vencieron, darlos de baja.',
@@ -157,6 +163,16 @@ export function describirAlerta(a: Alerta): string {
       if (d.dias_cobertura != null)
         partes.push(`alcanza para ${formatoUnDecimal.format(d.dias_cobertura)} días`)
       if (d.proveedor) partes.push(d.proveedor)
+      break
+    case 'marca_ajena':
+      if (d.ubicacion) partes.push(`en ${d.ubicacion}`)
+      if (d.marca_espacio) partes.push(`heladera de ${d.marca_espacio}`)
+      if (d.marca_producto) partes.push(`producto de ${d.marca_producto}`)
+      break
+    case 'fuera_de_lugar':
+      if (d.ubicacion) partes.push(`en ${d.ubicacion}`)
+      if (d.categoria_espacio) partes.push(`ahí va ${d.categoria_espacio}`)
+      if (d.categoria_producto) partes.push(`es de ${d.categoria_producto}`)
       break
     case 'lote_vencido':
     case 'vencimiento_proximo': {
@@ -284,6 +300,8 @@ export const CAMPOS_REGLA: Record<string, CampoParametro[]> = {
     { clave: 'dias', etiqueta: 'Avisar con', tipo: 'numero', sufijo: 'días de anticipación' },
   ],
   lote_vencido: [],
+  marca_ajena: [],
+  fuera_de_lugar: [],
   margen_bajo: [
     {
       clave: 'margen_minimo_pct',

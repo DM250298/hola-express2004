@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import type {
+  TipoMueble,
   TipoUbicacion,
   UbicacionInsert,
   UbicacionRow,
@@ -31,6 +32,42 @@ export const ETIQUETA_TIPO: Record<TipoUbicacion, string> = {
   gondola: 'Góndola',
   modulo: 'Módulo',
   estante: 'Estante',
+}
+
+export const ETIQUETA_MUEBLE: Record<TipoMueble, string> = {
+  gondola: 'Góndola',
+  isla: 'Isla',
+  heladera: 'Heladera',
+  freezer: 'Freezer',
+  mostrador: 'Mostrador',
+  exhibidor: 'Exhibidor',
+  estanteria: 'Estantería',
+  mesa: 'Mesa',
+}
+
+/** Frío = heladeras y freezers (para el filtro del mapa). */
+export function esFrio(m: TipoMueble | null | undefined): boolean {
+  return m === 'heladera' || m === 'freezer'
+}
+
+/**
+ * Valor efectivo de un campo heredable (categoría, marca, responsable): el
+ * del nodo, o el del ancestro más cercano que lo tenga.
+ */
+export function heredado<K extends 'categoria_id' | 'marca_exclusiva_id' | 'responsable_id'>(
+  id: number,
+  planas: UbicacionRow[],
+  campo: K
+): UbicacionRow[K] | null {
+  const porId = new Map(planas.map((u) => [u.id, u]))
+  let actual = porId.get(id)
+  let guarda = 0
+  while (actual && guarda < 10) {
+    if (actual[campo] != null) return actual[campo]
+    actual = actual.parent_id != null ? porId.get(actual.parent_id) : undefined
+    guarda++
+  }
+  return null
 }
 
 export interface NodoUbicacion extends UbicacionRow {

@@ -53,6 +53,12 @@ export interface DetalleAlerta {
   precio_venta?: number
   costo_actual?: number
   margen_pct?: number
+  // Reglas del espacio (mig 201)
+  ubicacion?: string
+  marca_espacio?: string
+  marca_producto?: string
+  categoria_espacio?: string
+  categoria_producto?: string
 }
 
 export type Alerta = Omit<AlertaListadoRow, 'detalle'> & { detalle: DetalleAlerta }

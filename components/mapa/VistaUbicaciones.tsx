@@ -1,7 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
-import { LayoutGrid, List, Plus, Warehouse } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { LayoutGrid, List, Plus, Snowflake, Warehouse } from 'lucide-react'
+import { useCategorias } from '@/lib/hooks/useCategorias'
+import { ETIQUETA_MUEBLE, esFrio } from '@/lib/queries/ubicaciones'
 import { cn } from '@/lib/utils'
 import { formatearMontoEntero, formatearNumero } from '@/lib/utils/formato'
 import type { ArbolUbicaciones, NodoUbicacion } from '@/lib/queries/ubicaciones'
@@ -56,7 +58,16 @@ export function VistaUbicaciones({
   onModo: (m: ModoVista) => void
   lista: React.ReactNode
 }) {
-  const sectores = useMemo(() => recolectar(arbol.raices, 'sector'), [arbol])
+  const [filtro, setFiltro] = useState<'todo' | 'seco' | 'frio'>('todo')
+  const { data: categorias } = useCategorias()
+  const nombreCategoria = (id: number | null) =>
+    id == null ? null : (categorias?.find((c) => c.id === id)?.nombre ?? null)
+  const sectores = useMemo(
+    () => recolectar(arbol.raices, 'sector').filter((s) => s.activo),
+    [arbol]
+  )
+  const pasaFiltro = (g: NodoUbicacion) =>
+    filtro === 'todo' || (filtro === 'frio' ? esFrio(g.tipo_mueble) : !esFrio(g.tipo_mueble))
   const raiz = arbol.raices[0]
 
   // Góndola activa: la seleccionada o la que contiene al nodo seleccionado.
@@ -78,6 +89,23 @@ export function VistaUbicaciones({
             {modo === 'mapa' ? 'Góndolas por sector' : 'Todas las ubicaciones'}
           </p>
         </div>
+        {modo === 'mapa' && (
+          <div className="flex rounded-xl border border-[#e4c9b0] bg-white p-0.5 text-xs">
+            {(['todo', 'seco', 'frio'] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFiltro(f)}
+                className={cn(
+                  'rounded-lg px-2.5 py-1 font-semibold',
+                  filtro === f ? 'bg-[#391511] text-white' : 'text-[#6f3a2a]'
+                )}
+              >
+                {f === 'todo' ? 'Todo' : f === 'seco' ? 'Seco' : 'Frío'}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex rounded-xl border border-[#e4c9b0] bg-[#fdfaf6] p-0.5">
           {(['mapa', 'lista'] as const).map((m) => (
             <button
@@ -105,7 +133,10 @@ export function VistaUbicaciones({
       ) : (
         <div className="space-y-4">
           {sectores.map((sector) => {
-            const gondolas = recolectar(sector.hijos, 'gondola')
+            const gondolas = recolectar(sector.hijos, 'gondola').filter(
+              (g) => g.activo && pasaFiltro(g)
+            )
+            if (gondolas.length === 0 && filtro !== 'todo') return null
             const activa = gondolas.find((g) => g.id === gondolaActiva)
             return (
               <div
@@ -145,7 +176,22 @@ export function VistaUbicaciones({
                           !g.activo && 'opacity-50'
                         )}
                       >
-                        <p className="truncate font-semibold text-[#391511]">{g.nombre}</p>
+                        <p className="flex items-center gap-1.5 font-semibold text-[#391511]">
+                          {esFrio(g.tipo_mueble) && (
+                            <Snowflake className="h-3.5 w-3.5 shrink-0 text-[#1e5fb0]" />
+                          )}
+                          <span className="truncate">{g.nombre}</span>
+                        </p>
+                        {(g.tipo_mueble || g.categoria_id != null) && (
+                          <p className="truncate text-[11px] text-[#9e6b15]">
+                            {[
+                              g.tipo_mueble ? ETIQUETA_MUEBLE[g.tipo_mueble] : null,
+                              nombreCategoria(g.categoria_id),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        )}
                         <p className="mt-0.5 text-xs text-[#6f3a2a]">
                           {g.productos_total > 0
                             ? `${formatearNumero(g.productos_total)} productos`
@@ -183,7 +229,7 @@ export function VistaUbicaciones({
                       Estantes de {activa.nombre}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {estantesDe(activa).map((e) => {
+                      {estantesDe(activa).filter((e) => e.activo).map((e) => {
                         const m = metricas.get(e.id)
                         return (
                           <button

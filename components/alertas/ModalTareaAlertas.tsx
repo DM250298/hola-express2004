@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useArbolUbicaciones } from '@/lib/hooks/useMapa'
+import { getUbicacionesProducto, heredado } from '@/lib/queries/ubicaciones'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -47,6 +49,26 @@ export function ModalTareaAlertas({
   )
 
   const { data: usuarios, isLoading: cargandoUsuarios } = useUsuariosActivos()
+  const { data: arbol } = useArbolUbicaciones()
+
+  // Responsable sugerido: el del espacio donde vive el primer producto
+  // (heredado de la góndola o el sector). Se puede cambiar.
+  const primerProducto = alertas.find((a) => a.producto_id != null)?.producto_id ?? null
+  useEffect(() => {
+    if (!arbol || primerProducto == null) return
+    let cancelado = false
+    getUbicacionesProducto(primerProducto)
+      .then((filas) => {
+        const principal = (filas ?? []).find((f) => f.es_principal)
+        if (!principal || cancelado) return
+        const sugerido = heredado(principal.ubicacion_id, arbol.planas, 'responsable_id')
+        if (sugerido) setResponsableId((actual) => actual || sugerido)
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [arbol, primerProducto])
   const crear = useCrearTareaAlertas()
 
   const puedeGuardar = titulo.trim() !== '' && responsableId !== '' && !crear.isPending

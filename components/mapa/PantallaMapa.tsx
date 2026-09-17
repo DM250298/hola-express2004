@@ -41,14 +41,19 @@ import {
   useEliminarUbicacion,
   useMapaSemaforo,
 } from '@/lib/hooks/useMapa'
+import { useCategorias } from '@/lib/hooks/useCategorias'
+import { useMarcas } from '@/lib/hooks/useMarcas'
+import { useUsuariosActivos } from '@/lib/hooks/useConteos'
 import {
+  ETIQUETA_MUEBLE,
   ETIQUETA_TIPO,
   TIPOS_HIJO,
+  heredado,
   rutaUbicacion,
   type NodoUbicacion,
 } from '@/lib/queries/ubicaciones'
 import type { ColorSemaforo, NodoMapa } from '@/lib/queries/mapa'
-import type { TipoUbicacion, UbicacionRow } from '@/types/database'
+import type { TipoMueble, TipoUbicacion, UbicacionRow } from '@/types/database'
 import { PanelNodoMapa } from './PanelNodoMapa'
 import { ArbolUbicaciones } from './ArbolUbicaciones'
 import { VistaUbicaciones, type ModoVista } from './VistaUbicaciones'
@@ -91,6 +96,9 @@ export function PantallaMapa() {
   const [modo, setModo] = useState<ModoVista>('mapa')
   const [asignando, setAsignando] = useState(false)
   const eliminar = useEliminarUbicacion()
+  const { data: categorias } = useCategorias()
+  const { data: marcas } = useMarcas()
+  const { data: usuarios } = useUsuariosActivos()
 
   // Todos los nodos por id (con hijos), para acciones del panel de detalle.
   const nodosPorId = useMemo(() => {
@@ -361,6 +369,27 @@ export function PantallaMapa() {
                 nodoArbol.tipo !== 'sucursal'
               return (
                 <PanelNodoMapa
+                  info={{
+                    mueble: nodoArbol?.tipo_mueble
+                      ? ETIQUETA_MUEBLE[nodoArbol.tipo_mueble]
+                      : null,
+                    categoria:
+                      categorias?.find(
+                        (c) =>
+                          c.id === heredado(nodoSeleccionado.id, arbol.planas, 'categoria_id')
+                      )?.nombre ?? null,
+                    marca:
+                      marcas?.find(
+                        (m) =>
+                          m.id ===
+                          heredado(nodoSeleccionado.id, arbol.planas, 'marca_exclusiva_id')
+                      )?.nombre ?? null,
+                    responsable:
+                      usuarios?.find(
+                        (u) =>
+                          u.id === heredado(nodoSeleccionado.id, arbol.planas, 'responsable_id')
+                      )?.nombre ?? null,
+                  }}
                   nodo={nodoSeleccionado}
                   ruta={rutaUbicacion(nodoSeleccionado.id, arbol.planas)}
                   desde={rango.desde}
@@ -671,6 +700,17 @@ function ModalUbicacion({
   const [orden, setOrden] = useState(String(original?.orden ?? 0))
   const [tipo, setTipo] = useState<TipoUbicacion>(edicion.tipo)
   const [activo, setActivo] = useState(original?.activo ?? true)
+  const [mueble, setMueble] = useState<string>(original?.tipo_mueble ?? '')
+  const [categoriaId, setCategoriaId] = useState<string>(
+    original?.categoria_id != null ? String(original.categoria_id) : ''
+  )
+  const [marcaId, setMarcaId] = useState<string>(
+    original?.marca_exclusiva_id != null ? String(original.marca_exclusiva_id) : ''
+  )
+  const [responsableId, setResponsableId] = useState<string>(original?.responsable_id ?? '')
+  const { data: categorias } = useCategorias()
+  const { data: marcas } = useMarcas()
+  const { data: usuarios } = useUsuariosActivos()
 
   const tiposPosibles = useMemo<TipoUbicacion[]>(() => {
     if (esEdicion) return [edicion.tipo]
@@ -685,6 +725,12 @@ function ModalUbicacion({
       nombre: nombre.trim(),
       codigo: codigo.trim() || null,
       orden: Number.parseInt(orden, 10) || 0,
+      ...(tipo !== 'sucursal' && {
+        tipo_mueble: tipo === 'gondola' && mueble ? (mueble as TipoMueble) : null,
+        categoria_id: categoriaId ? Number(categoriaId) : null,
+        marca_exclusiva_id: tipo === 'gondola' && marcaId ? Number(marcaId) : null,
+        responsable_id: responsableId || null,
+      }),
     }
     if (esEdicion && original) {
       actualizar.mutate(
@@ -765,6 +811,79 @@ function ModalUbicacion({
               />
             </div>
           </div>
+
+          {tipo !== 'sucursal' && (
+            <div className="grid grid-cols-2 gap-3">
+              {tipo === 'gondola' && (
+                <div className="space-y-1">
+                  <Label htmlFor="ubicacion-mueble">Tipo de mueble</Label>
+                  <select
+                    id="ubicacion-mueble"
+                    value={mueble}
+                    onChange={(e) => setMueble(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  >
+                    <option value="">Sin especificar</option>
+                    {Object.entries(ETIQUETA_MUEBLE).map(([v, e]) => (
+                      <option key={v} value={v}>
+                        {e}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="ubicacion-categoria">Categoría que va acá</Label>
+                <select
+                  id="ubicacion-categoria"
+                  value={categoriaId}
+                  onChange={(e) => setCategoriaId(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  <option value="">Hereda / sin asignar</option>
+                  {(categorias ?? []).map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {tipo === 'gondola' && (
+                <div className="space-y-1">
+                  <Label htmlFor="ubicacion-marca">Marca exclusiva</Label>
+                  <select
+                    id="ubicacion-marca"
+                    value={marcaId}
+                    onChange={(e) => setMarcaId(e.target.value)}
+                    className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  >
+                    <option value="">Ninguna</option>
+                    {(marcas ?? []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="ubicacion-responsable">Responsable</Label>
+                <select
+                  id="ubicacion-responsable"
+                  value={responsableId}
+                  onChange={(e) => setResponsableId(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  <option value="">Hereda / sin asignar</option>
+                  {(usuarios ?? []).map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {esEdicion && (
             <label className="flex items-center gap-2 text-sm text-[#391511]">

@@ -3456,6 +3456,17 @@ export type TipoUbicacion =
   | 'modulo'
   | 'estante'
 
+/** Qué mueble es la ubicación (mig 199). heladera y freezer = frío. */
+export type TipoMueble =
+  | 'gondola'
+  | 'isla'
+  | 'heladera'
+  | 'freezer'
+  | 'mostrador'
+  | 'exhibidor'
+  | 'estanteria'
+  | 'mesa'
+
 export type UbicacionRow = {
   id: number
   parent_id: number | null
@@ -3466,6 +3477,11 @@ export type UbicacionRow = {
   orden: number
   activo: boolean
   notas: string | null
+  /** Mig 199: mueble, categoría esperada, marca exclusiva y responsable. */
+  tipo_mueble: TipoMueble | null
+  categoria_id: number | null
+  marca_exclusiva_id: number | null
+  responsable_id: string | null
   created_at: string
   updated_at: string
 }
@@ -3479,9 +3495,17 @@ export type UbicacionInsert = {
   orden?: number
   activo?: boolean
   notas?: string | null
+  tipo_mueble?: TipoMueble | null
+  categoria_id?: number | null
+  marca_exclusiva_id?: number | null
+  responsable_id?: string | null
 }
 
 export type UbicacionUpdate = {
+  tipo_mueble?: TipoMueble | null
+  categoria_id?: number | null
+  marca_exclusiva_id?: number | null
+  responsable_id?: string | null
   parent_id?: number | null
   tipo?: TipoUbicacion
   nombre?: string

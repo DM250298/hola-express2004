@@ -296,3 +296,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 196 | `196_fn_sugerencias_compra_v3.sql` | ✅ aplicada | 2026-09-16 · ⚠️ la corrección por quiebres sobre-estima cuando el producto vendió con stock negativo (se corrige en la 197) | `f7c7d5d` |
 | 197 | `197_dias_sin_stock_por_dia.sql` | ✅ aplicada | 2026-09-17 | `2b609b3` |
 | 198 | `198_fn_sugerencias_compra_v4.sql` | ✅ aplicada | 2026-09-17 | `2b609b3` |
+| 199 | `199_ubicaciones_mueble_categoria_marca_responsable.sql` | ⏳ pendiente | — | en este commit |
+| 200 | `200_seed_local_real.sql` | ⏳ pendiente | — | en este commit |
+| 201 | `201_alertas_reglas_espacio.sql` | ⏳ pendiente | — | en este commit |
+| 202 | `202_alertas_catalogo_llama_espacio.sql` | ⏳ pendiente | — | en este commit |

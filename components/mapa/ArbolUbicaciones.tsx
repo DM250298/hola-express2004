@@ -64,6 +64,7 @@ export function ArbolUbicaciones({
   }
 
   function renderNodo(n: NodoUbicacion, nivel: number): React.ReactNode {
+    if (!n.activo) return null
     if (texto && !coincide(n, texto)) return null
     const m = metricas.get(n.id)
     const tieneHijos = n.hijos.length > 0

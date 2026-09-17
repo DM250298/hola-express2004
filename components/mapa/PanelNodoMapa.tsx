@@ -37,6 +37,7 @@ export function PanelNodoMapa({
   etiquetaHijo,
   onEditar,
   onEliminar,
+  info,
 }: {
   nodo: NodoMapa
   ruta: string
@@ -52,6 +53,13 @@ export function PanelNodoMapa({
   onEditar?: () => void
   /** Solo si se puede borrar (sin hijos ni productos). */
   onEliminar?: () => void
+  /** Mueble y valores heredados de categoría, marca y responsable. */
+  info?: {
+    mueble: string | null
+    categoria: string | null
+    marca: string | null
+    responsable: string | null
+  }
 }) {
   const quitar = useQuitarProductoDeUbicacion()
   const [confirmando, setConfirmando] = useState(false)
@@ -68,6 +76,14 @@ export function PanelNodoMapa({
             {ETIQUETA_TIPO[nodo.tipo]}
           </span>
           <h2 className="font-bold text-[#391511]">{nodo.nombre}</h2>
+          {info && (info.mueble || info.categoria || info.marca || info.responsable) && (
+            <p className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-[#6f3a2a]">
+              {info.mueble && <span>{info.mueble}</span>}
+              {info.categoria && <span>· va: {info.categoria}</span>}
+              {info.marca && <span>· marca: {info.marca}</span>}
+              {info.responsable && <span>· responsable: {info.responsable}</span>}
+            </p>
+          )}
           <p className="text-xs text-[#6f3a2a]">
             {ruta || 'Todo el local'} · {formatearNumero(nodo.skus)}{' '}
             {nodo.skus === 1 ? 'producto' : 'productos'}
