@@ -1,4 +1,4 @@
-﻿# Registro de migraciones — Hola Express
+# Registro de migraciones — Hola Express
 
 Este archivo existe porque **no hay migration runner**: las migraciones se corren a mano en el
 SQL Editor de Supabase, y hasta ahora no quedaba registro de cuáles se aplicaron. Sin ese
