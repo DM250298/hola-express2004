@@ -1138,6 +1138,8 @@ export type ProductoRow = {
   precio_costo: number
   stock_actual: number
   stock_minimo: number
+  /** Techo del local completo (mig 207). null = sin techo definido. */
+  stock_maximo: number | null
   ubicacion: string | null
   activo: boolean
   tipo: string
@@ -1189,6 +1191,7 @@ export type ProductoInsert = {
   precio_costo?: number
   stock_actual?: number
   stock_minimo?: number
+  stock_maximo?: number | null
   ubicacion?: string | null
   activo?: boolean
   tipo?: string
@@ -1235,6 +1238,7 @@ export type ProductoUpdate = {
   precio_costo?: number
   stock_actual?: number
   stock_minimo?: number
+  stock_maximo?: number | null
   ubicacion?: string | null
   activo?: boolean
   tipo?: string
@@ -3549,6 +3553,59 @@ export type ProductoUbicacionUpdate = {
   notas?: string | null
 }
 
+// ─── conteo_parcial (borrador de conteo por ubicación, mig 207) ──────────────
+// Lo contado de un producto en UNA ubicación mientras se esperan las demás.
+// NO es stock por ubicación: se vacía al consolidar y caduca a las 24 hs.
+
+export type ConteoParcialRow = {
+  id: number
+  producto_id: number
+  ubicacion_id: number
+  cantidad: number
+  usuario_id: string | null
+  created_at: string
+}
+
+export type ConteoParcialInsert = {
+  id?: number
+  producto_id: number
+  ubicacion_id: number
+  cantidad: number
+  usuario_id?: string | null
+}
+
+export type ConteoParcialUpdate = {
+  cantidad?: number
+  usuario_id?: string | null
+}
+
+/** Una ubicación dentro del resultado de un conteo. */
+export type UbicacionBreve = { id: number; nombre: string }
+
+/** Fila de fn_conteos_parciales_abiertos: un conteo a medias. */
+export type ConteoParcialAbiertoRow = {
+  producto_id: number
+  producto_nombre: string
+  venta_por_peso: boolean
+  contado: number
+  contadas: { id: number; nombre: string; cantidad: number }[]
+  faltan: UbicacionBreve[]
+  desde: string
+}
+
+/** Fila del jsonb que devuelve fn_guardar_conteo_ubicacion. */
+export type ResultadoConteoUbicacion = {
+  producto_id: number
+  total: number
+  /** false = falta contarlo en otra ubicación; el stock no se tocó. */
+  completo: boolean
+  ajustado: boolean
+  /** true = se quiso cerrar algo cuyo parcial ya no existe: no se tocó nada. */
+  sin_datos?: boolean
+  diferencia: number
+  faltan: UbicacionBreve[]
+}
+
 // ─── costos_item_venta / costos_item_devolucion (mig 171) ────────────────────
 // Costo congelado al momento de la operación. Gateadas por RLS 'costos':
 // sin permiso, el select devuelve 0 filas. Fila ausente = costo desconocido
@@ -4594,6 +4651,25 @@ export interface Database {
           },
         ]
       }
+      conteo_parcial: {
+        Row: ConteoParcialRow
+        Insert: ConteoParcialInsert
+        Update: ConteoParcialUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'conteo_parcial_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'conteo_parcial_ubicacion_id_fkey'
+            columns: ['ubicacion_id']
+            referencedRelation: 'ubicaciones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       costos_item_venta: {
         Row: CostoItemVentaRow
         Insert: CostoItemVentaInsert
@@ -5546,6 +5622,20 @@ export interface Database {
       fn_mapa_nodo_skus: {
         Args: { p_ubicacion_id: number; p_desde: string; p_hasta: string }
         Returns: MapaSkuRow[]
+      }
+      /** Conteo por ubicación (mig 207). p_ubicacion_id null = solo cerrar. */
+      fn_guardar_conteo_ubicacion: {
+        Args: {
+          p_usuario_id: string
+          p_ubicacion_id: number | null
+          p_items: Json
+          p_cerrar?: boolean
+        }
+        Returns: Json
+      }
+      fn_conteos_parciales_abiertos: {
+        Args: Record<string, never>
+        Returns: ConteoParcialAbiertoRow[]
       }
       fn_evaluar_alertas: {
         Args: { p_origen?: string; p_si_antiguedad_min?: number | null }
