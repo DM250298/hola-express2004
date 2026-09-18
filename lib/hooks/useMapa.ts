@@ -4,6 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   actualizarUbicacion,
+  borrarConteoParcial,
+  getConteosParcialesAbiertos,
+  guardarConteoUbicacion,
   agregarUbicacionSecundaria,
   asignarUbicacionPrincipal,
   crearUbicacion,
@@ -14,6 +17,7 @@ import {
   asignarAUbicacion,
   quitarProductoDeUbicacion,
 } from '@/lib/queries/ubicaciones'
+import type { ItemConteoUbicacion } from '@/lib/queries/ubicaciones'
 import { getMapaSemaforo, getSkusNodo } from '@/lib/queries/mapa'
 import type { UbicacionInsert, UbicacionUpdate } from '@/types/database'
 
@@ -202,6 +206,69 @@ export function useQuitarProductoDeUbicacion() {
     },
     onError: (error: Error) => {
       toast.error(`No se pudo quitar: ${error.message}`)
+    },
+  })
+}
+
+// ─── Conteo por ubicación (mig 207) ──────────────────────────────────────────
+
+/** Conteos a medias. `data === null` = migración 207 pendiente. */
+export function useConteosParcialesAbiertos(habilitado = true) {
+  return useQuery({
+    queryKey: [...MAPA_KEY, 'parciales'],
+    queryFn: getConteosParcialesAbiertos,
+    enabled: habilitado,
+    staleTime: 30 * 1000,
+  })
+}
+
+/**
+ * Guarda el conteo de una ubicación. Toca stock, así que invalida también
+ * inventario y las fichas de producto.
+ */
+export function useGuardarConteoUbicacion() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      usuarioId,
+      ubicacionId,
+      items,
+      cerrar,
+    }: {
+      usuarioId: string
+      ubicacionId: number | null
+      items: ItemConteoUbicacion[]
+      cerrar?: boolean
+    }) => guardarConteoUbicacion(usuarioId, ubicacionId, items, cerrar ?? false),
+    onSuccess: (resultados) => {
+      qc.invalidateQueries({ queryKey: MAPA_KEY })
+      qc.invalidateQueries({ queryKey: ['inventario'] })
+      qc.invalidateQueries({ queryKey: ['productos'] })
+      for (const r of resultados) {
+        if (r.ajustado) {
+          qc.invalidateQueries({ queryKey: ['producto-detalle', r.producto_id] })
+        }
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo guardar el conteo: ${error.message}`)
+    },
+  })
+}
+
+/** Borra el parcial de un producto en una ubicación (al sacarlo de ahí). */
+export function useBorrarConteoParcial() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      productoId,
+      ubicacionId,
+    }: {
+      productoId: number
+      ubicacionId: number
+    }) => borrarConteoParcial(productoId, ubicacionId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...MAPA_KEY, 'parciales'] })
     },
   })
 }

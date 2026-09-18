@@ -100,7 +100,7 @@ export function TablaStock({
                   }
                 />
                 <TableHead className="text-right text-[#391511] font-semibold">
-                  Stock mín.
+                  Stock mín. / máx.
                 </TableHead>
                 {puedeVerCosto && (
                   <TableHead className="text-right text-[#391511] font-semibold">
@@ -202,6 +202,24 @@ export function TablaStock({
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-[#6f3a2a]">
                       {formatearCantidad(p.stock_minimo, p.venta_por_peso)}
+                      {p.stock_maximo != null && (
+                        <>
+                          {' / '}
+                          <span
+                            className={cn(
+                              p.stock_actual > p.stock_maximo &&
+                                'font-semibold text-[#9e6b15]'
+                            )}
+                            title={
+                              p.stock_actual > p.stock_maximo
+                                ? 'Hay más stock del máximo definido'
+                                : undefined
+                            }
+                          >
+                            {formatearCantidad(p.stock_maximo, p.venta_por_peso)}
+                          </span>
+                        </>
+                      )}
                     </TableCell>
                     {puedeVerCosto && (
                       <TableCell className="text-right tabular-nums text-[#6f3a2a]">

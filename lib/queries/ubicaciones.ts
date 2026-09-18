@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import type {
+  ConteoParcialAbiertoRow,
+  Json,
+  ResultadoConteoUbicacion,
   TipoMueble,
   TipoUbicacion,
   UbicacionInsert,
@@ -349,4 +352,66 @@ export async function quitarProductoDeUbicacion(
     .eq('producto_id', productoId)
     .eq('ubicacion_id', ubicacionId)
   if (error) throw new Error(error.message)
+}
+
+// ─── Conteo por ubicación (mig 207) ──────────────────────────────────────────
+
+export interface ItemConteoUbicacion {
+  producto_id: number
+  /** Lo que se ve EN ESA ubicación, no el total del local. */
+  cantidad: number
+}
+
+/**
+ * Guarda lo contado en una ubicación. Los productos que viven en un solo lugar
+ * se ajustan en el acto; los que están en dos o más quedan como parcial hasta
+ * que se cuenten todas sus ubicaciones, y recién ahí se suma y se ajusta.
+ *
+ * @param ubicacionId null = no se cuenta nada nuevo, solo se cierra lo que ya
+ *   estaba acumulado (botón "ya conté todo").
+ * @param cerrar true = dar por terminado asumiendo 0 en lo que falte.
+ */
+export async function guardarConteoUbicacion(
+  usuarioId: string,
+  ubicacionId: number | null,
+  items: ItemConteoUbicacion[],
+  cerrar = false
+): Promise<ResultadoConteoUbicacion[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_guardar_conteo_ubicacion', {
+    p_usuario_id: usuarioId,
+    p_ubicacion_id: ubicacionId,
+    p_items: items as unknown as Json,
+    p_cerrar: cerrar,
+  })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as unknown as ResultadoConteoUbicacion[]
+}
+
+/** Conteos a medias de las últimas 24 hs (propios y de otros empleados). */
+export async function getConteosParcialesAbiertos(): Promise<
+  ConteoParcialAbiertoRow[] | null
+> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteos_parciales_abiertos')
+  if (error) {
+    // Igual que el resto del módulo: sin migración la UI avisa, no rompe.
+    if (esTablaFaltante(error) || error.code === 'PGRST202') return null
+    throw new Error(error.message)
+  }
+  return (data ?? []) as ConteoParcialAbiertoRow[]
+}
+
+/** Borra el parcial de un producto en una ubicación (al sacarlo de ahí). */
+export async function borrarConteoParcial(
+  productoId: number,
+  ubicacionId: number
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase
+    .from('conteo_parcial')
+    .delete()
+    .eq('producto_id', productoId)
+    .eq('ubicacion_id', ubicacionId)
+  if (error && !esTablaFaltante(error)) throw new Error(error.message)
 }

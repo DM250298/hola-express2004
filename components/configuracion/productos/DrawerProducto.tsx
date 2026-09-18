@@ -108,6 +108,17 @@ const esquemaProducto = z.object({
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
     .pipe(z.number().min(0, 'No puede ser negativo')),
+  // Vacío = sin techo. Es opcional a propósito: la mayoría de los productos
+  // no necesita uno y obligarlo sería inventar números.
+  stock_maximo: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    })
+    .pipe(z.number().min(0, 'No puede ser negativo').nullable()),
   venta_por_peso: z.boolean().default(false),
   visible_tienda: z.boolean().default(true),
   controlar_stock: z.boolean().default(true),
@@ -159,6 +170,13 @@ const esquemaProducto = z.object({
   // dos campos del mismo objeto, así que va como refinement y no en el campo.
   .superRefine((d, ctx) => {
     if (d.tipo === 'combo') return // el combo no lleva stock propio
+    if (d.stock_maximo != null && d.stock_maximo < d.stock_minimo) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stock_maximo'],
+        message: 'El máximo no puede ser menor que el mínimo',
+      })
+    }
     if (d.venta_por_peso) return // kg: hasta 3 decimales
     for (const campo of ['stock_actual', 'stock_minimo'] as const) {
       if (!Number.isInteger(d[campo])) {
@@ -168,6 +186,13 @@ const esquemaProducto = z.object({
           message: 'Solo enteros: activá "Venta por kg" si se vende fraccionado',
         })
       }
+    }
+    if (d.stock_maximo != null && !Number.isInteger(d.stock_maximo)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['stock_maximo'],
+        message: 'Solo enteros: activá "Venta por kg" si se vende fraccionado',
+      })
     }
   })
 
@@ -423,6 +448,7 @@ export function DrawerProducto({
       proveedor_id: SIN_VALOR,
       stock_actual: '0',
       stock_minimo: '5',
+      stock_maximo: '',
       dias_vencimiento_minimo: '',
       tipo: 'simple',
       unidad: 'unidad',
@@ -501,6 +527,8 @@ export function DrawerProducto({
             : SIN_VALOR,
       stock_actual: String(producto?.stock_actual ?? 0),
       stock_minimo: String(producto?.stock_minimo ?? 5),
+      stock_maximo:
+        producto?.stock_maximo != null ? String(producto.stock_maximo) : '',
       dias_vencimiento_minimo:
         producto?.dias_vencimiento_minimo != null
           ? String(producto.dias_vencimiento_minimo)
@@ -882,6 +910,10 @@ export function DrawerProducto({
       stock_minimo: esComboFinal
         ? 0
         : redondearCantidad(validado.stock_minimo, validado.venta_por_peso),
+      stock_maximo:
+        esComboFinal || validado.stock_maximo == null
+          ? null
+          : redondearCantidad(validado.stock_maximo, validado.venta_por_peso),
       dias_vencimiento_minimo: esComboFinal
         ? null
         : validado.dias_vencimiento_minimo,
@@ -2126,6 +2158,33 @@ export function DrawerProducto({
                         {errors.stock_minimo && (
                           <p className="text-[#c43e2c] text-xs mt-1">
                             {errors.stock_minimo.message}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="stock_maximo" className="text-[#391511] font-medium">
+                          Stock máximo
+                          {porPeso && <span className="text-[#9e6b15]"> (kg)</span>}
+                        </Label>
+                        <Input
+                          id="stock_maximo"
+                          type="number"
+                          min="0"
+                          step={porPeso ? '0.001' : '1'}
+                          inputMode={porPeso ? 'decimal' : 'numeric'}
+                          placeholder="sin tope"
+                          {...register('stock_maximo')}
+                          disabled={guardando}
+                          className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                        />
+                        {errors.stock_maximo ? (
+                          <p className="text-[#c43e2c] text-xs mt-1">
+                            {errors.stock_maximo.message}
+                          </p>
+                        ) : (
+                          <p className="text-[#c8a58a] text-xs">
+                            Opcional: en blanco, sin tope.
                           </p>
                         )}
                       </div>

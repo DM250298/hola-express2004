@@ -312,7 +312,7 @@ export function DetalleProducto({ productoId }: Props) {
         </div>
 
         {/* Stats grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <StatBlock
             etiqueta="Stock actual"
             valor={formatearCantidad(producto.stock_actual, porPeso)}
@@ -322,6 +322,18 @@ export function DetalleProducto({ productoId }: Props) {
           <StatBlock
             etiqueta="Stock mínimo"
             valor={formatearCantidad(producto.stock_minimo, porPeso)}
+          />
+          <StatBlock
+            etiqueta="Stock máximo"
+            valor={
+              producto.stock_maximo == null
+                ? 'sin tope'
+                : formatearCantidad(producto.stock_maximo, porPeso)
+            }
+            destacar={
+              producto.stock_maximo != null &&
+              producto.stock_actual > producto.stock_maximo
+            }
           />
           <StatBlock
             etiqueta="Precio venta"

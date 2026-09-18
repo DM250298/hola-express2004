@@ -27,6 +27,8 @@ export interface ProductoConStock {
   margen: number
   stock_actual: number
   stock_minimo: number
+  /** Techo del local (mig 207). null = sin tope definido. */
+  stock_maximo: number | null
   activo: boolean
   /** true = el stock se mide en kg (se muestra con decimales, no en unidades). */
   venta_por_peso: boolean
@@ -128,6 +130,7 @@ export async function getProductosConStock(
     margen: number
     stock_actual: number
     stock_minimo: number
+    stock_maximo: number | null
     activo: boolean
     venta_por_peso: boolean
     pendiente_precio: boolean
@@ -142,7 +145,7 @@ export async function getProductosConStock(
       let q = supabase
         .from('productos')
         .select(
-          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, margen, stock_actual, stock_minimo, activo, venta_por_peso, pendiente_precio, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
+          'id, nombre, codigo_barras, marca, ubicacion, categoria_id, proveedor_id, precio_venta, margen, stock_actual, stock_minimo, stock_maximo, activo, venta_por_peso, pendiente_precio, categorias(nombre), proveedores(nombre), costos_producto(precio_costo)'
         )
       if (filtros.activo !== undefined) q = q.eq('activo', filtros.activo)
       else if (filtros.solo_activos !== false) q = q.eq('activo', true)
@@ -171,6 +174,7 @@ export async function getProductosConStock(
       margen: p.margen,
       stock_actual: p.stock_actual,
       stock_minimo: p.stock_minimo,
+      stock_maximo: p.stock_maximo,
       activo: p.activo,
       venta_por_peso: p.venta_por_peso,
       pendiente_precio: p.pendiente_precio,
