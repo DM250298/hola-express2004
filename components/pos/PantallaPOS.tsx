@@ -459,7 +459,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   /** Llamado por ModalCobroTerminal cuando la maquinita aprobó el pago. */
   function confirmarVentaTerminal(
     medioPago: string,
-    cobroReal?: { comision: number; iibb: number } | null,
+    cobroReal?: { comision: number; iibb: number | null } | null,
     cobroId?: string | null
   ) {
     if (carrito.length === 0 || !turno) return

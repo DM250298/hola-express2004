@@ -12,6 +12,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Table,
   TableBody,
   TableCell,
@@ -70,6 +77,8 @@ function enRango(fecha: string, desde: string, hasta: string): boolean {
   return ts >= new Date(desde).getTime() && ts <= new Date(hasta).getTime()
 }
 
+const TODOS_PROV = '__todos__'
+
 interface Props {
   desde: string
   hasta: string
@@ -93,6 +102,10 @@ export function TabComprobantes({ desde, hasta }: Props) {
   const [compraControlar, setCompraControlar] =
     useState<ComprobanteCargado | null>(null)
   const [busqueda, setBusqueda] = useState('')
+  // Control por proveedor: con uno elegido se pueden ver TODAS sus facturas,
+  // no solo las del período de arriba.
+  const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS_PROV)
+  const [todoHistorial, setTodoHistorial] = useState(false)
 
   // Mapa cuenta_id → cuenta (para abrir el modal desde un comprobante)
   const cuentasPorId = useMemo(() => {
@@ -139,8 +152,31 @@ export function TabComprobantes({ desde, hasta }: Props) {
     return null
   }
 
+  const itemsProveedor = useMemo(() => {
+    const r: Record<string, string> = { [TODOS_PROV]: 'Todos los proveedores' }
+    const lista = [...(proveedores ?? [])].sort((a, b) =>
+      a.nombre.localeCompare(b.nombre, 'es')
+    )
+    for (const p of lista) r[String(p.id)] = p.nombre
+    return r
+  }, [proveedores])
+
+  // Proveedor de un comprobante: el propio o el de su cuenta a pagar.
+  function proveedorIdDe(c: {
+    cuenta_id: number | null
+    proveedor_id: number | null
+  }): number | null {
+    if (c.proveedor_id != null) return c.proveedor_id
+    return c.cuenta_id != null
+      ? (cuentasPorId.get(c.cuenta_id)?.proveedor_id ?? null)
+      : null
+  }
+  const filtraProveedor = proveedorFiltro !== TODOS_PROV
+  const esDelProveedor = (id: number | null) =>
+    !filtraProveedor || String(id) === proveedorFiltro
+
   // Por cargar: criterio unificado con Compras (tiene_factura = false).
-  const porCargar = sinFactura ?? []
+  const porCargar = (sinFactura ?? []).filter((c) => esDelProveedor(c.proveedor_id))
 
   // Compras directas del POS todavía sin controlar por el administrativo.
   const comprasAControlar = useMemo(
@@ -155,7 +191,9 @@ export function TabComprobantes({ desde, hasta }: Props) {
     // La mirada fiscal por emisión vive en Impuestos › Libro IVA de compras.
     // fechaLocal pasa el timestamptz UTC al día de La Rioja: sin eso, todo lo
     // cargado después de las 21:00 caería en el día siguiente.
-    if (!enRango(fechaLocal(c.created_at), desde, hasta)) return false
+    if (!esDelProveedor(proveedorIdDe(c))) return false
+    if (!(filtraProveedor && todoHistorial) && !enRango(fechaLocal(c.created_at), desde, hasta))
+      return false
     if (!q) return true
     const nro = nroComprobante(
       c.tipo_comprobante,
@@ -193,12 +231,43 @@ export function TabComprobantes({ desde, hasta }: Props) {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-[#391511] font-bold">Comprobantes de compra</h2>
-        <p className="text-[#6f3a2a] text-sm">
-          Cargá las facturas de proveedores: costos, IVA crédito y precios de
-          venta en un solo lugar.
-        </p>
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-[#391511] font-bold">Comprobantes de compra</h2>
+          <p className="text-[#6f3a2a] text-sm">
+            Cargá las facturas de proveedores: costos, IVA crédito y precios de
+            venta en un solo lugar.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Select
+            items={itemsProveedor}
+            value={proveedorFiltro}
+            onValueChange={(v) => setProveedorFiltro(v ?? TODOS_PROV)}
+          >
+            <SelectTrigger className="w-[240px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+              <SelectValue placeholder="Proveedor" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(itemsProveedor).map(([valor, etiqueta]) => (
+                <SelectItem key={valor} value={valor}>
+                  {etiqueta}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {filtraProveedor && (
+            <label className="flex items-center gap-1.5 text-xs text-[#6f3a2a] cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={todoHistorial}
+                onChange={(e) => setTodoHistorial(e.target.checked)}
+                className="accent-[#f9b44c]"
+              />
+              Todo el historial (sin el período)
+            </label>
+          )}
+        </div>
       </div>
 
       {/* Por cargar */}
@@ -338,8 +407,10 @@ export function TabComprobantes({ desde, hasta }: Props) {
               Facturas cargadas
             </h3>
             <span className="text-[10px] text-[#c8a58a] font-medium">
-              del período elegido · ordenadas por fecha de carga, la última
-              arriba
+              {filtraProveedor && todoHistorial
+                ? `de ${itemsProveedor[proveedorFiltro]} · todo el historial`
+                : 'del período elegido'}{' '}
+              · ordenadas por fecha de carga, la última arriba
             </span>
           </div>
           <div className="relative w-full sm:w-64">

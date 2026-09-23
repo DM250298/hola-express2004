@@ -210,8 +210,12 @@ export async function consultarOrdenPago(
 export interface CobroRealMP {
   /** Comisión MP real (suma de cargos tipo fee), en pesos. */
   comision: number
-  /** Retenciones impositivas reales (IIBB, etc.), en pesos. */
-  iibb: number
+  /**
+   * Retenciones impositivas reales (IIBB, etc.), en pesos. `null` = MP no
+   * informó el desglose: la venta usa el % de retención de la cuenta. Antes
+   * volvía 0 y ese 0 pisaba el 3 % configurado (el saldo quedaba inflado).
+   */
+  iibb: number | null
   /** Neto que MP acredita (bruto − comisión − impuestos), si lo informa. */
   neto: number | null
 }
@@ -250,7 +254,7 @@ export async function consultarCobroRealMP(
   const pago = await mpFetch<PagoMP>(`/v1/payments/${paymentId}`)
 
   let comision = 0
-  let iibb = 0
+  let iibb: number | null = 0
 
   const cargos = pago.charges_details ?? []
   if (cargos.length > 0) {
@@ -273,6 +277,7 @@ export async function consultarCobroRealMP(
   } else {
     // Fallback: solo fee_details (sin desglose de impuestos)
     for (const f of pago.fee_details ?? []) comision += aNum(f.amount)
+    iibb = null
   }
 
   const neto =
@@ -280,9 +285,16 @@ export async function consultarCobroRealMP(
       ? aNum(pago.transaction_details.net_received_amount)
       : null
 
+  // Sin desglose pero con neto: lo que falta entre bruto − comisión y el neto
+  // son las retenciones. Sin neto, null → la RPC aplica el % de la cuenta.
+  if (iibb === null && neto !== null && pago.transaction_amount != null) {
+    const bruto = aNum(pago.transaction_amount)
+    iibb = Math.max(0, bruto - comision - neto)
+  }
+
   return {
     comision: Math.round(comision * 100) / 100,
-    iibb: Math.round(iibb * 100) / 100,
+    iibb: iibb === null ? null : Math.round(iibb * 100) / 100,
     neto,
   }
 }

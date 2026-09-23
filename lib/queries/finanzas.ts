@@ -229,14 +229,28 @@ export interface CuentaAPagarConProveedor {
 /**
  * El estado "vencida" se deriva en memoria: si `pendiente` y la fecha
  * de vencimiento ya pasó, mostrar como vencida sin tocar la BD.
+ *
+ * Con `saldo`/`monto`: una deuda con importe y saldo 0 se muestra PAGADA
+ * aunque la fila diga 'pendiente' (la v13 de fn_guardar_factura_compra dejó
+ * filas así; la mig 215 las cierra). Una deuda SIN importe (recepción sin
+ * costo, a la espera de la factura) nunca figura vencida: no hay qué pagar.
  */
 function derivarEstado(
   estado: 'pendiente' | 'pagada' | 'vencida',
-  fechaVencimiento: string
+  fechaVencimiento: string,
+  saldo?: number,
+  monto?: number
 ): EstadoCuentaDerivado {
   if (estado === 'pagada') return 'pagada'
-  const venc = new Date(fechaVencimiento)
-  venc.setHours(23, 59, 59, 999)
+  if (monto !== undefined && saldo !== undefined) {
+    if (monto > 0.009 && saldo <= 0.009) return 'pagada'
+    if (monto <= 0.009) return 'pendiente'
+  }
+  // La columna es DATE: `new Date('YYYY-MM-DD')` la lee como medianoche UTC
+  // (21 h del día anterior en Argentina) y la deuda figuraba vencida el mismo
+  // día que vencía. Se arma la fecha LOCAL.
+  const [y, m, d] = fechaVencimiento.slice(0, 10).split('-').map(Number)
+  const venc = new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999)
   if (venc.getTime() < Date.now()) return 'vencida'
   return 'pendiente'
 }
@@ -374,7 +388,7 @@ function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
     saldo_pendiente: saldo,
     fecha_vencimiento: f.fecha_vencimiento,
     fecha_pago: f.fecha_pago,
-    estado: derivarEstado(f.estado, f.fecha_vencimiento),
+    estado: derivarEstado(f.estado, f.fecha_vencimiento, saldo, Number(f.monto)),
     parcial: f.estado !== 'pagada' && pagado > 0.009,
     tiene_factura: f.tiene_factura,
     provisoria: f.provisoria,

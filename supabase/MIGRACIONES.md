@@ -309,8 +309,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 209 | `209_rrhh_config_reseed.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
 | 210 | `210_fn_generar_liquidacion_coalesce.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
 | 211 | `211_variacion_costo_sin_overflow.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
-| 212 | `212_backfill_iva_compra_productos.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
-| 213 | `213_import_iva_compra_separado.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 212 | `212_backfill_iva_compra_productos.sql` | ⏳ pendiente (prueba + producción) | — | `908fe2f` |
+| 213 | `213_import_iva_compra_separado.sql` | ⏳ pendiente (prueba + producción) | — | `908fe2f` |
 
 ## Dos bases de Supabase (2026-09-17)
 
@@ -326,3 +326,6 @@ El 2026-09-17 producción estaba en la **169** y se le corrieron las **170 a 206
 
 **Regla:** una migración no está terminada hasta correrla en las DOS. Antes de dar una fase por
 cerrada, verificar contra producción, no contra la copia.
+
+| 214 | `214_devolucion_tarjeta_debita_cuenta.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 215 | `215_cerrar_deudas_saldadas.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
