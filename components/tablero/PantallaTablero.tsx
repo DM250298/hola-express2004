@@ -23,6 +23,7 @@ import { SelectorPeriodo } from '@/components/reportes/SelectorPeriodo'
 import { cn } from '@/lib/utils'
 import {
   formatearFechaCortaISO,
+  etiquetaRangoFechas,
   formatearMontoEntero,
   formatearNumero,
 } from '@/lib/utils/formato'
@@ -183,6 +184,9 @@ export function PantallaTablero({ puedeVerAlertas }: { puedeVerAlertas: boolean 
           <p className="mt-1 text-sm text-[#6f3a2a]">
             Cómo viene el negocio y qué requiere tu atención.
           </p>
+          <p className="mt-0.5 text-xs font-semibold text-[#391511]">
+            Período: <span className="capitalize">{etiquetaRangoFechas(rango.desde, rango.hasta)}</span>
+          </p>
         </div>
         <SelectorPeriodo
           periodo={periodo}
@@ -255,7 +259,7 @@ function CuerpoTablero({
   const oportunidades = situaciones.filter((s) => s.severidad === 'oportunidad')
   const snapshotAtrasado =
     datos.ultimo_snapshot == null || datos.ultimo_snapshot < isoMasDias(datos.hoy, -1)
-  const anterior = `${formatearFechaCortaISO(datos.periodo.anterior_desde)} – ${formatearFechaCortaISO(datos.periodo.anterior_hasta)}`
+  const anterior = etiquetaRangoFechas(datos.periodo.anterior_desde, datos.periodo.anterior_hasta)
 
   return (
     <>
@@ -314,7 +318,7 @@ function CuerpoTablero({
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <CardKPI
           icono={Receipt}
-          etiqueta="Ventas del período"
+          etiqueta={`Ventas · ${etiquetaRangoFechas(datos.periodo.desde, datos.periodo.hasta)}`}
           valor={formatearMontoEntero(v.periodo)}
           detalle={`${conCantidad(v.periodo_tickets, 'ticket', 'tickets')} · ticket promedio ${formatearMontoEntero(v.ticket_promedio)}`}
           pie={

@@ -17,6 +17,15 @@ function hoyIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+// Base UI arma el texto del trigger desde `items`: sin esto mostraba la clave
+// cruda ("mes_anterior").
+const ITEMS_PERIODO: Record<string, string> = {
+  ultimos_7: 'Última semana',
+  mes_actual: 'Este mes',
+  mes_anterior: 'Mes anterior',
+  personalizado: 'Personalizado',
+}
+
 interface Props {
   periodo: ClavePeriodo
   onCambioPeriodo: (p: ClavePeriodo) => void
@@ -41,6 +50,7 @@ export function SelectorPeriodo({
           Período
         </Label>
         <Select
+          items={ITEMS_PERIODO}
           value={periodo}
           onValueChange={(v) =>
             onCambioPeriodo((v ?? 'mes_actual') as ClavePeriodo)

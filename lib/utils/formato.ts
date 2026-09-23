@@ -23,6 +23,22 @@ export function formatearFechaCortaISO(fecha: string): string {
   return formatearFechaCorta(fecha)
 }
 
+/**
+ * Nombre de un rango de columnas `date` (yyyy-MM-dd): un mes calendario
+ * completo se nombra ("agosto 2026"); cualquier otro rango va con fechas
+ * ("02/08/2026 – 31/08/2026"). En el tablero, mostrar solo las fechas de la
+ * comparación hacía creer que "mes anterior" traía julio en vez de agosto.
+ */
+export function etiquetaRangoFechas(desde: string, hasta: string): string {
+  const [ad, md, dd] = desde.slice(0, 10).split('-').map(Number)
+  const [ah, mh, dh] = hasta.slice(0, 10).split('-').map(Number)
+  const ultimoDia = new Date(ah, mh, 0).getDate()
+  if (ad === ah && md === mh && dd === 1 && dh === ultimoDia) {
+    return format(new Date(ad, md - 1, 1), 'MMMM yyyy', { locale: es })
+  }
+  return `${formatearFechaCortaISO(desde.slice(0, 10))} – ${formatearFechaCortaISO(hasta.slice(0, 10))}`
+}
+
 export function formatearFechaHora(fecha: string | Date): string {
   return format(new Date(fecha), "dd/MM/yyyy 'a las' HH:mm", { locale: es })
 }

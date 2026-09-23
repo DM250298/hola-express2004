@@ -18,6 +18,7 @@ import { ModalArqueo } from './ModalArqueo'
 import { ModalRemesa } from './ModalRemesa'
 import { ModalMovimientoCajaFuerte } from './ModalMovimientoCajaFuerte'
 import { PanelControlDiferencias } from './PanelControlDiferencias'
+import { PanelArqueosBoveda } from './PanelArqueosBoveda'
 import {
   useSangriasEnBuzon,
   useSaldoCajaFuerte,
@@ -96,6 +97,13 @@ export function TabCajaFuerte() {
           Ingreso / Egreso manual
         </Button>
       </div>
+
+      {/* Arqueo diario: conteo físico de TODA la bóveda contra el sistema */}
+      <PanelArqueosBoveda
+        usuarioId={usuario?.id ?? null}
+        esAdmin={usuario?.rol === 'admin'}
+        saldo={saldo ? saldo.saldo : null}
+      />
 
       <div className="px-1 text-[10px] uppercase tracking-wider text-[#c8a58a] font-semibold">
         De qué se compone

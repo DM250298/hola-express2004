@@ -15,6 +15,9 @@ import {
   registrarMovimientoCajaFuerte,
   getDiferenciasCierrePorEmpleado,
   getArqueosPeriodo,
+  getArqueosBoveda,
+  registrarArqueoBoveda,
+  type RegistrarArqueoBovedaPayload,
   type ValidarArqueoPayload,
   type GenerarRemesaPayload,
   type RegistrarMovimientoCajaFuertePayload,
@@ -104,6 +107,14 @@ export function useTotalSangriasTurno(turnoId: number | undefined) {
   })
 }
 
+export function useArqueosBoveda() {
+  return useQuery({
+    queryKey: [...CAJA_FUERTE_KEY, 'arqueos-boveda'],
+    queryFn: () => getArqueosBoveda(),
+    staleTime: 30 * 1000,
+  })
+}
+
 function invalidarTodo(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: CAJA_FUERTE_KEY })
 }
@@ -188,5 +199,26 @@ export function useRegistrarMovimientoCajaFuerte() {
     },
     onError: (e: Error) =>
       toast.error(`No se pudo registrar el movimiento: ${e.message}`),
+  })
+}
+
+export function useRegistrarArqueoBoveda() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: RegistrarArqueoBovedaPayload) =>
+      registrarArqueoBoveda(payload),
+    onSuccess: (data) => {
+      // Con ajuste mueve la cuenta bóveda → refrescar todo lo que la lee.
+      invalidarBoveda(qc)
+      const dif = Number(data?.diferencia ?? 0)
+      if (Math.abs(dif) < 0.01) {
+        toast.success('Arqueo guardado · la caja fuerte cuadra')
+      } else if (data?.ajuste_aplicado) {
+        toast.success('Arqueo guardado · saldo ajustado a lo contado')
+      } else {
+        toast.warning('Arqueo guardado con diferencia (sin ajustar el saldo)')
+      }
+    },
+    onError: (e: Error) => toast.error(`No se pudo guardar el arqueo: ${e.message}`),
   })
 }

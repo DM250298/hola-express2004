@@ -311,8 +311,9 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 211 | `211_variacion_costo_sin_overflow.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
 | 212 | `212_backfill_iva_compra_productos.sql` | ⏳ pendiente (prueba + producción) | — | `908fe2f` |
 | 213 | `213_import_iva_compra_separado.sql` | ⏳ pendiente (prueba + producción) | — | `908fe2f` |
-| 214 | `214_devolucion_tarjeta_debita_cuenta.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
-| 215 | `215_cerrar_deudas_saldadas.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 214 | `214_devolucion_tarjeta_debita_cuenta.sql` | ⏳ pendiente (prueba + producción) | — | `35c93c0` |
+| 215 | `215_cerrar_deudas_saldadas.sql` | ⏳ pendiente (prueba + producción) | — | `35c93c0` |
+| 216 | `216_arqueo_diario_boveda.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 

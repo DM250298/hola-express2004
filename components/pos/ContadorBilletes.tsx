@@ -73,6 +73,8 @@ export function ContadorBilletes({ cantidades, onChange }: Props) {
                   min="0"
                   value={cant === 0 ? '' : cant}
                   onChange={(e) => setCantidad(d.valor, e.target.value)}
+                  // La rueda del mouse no cambia la cantidad (suelta el foco).
+                  onWheel={(e) => e.currentTarget.blur()}
                   placeholder="0"
                   className={cn(
                     'w-full text-center font-bold tabular-nums rounded-lg border px-2 py-1 text-sm outline-none transition-colors',
