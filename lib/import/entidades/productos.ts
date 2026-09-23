@@ -12,7 +12,11 @@ import {
   parsearPrecio,
   parsearTextoOpcional,
 } from '@/lib/utils/parseo-excel'
+import { esAlicuotaValida } from '@/lib/utils/fiscal'
 import type { ColumnaDef, DefinicionEntidad } from '../tipos'
+
+const ERROR_ALICUOTA =
+  'Alícuota inexistente: usá 0, 2,5, 5, 10,5, 21 o 27 (o 0.105, 0.21…)'
 
 /** "Un" → "unidad", "Kg" → "kg", etc. Conserva lo desconocido en minúsculas. */
 function normalizarUnidad(valor: unknown): string | null {
@@ -176,6 +180,22 @@ const columnas: ColumnaDef[] = [
       'Margen de ganancia deseado, en %. Poné 30 para 30%: es la ganancia LIMPIA sobre el costo, ya descontadas IIBB, imp. créd/déb y comisión Mercado Pago. Con costo + margen el sistema calcula el precio de venta solo. Dejá vacío si vas a cargar el precio a mano.',
   },
   {
+    // Va ANTES que 'iva' a propósito: la detección toma, columna por columna,
+    // el primer encabezado que matchea, y /al[ií]cuota/ de 'iva' se quedaría
+    // con "alicuota_iva_compra".
+    campo: 'iva_compra',
+    etiqueta: 'alicuota_iva_compra',
+    aliases: [/iva.*compra/i, /compra.*iva/i],
+    // Vacío → null: en una actualización conserva el IVA de compra de la ficha
+    // (el "iva" de venta ya NO lo pisa, mig 213); en un alta toma el de venta.
+    parser: (v) => (v == null || String(v).trim() === '' ? null : parsearIva(v)),
+    validar: (v) => (v == null || esAlicuotaValida(v as number) ? null : ERROR_ALICUOTA),
+    exportar: (v) => (v == null ? '' : Number(v) / 100),
+    orden: 5.2,
+    ayuda:
+      'IVA con el que te factura el proveedor (ej. 0.105 para harinas). Vacío = conserva el de la ficha (en productos nuevos, el mismo que el de venta).',
+  },
+  {
     campo: 'iva',
     etiqueta: 'alicuota_iva',
     aliases: [/al[ií]cuota.*iva/i, /al[ií]cuota/i, /^iva$/i],
@@ -183,10 +203,11 @@ const columnas: ColumnaDef[] = [
     // (coalesce); en un alta usa 21% por defecto. Si viene un valor, parsearIva
     // lo normaliza (0.21 → 21, "21%" → 21).
     parser: (v) => (v == null || String(v).trim() === '' ? null : parsearIva(v)),
+    validar: (v) => (v == null || esAlicuotaValida(v as number) ? null : ERROR_ALICUOTA),
     // Round-trip: el sistema guarda 21, el Excel del usuario usa 0.21
     exportar: (v) => Number(v ?? 21) / 100,
     orden: 5,
-    ayuda: 'Alícuota de IVA: podés poner 0.21 (= 21%) o 21. Vacío = conserva la actual (21% en productos nuevos).',
+    ayuda: 'Alícuota de IVA de VENTA: podés poner 0.21 (= 21%) o 21. Vacío = conserva la actual (21% en productos nuevos). El de compra va en su propia columna.',
   },
   {
     campo: 'precio_venta',

@@ -24,6 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SelectAlicuota } from '@/components/shared/SelectAlicuota'
+import { esAlicuotaValida } from '@/lib/utils/fiscal'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
@@ -157,7 +159,9 @@ type ProductoVenta = {
  * `semillaVenta`—, no de estas constantes.
  */
 const DEFAULTS = {
-  descuento: '0',
+  // Vacío = sin descuento (Number('') || 0). Con '0' había que borrarlo antes
+  // de tipear y quedaba "05".
+  descuento: '',
   iva_compra: '21',
   margen: '30',
   iva_venta: '21',
@@ -196,6 +200,9 @@ interface BorradorFactura {
   percepciones: { iibb: string; iva: string; otros: string }
   gastosNoDebitables: string
   redondeo: string
+  /** Total impreso en el papel: si está, el redondeo se deriva de él.
+   *  Opcional: los borradores viejos no lo traen. */
+  totalPapel?: string
   pagosLineas: PagoLinea[]
   fechaPago: string
   vencimientoCC: string
@@ -279,14 +286,18 @@ function CampoNumero({
   value,
   onChange,
   min,
+  max,
   step,
+  placeholder,
   inputMode = 'decimal',
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   min?: string
+  max?: string
   step?: string
+  placeholder?: string
   inputMode?: 'decimal' | 'numeric'
 }) {
   return (
@@ -298,12 +309,39 @@ function CampoNumero({
         type="number"
         inputMode={inputMode}
         min={min}
+        max={max}
         step={step}
+        placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="h-11 w-full rounded-lg border-[#e4c9b0] px-2.5 text-left text-base tabular-nums"
       />
     </label>
+  )
+}
+
+/** Alícuota de IVA con etiqueta arriba (tarjetas mobile): solo las legales. */
+function CampoAlicuota({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div className="block">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-[#6f3a2a]">
+        {label}
+      </span>
+      <SelectAlicuota
+        value={value}
+        onChange={onChange}
+        ariaLabel={label}
+        className="h-11 rounded-lg px-2.5 text-base"
+      />
+    </div>
   )
 }
 
@@ -343,6 +381,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const [gastosNoDebitables, setGastosNoDebitables] = useState('')
   // Redondeo del comprobante (+/−): para que el total dé EXACTO como el papel.
   const [redondeo, setRedondeo] = useState('')
+  // Total impreso en la factura: al cargarlo, el redondeo sale solo
+  // (papel − total calculado) y sigue a las líneas si se corrigen.
+  const [totalPapel, setTotalPapel] = useState('')
   // ── Pago integrado (migs 144/145): lista de pagos ─────────────────────
   // Sin filas = la deuda queda a cuenta corriente (comportamiento clásico).
   // Cada fila es un pago independiente (importe, método, cuenta, comprobante,
@@ -510,6 +551,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         setPercepciones(borrador.percepciones)
         setGastosNoDebitables(borrador.gastosNoDebitables)
         setRedondeo(borrador.redondeo)
+        setTotalPapel(borrador.totalPapel ?? '')
         setPagosLineas(borrador.pagosLineas)
         // Que las filas de pago nuevas no repitan keys de las restauradas.
         pagoKeyRef.current = borrador.pagosLineas.reduce(
@@ -566,6 +608,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       setPercepciones({ iibb: '', iva: '', otros: '' })
       setGastosNoDebitables('')
       setRedondeo('')
+      setTotalPapel('')
       // Pago integrado: cada apertura arranca sin pagos y SIN modo elegido
       // (el default de una factura ya guardada se deriva en render).
       setPagosLineas([])
@@ -715,6 +758,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         f.gastos_no_debitables ? String(f.gastos_no_debitables) : ''
       )
       setRedondeo(f.redondeo ? String(f.redondeo) : '')
+      setTotalPapel('')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abierto, cargando, pricing.cargando, facturaGuardada, cuenta?.id, reinitTick])
@@ -748,6 +792,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       percepciones,
       gastosNoDebitables,
       redondeo,
+      totalPapel,
       pagosLineas,
       fechaPago,
       vencimientoCC,
@@ -779,6 +824,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     percepciones,
     gastosNoDebitables,
     redondeo,
+    totalPapel,
     pagosLineas,
     fechaPago,
     vencimientoCC,
@@ -1032,9 +1078,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const totalPercepciones = percIibb + percIva + percOtros
   // Redondeo del comprobante (mig 146): ajusta el total para que coincida
   // EXACTO con el impreso; asienta contra 5.2.10 y no toca costos ni IVA.
-  const redondeoNum = r2(Number(redondeo) || 0)
-  const totalConIva =
-    totales.neto + totales.iva + totalPercepciones + gastos + redondeoNum
+  const totalSinRedondeo = totales.neto + totales.iva + totalPercepciones + gastos
+  // Con "Total del papel" cargado, el redondeo es la diferencia contra el
+  // calculado (vivo: sigue a las líneas); sin él, el que se tipeó a mano.
+  const totalPapelNum = Number(totalPapel.replace(',', '.')) || 0
+  const usaTotalPapel = totalPapel.trim() !== '' && totalPapelNum > 0
+  const redondeoNum = usaTotalPapel
+    ? r2(totalPapelNum - totalSinRedondeo)
+    : r2(Number(redondeo) || 0)
+  // Una diferencia grande no es redondeo: casi seguro hay un renglón mal
+  // cargado (cantidad, costo, IVA). Se avisa; no bloquea.
+  const REDONDEO_SOSPECHOSO = 50
+  const redondeoSospechoso = usaTotalPapel && Math.abs(redondeoNum) > REDONDEO_SOSPECHOSO
+  const totalConIva = totalSinRedondeo + redondeoNum
 
   // ── Derivados del pago integrado (migs 144/145) ───────────────────────
   const cuentaPagada = cuenta?.estado === 'pagada'
@@ -1361,6 +1417,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     ...calculadas
       .filter((c) => c.error !== null)
       .map((c) => `«${c.l.nombre}»: ${c.error}`),
+    // Alícuotas: solo las legales (un 22 % no existe y el Libro IVA lo
+    // mandaba a "exento" mientras el asiento lo contaba como IVA).
+    ...lineas
+      .filter(
+        (l) =>
+          (l.iva_compra.trim() !== '' && !esAlicuotaValida(l.iva_compra)) ||
+          (l.iva_venta.trim() !== '' && !esAlicuotaValida(l.iva_venta))
+      )
+      .map((l) => `«${l.nombre}»: la alícuota de IVA no es legal. Elegí 0, 2,5, 5, 10,5, 21 o 27 %.`),
+    ...lineas
+      .filter((l) => (Number(l.descuento) || 0) > 100)
+      .map((l) => `«${l.nombre}»: el descuento no puede pasar del 100 %.`),
+    ...calculadas
+      .filter((c) => Math.abs(c.margenPct ?? 0) > 10000)
+      .map((c) => `«${c.l.nombre}»: el margen da más de 10.000 % — revisá el costo o el precio.`),
     // Pago
     ...(modoInvalido
       ? [
@@ -1782,8 +1853,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         value={l.cantidad}
                         onChange={(v) => setLineaCampo(l.key, 'cantidad', v)}
                         min="0"
-                        step="1"
-                        inputMode="numeric"
+                        step="any"
+                        inputMode={
+                          productosMap.get(l.producto_id)?.venta_por_peso
+                            ? 'decimal'
+                            : 'numeric'
+                        }
                       />
                       <CampoNumero
                         label="Costo s/IVA"
@@ -1797,12 +1872,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         value={l.descuento}
                         onChange={(v) => setLineaCampo(l.key, 'descuento', v)}
                         min="0"
+                        max="100"
+                        placeholder="0"
                       />
-                      <CampoNumero
+                      <CampoAlicuota
                         label="IVA compra %"
                         value={l.iva_compra}
                         onChange={(v) => setLineaCampo(l.key, 'iva_compra', v)}
-                        min="0"
                       />
                     </div>
                     <div className="mt-2.5 flex items-center justify-between border-t border-[#e4c9b0]/60 pt-2 text-xs">
@@ -1867,11 +1943,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         min="0"
                         step="0.01"
                       />
-                      <CampoNumero
+                      <CampoAlicuota
                         label="IVA venta %"
                         value={l.iva_venta}
                         onChange={(v) => setLineaCampo(l.key, 'iva_venta', v)}
-                        min="0"
                       />
                     </div>
                     {error ? (
@@ -2091,7 +2166,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <Input
                           type="number"
                           min="0"
-                          step="1"
+                          step="any"
                           value={l.cantidad}
                           onChange={(ev) =>
                             setLineaCampo(l.key, 'cantidad', ev.target.value)
@@ -2150,25 +2225,25 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <Input
                           type="number"
                           min="0"
+                          max="100"
                           value={l.descuento}
                           onChange={(ev) =>
                             setLineaCampo(l.key, 'descuento', ev.target.value)
                           }
+                          placeholder="0"
                           className={inputCls}
                         />
                       </td>
                       <td className="p-2 text-right tabular-nums text-[#6f3a2a]">
                         <MontoARS monto={calc.costoNeto * cantidad} />
                       </td>
-                      <td className="p-1 w-16">
-                        <Input
-                          type="number"
-                          min="0"
+                      <td className="p-1 w-20">
+                        <SelectAlicuota
+                          size="sm"
                           value={l.iva_compra}
-                          onChange={(ev) =>
-                            setLineaCampo(l.key, 'iva_compra', ev.target.value)
-                          }
-                          className={inputCls}
+                          onChange={(v) => setLineaCampo(l.key, 'iva_compra', v)}
+                          ariaLabel={`IVA compra de ${l.nombre}`}
+                          className="px-1.5 text-xs"
                         />
                       </td>
                       <td className="p-2 text-right tabular-nums font-semibold text-[#391511]">
@@ -2237,15 +2312,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           '…'
                         )}
                       </td>
-                      <td className="p-1 w-16">
-                        <Input
-                          type="number"
-                          min="0"
+                      <td className="p-1 w-20">
+                        <SelectAlicuota
+                          size="sm"
                           value={l.iva_venta}
-                          onChange={(ev) =>
-                            setLineaCampo(l.key, 'iva_venta', ev.target.value)
-                          }
-                          className={inputCls}
+                          onChange={(v) => setLineaCampo(l.key, 'iva_venta', v)}
+                          ariaLabel={`IVA venta de ${l.nombre}`}
+                          className="px-1.5 text-xs"
                         />
                       </td>
                       <td className="p-1 w-24" title={error ?? undefined}>
@@ -2597,23 +2670,59 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             />
           </div>
 
+          {/* Total del papel → el redondeo sale solo */}
+          <div className="flex flex-wrap items-center justify-end gap-2 mb-1.5">
+            <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mr-1">
+              Total del papel
+            </span>
+            <span className="text-[11px] text-[#c8a58a]">
+              (opcional · el total impreso en la factura)
+            </span>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={totalPapel}
+              onChange={(e) => setTotalPapel(e.target.value)}
+              placeholder="—"
+              className="h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs"
+            />
+          </div>
+
           {/* Redondeo (+/−): para que el total dé EXACTO como el papel */}
           <div className="flex flex-wrap items-center justify-end gap-2 mb-1.5">
             <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mr-1">
               Redondeo
             </span>
             <span className="text-[11px] text-[#c8a58a]">
-              (+/− para que el total dé igual al papel · va a Diferencias)
+              {usaTotalPapel
+                ? '(calculado: papel − total del sistema · va a Diferencias)'
+                : '(+/− centavos para que el total dé igual al papel · va a Diferencias)'}
             </span>
             <Input
               type="number"
               step="0.01"
-              value={redondeo}
+              value={usaTotalPapel ? String(redondeoNum) : redondeo}
               onChange={(e) => setRedondeo(e.target.value)}
+              readOnly={usaTotalPapel}
               placeholder="0"
-              className="h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs"
+              className={cn(
+                'h-8 w-28 text-right tabular-nums border-[#e4c9b0] text-xs',
+                usaTotalPapel && 'bg-[#fdfaf6] text-[#6f3a2a]',
+                redondeoSospechoso && 'border-[#e4a42a] font-bold text-[#9e6b15]'
+              )}
             />
           </div>
+          {redondeoSospechoso && (
+            <p className="text-[11px] text-[#9e6b15] text-right mb-3">
+              La diferencia con el papel es de{' '}
+              <span className="font-semibold">
+                <MontoARS monto={Math.abs(redondeoNum)} />
+              </span>
+              : eso no es redondeo. Revisá cantidades, costos, descuentos e IVA
+              de los renglones antes de guardar.
+            </p>
+          )}
           {hayGastos && (
             <p className="text-[11px] text-[#9e6b15] text-right mb-3">
               Se prorratea al costo de cada producto (+

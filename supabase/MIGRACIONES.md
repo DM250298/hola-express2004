@@ -305,10 +305,12 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
 | 206 | `206_fix_178_join_costos_item_venta.sql` | ✅ aplicada | 2026-09-17 | `d447cda` |
 | 207 | `207_stock_maximo_y_conteo_parcial.sql` | ✅ aplicada | 2026-09-17 (prueba + producción) | `2e07940` |
-| 208 | `208_fix_fn_crear_movimiento.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
-| 209 | `209_rrhh_config_reseed.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
-| 210 | `210_fn_generar_liquidacion_coalesce.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
-| 211 | `211_variacion_costo_sin_overflow.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 208 | `208_fix_fn_crear_movimiento.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 209 | `209_rrhh_config_reseed.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 210 | `210_fn_generar_liquidacion_coalesce.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 211 | `211_variacion_costo_sin_overflow.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 212 | `212_backfill_iva_compra_productos.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 213 | `213_import_iva_compra_separado.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 
