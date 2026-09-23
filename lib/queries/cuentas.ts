@@ -216,11 +216,14 @@ export const CATEGORIAS_INGRESO = [
   { valor: 'cobro_cliente', etiqueta: 'Cobro a cliente' },
   { valor: 'aporte_socio', etiqueta: 'Aporte de socio' },
   { valor: 'devolucion', etiqueta: 'Devolución / Reintegro' },
+  { valor: 'ajuste_conciliacion', etiqueta: 'Ajuste de conciliación' },
   { valor: 'otros', etiqueta: 'Otros ingresos' },
 ] as const
 
 export const CATEGORIAS_EGRESO_MOV = [
-  { valor: 'pago_proveedor', etiqueta: 'Pago a proveedor' },
+  // Mismo valor que escribe fn_pagar_cuenta (mig 155), para que los
+  // filtros y resúmenes por categoría los junten.
+  { valor: 'pago_proveedores', etiqueta: 'Pago a proveedor' },
   { valor: 'alquiler', etiqueta: 'Alquiler' },
   { valor: 'servicios', etiqueta: 'Servicios (luz/agua/gas)' },
   { valor: 'sueldos', etiqueta: 'Sueldos' },
@@ -228,6 +231,8 @@ export const CATEGORIAS_EGRESO_MOV = [
   { valor: 'mantenimiento', etiqueta: 'Mantenimiento' },
   { valor: 'retiro_socio', etiqueta: 'Retiro de socio' },
   { valor: 'comisiones', etiqueta: 'Comisiones bancarias' },
+  { valor: 'iibb', etiqueta: 'Retención IIBB' },
+  { valor: 'ajuste_conciliacion', etiqueta: 'Ajuste de conciliación' },
   { valor: 'otros', etiqueta: 'Otros egresos' },
 ] as const
 

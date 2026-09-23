@@ -304,7 +304,11 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 204 | `204_isla_y_limpieza_estantes.sql` | ✅ aplicada | 2026-09-17 | `b4bfc99` |
 | 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
 | 206 | `206_fix_178_join_costos_item_venta.sql` | ✅ aplicada | 2026-09-17 | `d447cda` |
-| 207 | `207_stock_maximo_y_conteo_parcial.sql` | ✅ aplicada | 2026-09-17 (prueba + producción) | pendiente de commit |
+| 207 | `207_stock_maximo_y_conteo_parcial.sql` | ✅ aplicada | 2026-09-17 (prueba + producción) | `2e07940` |
+| 208 | `208_fix_fn_crear_movimiento.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 209 | `209_rrhh_config_reseed.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 210 | `210_fn_generar_liquidacion_coalesce.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 211 | `211_variacion_costo_sin_overflow.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 

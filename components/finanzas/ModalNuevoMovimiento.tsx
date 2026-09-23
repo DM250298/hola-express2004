@@ -31,6 +31,7 @@ import {
   useCrearTransferencia,
   useCuentas,
 } from '@/lib/hooks/useCuentas'
+import { useRegistrarMovimientoCajaFuerte } from '@/lib/hooks/useCajaFuerte'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import {
   CATEGORIAS_EGRESO_MOV,
@@ -92,6 +93,7 @@ export function ModalNuevoMovimiento({
   const { data: cuentas } = useCuentas(true)
   const crearMov = useCrearMovimiento()
   const crearTransf = useCrearTransferencia()
+  const movBoveda = useRegistrarMovimientoCajaFuerte()
 
   const [modo, setModo] = useState<Modo>(modoInicial)
   const [cuentaId, setCuentaId] = useState<string>('')
@@ -113,7 +115,8 @@ export function ModalNuevoMovimiento({
     }
   }, [abierto, modoInicial, cuentaIdInicial])
 
-  const procesando = crearMov.isPending || crearTransf.isPending
+  const procesando =
+    crearMov.isPending || crearTransf.isPending || movBoveda.isPending
   const montoNum = Number(monto) || 0
 
   // Categorías según modo
@@ -123,9 +126,25 @@ export function ModalNuevoMovimiento({
     return []
   }, [modo])
 
+  // Base UI arma el texto del trigger desde `items`: sin esto muestra el
+  // valor crudo (el id de la cuenta, `aporte_socio`).
+  const itemsCuenta = useMemo(() => {
+    const r: Record<string, string> = {}
+    for (const c of cuentas ?? []) r[String(c.id)] = c.nombre
+    return r
+  }, [cuentas])
+  const itemsCategoria = useMemo(() => {
+    const r: Record<string, string> = {}
+    for (const c of categoriasDisponibles) r[c.valor] = c.etiqueta
+    return r
+  }, [categoriasDisponibles])
+
   // Saldo de la cuenta seleccionada (origen)
   const cuentaSel = cuentas?.find((c) => String(c.id) === cuentaId)
-  const cuentaDestSel = cuentas?.find((c) => String(c.id) === cuentaDestinoId)
+  // La Caja Efectivo es la bóveda (mig 118): sus ingresos/egresos manuales
+  // van por fn_registrar_mov_caja_fuerte para que el circuito no descuadre
+  // (fn_crear_movimiento la rechaza desde la mig 208).
+  const esBoveda = modo !== 'transferencia' && !!cuentaSel?.es_caja_fuerte
   const saldoResultante =
     cuentaSel && montoNum > 0
       ? modo === 'ingreso'
@@ -158,6 +177,13 @@ export function ModalNuevoMovimiento({
           descripcion: descripcion.trim(),
           fecha,
           usuario_id: usuario.id,
+        })
+      } else if (esBoveda) {
+        await movBoveda.mutateAsync({
+          usuario_id: usuario.id,
+          tipo: modo,
+          monto: montoNum,
+          nota: descripcion.trim(),
         })
       } else {
         await crearMov.mutateAsync({
@@ -242,11 +268,12 @@ export function ModalNuevoMovimiento({
               <span className="text-[#c43e2c]">*</span>
             </Label>
             <Select
+              items={itemsCuenta}
               value={cuentaId}
               onValueChange={(v) => setCuentaId(v ?? '')}
               disabled={procesando}
             >
-              <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
+              <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
                 <SelectValue placeholder="Elegí una cuenta…" />
               </SelectTrigger>
               <SelectContent>
@@ -260,6 +287,12 @@ export function ModalNuevoMovimiento({
                 ))}
               </SelectContent>
             </Select>
+            {esBoveda && (
+              <p className="text-[11px] text-[#6f3a2a] leading-snug">
+                Es la caja fuerte: el movimiento queda en su historial (Caja
+                fuerte) con fecha de hoy y la descripción como nota.
+              </p>
+            )}
           </div>
 
           {/* Cuenta destino (solo transferencia) */}
@@ -269,11 +302,12 @@ export function ModalNuevoMovimiento({
                 Cuenta destino <span className="text-[#c43e2c]">*</span>
               </Label>
               <Select
+                items={itemsCuenta}
                 value={cuentaDestinoId}
                 onValueChange={(v) => setCuentaDestinoId(v ?? '')}
                 disabled={procesando}
               >
-                <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
+                <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
                   <SelectValue placeholder="Elegí cuenta destino…" />
                 </SelectTrigger>
                 <SelectContent>
@@ -349,22 +383,23 @@ export function ModalNuevoMovimiento({
                 type="date"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
-                disabled={procesando}
+                disabled={procesando || esBoveda}
                 className="border-[#e4c9b0] focus-visible:ring-[#f9b44c] tabular-nums"
               />
             </div>
 
-            {modo !== 'transferencia' && (
+            {modo !== 'transferencia' && !esBoveda && (
               <div className="space-y-1.5">
                 <Label className="text-[#391511] font-medium text-sm">
                   Categoría
                 </Label>
                 <Select
+                  items={itemsCategoria}
                   value={categoria}
                   onValueChange={(v) => setCategoria(v ?? '')}
                   disabled={procesando}
                 >
-                  <SelectTrigger className="border-[#e4c9b0] focus:ring-[#f9b44c]">
+                  <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c]">
                     <SelectValue placeholder="Sin categoría" />
                   </SelectTrigger>
                   <SelectContent>
