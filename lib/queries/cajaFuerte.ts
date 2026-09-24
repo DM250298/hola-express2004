@@ -384,7 +384,7 @@ export async function getDiferenciasCierrePorEmpleado(
     supabase
       .from('caja_turnos')
       .select(
-        'id, usuario_id, fecha_cierre, monto_cierre_esperado, monto_cierre_real, diferencia, usuarios(nombre)'
+        'id, usuario_id, fecha_cierre, monto_cierre_esperado, monto_cierre_real, diferencia, usuarios!usuario_id(nombre)'
       )
       .eq('estado', 'cerrado')
       .gte('fecha_cierre', desde)

@@ -51,7 +51,7 @@ export async function getKPIsDia(): Promise<KPIsDia> {
     // abandonados de otro empleado).
     supabase
       .from('caja_turnos')
-      .select('id, fecha_apertura, usuarios(nombre)')
+      .select('id, fecha_apertura, usuarios!usuario_id(nombre)')
       .eq('estado', 'abierto')
       .order('fecha_apertura', { ascending: false }),
   ])
@@ -276,7 +276,7 @@ export async function getTurnosDelDia(): Promise<TurnoDelDia[]> {
   const turnos = await supabase
     .from('caja_turnos')
     .select(
-      'id, usuario_id, fecha_apertura, fecha_cierre, estado, monto_apertura, diferencia, usuarios(nombre)'
+      'id, usuario_id, fecha_apertura, fecha_cierre, estado, monto_apertura, diferencia, usuarios!usuario_id(nombre)'
     )
     .or(`estado.eq.abierto,fecha_apertura.gte.${desde}`)
     .lte('fecha_apertura', hasta)
