@@ -23,10 +23,19 @@ export async function validarSupervisor(
   email: string,
   password: string
 ): Promise<ResultadoSupervisor> {
+  // storageKey propio: aunque no persista, comparte proceso con el cliente
+  // del cajero y auth-js avisa "Multiple GoTrueClient instances" si usan la
+  // misma clave.
   const cliente = createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false } }
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        storageKey: 'sb-supervisor',
+      },
+    }
   )
 
   try {
@@ -45,7 +54,10 @@ export async function validarSupervisor(
       .eq('id', data.user.id)
       .single()
 
-    await cliente.auth.signOut()
+    // scope 'local': revoca SOLO esta sesión efímera. El default ('global')
+    // tumbaba todas las sesiones del supervisor —incluida la del POS si el
+    // encargado era quien tenía la caja abierta— y el turno "desaparecía".
+    await cliente.auth.signOut({ scope: 'local' })
 
     if (!perfil || perfil.activo === false) {
       return { ok: false, error: 'El usuario no está activo.' }

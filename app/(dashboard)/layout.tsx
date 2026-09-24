@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/shared/Sidebar'
 import { Header } from '@/components/shared/Header'
+import { GuardianSesion } from '@/components/shared/GuardianSesion'
 import { PERMISOS_POR_ROL_LEGACY } from '@/lib/permisos'
 import type { Rol } from '@/types/database'
 
@@ -38,6 +39,9 @@ export default async function LayoutDashboard({
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#fdfaf6]">
+      {/* La pantalla se armó con `user.id`; el guardián la recarga o la
+          manda al login si la sesión real del navegador deja de ser esa. */}
+      <GuardianSesion usuarioId={user.id} />
       <Sidebar permisos={permisos} />
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">

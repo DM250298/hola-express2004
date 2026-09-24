@@ -53,16 +53,27 @@ export function CardsKPIs() {
         bgColor="bg-white"
       />
       <Card
-        etiqueta="Turno activo"
+        etiqueta={
+          data.turnos_abiertos.length > 1
+            ? `Turnos abiertos · ${data.turnos_abiertos.length}`
+            : 'Turno abierto'
+        }
         valor={
-          data.turno_activo ? (
-            <div className="leading-tight">
-              <div className="text-base">
-                {data.turno_activo.cajero_nombre ?? '—'}
-              </div>
-              <div className="text-xs text-[#6f3a2a] font-normal mt-0.5">
-                Abierto {formatearFechaHora(data.turno_activo.fecha_apertura)}
-              </div>
+          data.turnos_abiertos.length > 0 ? (
+            <div className="leading-tight space-y-1">
+              {data.turnos_abiertos.slice(0, 3).map((t) => (
+                <div key={t.id}>
+                  <div className="text-base">{t.cajero_nombre ?? '—'}</div>
+                  <div className="text-xs text-[#6f3a2a] font-normal mt-0.5">
+                    Abierto {formatearFechaHora(t.fecha_apertura)}
+                  </div>
+                </div>
+              ))}
+              {data.turnos_abiertos.length > 3 && (
+                <div className="text-xs text-[#6f3a2a] font-normal">
+                  y {data.turnos_abiertos.length - 3} más…
+                </div>
+              )}
             </div>
           ) : (
             <span className="text-[#c8a58a] italic text-base font-medium">
@@ -72,8 +83,10 @@ export function CardsKPIs() {
         }
         icono={UserCircle2}
         color="#391511"
-        bgColor={data.turno_activo ? 'bg-[#f9b44c]/15' : 'bg-[#c8a58a]/20'}
-        valorComoTexto={!data.turno_activo}
+        bgColor={
+          data.turnos_abiertos.length > 0 ? 'bg-[#f9b44c]/15' : 'bg-[#c8a58a]/20'
+        }
+        valorComoTexto={data.turnos_abiertos.length === 0}
       />
     </div>
   )

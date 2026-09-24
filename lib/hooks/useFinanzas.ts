@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { manejarErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 import {
   actualizarEgreso,
   anularEgreso,
@@ -232,6 +233,7 @@ export function useCrearEgreso() {
       toast.success('Gasto registrado')
     },
     onError: (error: Error) => {
+      if (manejarErrorIdentidad(error, qc)) return
       toast.error(`No se pudo registrar el gasto: ${error.message}`)
     },
   })

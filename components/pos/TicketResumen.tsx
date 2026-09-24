@@ -137,7 +137,8 @@ export function TicketResumen({
                       {etiquetaMedio(p.medio_pago)}
                     </span>
                     <span className="text-[#391511] font-medium tabular-nums">
-                      <MontoARS monto={p.monto} />
+                      {/* Efectivo: lo que entregó el cliente (el vuelto va abajo). */}
+                      <MontoARS monto={p.monto_entregado ?? p.monto} />
                     </span>
                   </li>
                 ))}

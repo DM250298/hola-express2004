@@ -1,6 +1,8 @@
 'use client'
 
-import { Clock, Users } from 'lucide-react'
+import { useState } from 'react'
+import { Clock, LockKeyhole, Users } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -11,8 +13,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { CierreCaja } from '@/components/pos/CierreCaja'
 import { formatearFechaHora } from '@/lib/utils/formato'
 import { useTurnosDelDia } from '@/lib/hooks/useDashboard'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
+import type { TurnoDelDia } from '@/lib/queries/dashboard'
 import { cn } from '@/lib/utils'
 
 function soloHora(fecha: string): string {
@@ -22,6 +28,11 @@ function soloHora(fecha: string): string {
 
 export function TablaTurnosDia() {
   const { data: turnos, isLoading, isError } = useTurnosDelDia()
+  const { data: usuario } = useUsuario()
+  // Cierre administrativo (mig 218): Finanzas puede cerrar el turno que otro
+  // empleado dejó abierto. Queda registrado quién lo cerró (cerrado_por).
+  const puedeCerrar = tienePermiso(usuario?.permisos, 'finanzas')
+  const [turnoACerrar, setTurnoACerrar] = useState<TurnoDelDia | null>(null)
 
   return (
     <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
@@ -68,6 +79,11 @@ export function TablaTurnosDia() {
                 <TableHead className="text-right text-[#391511] font-semibold">
                   Diferencia
                 </TableHead>
+                {puedeCerrar && (
+                  <TableHead className="text-right text-[#391511] font-semibold">
+                    <span className="sr-only">Acciones</span>
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,14 +95,22 @@ export function TablaTurnosDia() {
                     className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
                   >
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-[#391511]">
                           {t.cajero_nombre ?? '—'}
                         </span>
-                        {abierto && (
+                        {abierto && !t.abierto_otro_dia && (
                           <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-[#f9b44c]/20 text-[#6f3a2a] px-1.5 py-0.5 rounded-full">
                             <span className="h-1 w-1 rounded-full bg-[#f9b44c] animate-pulse" />
                             En curso
+                          </span>
+                        )}
+                        {t.abierto_otro_dia && (
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-[#c43e2c]/15 text-[#9e2f25] px-1.5 py-0.5 rounded-full"
+                            title="Quedó abierto de otro día: hay que cerrarlo para que el arqueo cierre."
+                          >
+                            Abierto desde {formatearFechaHora(t.fecha_apertura)}
                           </span>
                         )}
                       </div>
@@ -133,12 +157,41 @@ export function TablaTurnosDia() {
                         </span>
                       )}
                     </TableCell>
+                    {puedeCerrar && (
+                      <TableCell className="text-right">
+                        {abierto && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setTurnoACerrar(t)}
+                            title="Cerrar este turno con el efectivo contado (cierre administrativo)"
+                            className="h-8 border-[#e4c9b0] text-[#391511] gap-1.5"
+                          >
+                            <LockKeyhole className="h-3.5 w-3.5" />
+                            Cerrar turno
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 )
               })}
             </TableBody>
           </Table>
         </div>
+      )}
+
+      {turnoACerrar && (
+        <CierreCaja
+          abierto={turnoACerrar !== null}
+          onCambioAbierto={(v) => !v && setTurnoACerrar(null)}
+          turnoId={turnoACerrar.id}
+          montoApertura={turnoACerrar.monto_apertura}
+          fechaApertura={turnoACerrar.fecha_apertura}
+          nombreCajero={turnoACerrar.cajero_nombre ?? '—'}
+          contexto="admin"
+        />
       )}
     </div>
   )

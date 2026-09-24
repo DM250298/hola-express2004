@@ -1275,6 +1275,8 @@ export type CajaTurnoRow = {
   diferencia: number | null
   estado: EstadoTurno
   novedades: string | null
+  /** Quién cerró (auth.uid()): dueño o Finanzas. Null en cierres previos a la mig 218. */
+  cerrado_por: string | null
   created_at: string
 }
 
@@ -1289,6 +1291,7 @@ export type CajaTurnoInsert = {
   diferencia?: number | null
   estado?: EstadoTurno
   novedades?: string | null
+  cerrado_por?: string | null
   created_at?: string
 }
 
@@ -1299,6 +1302,7 @@ export type CajaTurnoUpdate = {
   diferencia?: number | null
   estado?: EstadoTurno
   novedades?: string | null
+  cerrado_por?: string | null
 }
 
 // ─── sangrias (retiros de caja al buzón de caja fuerte) ───────────────────────
@@ -4902,6 +4906,8 @@ export interface Database {
           p_cliente_uuid?: string | null
           p_cliente_id?: number | null
           p_forzar_turno?: boolean
+          /** Hora real de la venta (cola offline / intento de cobro). Null = now(). */
+          p_fecha?: string | null
         }
         Returns: VentaRow
       }
@@ -4910,6 +4916,22 @@ export interface Database {
           p_cobro_id: string
         }
         Returns: VentaRow
+      }
+      fn_abrir_turno: {
+        Args: { p_monto_apertura: number }
+        Returns: CajaTurnoRow
+      }
+      fn_resumen_turno: {
+        Args: { p_turno_id: number }
+        Returns: Json
+      }
+      fn_cerrar_turno: {
+        Args: {
+          p_turno_id: number
+          p_monto_cierre_real: number
+          p_novedades?: string | null
+        }
+        Returns: Json
       }
       fn_saldo_cta_cte_cliente: {
         Args: { p_cliente_id: number }

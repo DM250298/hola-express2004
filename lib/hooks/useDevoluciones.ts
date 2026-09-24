@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { manejarErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 import {
   getVentaParaDevolucion,
   crearDevolucion,
@@ -31,7 +32,9 @@ export function useCrearDevolucion() {
       qc.invalidateQueries({ queryKey: ['resumen-turno'] })
       qc.invalidateQueries({ queryKey: ['venta-devolucion'] })
     },
-    onError: (e: Error) =>
-      toast.error(`No se pudo registrar la devolución: ${e.message}`),
+    onError: (e: Error) => {
+      if (manejarErrorIdentidad(e, qc)) return
+      toast.error(`No se pudo registrar la devolución: ${e.message}`)
+    },
   })
 }

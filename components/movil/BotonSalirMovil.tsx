@@ -1,14 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { purgarShellSW } from '@/lib/offline/shell'
+import { cancelarSalida, iniciarSalida } from '@/lib/auth/sesionActual'
 
 export function BotonSalirMovil() {
-  const router = useRouter()
   const [saliendo, setSaliendo] = useState(false)
 
   async function salir() {
@@ -16,12 +15,19 @@ export function BotonSalirMovil() {
     setSaliendo(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      iniciarSalida()
+      // Purgar ANTES de salir: el guardián de sesión navega apenas ve el
+      // SIGNED_OUT y la purga no tiene que competir con esa navegación.
       await purgarShellSW()
-      router.push('/login')
-      router.refresh()
+      // scope 'local': cierra SOLO la sesión de este celular. El default
+      // ('global') también tumbaba la sesión de la PC del mostrador y el
+      // POS quedaba sin turno "de la nada".
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
+      if (error) throw error
+      // Navegación dura: descarta la caché de queries del usuario saliente.
+      window.location.assign('/login')
     } catch {
+      cancelarSalida()
       toast.error('No se pudo cerrar la sesión. Intentá de nuevo.')
       setSaliendo(false)
     }

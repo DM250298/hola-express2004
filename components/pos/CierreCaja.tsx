@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Loader2, Printer } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Loader2,
+  Printer,
+  RefreshCw,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,12 +24,25 @@ import {
 import { MontoARS } from '@/components/shared/MontoARS'
 import { ComprobanteCierre, type DatosComprobanteCierre } from './ComprobanteCierre'
 import { ContadorBilletes } from './ContadorBilletes'
-import { useCerrarTurno } from '@/lib/hooks/useTurno'
-import { useRegistrarSangria } from '@/lib/hooks/useCajaFuerte'
+import {
+  RESUMEN_TURNO_KEY,
+  TURNO_KEY,
+  useCerrarTurno,
+  useResumenTurno,
+} from '@/lib/hooks/useTurno'
 import { useMediosPago } from '@/lib/hooks/useMediosPago'
-import { getCobrosFiadoTurno } from '@/lib/queries/ctaCte'
+import {
+  EVENTO_COLA_CAMBIADA,
+  leerVentasPendientes,
+  reintentarVenta,
+  type VentaPendiente,
+} from '@/lib/offline/cola'
+import { sincronizarVentasPendientes } from '@/lib/offline/sync'
+import { purgarShellSW } from '@/lib/offline/shell'
+import { cancelarSalida, iniciarSalida } from '@/lib/auth/sesionActual'
+import { textoErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 import { createClient } from '@/lib/supabase/client'
-import { formatearMonto } from '@/lib/utils/formato'
+import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -32,132 +52,22 @@ interface Props {
   montoApertura: number
   fechaApertura: string
   nombreCajero: string
-  usuarioId: string
+  /**
+   * 'pos': lo cierra el cajero en el mostrador. Al cerrar el informe se
+   *        CIERRA LA SESIÓN de esta PC, para que el próximo cajero entre con
+   *        su usuario y no venda a nombre del anterior.
+   * 'admin': cierre administrativo desde el Dashboard (Finanzas) de un turno
+   *        que otro empleado dejó abierto. Solo refresca las listas.
+   */
+  contexto?: 'pos' | 'admin'
 }
 
-interface DesgloseMedio {
-  codigo: string
-  total: number
-  cantidad: number
-}
+const COLA_TURNO_KEY = ['cola-offline-turno'] as const
 
-interface ProductoVendido {
-  nombre: string
-  cantidad: number
-  unidad: string
-}
-
-interface ResumenTurno {
-  total_ventas_efectivo: number
-  cantidad_ventas: number
-  total_ventas: number
-  por_medio: DesgloseMedio[]
-  productos: ProductoVendido[]
-  gastos: number
-  sangrias: number
-  /** Cobros de fiado en efectivo del turno (suman al esperado). */
-  cobros_fiado: number
-}
-
-async function obtenerResumenTurno(turnoId: number): Promise<ResumenTurno> {
-  const supabase = createClient()
-
-  const [resVentas, resPagos, resItems, resGastos, resSangrias, cobrosFiado] =
-    await Promise.all([
-      supabase
-        .from('ventas')
-        .select('id', { count: 'exact', head: true })
-        .eq('turno_id', turnoId)
-        .eq('estado', 'completada'),
-      supabase
-        .from('pagos_venta')
-        .select('medio_pago, monto, ventas!inner(turno_id, estado)')
-        .eq('ventas.turno_id', turnoId)
-        .eq('ventas.estado', 'completada'),
-      supabase
-        .from('items_venta')
-        .select(
-          'cantidad, productos(nombre, unidad), ventas!inner(turno_id, estado)'
-        )
-        .eq('ventas.turno_id', turnoId)
-        .eq('ventas.estado', 'completada'),
-      supabase.from('egresos').select('monto').eq('turno_id', turnoId),
-      supabase.from('sangrias').select('monto').eq('turno_id', turnoId),
-      getCobrosFiadoTurno(turnoId),
-    ])
-
-  if (resVentas.error) throw resVentas.error
-  if (resPagos.error) throw resPagos.error
-  if (resItems.error) throw resItems.error
-  // resGastos puede fallar si la migración 009 no se corrió → se asume 0.
-
-  type FilaPago = { medio_pago: string; monto: number }
-  const filas = (resPagos.data ?? []) as unknown as FilaPago[]
-
-  // Agrupar por código de medio (dinámico)
-  const mapa = new Map<string, DesgloseMedio>()
-  for (const p of filas) {
-    const previo = mapa.get(p.medio_pago)
-    if (previo) {
-      previo.total += Number(p.monto)
-      previo.cantidad += 1
-    } else {
-      mapa.set(p.medio_pago, {
-        codigo: p.medio_pago,
-        total: Number(p.monto),
-        cantidad: 1,
-      })
-    }
-  }
-
-  const por_medio = [...mapa.values()]
-  const total_ventas = por_medio.reduce((acc, m) => acc + m.total, 0)
-  const total_efectivo = mapa.get('efectivo')?.total ?? 0
-
-  // Productos vendidos en el turno (agrupados por producto)
-  type FilaItem = {
-    cantidad: number
-    productos: { nombre: string; unidad: string } | null
-  }
-  const itemsRaw = (resItems.data ?? []) as unknown as FilaItem[]
-  const mapaProd = new Map<string, ProductoVendido>()
-  for (const it of itemsRaw) {
-    if (!it.productos) continue
-    const prev = mapaProd.get(it.productos.nombre)
-    if (prev) {
-      prev.cantidad += it.cantidad
-    } else {
-      mapaProd.set(it.productos.nombre, {
-        nombre: it.productos.nombre,
-        cantidad: it.cantidad,
-        unidad: it.productos.unidad,
-      })
-    }
-  }
-  const productos = [...mapaProd.values()].sort((a, b) =>
-    a.nombre.localeCompare(b.nombre, 'es-AR')
-  )
-
-  const gastos = (resGastos.data ?? []).reduce(
-    (acc, g) => acc + Number((g as { monto: number }).monto),
-    0
-  )
-
-  const sangrias = (resSangrias.data ?? []).reduce(
-    (acc, s) => acc + Number((s as { monto: number }).monto),
-    0
-  )
-
-  return {
-    total_ventas_efectivo: total_efectivo,
-    cantidad_ventas: resVentas.count ?? 0,
-    total_ventas,
-    por_medio,
-    productos,
-    gastos,
-    sangrias,
-    cobros_fiado: cobrosFiado,
-  }
+/** Ventas cobradas sin conexión en ESTA PC que pertenecen al turno. */
+async function leerColaDelTurno(turnoId: number): Promise<VentaPendiente[]> {
+  const todas = await leerVentasPendientes()
+  return todas.filter((v) => v.turno_id === turnoId)
 }
 
 export function CierreCaja({
@@ -167,16 +77,17 @@ export function CierreCaja({
   montoApertura,
   fechaApertura,
   nombreCajero,
-  usuarioId,
+  contexto = 'pos',
 }: Props) {
   const cerrar = useCerrarTurno()
-  const sangriaAuto = useRegistrarSangria()
   const qc = useQueryClient()
   const { data: medios } = useMediosPago()
   const [montoCierre, setMontoCierre] = useState('')
   const [novedades, setNovedades] = useState('')
   const [mostrarContador, setMostrarContador] = useState(false)
   const [cantidadesBilletes, setCantidadesBilletes] = useState<Record<number, number>>({})
+  const [sincronizandoCola, setSincronizandoCola] = useState(false)
+  const [saliendo, setSaliendo] = useState(false)
 
   // Calcula el total del contador y actualiza el campo de monto automáticamente
   function handleCantidadesBilletes(nuevas: Record<number, number>) {
@@ -192,12 +103,32 @@ export function CierreCaja({
     null
   )
 
-  const { data: resumen, isLoading } = useQuery({
-    queryKey: ['resumen-turno', turnoId],
-    queryFn: () => obtenerResumenTurno(turnoId),
+  // Resumen calculado en el servidor (fn_resumen_turno): mismo cálculo que
+  // usa el cierre, sin tope de filas ni ceros por RLS.
+  const {
+    data: resumen,
+    isLoading,
+    isError: errorResumen,
+    error: errResumen,
+  } = useResumenTurno(turnoId, abierto)
+
+  // Ventas offline de este turno que todavía no llegaron al servidor: el
+  // arqueo no las cuenta, así que el cierre se bloquea hasta sincronizarlas.
+  const { data: cola = [], refetch: refrescarCola } = useQuery({
+    queryKey: [...COLA_TURNO_KEY, turnoId],
+    queryFn: () => leerColaDelTurno(turnoId),
     enabled: abierto,
     staleTime: 0,
+    refetchInterval: abierto ? 5000 : false,
   })
+  const hayCola = cola.length > 0
+
+  useEffect(() => {
+    if (!abierto) return
+    const alCambiar = () => void refrescarCola()
+    window.addEventListener(EVENTO_COLA_CAMBIADA, alCambiar)
+    return () => window.removeEventListener(EVENTO_COLA_CAMBIADA, alCambiar)
+  }, [abierto, refrescarCola])
 
   useEffect(() => {
     if (abierto) {
@@ -208,6 +139,32 @@ export function CierreCaja({
       setCantidadesBilletes({})
     }
   }, [abierto])
+
+  async function sincronizarCola() {
+    if (sincronizandoCola) return
+    setSincronizandoCola(true)
+    try {
+      const r = await sincronizarVentasPendientes()
+      if (r.sincronizadas > 0) {
+        toast.success(
+          `${r.sincronizadas} venta${r.sincronizadas === 1 ? '' : 's'} sincronizada${r.sincronizadas === 1 ? '' : 's'}`
+        )
+        qc.invalidateQueries({ queryKey: RESUMEN_TURNO_KEY })
+      } else if (r.cortadoPorRed) {
+        toast.error('Sin conexión: no se pudo sincronizar.')
+      } else if (r.conError > 0) {
+        toast.error('El servidor rechazó ventas de la cola. Revisá el detalle.')
+      }
+    } finally {
+      setSincronizandoCola(false)
+      void refrescarCola()
+    }
+  }
+
+  async function reintentar(uuid: string) {
+    await reintentarVenta(uuid)
+    await sincronizarCola()
+  }
 
   // codigo → nombre legible
   const nombreMedio = useMemo(() => {
@@ -234,17 +191,7 @@ export function CierreCaja({
       }))
   }, [resumen, nombreMedio, ordenMedio])
 
-  const montoEsperado = useMemo(
-    () =>
-      resumen
-        ? Number(montoApertura) +
-          resumen.total_ventas_efectivo +
-          resumen.cobros_fiado -
-          resumen.gastos -
-          resumen.sangrias
-        : null,
-    [resumen, montoApertura]
-  )
+  const montoEsperado = resumen ? resumen.monto_esperado : null
 
   const cierreNumero = Number(montoCierre)
   const cierreValido =
@@ -253,29 +200,17 @@ export function CierreCaja({
     cierreValido && montoEsperado !== null ? cierreNumero - montoEsperado : null
 
   function handleCerrar() {
-    if (!cierreValido || !resumen) return
+    if (!cierreValido || !resumen || hayCola) return
+    const nov = novedades.trim() ? novedades.trim() : null
     cerrar.mutate(
-      {
-        turnoId,
-        montoCierreReal: cierreNumero,
-        novedades: novedades.trim() ? novedades.trim() : null,
-      },
+      { turnoId, montoCierreReal: cierreNumero, novedades: nov },
       {
         onSuccess: (resultado) => {
-          // Al cerrar turno, el efectivo contado va automáticamente al buzón
-          // de la caja fuerte como sangría, para que pase por el arqueo.
-          if (cierreNumero > 0) {
-            sangriaAuto.mutate({
-              turno_id: turnoId,
-              usuario_id: usuarioId,
-              monto: cierreNumero,
-              nota: `Cierre de turno #${turnoId}`,
-            })
-          }
-
+          // La sangría automática del efectivo contado la creó el RPC en la
+          // misma transacción (antes era un insert aparte del cliente).
           setComprobante({
             turnoId,
-            cajeroNombre: nombreCajero,
+            cajeroNombre: resultado.cajero_nombre ?? nombreCajero,
             fechaApertura,
             fechaCierre:
               resultado.turno.fecha_cierre ?? new Date().toISOString(),
@@ -284,11 +219,14 @@ export function CierreCaja({
             totalVentas: resumen.total_ventas,
             desglose,
             productos: resumen.productos,
-            gastosCaja: resumen.gastos,
+            gastosCaja: resultado.gastos,
+            ventasEfectivo: resultado.total_ventas_efectivo,
+            cobrosFiado: resultado.total_cobros_fiado,
+            sangrias: resultado.sangrias,
             efectivoEsperado: resultado.monto_esperado,
             montoContado: cierreNumero,
             diferencia: resultado.diferencia,
-            novedades: novedades.trim() ? novedades.trim() : null,
+            novedades: nov,
           })
         },
       }
@@ -298,22 +236,58 @@ export function CierreCaja({
   const cerrado = comprobante !== null
 
   /**
-   * Cierra el modal. Si el turno ya quedó cerrado (fase informe), recién acá
-   * se refresca la consulta del turno → la pantalla pasa a "Abrir caja".
+   * Cierre de turno en el POS = fin de la sesión en esta PC: el próximo
+   * cajero entra con SU usuario y abre SU caja. Es la garantía de que cada
+   * venta queda a nombre de quien está en el mostrador.
    */
-  function cerrarModal() {
+  async function salirTrasCierre() {
+    if (saliendo) return
+    setSaliendo(true)
+    try {
+      const supabase = createClient()
+      iniciarSalida()
+      await purgarShellSW()
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
+      if (error) throw error
+      window.location.assign('/login?motivo=turno_cerrado')
+    } catch {
+      cancelarSalida()
+      setSaliendo(false)
+      toast.error(
+        'No se pudo cerrar la sesión. Salí desde el menú cuando tengas conexión.'
+      )
+      qc.invalidateQueries({ queryKey: TURNO_KEY })
+      onCambioAbierto(false)
+    }
+  }
+
+  /**
+   * Cierra el modal. Si el turno ya quedó cerrado (fase informe), recién acá
+   * se actúa: en el POS se cierra la sesión; en el Dashboard se refrescan las
+   * listas (el modal no se desmonta antes de que se vea/imprima el informe).
+   */
+  async function cerrarModal() {
     if (cerrado) {
-      qc.invalidateQueries({ queryKey: ['turno-activo'] })
+      if (contexto === 'pos') {
+        await salirTrasCierre()
+        return
+      }
+      qc.invalidateQueries({ queryKey: TURNO_KEY })
+      qc.invalidateQueries({ queryKey: ['dashboard-turnos-dia'] })
+      qc.invalidateQueries({ queryKey: ['dashboard-kpis-dia'] })
+      qc.invalidateQueries({ queryKey: ['caja-fuerte'] })
     }
     onCambioAbierto(false)
   }
+
+  const esAdmin = contexto === 'admin'
 
   return (
     <Dialog
       open={abierto}
       onOpenChange={(v) => {
-        if (cerrar.isPending) return
-        if (!v) cerrarModal()
+        if (cerrar.isPending || saliendo) return
+        if (!v) void cerrarModal()
         else onCambioAbierto(true)
       }}
     >
@@ -327,7 +301,9 @@ export function CierreCaja({
                 Turno #{turnoId} cerrado
               </DialogTitle>
               <DialogDescription className="text-[#6f3a2a]">
-                Imprimí el informe para que el empleado lo firme.
+                {esAdmin
+                  ? 'Cierre administrativo registrado a tu nombre. Imprimí el informe para que el empleado lo firme.'
+                  : 'Imprimí el informe para que el empleado lo firme. Al cerrar esta ventana se cierra la sesión: el próximo cajero entra con su usuario.'}
               </DialogDescription>
             </DialogHeader>
 
@@ -341,13 +317,24 @@ export function CierreCaja({
             <DialogFooter className="px-6 py-4 border-t border-[#e4c9b0]/60 bg-[#fdfaf6] flex-row gap-2 sm:gap-2">
               <Button
                 variant="outline"
-                onClick={cerrarModal}
+                onClick={() => void cerrarModal()}
+                disabled={saliendo}
                 className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
               >
-                Listo
+                {saliendo ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Cerrando sesión…
+                  </>
+                ) : esAdmin ? (
+                  'Listo'
+                ) : (
+                  'Listo y salir'
+                )}
               </Button>
               <Button
                 onClick={() => window.print()}
+                disabled={saliendo}
                 className="flex-1 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
               >
                 <Printer className="h-4 w-4" />
@@ -360,14 +347,85 @@ export function CierreCaja({
           <>
             <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
               <DialogTitle className="text-[#391511] text-lg">
-                Cerrar turno de caja
+                {esAdmin
+                  ? `Cerrar turno #${turnoId} de ${resumen?.cajero_nombre ?? nombreCajero}`
+                  : 'Cerrar turno de caja'}
               </DialogTitle>
               <DialogDescription className="text-[#6f3a2a]">
-                Contá el efectivo en caja y registralo abajo.
+                {esAdmin
+                  ? `Abierto ${formatearFechaHora(fechaApertura)}. Contá el efectivo de esa caja y registralo abajo; el cierre queda a tu nombre.`
+                  : 'Contá el efectivo en caja y registralo abajo.'}
               </DialogDescription>
             </DialogHeader>
 
             <div className="px-6 py-5 space-y-5 max-h-[60vh] overflow-y-auto">
+              {errorResumen && (
+                <div className="rounded-xl border border-[#c43e2c]/40 bg-[#c43e2c]/10 px-3 py-2.5 text-sm text-[#9e2f25]">
+                  No se pudo calcular el resumen del turno:{' '}
+                  {textoErrorIdentidad(errResumen)}
+                </div>
+              )}
+
+              {/* Ventas offline sin sincronizar: bloquean el cierre. */}
+              {hayCola && (
+                <div className="rounded-xl border border-[#f9b44c]/60 bg-[#f9b44c]/10 px-3 py-3 space-y-2">
+                  <div className="flex items-start gap-2 text-sm text-[#6f3a2a]">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-[#c43e2c]" />
+                    <span>
+                      Hay <b>{cola.length}</b>{' '}
+                      {cola.length === 1 ? 'venta cobrada' : 'ventas cobradas'} sin
+                      conexión que todavía no llegaron al servidor. El arqueo no las
+                      cuenta: conectate a internet y sincronizá antes de cerrar.
+                    </span>
+                  </div>
+                  <ul className="divide-y divide-[#e4c9b0]/40 rounded-lg bg-white border border-[#e4c9b0]/60">
+                    {cola.map((v) => (
+                      <li
+                        key={v.cliente_uuid}
+                        className="flex items-center justify-between gap-2 px-3 py-1.5 text-xs"
+                      >
+                        <span className="text-[#6f3a2a]">
+                          {formatearFechaHora(v.creada_en)} ·{' '}
+                          <b className="text-[#391511]">{formatearMonto(v.total)}</b>
+                          {v.estado === 'error' && (
+                            <span className="block text-[#c43e2c]">
+                              Rechazada: {v.error ?? 'error desconocido'}
+                            </span>
+                          )}
+                        </span>
+                        {v.estado === 'error' && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={sincronizandoCola}
+                            onClick={() => void reintentar(v.cliente_uuid)}
+                            className="h-7 px-2 text-[11px] text-[#6f3a2a]"
+                          >
+                            Reintentar
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={sincronizandoCola}
+                    onClick={() => void sincronizarCola()}
+                    className="w-full border-[#e4c9b0] text-[#391511] gap-1.5"
+                  >
+                    {sincronizandoCola ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    Sincronizar ahora
+                  </Button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <ResumenItem
                   etiqueta="Apertura"
@@ -575,7 +633,18 @@ export function CierreCaja({
               </Button>
               <Button
                 onClick={handleCerrar}
-                disabled={!cierreValido || cerrar.isPending || isLoading}
+                disabled={
+                  !cierreValido ||
+                  cerrar.isPending ||
+                  isLoading ||
+                  errorResumen ||
+                  hayCola
+                }
+                title={
+                  hayCola
+                    ? 'Sincronizá las ventas pendientes antes de cerrar'
+                    : undefined
+                }
                 className="flex-1 bg-[#c43e2c] hover:bg-[#9e2f25] text-white font-semibold"
               >
                 {cerrar.isPending ? (

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createServerClient } from '@/lib/supabase/server'
 import { BotonSalirMovil } from '@/components/movil/BotonSalirMovil'
+import { GuardianSesion } from '@/components/shared/GuardianSesion'
 
 // Manifest propio del modo móvil: la app instalada desde /movil arranca en
 // /movil (no en el POS). Sobreescribe el manifest por defecto del layout raíz.
@@ -30,6 +31,7 @@ export default async function LayoutMovil({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#fdfaf6]">
+      <GuardianSesion usuarioId={user.id} />
       <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[#e4c9b0]/60 bg-white px-4">
         <Link href="/movil" className="flex items-baseline gap-1.5">
           <span className="text-xl font-extrabold tracking-tight text-[#391511]">

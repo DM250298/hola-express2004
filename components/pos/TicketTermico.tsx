@@ -124,7 +124,7 @@ export function TicketTermico({
         {venta.pagos.map((p, i) => (
           <div className="ticket-fila" key={i}>
             <span>{etiquetaMedio(p.medio_pago)}</span>
-            <span>{formatearMonto(p.monto)}</span>
+            <span>{formatearMonto(p.monto_entregado ?? p.monto)}</span>
           </div>
         ))}
         {vuelto != null && vuelto > 0 && (

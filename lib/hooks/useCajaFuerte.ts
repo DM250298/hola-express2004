@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { manejarErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 import {
   registrarSangria,
   getSangriasEnBuzon,
@@ -145,8 +146,10 @@ export function useRegistrarSangria() {
       invalidarTodo(qc)
       toast.success('Sangría registrada · sobre en el buzón')
     },
-    onError: (e: Error) =>
-      toast.error(`No se pudo registrar la sangría: ${e.message}`),
+    onError: (e: Error) => {
+      if (manejarErrorIdentidad(e, qc)) return
+      toast.error(`No se pudo registrar la sangría: ${e.message}`)
+    },
   })
 }
 

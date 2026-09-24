@@ -332,20 +332,52 @@ export function ModalCobro({
     return { medio_pago: p.medio, monto: Number(p.monto) }
   }
 
+  /**
+   * El efectivo viaja IMPUTADO (lo que quedó en el cajón), no entregado: el
+   * exceso es el vuelto, que va aparte para el ticket. Los medios no-efectivo
+   * se imputan tal cual. Si el efectivo sobra, se reparte lo necesario entre
+   * las líneas de efectivo en orden y las que quedan en 0 se descartan.
+   */
+  function imputarEfectivo(
+    lineas: PagoPayload[],
+    totalACubrir: number
+  ): PagoPayload[] {
+    const noEfectivo = lineas
+      .filter((p) => p.medio_pago !== 'efectivo')
+      .reduce((acc, p) => acc + p.monto, 0)
+    let necesario = Math.max(0, Math.round((totalACubrir - noEfectivo) * 100) / 100)
+    return lineas
+      .map((p) => {
+        if (p.medio_pago !== 'efectivo') return p
+        const imputado = Math.round(Math.min(p.monto, necesario) * 100) / 100
+        necesario = Math.round((necesario - imputado) * 100) / 100
+        return { ...p, monto: imputado, monto_entregado: p.monto }
+      })
+      .filter((p) => p.medio_pago !== 'efectivo' || p.monto > 0.005)
+  }
+
   function confirmar() {
     if (!puedeConfirmar) return
+    // Un medio que no da vuelto (tarjeta, transferencia, vale) no puede cobrar
+    // de más: el servidor lo rechaza. Mejor avisar acá.
+    if (totalNoEfectivo > total + 0.005) {
+      toast.error('Los pagos sin efectivo superan el total de la venta.')
+      return
+    }
     // Si hay una línea de maquinita y el parent sabe manejarla, desviamos
     // a ese flujo: el parent abre la maquinita con el monto parcial y
     // registra la venta al aprobarse.
     const lineaMaq = pagos.find((p) => p.medio === MEDIO_MAQUINITA)
     if (lineaMaq && onCobrarConMaquinita) {
-      const otros: PagoPayload[] = pagos
-        .filter((p) => p.medio !== MEDIO_MAQUINITA)
-        .map(mapPago)
-      onCobrarConMaquinita(otros, Number(lineaMaq.monto))
+      const montoMaq = Number(lineaMaq.monto)
+      const otros: PagoPayload[] = imputarEfectivo(
+        pagos.filter((p) => p.medio !== MEDIO_MAQUINITA).map(mapPago),
+        total - montoMaq
+      )
+      onCobrarConMaquinita(otros, montoMaq)
       return
     }
-    onConfirmar(pagos.map(mapPago), vuelto)
+    onConfirmar(imputarEfectivo(pagos.map(mapPago), total), vuelto)
   }
 
   const shortcuts = useMemo(

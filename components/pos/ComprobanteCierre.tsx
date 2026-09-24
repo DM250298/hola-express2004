@@ -23,6 +23,12 @@ export interface DatosComprobanteCierre {
   desglose: Array<{ etiqueta: string; total: number; cantidad: number }>
   productos: ProductoVendidoComprobante[]
   gastosCaja: number
+  /** Ventas en efectivo (imputado) según el servidor. Si falta, se busca en el desglose. */
+  ventasEfectivo?: number
+  /** Cobros de fiado en efectivo del turno (suman al esperado). */
+  cobrosFiado?: number
+  /** Sangrías del turno al buzón (restan del esperado). */
+  sangrias?: number
   efectivoEsperado: number
   montoContado: number
   diferencia: number
@@ -116,12 +122,30 @@ export function ComprobanteCierre({ datos }: Props) {
       </div>
       <div className="comprobante-fila">
         <span>(+) Ventas en efectivo</span>
-        <span>{formatearMonto(datos.desglose.find((d) => d.etiqueta === 'Efectivo')?.total ?? 0)}</span>
+        <span>
+          {formatearMonto(
+            datos.ventasEfectivo ??
+              datos.desglose.find((d) => d.etiqueta === 'Efectivo')?.total ??
+              0
+          )}
+        </span>
       </div>
+      {(datos.cobrosFiado ?? 0) > 0.009 && (
+        <div className="comprobante-fila">
+          <span>(+) Cobros de fiado</span>
+          <span>{formatearMonto(datos.cobrosFiado ?? 0)}</span>
+        </div>
+      )}
       <div className="comprobante-fila">
         <span>(−) Gastos de caja</span>
         <span>{formatearMonto(datos.gastosCaja)}</span>
       </div>
+      {(datos.sangrias ?? 0) > 0.009 && (
+        <div className="comprobante-fila">
+          <span>(−) Sangrías a caja fuerte</span>
+          <span>{formatearMonto(datos.sangrias ?? 0)}</span>
+        </div>
+      )}
       <div className="comprobante-fila">
         <span>Esperado en caja</span>
         <span>{formatearMonto(datos.efectivoEsperado)}</span>
