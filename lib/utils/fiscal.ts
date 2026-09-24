@@ -105,3 +105,30 @@ export function normalizarNumeroComprobante(s: string | null | undefined): strin
 export function discriminaIva(tipo: string): boolean {
   return tipo === 'A' || tipo === 'M'
 }
+
+/**
+ * Alícuotas de IVA vigentes en Argentina (Ley de IVA): 0 (exento / no
+ * gravado), 2,5, 5, 10,5 (harinas, carnes, frutas…), 21 (general) y 27
+ * (servicios públicos a responsables inscriptos). Los campos de IVA se eligen
+ * de esta lista: un número libre dejaba pasar un 22 % por un giro de la rueda.
+ */
+export const ALICUOTAS_IVA = [0, 2.5, 5, 10.5, 21, 27] as const
+
+/** Clave canónica de una alícuota (`'10.5'`, `'21'`); '' si está vacía. */
+export function claveAlicuota(v: string | number | null | undefined): string {
+  if (v === null || v === undefined || String(v).trim() === '') return ''
+  const n = Number(String(v).replace(',', '.'))
+  return Number.isFinite(n) ? String(n) : String(v)
+}
+
+/** `true` si el valor es una de las alícuotas legales. */
+export function esAlicuotaValida(v: string | number | null | undefined): boolean {
+  const c = claveAlicuota(v)
+  return c !== '' && ALICUOTAS_IVA.some((a) => String(a) === c)
+}
+
+/** Etiqueta para mostrar: `10,5 %`, `0 % (exento)`. */
+export function etiquetaAlicuota(v: number): string {
+  const txt = `${String(v).replace('.', ',')} %`
+  return v === 0 ? `${txt} (exento)` : txt
+}

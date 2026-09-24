@@ -1425,6 +1425,27 @@ export type MovimientoCajaFuerteUpdate = {
   nota?: string
 }
 
+// ─── arqueos_boveda (conteo diario de la caja fuerte, mig 216) ──────────────
+
+export type ArqueoBovedaRow = {
+  id: number
+  fecha: string
+  usuario_id: string | null
+  saldo_sistema: number
+  contado: number
+  diferencia: number
+  /** Denominación → cantidad de billetes (lo que cargó el contador). */
+  detalle_billetes: Json | null
+  nota: string | null
+  ajuste_aplicado: boolean
+  movimiento_cf_id: number | null
+  created_at: string
+}
+
+/** Solo lectura desde el cliente: se escribe por fn_arqueo_boveda. */
+export type ArqueoBovedaInsert = never
+export type ArqueoBovedaUpdate = never
+
 // ─── ventas ──────────────────────────────────────────────────────────────────
 
 export type VentaRow = {
@@ -4320,6 +4341,12 @@ export interface Database {
         Update: MovimientoCajaFuerteUpdate
         Relationships: []
       }
+      arqueos_boveda: {
+        Row: ArqueoBovedaRow
+        Insert: ArqueoBovedaInsert
+        Update: ArqueoBovedaUpdate
+        Relationships: []
+      }
       acreditaciones: {
         Row: AcreditacionRow
         Insert: AcreditacionInsert
@@ -5489,6 +5516,22 @@ export interface Database {
           remesa_id: number
           movimiento_id: number
           saldo_nuevo: number
+        }
+      }
+      fn_arqueo_boveda: {
+        Args: {
+          p_usuario_id: string
+          p_contado: number
+          p_detalle: Json | null
+          p_nota: string | null
+          p_aplicar_ajuste: boolean
+        }
+        Returns: {
+          id: number
+          saldo_sistema: number
+          contado: number
+          diferencia: number
+          ajuste_aplicado: boolean
         }
       }
       fn_registrar_mov_caja_fuerte: {

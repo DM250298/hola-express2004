@@ -59,7 +59,9 @@ import {
   puntoVentaValido,
   soloDigitos,
   tipoDesdeCondicionIva,
+  esAlicuotaValida,
 } from '@/lib/utils/fiscal'
+import { SelectAlicuota } from '@/components/shared/SelectAlicuota'
 import { hoyIso } from '@/lib/utils/periodos'
 
 interface LineaStock {
@@ -71,6 +73,13 @@ interface LineaStock {
   margen: string
   /** IVA de venta % del producto (para el recálculo del precio). */
   iva_venta: string
+  /**
+   * IVA de compra % del renglón. Arranca con el de la ficha del producto: un
+   * único IVA para toda la compra pisaba las harinas al 10,5 con un 21.
+   */
+  iva_compra: string
+  /** El IVA de compra de la ficha (para restaurarlo al volver a una A). */
+  iva_compra_ficha: string
   /**
    * Qué manda del lado venta, igual que en la carga de factura:
    *  · 'precio' → el precio tipeado se respeta tal cual (y el margen se deduce)
@@ -235,6 +244,14 @@ export function ModalCompraFactura({
   function aplicarTipo(t: string) {
     setTipoComp(t)
     setIvaPct(discriminaIva(t) ? '21' : '0')
+    // Con renglones de stock, el IVA es por renglón: una B/C/X los deja en 0;
+    // volver a una A les devuelve el de la ficha del producto.
+    setLineas((prev) =>
+      prev.map((l) => ({
+        ...l,
+        iva_compra: discriminaIva(t) ? l.iva_compra_ficha : '0',
+      }))
+    )
   }
 
   function agregarLinea(prod: {
@@ -242,6 +259,7 @@ export function ModalCompraFactura({
     nombre: string
     margen?: number | null
     iva_venta?: number | null
+    iva_compra?: number | null
     precio_venta?: number | null
     pendiente_precio?: boolean | null
   }) {
@@ -267,6 +285,12 @@ export function ModalCompraFactura({
               costo_sin_iva: '',
               margen: String(margenProd > 0 ? margenProd : 30),
               iva_venta: String(prod.iva_venta ?? 21),
+              // Una B/C/X no discrimina IVA: el renglón va en 0 (la ficha no
+              // se toca, ver aplicar_iva).
+              iva_compra: discriminaIva(tipoComp)
+                ? String(prod.iva_compra ?? 21)
+                : '0',
+              iva_compra_ficha: String(prod.iva_compra ?? 21),
               modoVenta: congelar ? 'precio' : 'margen',
               precio: congelar ? String(vigente) : '',
               precioVigente: congelar ? String(vigente) : '',
@@ -278,7 +302,7 @@ export function ModalCompraFactura({
 
   function editarLinea(
     id: number,
-    campo: 'cantidad' | 'costo_sin_iva' | 'margen' | 'precio',
+    campo: 'cantidad' | 'costo_sin_iva' | 'margen' | 'precio' | 'iva_compra',
     valor: string
   ) {
     setLineas((prev) =>
@@ -306,10 +330,25 @@ export function ModalCompraFactura({
     return Number(gastoNeto) || 0
   }, [mueveStock, lineas, gastoNeto])
 
-  const ivaTotal = useMemo(
-    () => Math.round(neto * (Number(ivaPct) || 0)) / 100,
-    [neto, ivaPct]
-  )
+  // Con stock el IVA es por renglón (cada producto con su alícuota); sin
+  // stock (gasto) sigue siendo uno solo para todo el comprobante.
+  const ivaTotal = useMemo(() => {
+    if (mueveStock) {
+      const iva = lineas.reduce(
+        (acc, l) =>
+          acc +
+          (Number(l.cantidad) || 0) *
+            (Number(l.costo_sin_iva) || 0) *
+            ((Number(l.iva_compra) || 0) / 100),
+        0
+      )
+      return Math.round(iva * 100) / 100
+    }
+    return Math.round(neto * (Number(ivaPct) || 0)) / 100
+  }, [mueveStock, lineas, neto, ivaPct])
+  const alicuotaInvalida = mueveStock
+    ? lineas.some((l) => !esAlicuotaValida(l.iva_compra))
+    : !esAlicuotaValida(ivaPct)
   const total = Math.round((neto + ivaTotal) * 100) / 100
 
   const proveedorSel = (proveedores ?? []).find((p) => String(p.id) === proveedorId)
@@ -422,6 +461,7 @@ export function ModalCompraFactura({
     !nroError &&
     !fechaError &&
     total > 0 &&
+    !alicuotaInvalida &&
     !pagoInvalido &&
     (mueveStock ? lineasValidas : gastoValido) &&
     (montoPagoNum <= 0.009
@@ -498,15 +538,22 @@ export function ModalCompraFactura({
               producto_id: l.producto_id,
               cantidad: Number(l.cantidad),
               costo_sin_iva: Number(l.costo_sin_iva),
-              iva_compra_porcentaje: Number(ivaPct) || 0,
+              iva_compra_porcentaje: Number(l.iva_compra) || 0,
               margen_porcentaje: Number(l.margen) || 0,
-              iva_venta_porcentaje: Number(l.iva_venta) || 21,
+              // `||` convertía un exento (0) en 21.
+              iva_venta_porcentaje:
+                l.iva_venta.trim() !== '' ? Number(l.iva_venta) : 21,
               // El precio tipeado MANDA (el RPC deduce el margen real, aunque
               // dé negativo). Sin precio, repricia el motor desde el margen.
               precio_venta:
                 l.modoVenta === 'precio' ? r2(Number(l.precio) || 0) : null,
-              // La alícuota vuelve a la ficha del producto (mig 168/169).
-              aplicar_iva: l.iva_venta.trim() !== '',
+              // La alícuota vuelve a la ficha del producto (mig 168/169),
+              // pero solo desde un comprobante que discrimina IVA: el 0 de una
+              // B/C/X no es la alícuota del producto.
+              aplicar_iva:
+                discriminaIva(tipoComp) &&
+                l.iva_venta.trim() !== '' &&
+                l.iva_compra.trim() !== '',
             }))
           : [],
         gasto: mueveStock
@@ -705,6 +752,7 @@ export function ModalCompraFactura({
                             nombre: p.nombre,
                             margen: p.margen,
                             iva_venta: p.iva_venta,
+                            iva_compra: p.iva_compra,
                             precio_venta: p.precio_venta,
                             pendiente_precio: p.pendiente_precio,
                           })
@@ -730,6 +778,7 @@ export function ModalCompraFactura({
                         <th className="p-2 text-left">Producto</th>
                         <th className="p-2 w-20">Cant.</th>
                         <th className="p-2 w-28">Costo s/IVA</th>
+                        <th className="p-2 w-20">IVA %</th>
                         {afectaPrecio && (
                           <th
                             className="p-2 w-20"
@@ -782,6 +831,16 @@ export function ModalCompraFactura({
                                 className="w-full h-8 pl-5 text-right text-sm tabular-nums border-[#e4c9b0]"
                               />
                             </div>
+                          </td>
+                          <td className="p-1">
+                            <SelectAlicuota
+                              size="sm"
+                              value={l.iva_compra}
+                              onChange={(v) => editarLinea(l.producto_id, 'iva_compra', v)}
+                              disabled={!discriminaIva(tipoComp)}
+                              ariaLabel={`IVA compra de ${l.nombre}`}
+                              className="h-8 px-1.5 text-xs"
+                            />
                           </td>
                           {afectaPrecio && (
                             <td className="p-1">
@@ -856,7 +915,7 @@ export function ModalCompraFactura({
                           }).format(totalUnidades)}{' '}
                           u.
                         </td>
-                        <td className="p-2" colSpan={afectaPrecio ? 4 : 2} />
+                        <td className="p-2" colSpan={afectaPrecio ? 5 : 3} />
                       </tr>
                     </tfoot>
                   </table>
@@ -1083,17 +1142,20 @@ export function ModalCompraFactura({
             </div>
             <div className="space-y-1.5">
               <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">IVA %</Label>
-              <Input
-                type="number"
-                min="0"
-                step="0.5"
-                value={ivaPct}
-                onChange={(e) => setIvaPct(e.target.value)}
-                className="h-9 tabular-nums border-[#e4c9b0]"
-              />
+              {mueveStock ? (
+                <p className="flex h-9 items-center text-[11px] leading-tight text-[#6f3a2a]">
+                  Por producto, en la tabla
+                </p>
+              ) : (
+                <SelectAlicuota
+                  value={ivaPct}
+                  onChange={setIvaPct}
+                  className="h-9"
+                />
+              )}
             </div>
           </div>
-          {!discriminaIva(tipoComp) && Number(ivaPct) > 0 && (
+          {!mueveStock && !discriminaIva(tipoComp) && Number(ivaPct) > 0 && (
             <p className="-mt-2 flex items-start gap-1 text-[10px] leading-snug text-[#c43e2c]">
               <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
               Un comprobante {tipoComp} no discrimina IVA: cargarle{' '}

@@ -64,6 +64,14 @@ function inicioMesIso(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
+// Etiquetas del selector de período (Base UI las usa para el trigger).
+const ITEMS_PERIODO_FIN: Record<string, string> = {
+  mes_actual: 'Este mes',
+  mes_anterior: 'Mes anterior',
+  ultimos_7: 'Últimos 7 días',
+  personalizado: 'Personalizado',
+}
+
 export function PantallaFinanzas() {
   const [periodo, setPeriodo] = useState<ClavePeriodo>('mes_actual')
   const [desdePersonalizado, setDesdePersonalizado] =
@@ -109,6 +117,7 @@ export function PantallaFinanzas() {
               Período
             </Label>
             <Select
+              items={ITEMS_PERIODO_FIN}
               value={periodo}
               onValueChange={(v) =>
                 setPeriodo((v ?? 'mes_actual') as ClavePeriodo)

@@ -101,8 +101,11 @@ export function parsearEnteroOpcional(valor: unknown): number | null {
 export function parsearIva(valor: unknown): number {
   if (valor === null || valor === undefined || valor === '') return 21
   const n = parsearPrecio(valor)
-  if (!Number.isFinite(n) || n <= 0) return 21
-  return n <= 1 ? Math.round(n * 100) : Math.round(n)
+  if (!Number.isFinite(n) || n < 0) return 21
+  // Fracción (0.105) o porcentaje (10.5), a 2 decimales: el Math.round entero
+  // convertía el 10,5 de las harinas en 11, y el 0 de un exento en 21.
+  const pct = n > 0 && n <= 1 ? n * 100 : n
+  return Math.round(pct * 100) / 100
 }
 
 /**

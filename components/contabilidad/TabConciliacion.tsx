@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Landmark } from 'lucide-react'
+import { Landmark, Scale } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -13,11 +14,16 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { MontoARS } from '@/components/shared/MontoARS'
+import { ConfirmacionAccion } from '@/components/shared/ConfirmacionAccion'
 import {
   useConciliarMovimiento,
+  useCrearMovimiento,
   useCuentas,
   useMovimientos,
 } from '@/lib/hooks/useCuentas'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { formatearMonto } from '@/lib/utils/formato'
+import { hoyIso } from '@/lib/utils/periodos'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
@@ -27,6 +33,9 @@ export function TabConciliacion() {
   const [saldoExtracto, setSaldoExtracto] = useState('')
 
   const conciliar = useConciliarMovimiento()
+  const crearMov = useCrearMovimiento()
+  const { data: usuario } = useUsuario()
+  const [confirmarAjuste, setConfirmarAjuste] = useState(false)
   const { data: movimientos, isLoading } = useMovimientos(
     cuentaId ? { cuenta_id: Number(cuentaId) } : {}
   )
@@ -48,6 +57,27 @@ export function TabConciliacion() {
     saldoExtracto !== '' && Number.isFinite(extractoNum)
       ? extractoNum - saldoSistema
       : null
+  const hayDiferencia = diferencia !== null && Math.abs(diferencia) >= 0.01
+  // La bóveda no se ajusta acá: su saldo lo mueve el arqueo (Caja fuerte).
+  const puedeAjustar = hayDiferencia && !!cuenta && !cuenta.es_caja_fuerte
+
+  async function registrarAjuste() {
+    if (!puedeAjustar || !cuenta || !usuario || diferencia === null) return
+    try {
+      await crearMov.mutateAsync({
+        cuenta_id: cuenta.id,
+        tipo: diferencia > 0 ? 'ingreso' : 'egreso',
+        monto: Math.round(Math.abs(diferencia) * 100) / 100,
+        descripcion: `Ajuste de conciliación: saldo real ${formatearMonto(extractoNum)}`,
+        categoria: 'ajuste_conciliacion',
+        fecha: hoyIso(),
+        usuario_id: usuario.id,
+      })
+      setConfirmarAjuste(false)
+    } catch {
+      // toast en el hook
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -139,9 +169,47 @@ export function TabConciliacion() {
             <div className="text-xl font-extrabold text-[#391511] tabular-nums">
               {diferencia === null ? '—' : <MontoARS monto={diferencia} />}
             </div>
+            {puedeAjustar && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmarAjuste(true)}
+                className="mt-2 gap-1.5 border-[#c43e2c]/40 text-[#391511] bg-white"
+              >
+                <Scale className="h-3.5 w-3.5" />
+                Registrar ajuste por la diferencia
+              </Button>
+            )}
+            {hayDiferencia && cuenta?.es_caja_fuerte && (
+              <p className="mt-2 text-[11px] text-[#6f3a2a]">
+                La caja fuerte se ajusta con el arqueo del día (Finanzas › Caja
+                fuerte).
+              </p>
+            )}
           </div>
         </div>
       )}
+
+      <ConfirmacionAccion
+        abierto={confirmarAjuste}
+        onCambioAbierto={setConfirmarAjuste}
+        titulo="Registrar ajuste de conciliación"
+        descripcion={
+          diferencia !== null && cuenta ? (
+            <>
+              Se registra un {diferencia > 0 ? 'ingreso' : 'egreso'} de{' '}
+              <strong>{formatearMonto(Math.abs(diferencia))}</strong> en{' '}
+              <strong>{cuenta.nombre}</strong> (categoría &quot;Ajuste de
+              conciliación&quot;) para que el saldo del sistema quede igual al
+              real. Antes, revisá en Finanzas › Movimientos (resumen por
+              categoría) que no falte cargar algo concreto.
+            </>
+          ) : undefined
+        }
+        textoConfirmar="Registrar ajuste"
+        procesando={crearMov.isPending}
+        onConfirmar={registrarAjuste}
+      />
 
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
         {!cuentaId ? (

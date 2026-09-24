@@ -24,6 +24,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { SelectAlicuota } from '@/components/shared/SelectAlicuota'
+import { esAlicuotaValida } from '@/lib/utils/fiscal'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -844,6 +846,10 @@ export function DrawerProducto({
       )
       return
     }
+    if (!esAlicuotaValida(ivaCompra) || !esAlicuotaValida(ivaVenta)) {
+      toast.error('Elegí alícuotas de IVA legales: 0, 2,5, 5, 10,5, 21 o 27 %.')
+      return
+    }
 
     const costosAdicionales: CostoAdicional[] = adicionales
       .filter((a) => a.descripcion.trim() !== '' || Number(a.monto) > 0)
@@ -1381,17 +1387,14 @@ export function DrawerProducto({
                     <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                       IVA compra %
                     </Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.5"
+                    <SelectAlicuota
                       value={ivaCompra}
-                      onChange={(e) => {
+                      onChange={(v) => {
                         setPrecioTocado(true)
-                        setIvaCompra(e.target.value)
+                        setIvaCompra(v)
                       }}
                       disabled={guardando}
-                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      className="bg-white"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1569,17 +1572,14 @@ export function DrawerProducto({
                     <Label className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
                       IVA venta %
                     </Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.5"
+                    <SelectAlicuota
                       value={ivaVenta}
-                      onChange={(e) => {
+                      onChange={(v) => {
                         setPrecioTocado(true)
-                        setIvaVenta(e.target.value)
+                        setIvaVenta(v)
                       }}
                       disabled={guardando}
-                      className="bg-white tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                      className="bg-white"
                     />
                   </div>
                   {modoPrecio === 'margen' ? (

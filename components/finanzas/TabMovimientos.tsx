@@ -32,6 +32,12 @@ import {
   type PorPagina,
 } from '@/components/shared/PaginadorTabla'
 import { ModalNuevoMovimiento } from './ModalNuevoMovimiento'
+import {
+  ResumenCategoriasCuenta,
+  claveCategoriaMov,
+  esEntradaMov,
+  etiquetaCategoriaMov,
+} from './ResumenCategoriasCuenta'
 import { useCuentas, useMovimientos } from '@/lib/hooks/useCuentas'
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -100,12 +106,13 @@ export function TabMovimientos({
     cuentaInicial != null ? String(cuentaInicial) : TODOS
   )
   const [tipoFiltro, setTipoFiltro] = useState<string>(TODOS)
+  const [categoriaFiltro, setCategoriaFiltro] = useState<string>(TODOS)
   const [pagina, setPagina] = useState(0)
   const [porPagina, setPorPagina] = useState<PorPagina>(25)
   const [modalAbierto, setModalAbierto] = useState(false)
 
   const { data: cuentas } = useCuentas(false)
-  const { data: movimientos, isLoading, isError } = useMovimientos({
+  const { data: movimientosTodos, isLoading, isError } = useMovimientos({
     desde,
     hasta,
     cuenta_id: cuentaFiltro === TODOS ? null : Number(cuentaFiltro),
@@ -114,7 +121,28 @@ export function TabMovimientos({
 
   useEffect(() => {
     setPagina(0)
-  }, [desde, hasta, cuentaFiltro, tipoFiltro])
+  }, [desde, hasta, cuentaFiltro, tipoFiltro, categoriaFiltro])
+
+  // La categoría se filtra en memoria: así el selector ofrece solo las que
+  // tienen movimientos en el período, y el resumen por categoría usa todas.
+  const itemsCategoria = useMemo(() => {
+    const r: Record<string, string> = { [TODOS]: 'Todas las categorías' }
+    for (const m of movimientosTodos ?? []) {
+      const c = claveCategoriaMov(m)
+      r[c] = etiquetaCategoriaMov(c)
+    }
+    return r
+  }, [movimientosTodos])
+
+  const movimientos = useMemo(
+    () =>
+      categoriaFiltro === TODOS
+        ? movimientosTodos
+        : movimientosTodos?.filter((m) => claveCategoriaMov(m) === categoriaFiltro),
+    [movimientosTodos, categoriaFiltro]
+  )
+  const cuentaFiltrada =
+    cuentaFiltro === TODOS ? null : cuentas?.find((c) => String(c.id) === cuentaFiltro)
 
   const itemsCuenta = useMemo(() => {
     const r: Record<string, string> = { [TODOS]: 'Todas las cuentas' }
@@ -128,11 +156,9 @@ export function TabMovimientos({
     let egresos = 0
     for (const m of lista) {
       const monto = Number(m.monto)
-      if (m.tipo === 'ingreso' || m.tipo === 'transferencia_entrada') {
-        ingresos += monto
-      } else if (m.tipo === 'egreso' || m.tipo === 'transferencia_salida') {
-        egresos += monto
-      }
+      // El ajuste suma al saldo (fn_crear_movimiento): cuenta como entrada.
+      if (esEntradaMov(m.tipo)) ingresos += monto
+      else egresos += monto
     }
     return { ingresos, egresos, neto: ingresos - egresos }
   }, [movimientos])
@@ -239,7 +265,35 @@ export function TabMovimientos({
             <SelectItem value="ajuste">Ajustes</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select
+          items={itemsCategoria}
+          value={categoriaFiltro}
+          onValueChange={(v) => setCategoriaFiltro(v ?? TODOS)}
+        >
+          <SelectTrigger className="w-[220px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+            <SelectValue placeholder="Categoría" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(itemsCategoria).map(([valor, etiqueta]) => (
+              <SelectItem key={valor} value={valor}>
+                {etiqueta}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {cuentaFiltrada &&
+        tipoFiltro === TODOS &&
+        categoriaFiltro === TODOS &&
+        movimientosTodos &&
+        movimientosTodos.length > 0 && (
+          <ResumenCategoriasCuenta
+            movimientos={movimientosTodos}
+            cuentaNombre={cuentaFiltrada.nombre}
+          />
+        )}
 
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
         {isLoading ? (
@@ -313,8 +367,8 @@ export function TabMovimientos({
                           </div>
                         )}
                         {m.categoria && (
-                          <div className="text-[10px] text-[#6f3a2a] capitalize">
-                            {m.categoria.replace(/_/g, ' ')}
+                          <div className="text-[10px] text-[#6f3a2a]">
+                            {etiquetaCategoriaMov(m.categoria)}
                           </div>
                         )}
                       </TableCell>

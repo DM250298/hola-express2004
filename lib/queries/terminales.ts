@@ -111,7 +111,8 @@ export interface OrdenPagoCliente {
    */
   cobro_real?: {
     comision: number
-    iibb: number
+    /** null = MP no mandó el desglose → se usa el % de la cuenta. */
+    iibb: number | null
     neto: number | null
   }
 }

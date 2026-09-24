@@ -1,8 +1,16 @@
 'use client'
 
-import { useState } from 'react'
-import { CalendarClock, CheckCircle2, FileText, Loader2, Wallet } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import {
+  CalendarClock,
+  CheckCircle2,
+  FileText,
+  Loader2,
+  Search,
+  Wallet,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -62,6 +70,8 @@ const ITEMS_ESTADO: Record<string, string> = {
 
 export function TabCuentasAPagar() {
   const [estadoFiltro, setEstadoFiltro] = useState<string>('pendientes')
+  const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS)
+  const [busqueda, setBusqueda] = useState('')
   const [cuentaEditar, setCuentaEditar] =
     useState<CuentaAPagarConProveedor | null>(null)
   const [cuentaPago, setCuentaPago] =
@@ -87,10 +97,28 @@ export function TabCuentasAPagar() {
   const cancelarProg = useCancelarPagoProgramado()
   const hoy = hoyIso()
 
-  const cuentasFiltradas =
-    estadoFiltro === 'pendientes'
-      ? (cuentas ?? []).filter((c) => c.estado !== 'pagada')
-      : (cuentas ?? [])
+  // Proveedores presentes en el filtro de estado (para el selector).
+  const itemsProveedor = useMemo(() => {
+    const r: Record<string, string> = { [TODOS]: 'Todos los proveedores' }
+    const lista = [...(cuentas ?? [])]
+      .filter((c) => c.proveedor_id != null)
+      .sort((a, b) =>
+        (a.proveedor_nombre ?? '').localeCompare(b.proveedor_nombre ?? '', 'es')
+      )
+    for (const c of lista) r[String(c.proveedor_id)] = c.proveedor_nombre ?? '—'
+    return r
+  }, [cuentas])
+
+  const texto = busqueda.trim().toLowerCase()
+  const cuentasFiltradas = (cuentas ?? []).filter(
+    (c) =>
+      (estadoFiltro !== 'pendientes' || c.estado !== 'pagada') &&
+      (proveedorFiltro === TODOS || String(c.proveedor_id) === proveedorFiltro) &&
+      (texto === '' ||
+        (c.proveedor_nombre ?? '').toLowerCase().includes(texto) ||
+        (c.numero_factura ?? '').toLowerCase().includes(texto) ||
+        (c.nota ?? '').toLowerCase().includes(texto))
+  )
 
   // Objetos VIVOS para drawer/modales: el state guarda la copia del click, y
   // tras definir cuotas o pagar quedaría vieja (mostraría el plan anterior).
@@ -134,6 +162,35 @@ export function TabCuentasAPagar() {
             <SelectItem value={TODOS}>Todas</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Filtros por proveedor */}
+      <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-3 flex flex-wrap gap-2">
+        <Select
+          items={itemsProveedor}
+          value={proveedorFiltro}
+          onValueChange={(v) => setProveedorFiltro(v ?? TODOS)}
+        >
+          <SelectTrigger className="w-[240px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+            <SelectValue placeholder="Proveedor" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(itemsProveedor).map(([valor, etiqueta]) => (
+              <SelectItem key={valor} value={valor}>
+                {etiqueta}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#c8a58a]" />
+          <Input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar proveedor, n° de factura o nota…"
+            className="pl-8 border-[#e4c9b0] bg-white"
+          />
+        </div>
       </div>
 
       {/* Total pendiente */}
@@ -327,6 +384,14 @@ export function TabCuentasAPagar() {
                     {!c.tiene_factura && (
                       <span className="ml-2 text-[9px] uppercase tracking-wider text-[#c43e2c] bg-[#c43e2c]/10 rounded-full px-1.5 py-0.5">
                         sin factura
+                      </span>
+                    )}
+                    {c.monto <= 0.009 && (
+                      <span
+                        className="ml-2 text-[9px] uppercase tracking-wider text-[#6f3a2a] bg-[#e4c9b0]/40 rounded-full px-1.5 py-0.5"
+                        title="Se recibió sin costo: el importe se define al cargar la factura."
+                      >
+                        sin importe
                       </span>
                     )}
                   </TableCell>

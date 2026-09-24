@@ -131,7 +131,12 @@ export function useGuardarFacturaCompra() {
       )
     },
     onError: (error: Error) => {
-      toast.error(`No se pudo guardar la factura: ${error.message}`)
+      // El error de Postgres trae el detalle aparte (`details`): sin él, un
+      // "numeric field overflow" no dice qué campo se pasó de rango.
+      const detalle = (error as Error & { details?: string | null }).details
+      toast.error(`No se pudo guardar la factura: ${error.message}`, {
+        description: detalle || undefined,
+      })
     },
   })
 }

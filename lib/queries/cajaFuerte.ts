@@ -4,7 +4,9 @@ import { getTotalRemesado } from '@/lib/queries/posicionCaja'
 import { getCuentaCajaFuerte } from '@/lib/queries/cuentas'
 import { fechaLocal } from '@/lib/utils/periodos'
 import type {
+  ArqueoBovedaRow,
   ArqueoTesoreriaRow,
+  Json,
   MovimientoCajaFuerteRow,
   RemesaRow,
   SangriaRow,
@@ -276,6 +278,62 @@ export async function registrarMovimientoCajaFuerte(
     p_tipo: payload.tipo,
     p_monto: payload.monto,
     p_nota: payload.nota,
+  })
+  if (error) throw error
+  return data
+}
+
+// ─── Arqueo diario de la bóveda (mig 216) ────────────────────────────────────
+
+export interface ArqueoBovedaConUsuario extends ArqueoBovedaRow {
+  usuario_nombre: string | null
+}
+
+/**
+ * Historial de conteos de la caja fuerte, lo más nuevo primero. Devuelve
+ * `null` si la tabla todavía no existe (falta correr la migración 216), para
+ * que la pantalla lo diga en vez de romper.
+ */
+export async function getArqueosBoveda(
+  limite = 60
+): Promise<ArqueoBovedaConUsuario[] | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('arqueos_boveda')
+    .select('*, usuarios(nombre)')
+    .order('fecha', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limite)
+  if (error) {
+    if (error.code === 'PGRST205' || error.code === '42P01') return null
+    throw error
+  }
+  type Fila = ArqueoBovedaRow & { usuarios: { nombre: string } | null }
+  return ((data ?? []) as unknown as Fila[]).map(({ usuarios, ...resto }) => ({
+    ...resto,
+    usuario_nombre: usuarios?.nombre ?? null,
+  }))
+}
+
+export interface RegistrarArqueoBovedaPayload {
+  usuario_id: string
+  contado: number
+  /** Denominación → cantidad (del contador de billetes). */
+  detalle: Record<number, number> | null
+  nota: string | null
+  /** Solo admin: deja el saldo igual a lo contado. */
+  aplicar_ajuste: boolean
+}
+
+/** Guarda el conteo de la bóveda (y el ajuste, si se pidió) en una RPC atómica. */
+export async function registrarArqueoBoveda(payload: RegistrarArqueoBovedaPayload) {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_arqueo_boveda', {
+    p_usuario_id: payload.usuario_id,
+    p_contado: payload.contado,
+    p_detalle: (payload.detalle ?? null) as Json | null,
+    p_nota: payload.nota,
+    p_aplicar_ajuste: payload.aplicar_ajuste,
   })
   if (error) throw error
   return data

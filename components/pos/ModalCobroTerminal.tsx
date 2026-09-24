@@ -65,7 +65,7 @@ interface Props {
    */
   onAprobado: (
     medioPago: string,
-    cobroReal?: { comision: number; iibb: number } | null,
+    cobroReal?: { comision: number; iibb: number | null } | null,
     cobroId?: string | null
   ) => void
   /** true si la venta se está registrando luego de la aprobación. */

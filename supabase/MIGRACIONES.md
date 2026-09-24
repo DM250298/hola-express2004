@@ -304,7 +304,17 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 204 | `204_isla_y_limpieza_estantes.sql` | ✅ aplicada | 2026-09-17 | `b4bfc99` |
 | 205 | `205_punteras_isla_estantes.sql` | ✅ aplicada | 2026-09-17 | `491a668` |
 | 206 | `206_fix_178_join_costos_item_venta.sql` | ✅ aplicada | 2026-09-17 | `d447cda` |
-| 207 | `207_stock_maximo_y_conteo_parcial.sql` | ✅ aplicada | 2026-09-17 (prueba + producción) | pendiente de commit |
+| 207 | `207_stock_maximo_y_conteo_parcial.sql` | ✅ aplicada | 2026-09-17 (prueba + producción) | `2e07940` |
+| 208 | `208_fix_fn_crear_movimiento.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 209 | `209_rrhh_config_reseed.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 210 | `210_fn_generar_liquidacion_coalesce.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 211 | `211_variacion_costo_sin_overflow.sql` | ⏳ pendiente (prueba + producción) | — | `483ed6c` |
+| 212 | `212_backfill_iva_compra_productos.sql` | ⏳ pendiente (prueba + producción) | — | `908fe2f` |
+| 213 | `213_import_iva_compra_separado.sql` | ⏳ pendiente (prueba + producción) | — | `908fe2f` |
+| 214 | `214_devolucion_tarjeta_debita_cuenta.sql` | ⏳ pendiente (prueba + producción) | — | `35c93c0` |
+| 215 | `215_cerrar_deudas_saldadas.sql` | ⏳ pendiente (prueba + producción) | — | `35c93c0` |
+| 216 | `216_arqueo_diario_boveda.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 217 | `217_tablero_compara_mismo_tramo.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 
