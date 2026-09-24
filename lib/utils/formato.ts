@@ -36,6 +36,11 @@ export function etiquetaRangoFechas(desde: string, hasta: string): string {
   if (ad === ah && md === mh && dd === 1 && dh === ultimoDia) {
     return format(new Date(ad, md - 1, 1), 'MMMM yyyy', { locale: es })
   }
+  // Tramo desde el 1° dentro de un mes ("mismo tramo del mes pasado").
+  if (ad === ah && md === mh && dd === 1) {
+    const mes = format(new Date(ad, md - 1, 1), 'MMMM', { locale: es })
+    return `1 al ${dh} de ${mes}`
+  }
   return `${formatearFechaCortaISO(desde.slice(0, 10))} – ${formatearFechaCortaISO(hasta.slice(0, 10))}`
 }
 

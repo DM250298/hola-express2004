@@ -314,6 +314,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 214 | `214_devolucion_tarjeta_debita_cuenta.sql` | ⏳ pendiente (prueba + producción) | — | `35c93c0` |
 | 215 | `215_cerrar_deudas_saldadas.sql` | ⏳ pendiente (prueba + producción) | — | `35c93c0` |
 | 216 | `216_arqueo_diario_boveda.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
+| 217 | `217_tablero_compara_mismo_tramo.sql` | ⏳ pendiente (prueba + producción) | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 
