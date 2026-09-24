@@ -7,6 +7,7 @@ import {
   getProductosFrecuentesTurno,
   type CrearVentaPayload,
 } from '@/lib/queries/ventas'
+import { manejarErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 
 export const VENTAS_KEY = ['ventas'] as const
 export const FRECUENTES_KEY = ['productos-frecuentes-turno'] as const
@@ -55,6 +56,9 @@ export function useCrearVenta() {
       toast.success('Venta registrada')
     },
     onError: (error: Error) => {
+      // Sesión o turno de la pantalla ya no son los reales (mig 218): se
+      // avisa y se recarga / se vuelve a "Abrir caja".
+      if (manejarErrorIdentidad(error, queryClient)) return
       // El tope de fiado rebota desde fn_crear_venta con el prefijo
       // CTACTE_LIMITE: se muestra el detalle (quién, cuánto debe, su tope)
       // sin el ruido de "No se pudo completar la venta: ...".

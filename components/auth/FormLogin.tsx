@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, Lock, Mail } from 'lucide-react'
+import { CheckCircle2, Loader2, Lock, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,11 +10,21 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/client'
 import { purgarShellSW } from '@/lib/offline/shell'
 
-export function FormLogin() {
-  const router = useRouter()
+/** Avisos contextuales según de dónde se llegó al login (`?motivo=`). */
+const AVISOS: Record<string, string> = {
+  turno_cerrado:
+    'Turno cerrado. Ingresá con tu usuario para abrir la caja de tu turno.',
+}
+
+interface Props {
+  motivo?: string | null
+}
+
+export function FormLogin({ motivo = null }: Props) {
   const [email, setEmail] = useState('')
   const [contrasena, setContrasena] = useState('')
   const [cargando, setCargando] = useState(false)
+  const aviso = motivo ? (AVISOS[motivo] ?? null) : null
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -36,6 +45,7 @@ export function FormLogin() {
           'Too many requests': 'Demasiados intentos. Esperá unos minutos.',
         }
         toast.error(mensajes[error.message] ?? 'No se pudo iniciar sesión. Intentá de nuevo.')
+        setCargando(false)
         return
       }
 
@@ -43,13 +53,13 @@ export function FormLogin() {
       // arrastrar la pantalla de otra persona si se corta internet.
       await purgarShellSW()
 
-      // La marca `desde=login` le avisa al middleware que es la entrada:
-      // quien tiene el tablero del dueño aterriza ahí.
-      router.push('/?desde=login')
-      router.refresh()
+      // Navegación DURA (no router.push): descarta la caché de queries y
+      // cualquier estado en memoria del usuario anterior. La marca
+      // `desde=login` le avisa al middleware que es la entrada: quien tiene
+      // el tablero del dueño aterriza ahí.
+      window.location.assign('/?desde=login')
     } catch {
       toast.error('Error inesperado. Revisá tu conexión e intentá de nuevo.')
-    } finally {
       setCargando(false)
     }
   }
@@ -82,6 +92,16 @@ export function FormLogin() {
       </CardHeader>
 
       <CardContent className="px-8 py-7 bg-white">
+        {aviso && (
+          <div
+            role="status"
+            className="mb-5 flex items-start gap-2 rounded-xl border border-[#2f8f4e]/30 bg-[#2f8f4e]/10 px-3 py-2.5 text-sm text-[#1f5f34]"
+          >
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#2f8f4e]" />
+            <span>{aviso}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-1.5">
             <Label htmlFor="email" className="text-[#391511] font-medium text-sm">

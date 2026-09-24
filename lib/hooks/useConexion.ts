@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { EVENTO_COLA_CAMBIADA } from '@/lib/offline/cola'
 import {
-  EVENTO_COLA_CAMBIADA,
-  contarVentasPendientes,
-} from '@/lib/offline/cola'
-import { sincronizarVentasPendientes } from '@/lib/offline/sync'
+  contarColaPorUsuario,
+  sincronizarVentasPendientes,
+} from '@/lib/offline/sync'
+import { getUsuarioSesion } from '@/lib/auth/sesionActual'
 
 /** Cada cuánto reintentar la sincronización en segundo plano (ms). */
 const INTERVALO_SYNC = 45 * 1000
@@ -15,8 +16,10 @@ const INTERVALO_SYNC = 45 * 1000
 export interface EstadoConexion {
   /** Hay conexión a internet. */
   online: boolean
-  /** Ventas en cola (offline) sin sincronizar. */
+  /** Ventas en cola (offline) del usuario de la sesión, sin sincronizar. */
   pendientes: number
+  /** Ventas en cola de OTRO cajero: se envían cuando esa persona (o Finanzas) entre. */
+  deOtroUsuario: number
   /** Hay una sincronización en curso. */
   sincronizando: boolean
   /** Dispara una sincronización manual con avisos al usuario. */
@@ -33,10 +36,13 @@ export function useConexion(): EstadoConexion {
   const queryClient = useQueryClient()
   const [online, setOnline] = useState(true)
   const [pendientes, setPendientes] = useState(0)
+  const [deOtroUsuario, setDeOtroUsuario] = useState(0)
   const [sincronizando, setSincronizando] = useState(false)
 
   const refrescarPendientes = useCallback(async () => {
-    setPendientes(await contarVentasPendientes())
+    const c = await contarColaPorUsuario(getUsuarioSesion())
+    setPendientes(c.propias)
+    setDeOtroUsuario(c.deOtroUsuario)
   }, [])
 
   const sincronizar = useCallback(
@@ -60,6 +66,8 @@ export function useConexion(): EstadoConexion {
             'cuentas',
             'movimientos-cuenta',
             'productos-frecuentes-turno',
+            'resumen-turno',
+            'dashboard-turnos-dia',
           ]) {
             queryClient.invalidateQueries({ queryKey: [key] })
           }
@@ -67,6 +75,15 @@ export function useConexion(): EstadoConexion {
         if (r.conError > 0 && !silencioso) {
           toast.error(
             `${r.conError} venta${r.conError === 1 ? '' : 's'} no se pudieron sincronizar.`
+          )
+        }
+        if (r.deOtroUsuario > 0 && !silencioso) {
+          toast.warning(
+            `${r.deOtroUsuario} venta${r.deOtroUsuario === 1 ? '' : 's'} de otro cajero siguen en cola`,
+            {
+              description:
+                'Se envían cuando esa persona (o un encargado) inicie sesión en esta PC.',
+            }
           )
         }
       } finally {
@@ -81,7 +98,8 @@ export function useConexion(): EstadoConexion {
   useEffect(() => {
     setOnline(navigator.onLine)
     refrescarPendientes()
-    // Al montar, intentar drenar lo que haya quedado de una sesión previa.
+    // Al montar, intentar drenar lo que haya quedado pendiente (solo lo de
+    // esta sesión; lo de otro cajero espera a su dueño).
     sincronizar(true)
 
     function alConectar() {
@@ -111,6 +129,7 @@ export function useConexion(): EstadoConexion {
   return {
     online,
     pendientes,
+    deOtroUsuario,
     sincronizando,
     sincronizarAhora: () => sincronizar(false),
   }

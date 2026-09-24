@@ -315,6 +315,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 215 | `215_cerrar_deudas_saldadas.sql` | ✅ aplicada | 2026-09-23 (prueba + producción) | `35c93c0` |
 | 216 | `216_arqueo_diario_boveda.sql` | ✅ aplicada | 2026-09-23 (prueba + producción) | en este commit |
 | 217 | `217_tablero_compara_mismo_tramo.sql` | ✅ aplicada | 2026-09-23 (prueba + producción) | `ea8140d` |
+| 218 | `218_identidad_turnos.sql` | ✅ aplicada en PRUEBA 2026-09-24 · ⏳ PENDIENTE en producción (correr junto con el deploy; después T1 y los chequeos del final del archivo) | 2026-09-24 (prueba) | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 

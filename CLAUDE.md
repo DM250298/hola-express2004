@@ -132,7 +132,9 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
   (empleados, liquidaciones, sueldos, ctacte), costos (`costos_producto`).
   `egresos`/`sangrias`: el cajero ve solo los de su turno. Los RPCs son
   `security definer` → **bypassean RLS**, así que el POS/anular/recepción
-  no se afectan.
+  no se afectan. Desde la mig 218, `caja_turnos`, `ventas`, `items_venta` y
+  `pagos_venta` son **solo SELECT** para authenticated: toda escritura pasa
+  por RPC (`fn_abrir_turno`, `fn_cerrar_turno`, `fn_crear_venta`, …).
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
@@ -427,10 +429,28 @@ Varias columnas del schema viejo son enums (`estado_pedido`, `estado_lote`,
 `estado_venta`, `tipo_movimiento`, etc.). Al asignar text desde una RPC en
 plpgsql, **castear explícitamente**: `'recibido'::public.estado_pedido`.
 
-### `fn_crear_venta` recibe 6 argumentos
+### `fn_crear_venta` recibe 8 argumentos (v14, mig 218)
 Firma actual: `(p_turno_id integer, p_usuario_id uuid, p_pagos jsonb,
 p_items jsonb, p_cliente_uuid uuid default null, p_cliente_id integer
-default null)`. Si tocás esta función, no rompas la firma o se cae el POS.
+default null, p_forzar_turno boolean default false, p_fecha timestamptz
+default null)`. Si tocás esta función, partí de la 218 y no rompas la firma
+o se cae el POS (y dropeá la firma vieja: ver "CREATE OR REPLACE").
+
+### Identidad: la pone la sesión, la base la exige (mig 218)
+El POS arma la pantalla con el usuario del SSR, pero **la base solo acepta
+escrituras de caja a nombre de `auth.uid()`**: `fn_crear_venta` rechaza
+`p_usuario_id ≠ auth.uid()` (`SESION_CAMBIO:`) y turnos ajenos
+(`TURNO_AJENO:`); el trigger `trg_control_identidad` hace lo mismo en
+`ventas`, `egresos`, `sangrias`, `devoluciones` y `cuenta_corriente_*` con
+`turno_id`. Finanzas (admin incluido) puede operar sobre turnos ajenos
+(cierre administrativo, replay de la cola offline). `service_role` y las
+llamadas sin JWT (SQL Editor, clonado) confían en los parámetros. Abrir y
+cerrar turno va por `fn_abrir_turno` / `fn_cerrar_turno` (un solo turno
+abierto por usuario, índice único parcial). En el cliente,
+`GuardianSesion` recarga la pantalla si la sesión del navegador cambia, los
+hooks del POS usan `manejarErrorIdentidad()` y **`signOut` siempre con
+`scope: 'local'`** (el global tumbaba la sesión de la PC del mostrador desde
+el celular). Cerrar caja en el POS cierra la sesión de esa PC.
 
 ### CREATE OR REPLACE no pisa firmas distintas
 Si la función actual difiere en un argumento (orden, default, tipo),

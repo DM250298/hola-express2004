@@ -6,7 +6,11 @@ export const metadata = {
   title: 'Iniciar sesión — ¡Hola! Express',
 }
 
-export default async function PaginaLogin() {
+export default async function PaginaLogin({
+  searchParams,
+}: {
+  searchParams: Promise<{ motivo?: string }>
+}) {
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -14,5 +18,9 @@ export default async function PaginaLogin() {
 
   if (user) redirect('/')
 
-  return <FormLogin />
+  // `?motivo=turno_cerrado`: el POS cierra la sesión al cerrar la caja y
+  // manda acá; el formulario muestra el aviso correspondiente.
+  const { motivo } = await searchParams
+
+  return <FormLogin motivo={motivo ?? null} />
 }

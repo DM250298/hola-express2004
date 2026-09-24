@@ -9,11 +9,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useAbrirTurno } from '@/lib/hooks/useTurno'
 
 interface Props {
-  usuarioId: string
   nombreUsuario: string
 }
 
-export function AperturaCaja({ usuarioId, nombreUsuario }: Props) {
+export function AperturaCaja({ nombreUsuario }: Props) {
   const abrir = useAbrirTurno()
   const [monto, setMonto] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -26,7 +25,9 @@ export function AperturaCaja({ usuarioId, nombreUsuario }: Props) {
       setError('Ingresá un monto válido (puede ser 0).')
       return
     }
-    abrir.mutate({ usuarioId, montoApertura: valor })
+    // La identidad del turno la pone la sesión en el servidor (fn_abrir_turno):
+    // acá solo viaja el monto.
+    abrir.mutate({ montoApertura: valor })
   }
 
   return (

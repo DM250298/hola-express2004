@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useTurnoActivo } from '@/lib/hooks/useTurno'
+import { useTurnoActivo, useTurnoEnVivo } from '@/lib/hooks/useTurno'
 import { useCrearVenta } from '@/lib/hooks/useVentas'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
@@ -87,6 +87,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     isLoading,
     isError,
   } = useTurnoActivo(usuarioId)
+  // Si el turno lo cierra el dueño o Finanzas desde el Dashboard, esta
+  // pantalla se entera al instante (pasa a "Abrir caja").
+  useTurnoEnVivo(turno?.id)
   const crearVenta = useCrearVenta()
   // Guard síncrono anti doble-tap: el botón se deshabilita con isPending, pero
   // eso es asíncrono; este ref bloquea un segundo disparo en el mismo tick
@@ -350,7 +353,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   }
 
   if (!turno) {
-    return <AperturaCaja usuarioId={usuarioId} nombreUsuario={nombreUsuario} />
+    return <AperturaCaja nombreUsuario={nombreUsuario} />
   }
 
   // — Con turno abierto —
@@ -547,6 +550,14 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-[#f9b44c]/20 text-[#6f3a2a]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#f9b44c] animate-pulse" />
               Turno #{turno.id}
+            </span>
+            {/* Identidad siempre a la vista: las ventas quedan a nombre de
+                esta persona. Si no sos vos, salí y entrá con tu usuario. */}
+            <span
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-[#391511] text-[#f9d2a2]"
+              title="Las ventas de este turno quedan a nombre de este usuario"
+            >
+              Cajero: {nombreUsuario}
             </span>
           </div>
           <p className="text-[#6f3a2a] text-xs hidden sm:block">
@@ -804,7 +815,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         montoApertura={turno.monto_apertura}
         fechaApertura={turno.fecha_apertura}
         nombreCajero={nombreUsuario}
-        usuarioId={usuarioId}
+        contexto="pos"
       />
 
       <ModalVentasTurno

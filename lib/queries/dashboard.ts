@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { traerTodo } from '@/lib/supabase/paginacion'
 
 function inicioDeHoy(): Date {
   const d = new Date()
@@ -26,11 +27,12 @@ export interface KPIsDia {
   ventas_total: number
   cantidad_tickets: number
   ticket_promedio: number
-  turno_activo: {
+  /** Turnos abiertos en este momento (de cualquier día), del más nuevo al más viejo. */
+  turnos_abiertos: Array<{
     id: number
     cajero_nombre: string | null
     fecha_apertura: string
-  } | null
+  }>
 }
 
 export async function getKPIsDia(): Promise<KPIsDia> {
@@ -45,13 +47,13 @@ export async function getKPIsDia(): Promise<KPIsDia> {
       .eq('estado', 'completada')
       .gte('fecha', desde)
       .lte('fecha', hasta),
+    // TODOS los abiertos (antes: solo el más nuevo, que ocultaba los turnos
+    // abandonados de otro empleado).
     supabase
       .from('caja_turnos')
       .select('id, fecha_apertura, usuarios(nombre)')
       .eq('estado', 'abierto')
-      .order('fecha_apertura', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order('fecha_apertura', { ascending: false }),
   ])
 
   if (resultadoVentas.error) throw resultadoVentas.error
@@ -67,21 +69,19 @@ export async function getKPIsDia(): Promise<KPIsDia> {
     id: number
     fecha_apertura: string
     usuarios: { nombre: string } | null
-  } | null
+  }
 
-  const t = resultadoTurno.data as unknown as TurnoCrudo
+  const abiertos = (resultadoTurno.data ?? []) as unknown as TurnoCrudo[]
 
   return {
     ventas_total,
     cantidad_tickets,
     ticket_promedio,
-    turno_activo: t
-      ? {
-          id: t.id,
-          cajero_nombre: t.usuarios?.nombre ?? null,
-          fecha_apertura: t.fecha_apertura,
-        }
-      : null,
+    turnos_abiertos: abiertos.map((t) => ({
+      id: t.id,
+      cajero_nombre: t.usuarios?.nombre ?? null,
+      fecha_apertura: t.fecha_apertura,
+    })),
   }
 }
 
@@ -250,6 +250,7 @@ export async function getTopProductosDia(
 
 export interface TurnoDelDia {
   id: number
+  usuario_id: string
   cajero_nombre: string | null
   fecha_apertura: string
   fecha_cierre: string | null
@@ -258,44 +259,34 @@ export interface TurnoDelDia {
   diferencia: number | null
   ventas_total: number
   cantidad_ventas: number
+  /** Sigue abierto pero se abrió otro día: turno abandonado, a cerrar por Finanzas. */
+  abierto_otro_dia: boolean
 }
 
+/**
+ * Turnos abiertos hoy + TODO turno que siga abierto aunque sea de otro día
+ * (antes los abandonados quedaban invisibles). Las ventas se cuentan por
+ * turno (no por fecha), paginadas por si un turno largo supera las 1000 filas.
+ */
 export async function getTurnosDelDia(): Promise<TurnoDelDia[]> {
   const supabase = createClient()
   const desde = inicioDeHoy().toISOString()
   const hasta = finDeHoy().toISOString()
 
-  const [turnos, ventas] = await Promise.all([
-    supabase
-      .from('caja_turnos')
-      .select(
-        'id, fecha_apertura, fecha_cierre, estado, monto_apertura, diferencia, usuarios(nombre)'
-      )
-      .gte('fecha_apertura', desde)
-      .lte('fecha_apertura', hasta)
-      .order('fecha_apertura', { ascending: false }),
-    supabase
-      .from('ventas')
-      .select('turno_id, total')
-      .eq('estado', 'completada')
-      .gte('fecha', desde)
-      .lte('fecha', hasta),
-  ])
+  const turnos = await supabase
+    .from('caja_turnos')
+    .select(
+      'id, usuario_id, fecha_apertura, fecha_cierre, estado, monto_apertura, diferencia, usuarios(nombre)'
+    )
+    .or(`estado.eq.abierto,fecha_apertura.gte.${desde}`)
+    .lte('fecha_apertura', hasta)
+    .order('fecha_apertura', { ascending: false })
 
   if (turnos.error) throw turnos.error
-  if (ventas.error) throw ventas.error
-
-  // Agrupar ventas por turno
-  const ventasPorTurno = new Map<number, { total: number; count: number }>()
-  for (const v of ventas.data ?? []) {
-    const prev = ventasPorTurno.get(v.turno_id) ?? { total: 0, count: 0 }
-    prev.total += Number(v.total)
-    prev.count += 1
-    ventasPorTurno.set(v.turno_id, prev)
-  }
 
   type TurnoCrudo = {
     id: number
+    usuario_id: string
     fecha_apertura: string
     fecha_cierre: string | null
     estado: 'abierto' | 'cerrado'
@@ -303,19 +294,47 @@ export async function getTurnosDelDia(): Promise<TurnoDelDia[]> {
     diferencia: number | null
     usuarios: { nombre: string } | null
   }
+  const filas = (turnos.data ?? []) as unknown as TurnoCrudo[]
+  const ids = filas.map((t) => t.id)
+  const inicioHoyMs = inicioDeHoy().getTime()
 
-  return ((turnos.data ?? []) as unknown as TurnoCrudo[]).map((t) => {
+  const ventas =
+    ids.length === 0
+      ? []
+      : await traerTodo<{ turno_id: number; total: number }>(() =>
+          supabase
+            .from('ventas')
+            .select('turno_id, total')
+            .eq('estado', 'completada')
+            .in('turno_id', ids)
+            .order('id')
+        )
+
+  // Agrupar ventas por turno
+  const ventasPorTurno = new Map<number, { total: number; count: number }>()
+  for (const v of ventas) {
+    const prev = ventasPorTurno.get(v.turno_id) ?? { total: 0, count: 0 }
+    prev.total += Number(v.total)
+    prev.count += 1
+    ventasPorTurno.set(v.turno_id, prev)
+  }
+
+  return filas.map((t) => {
     const v = ventasPorTurno.get(t.id) ?? { total: 0, count: 0 }
     return {
       id: t.id,
+      usuario_id: t.usuario_id,
       cajero_nombre: t.usuarios?.nombre ?? null,
       fecha_apertura: t.fecha_apertura,
       fecha_cierre: t.fecha_cierre,
       estado: t.estado,
-      monto_apertura: t.monto_apertura,
+      monto_apertura: Number(t.monto_apertura),
       diferencia: t.diferencia,
       ventas_total: v.total,
       cantidad_ventas: v.count,
+      abierto_otro_dia:
+        t.estado === 'abierto' &&
+        new Date(t.fecha_apertura).getTime() < inicioHoyMs,
     }
   })
 }

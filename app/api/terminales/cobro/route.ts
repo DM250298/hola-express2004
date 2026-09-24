@@ -94,11 +94,16 @@ export async function POST(request: Request) {
   // del propio usuario.
   const usuarioId = user.id
   const admin = createAdminClient()
+  // Desde la mig 218 hay a lo sumo un turno abierto por usuario; el
+  // order/limit es defensa ante duplicados históricos (con 2 filas
+  // maybeSingle() daba error y el cobro salía sin blindaje).
   const { data: turnoAbierto } = await admin
     .from('caja_turnos')
     .select('id')
     .eq('usuario_id', usuarioId)
     .eq('estado', 'abierto')
+    .order('fecha_apertura', { ascending: false })
+    .limit(1)
     .maybeSingle()
   const turnoId = (turnoAbierto?.id as number | undefined) ?? null
 

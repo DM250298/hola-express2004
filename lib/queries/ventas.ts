@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/client'
 import { encolarVenta, nuevoUuid } from '@/lib/offline/cola'
 import { esErrorDeRed } from '@/lib/offline/sync'
+import { getUsuarioSesion } from '@/lib/auth/sesionActual'
+import { PREFIJO_SESION_CAMBIO } from '@/lib/auth/erroresIdentidad'
 import type { Json, ListaPrecio, MedioPago, VentaRow } from '@/types/database'
 
 export interface ItemVentaPayload {
@@ -22,7 +24,17 @@ export interface ItemVentaPayload {
 
 export interface PagoPayload {
   medio_pago: MedioPago
+  /**
+   * Monto IMPUTADO a la venta. Para el efectivo es lo que quedó en el cajón
+   * (sin el vuelto): es lo que se guarda en `pagos_venta` y lo que suma el
+   * arqueo del turno.
+   */
   monto: number
+  /**
+   * Solo efectivo y solo para el ticket: lo que el cliente ENTREGÓ (con
+   * vuelto). No viaja al RPC. Ausente en ventas reimpresas desde la base.
+   */
+  monto_entregado?: number | null
   /** Solo para medio_pago === 'nota_credito': código del vale a consumir. */
   nc_codigo?: string | null
   /**
@@ -208,6 +220,16 @@ export async function crearVenta(
 
   if (payload.pagos.length === 0) {
     throw new Error('La venta debe tener al menos un pago.')
+  }
+
+  // La pantalla se armó con `usuario_id`; si la sesión del navegador ya es
+  // de otra persona (guardián de sesión), no se manda ni se ENCOLA nada con
+  // la identidad vieja. El servidor lo vuelve a controlar con auth.uid().
+  const usuarioSesion = getUsuarioSesion()
+  if (usuarioSesion && usuarioSesion !== payload.usuario_id) {
+    throw new Error(
+      `${PREFIJO_SESION_CAMBIO} esta pantalla quedó con la sesión de otro usuario. Recargá la página e ingresá con tu usuario.`
+    )
   }
 
   const clienteUuid = payload.cliente_uuid ?? nuevoUuid()

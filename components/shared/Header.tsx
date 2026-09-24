@@ -1,6 +1,5 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { LogOut, Menu } from 'lucide-react'
@@ -16,6 +15,7 @@ import {
 import { Sidebar } from '@/components/shared/Sidebar'
 import { createClient } from '@/lib/supabase/client'
 import { purgarShellSW } from '@/lib/offline/shell'
+import { cancelarSalida, iniciarSalida } from '@/lib/auth/sesionActual'
 import type { Rol } from '@/types/database'
 
 const ETIQUETAS_ROL: Record<string, { texto: string; clase: string }> = {
@@ -46,7 +46,6 @@ interface HeaderProps {
 }
 
 export function Header({ nombre, rol, permisos }: HeaderProps) {
-  const router = useRouter()
   const [cerrandoSesion, setCerrandoSesion] = useState(false)
   const [sidebarAbierto, setSidebarAbierto] = useState(false)
 
@@ -55,12 +54,20 @@ export function Header({ nombre, rol, permisos }: HeaderProps) {
     setCerrandoSesion(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      iniciarSalida()
+      // Purgar ANTES de salir: el guardián de sesión reacciona al SIGNED_OUT
+      // y la purga del shell no tiene que competir con la navegación.
       await purgarShellSW()
-      router.push('/login')
-      router.refresh()
+      // scope 'local': cierra SOLO la sesión de este navegador. El default
+      // ('global') revocaba todas las sesiones de la persona —el celular
+      // tumbaba la PC del mostrador y el POS se quedaba sin turno "solo".
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
+      if (error) throw error
+      // Navegación dura (no router.push): descarta la caché de queries y el
+      // estado en memoria del usuario que sale.
+      window.location.assign('/login')
     } catch {
+      cancelarSalida()
       toast.error('No se pudo cerrar la sesión. Intentá de nuevo.')
       setCerrandoSesion(false)
     }

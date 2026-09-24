@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { manejarErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 import {
   buscarDeudores,
   cobrarCtaCte,
@@ -118,6 +119,9 @@ export function useCobrarCtaCte() {
       }
       toast.success('Cobro registrado')
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      if (manejarErrorIdentidad(e, qc)) return
+      toast.error(e.message)
+    },
   })
 }
