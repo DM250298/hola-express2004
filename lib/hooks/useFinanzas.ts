@@ -269,6 +269,7 @@ export function useAnularEgreso() {
       toast.success('Gasto anulado')
     },
     onError: (error: Error) => {
+      if (manejarErrorIdentidad(error, qc)) return
       toast.error(`No se pudo anular el gasto: ${error.message}`)
     },
   })

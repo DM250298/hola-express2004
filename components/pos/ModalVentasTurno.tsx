@@ -20,6 +20,8 @@ import {
   useVentaDetalle,
   useVentasListado,
 } from '@/lib/hooks/useVentasListado'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import { aVentaCompleta } from '@/lib/queries/ventas-listado'
 import { formatearFechaHora, formatearNumero } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
@@ -39,6 +41,9 @@ export function ModalVentasTurno({
 }: Props) {
   const { data: ventas, isLoading } = useVentasListado({ turno_id: turnoId })
   const anular = useAnularVenta()
+  // El servidor exige 'ventas_anular' (mig 219): sin el permiso no se ofrece.
+  const { data: usuario } = useUsuario()
+  const puedeAnular = tienePermiso(usuario?.permisos, 'ventas_anular')
   const [ventaVer, setVentaVer] = useState<number | null>(null)
   const [reimprimirId, setReimprimirId] = useState<number | null>(null)
 
@@ -191,6 +196,7 @@ export function ModalVentasTurno({
                         )}
                       </Button>
 
+                      {puedeAnular && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -207,6 +213,7 @@ export function ModalVentasTurno({
                         )}
                         Anular
                       </Button>
+                      )}
                     </li>
                   )
                 })}
