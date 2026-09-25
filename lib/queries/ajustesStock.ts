@@ -18,6 +18,8 @@ export const RAZONES_AJUSTE = [
   { valor: 'otra', etiqueta: 'Otra razón' },
 ] as const
 
+export type RazonAjuste = (typeof RAZONES_AJUSTE)[number]['valor']
+
 export function etiquetaRazon(valor: string): string {
   return RAZONES_AJUSTE.find((r) => r.valor === valor)?.etiqueta ?? valor
 }
@@ -62,18 +64,20 @@ export function calcularAjuste(it: {
 }
 
 /**
- * Registra un ajuste de stock con varios productos:
- *  1. Inserta la cabecera `ajustes_stock`.
- *  2. Por cada item: actualiza `productos.stock_actual`, registra el
- *     `movimientos_stock` y guarda el `items_ajuste_stock`.
- *
- * Valida que ningún ajuste deje stock negativo ANTES de aplicar nada.
- */
-/**
  * Registra un ajuste de stock multi-producto, de forma atómica
  * (`fn_crear_ajuste_stock`): cabecera, stock de cada producto, movimientos
  * e items del ajuste — todo en una transacción. Si un ajuste dejaría stock
  * negativo, falla entero y no aplica nada.
+ *
+ * Tipo del movimiento de stock (mig 221): con razón `merma` y el stock
+ * bajando (salida, o "fijar stock" por debajo del actual) el movimiento se
+ * graba como `merma`, que es lo que suman el reporte de mermas, el resumen
+ * de Vencimientos y el P&L. Con cualquier otra razón, o si el stock sube,
+ * queda el tipo del renglón (entrada / salida / ajuste). El `tipo` de
+ * `items_ajuste_stock` siempre es el del renglón.
+ *
+ * Identidad: la RPC resuelve el usuario con `fn_usuario_efectivo` (con
+ * sesión de usuario manda `auth.uid()`, no el `usuario_id` del payload).
  */
 export async function crearAjusteStock(
   payload: NuevoAjustePayload
