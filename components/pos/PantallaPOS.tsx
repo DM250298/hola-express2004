@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDownToLine,
   Keyboard,
@@ -83,10 +83,16 @@ function nuevaOrden(): Orden {
 
 export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const {
-    data: turno,
+    data: turnoActivo,
     isLoading,
     isError,
   } = useTurnoActivo(usuarioId)
+  // Mientras el modal de cierre está abierto se conserva el turno en
+  // pantalla aunque la base ya lo marque cerrado (tiempo real, o el refetch
+  // al volver el foco después del diálogo de impresión). Si no, el POS pasaba
+  // a "Abrir caja" y desmontaba el informe antes de que se imprimiera.
+  const [turnoEnCierre, setTurnoEnCierre] = useState<typeof turnoActivo>(null)
+  const turno = turnoActivo ?? turnoEnCierre
   // Si el turno lo cierra el dueño o Finanzas desde el Dashboard, esta
   // pantalla se entera al instante (pasa a "Abrir caja").
   useTurnoEnVivo(turno?.id)
@@ -115,6 +121,15 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
 
   const [modalCobroAbierto, setModalCobroAbierto] = useState(false)
   const [modalCierreAbierto, setModalCierreAbierto] = useState(false)
+  // Foto del turno al abrir el cierre (ver `turnoEnCierre` arriba).
+  useEffect(() => {
+    if (modalCierreAbierto && turnoActivo) setTurnoEnCierre(turnoActivo)
+  }, [modalCierreAbierto, turnoActivo])
+  /** Al cerrar el modal (cancelar o después del informe) se suelta la foto. */
+  function cambiarModalCierre(v: boolean) {
+    setModalCierreAbierto(v)
+    if (!v) setTurnoEnCierre(null)
+  }
   const [modalVentasTurnoAbierto, setModalVentasTurnoAbierto] = useState(false)
   const [modalGastoAbierto, setModalGastoAbierto] = useState(false)
   const [modalCompraAbierto, setModalCompraAbierto] = useState(false)
@@ -344,7 +359,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     )
   }
 
-  if (isError) {
+  // Con un turno en pantalla (o en cierre) un refetch fallido no tapa el POS.
+  if (isError && !turno) {
     return (
       <div className="p-12 text-center text-[#c43e2c]">
         No se pudo cargar el estado del turno. Recargá la página.
@@ -810,7 +826,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
 
       <CierreCaja
         abierto={modalCierreAbierto}
-        onCambioAbierto={setModalCierreAbierto}
+        onCambioAbierto={cambiarModalCierre}
         turnoId={turno.id}
         montoApertura={turno.monto_apertura}
         fechaApertura={turno.fecha_apertura}

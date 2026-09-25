@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -88,6 +88,8 @@ export function CierreCaja({
   const [cantidadesBilletes, setCantidadesBilletes] = useState<Record<number, number>>({})
   const [sincronizandoCola, setSincronizandoCola] = useState(false)
   const [saliendo, setSaliendo] = useState(false)
+  /** El informe ya se mandó a imprimir al menos una vez. */
+  const [impreso, setImpreso] = useState(false)
 
   // Calcula el total del contador y actualiza el campo de monto automáticamente
   function handleCantidadesBilletes(nuevas: Record<number, number>) {
@@ -137,8 +139,34 @@ export function CierreCaja({
       setComprobante(null)
       setMostrarContador(false)
       setCantidadesBilletes({})
+      setImpreso(false)
     }
   }, [abierto])
+
+  function imprimir() {
+    window.print()
+    // En Chrome window.print() bloquea hasta que se cierra el diálogo.
+    setImpreso(true)
+  }
+
+  // Red de seguridad: el navegador avisa cuando termina la impresión.
+  useEffect(() => {
+    if (!comprobante) return
+    const alImprimir = () => setImpreso(true)
+    window.addEventListener('afterprint', alImprimir)
+    return () => window.removeEventListener('afterprint', alImprimir)
+  }, [comprobante])
+
+  // Apenas se cierra el turno se abre solo el diálogo de impresión: el
+  // informe se imprime siempre, antes de salir. Una sola vez por cierre.
+  const autoImpresoRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!comprobante || autoImpresoRef.current === comprobante.turnoId) return
+    autoImpresoRef.current = comprobante.turnoId
+    // Esperar a que el comprobante térmico esté en el DOM.
+    const t = setTimeout(imprimir, 400)
+    return () => clearTimeout(t)
+  }, [comprobante])
 
   async function sincronizarCola() {
     if (sincronizandoCola) return
@@ -287,6 +315,9 @@ export function CierreCaja({
       open={abierto}
       onOpenChange={(v) => {
         if (cerrar.isPending || saliendo) return
+        // Con el turno ya cerrado, el informe solo se cierra con el botón
+        // (Escape o un clic afuera no lo descartan sin imprimir).
+        if (cerrado) return
         if (!v) void cerrarModal()
         else onCambioAbierto(true)
       }}
@@ -303,7 +334,9 @@ export function CierreCaja({
               <DialogDescription className="text-[#6f3a2a]">
                 {esAdmin
                   ? 'Cierre administrativo registrado a tu nombre. Imprimí el informe para que el empleado lo firme.'
-                  : 'Imprimí el informe para que el empleado lo firme. Al cerrar esta ventana se cierra la sesión: el próximo cajero entra con su usuario.'}
+                  : impreso
+                    ? 'Informe impreso. Si no salió bien, reimprimilo. Al tocar "Listo y salir" se cierra la sesión: el próximo cajero entra con su usuario.'
+                    : 'Imprimí el informe para que el empleado lo firme. Es obligatorio antes de salir.'}
               </DialogDescription>
             </DialogHeader>
 
@@ -318,7 +351,12 @@ export function CierreCaja({
               <Button
                 variant="outline"
                 onClick={() => void cerrarModal()}
-                disabled={saliendo}
+                disabled={saliendo || (!esAdmin && !impreso)}
+                title={
+                  !esAdmin && !impreso
+                    ? 'Primero imprimí el informe de cierre'
+                    : undefined
+                }
                 className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
               >
                 {saliendo ? (
@@ -333,12 +371,12 @@ export function CierreCaja({
                 )}
               </Button>
               <Button
-                onClick={() => window.print()}
+                onClick={imprimir}
                 disabled={saliendo}
                 className="flex-1 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
               >
                 <Printer className="h-4 w-4" />
-                Imprimir informe
+                {impreso ? 'Reimprimir' : 'Imprimir informe'}
               </Button>
             </DialogFooter>
           </>
