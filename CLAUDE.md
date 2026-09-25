@@ -446,10 +446,12 @@ escrituras de caja a nombre de `auth.uid()`**: `fn_crear_venta` rechaza
 (cierre administrativo, replay de la cola offline). `service_role` y las
 llamadas sin JWT (SQL Editor, clonado) confían en los parámetros. Abrir y
 cerrar turno va por `fn_abrir_turno` / `fn_cerrar_turno` (un solo turno
-abierto por usuario, índice único parcial). Desde la 219, `fn_anular_venta`,
-`fn_crear_egreso` y `fn_anular_egreso` reemplazan `p_usuario_id` por
-`fn_usuario_efectivo()` y exigen permisos en el servidor (`ventas_anular`;
-`pos_gasto` + turno propio y abierto; `finanzas` para gastos sin turno).
+abierto por usuario, índice único parcial). Desde la 219/220, `fn_anular_venta`,
+`fn_crear_egreso`, `fn_anular_egreso`, `fn_crear_devolucion` y
+`fn_cobrar_cta_cte` reemplazan `p_usuario_id` por `fn_usuario_efectivo()`
+y exigen permisos en el servidor (`ventas_anular`; `pos_gasto` o
+`devoluciones` + turno propio y abierto; cobro de fiado en caja contra el
+turno propio y abierto; `finanzas` para operar sin turno o sobre turno ajeno).
 **Al reemitir una RPC que recibe `p_usuario_id`, hacé lo mismo.** En el cliente,
 `GuardianSesion` recarga la pantalla si la sesión del navegador cambia, los
 hooks del POS usan `manejarErrorIdentidad()` y **`signOut` siempre con

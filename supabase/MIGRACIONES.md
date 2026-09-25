@@ -317,6 +317,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 217 | `217_tablero_compara_mismo_tramo.sql` | ✅ aplicada | 2026-09-23 (prueba + producción) | `ea8140d` |
 | 218 | `218_identidad_turnos.sql` | ✅ aplicada | 2026-09-24 (prueba + producción) | `5734647` |
 | 219 | `219_identidad_anular_venta_egresos.sql` | ✅ aplicada | 2026-09-25 (prueba + producción) | `c789014` |
+| 220 | `220_identidad_devoluciones_cobro_fiado.sql` | ✅ aplicada en PRUEBA 2026-09-25 · ⏳ PENDIENTE en producción (T1 y chequeos del final del archivo) | 2026-09-25 (prueba) | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 
