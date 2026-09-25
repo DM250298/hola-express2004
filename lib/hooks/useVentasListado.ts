@@ -8,6 +8,7 @@ import {
   type FiltrosVentas,
 } from '@/lib/queries/ventas-listado'
 import { anularVenta } from '@/lib/queries/ventas'
+import { manejarErrorIdentidad } from '@/lib/auth/erroresIdentidad'
 
 export function useVentasListado(filtros: FiltrosVentas = {}) {
   return useQuery({
@@ -54,6 +55,8 @@ export function useAnularVenta() {
       toast.success('Venta anulada — stock, lotes, cuentas y acreditaciones revertidos')
     },
     onError: (error: Error) => {
+      // Mig 219: sesión o turno ajeno → recarga; turno cerrado → aviso.
+      if (manejarErrorIdentidad(error, queryClient)) return
       toast.error(`No se pudo anular la venta: ${error.message}`)
     },
   })
