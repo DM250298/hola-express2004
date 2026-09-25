@@ -244,13 +244,24 @@ function claveBorrador(cuentaId: number): string {
  */
 const LS_PANEL_PLEGADO = 'hola-factura-panel-plegado'
 
+/**
+ * Debajo de este ancho de ventana la tabla (piso de 1080 px) no entra al lado
+ * del panel abierto (420 px + paddings del modal al 97vw): 1536 × 0,97 − 461
+ * ≈ 1029 px. Sin preferencia guardada, ahí el panel arranca plegado; en un
+ * monitor de 1920 arranca abierto.
+ */
+const ANCHO_MIN_PANEL_ABIERTO = 1600
+
 function leerPanelPlegado(): boolean {
+  if (typeof window === 'undefined') return false
   try {
-    if (typeof window === 'undefined') return false
-    return window.localStorage.getItem(LS_PANEL_PLEGADO) === '1'
+    const guardado = window.localStorage.getItem(LS_PANEL_PLEGADO)
+    if (guardado === '1') return true
+    if (guardado === '0') return false
   } catch {
-    return false // sin localStorage (modo privado, etc.): arranca abierto
+    // sin localStorage (modo privado, etc.): decide solo el ancho
   }
+  return window.innerWidth < ANCHO_MIN_PANEL_ABIERTO
 }
 
 function guardarPanelPlegado(plegado: boolean): void {
@@ -436,10 +447,16 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   // se intenta guardar; después, en rojo (patrón RecepcionMovil).
   const [intentoGuardar, setIntentoGuardar] = useState(false)
   // Panel derecho plegado (solo cuenta en 2xl+; abajo de eso va debajo de la
-  // tabla y siempre visible). Inicializador perezoso: se lee UNA vez al
-  // montar, sin effect ni flash. Es seguro para la hidratación porque el
-  // Dialog cerrado no renderiza contenido y el modal siempre se abre por click.
+  // tabla y siempre visible). El componente queda montado en la pestaña
+  // aunque el modal esté cerrado, así que el valor se RECALCULA en cada
+  // apertura (preferencia guardada o, si no hay, el ancho de la ventana de
+  // ese momento). El inicializador perezoso evita el salto en la primera
+  // apertura; es seguro para la hidratación porque el Dialog cerrado no
+  // renderiza contenido.
   const [panelPlegado, setPanelPlegado] = useState(leerPanelPlegado)
+  useEffect(() => {
+    if (abierto) setPanelPlegado(leerPanelPlegado())
+  }, [abierto])
   function alternarPanel(plegado: boolean) {
     setPanelPlegado(plegado)
     guardarPanelPlegado(plegado)
