@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,6 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { useAjustarStock } from '@/lib/hooks/useInventario'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { RAZONES_AJUSTE, type RazonAjuste } from '@/lib/queries/ajustesStock'
 import {
   formatearCantidad,
   formatearNumero,
@@ -26,8 +34,31 @@ import {
 } from '@/lib/utils/formato'
 import { cn } from '@/lib/utils'
 
+type TipoAjusteModal = 'entrada' | 'salida' | 'ajuste'
+
+const VALORES_RAZON = RAZONES_AJUSTE.map((r) => r.valor) as [
+  RazonAjuste,
+  ...RazonAjuste[],
+]
+
+const RAZON_ITEMS: Record<string, string> = Object.fromEntries(
+  RAZONES_AJUSTE.map((r) => [r.valor, r.etiqueta])
+)
+
+/**
+ * Razón propuesta al elegir el tipo: una salida de la ficha del producto es,
+ * casi siempre, mercadería que se pierde (merma); una corrección es un
+ * recuento; una entrada no tiene razón típica. El usuario la puede cambiar.
+ */
+const RAZON_POR_TIPO: Record<TipoAjusteModal, RazonAjuste> = {
+  entrada: 'otra',
+  salida: 'merma',
+  ajuste: 'recuento',
+}
+
 const esquemaBase = z.object({
   tipo: z.enum(['entrada', 'salida', 'ajuste']),
+  razon: z.enum(VALORES_RAZON),
   cantidad: z
     .union([z.string(), z.number()])
     .transform((v) => (v === '' ? NaN : Number(v)))
@@ -118,16 +149,17 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
     formState: { errors },
   } = useForm<DatosForm>({
     resolver: zodResolver(esquema),
-    defaultValues: { tipo: 'entrada', cantidad: '', nota: '' },
+    defaultValues: { tipo: 'entrada', razon: 'otra', cantidad: '', nota: '' },
   })
 
   useEffect(() => {
     if (abierto) {
-      reset({ tipo: 'entrada', cantidad: '', nota: '' })
+      reset({ tipo: 'entrada', razon: 'otra', cantidad: '', nota: '' })
     }
   }, [abierto, reset])
 
   const tipoActual = watch('tipo')
+  const razonActual = watch('razon')
   const cantidadCruda = String(watch('cantidad') ?? '')
   const cantidadActual = Number(cantidadCruda) || 0
 
@@ -145,6 +177,17 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
 
   const stockResultante = calcularStockResultante()
 
+  // ¿Este ajuste baja el stock? Con razón "merma" el RPC solo graba merma
+  // cuando baja (mig 221). null = todavía no se sabe (corrección sin cantidad).
+  const bajaStock: boolean | null =
+    tipoActual === 'salida'
+      ? true
+      : tipoActual === 'entrada'
+        ? false
+        : stockResultante !== null && producto !== null
+          ? stockResultante < producto.stock_actual
+          : null
+
   function onSubmit(datos: DatosForm) {
     if (!producto || !usuario) return
     const validado = esquema.parse(datos)
@@ -152,6 +195,7 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
       {
         producto_id: producto.id,
         tipo: validado.tipo,
+        razon: validado.razon,
         cantidad: redondearCantidad(validado.cantidad, porPeso),
         nota: validado.nota,
         usuario_id: usuario.id,
@@ -207,7 +251,10 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
                       <button
                         key={t.valor}
                         type="button"
-                        onClick={() => field.onChange(t.valor)}
+                        onClick={() => {
+                          field.onChange(t.valor)
+                          setValue('razon', RAZON_POR_TIPO[t.valor])
+                        }}
                         disabled={ajustar.isPending}
                         className={cn(
                           'flex flex-col items-center justify-center gap-1 py-3 rounded-xl border-2 transition-all',
@@ -233,6 +280,51 @@ export function ModalAjusteStock({ abierto, onCambioAbierto, producto }: Props) 
                 </div>
               )}
             />
+          </div>
+
+          {/* Razón */}
+          <div className="space-y-1.5">
+            <Label className="text-[#391511] font-medium text-sm">
+              Razón <span className="text-[#c43e2c]">*</span>
+            </Label>
+            <Controller
+              control={control}
+              name="razon"
+              render={({ field }) => (
+                <Select
+                  items={RAZON_ITEMS}
+                  value={field.value}
+                  onValueChange={(v) =>
+                    field.onChange(v ?? RAZON_POR_TIPO[tipoActual])
+                  }
+                  disabled={ajustar.isPending}
+                >
+                  <SelectTrigger className="w-full border-[#e4c9b0] focus:ring-[#f9b44c] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RAZONES_AJUSTE.map((r) => (
+                      <SelectItem key={r.valor} value={r.valor}>
+                        {r.etiqueta}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {razonActual === 'merma' && bajaStock === true && (
+              <p className="text-[#6f3a2a] text-xs">
+                Se registra como merma: suma en el reporte de mermas, en
+                Vencimientos y en el P&amp;L.
+              </p>
+            )}
+            {razonActual === 'merma' && bajaStock === false && (
+              <p className="text-[#9e6b15] text-xs">
+                Con razón merma pero el stock no baja: queda como{' '}
+                {tipoActual === 'entrada' ? 'entrada' : 'corrección'}, no como
+                merma.
+              </p>
+            )}
           </div>
 
           {/* Cantidad */}

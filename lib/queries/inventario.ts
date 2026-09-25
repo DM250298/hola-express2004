@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import { costoDesdeEmbed, type CostoEmbed } from '@/lib/queries/productos'
 import { fechaLocal } from '@/lib/utils/periodos'
+import type { RazonAjuste } from '@/lib/queries/ajustesStock'
 import type {
   CoberturaStockRow,
   Json,
@@ -269,6 +270,12 @@ export interface AjusteStockPayload {
   producto_id: number
   tipo: Extract<TipoMovimiento, 'entrada' | 'salida' | 'ajuste'>
   cantidad: number
+  /**
+   * Mismas razones que la tab de Ajustes. Con 'merma' y el stock bajando el
+   * RPC graba el movimiento como `merma` (mig 221), que es lo que suman el
+   * reporte de mermas, Vencimientos y el P&L.
+   */
+  razon: RazonAjuste
   nota: string
   usuario_id: string
 }
@@ -286,13 +293,14 @@ export interface AjusteStockPayload {
  *
  * Reemplaza el lee-modifica-escribe anterior, que tenía una race condition con
  * el POS vendiendo en paralelo y podía dejar el stock cambiado sin movimiento.
- * La nota libre del modal se guarda como detalle de la razón del ajuste.
+ * La razón elegida en el modal viaja tal cual; la nota libre se guarda como
+ * detalle de la razón del ajuste.
  */
 export async function ajustarStock(payload: AjusteStockPayload): Promise<void> {
   const supabase = createClient()
   const { error } = await supabase.rpc('fn_crear_ajuste_stock', {
     p_usuario_id: payload.usuario_id,
-    p_razon: 'otra',
+    p_razon: payload.razon,
     p_razon_detalle: payload.nota,
     p_items: [
       {
