@@ -7,6 +7,8 @@ import {
   FileText,
   History,
   Loader2,
+  PanelRightClose,
+  PanelRightOpen,
   Pencil,
   Plus,
   Search,
@@ -235,6 +237,41 @@ function claveBorrador(cuentaId: number): string {
   return `factura-c${cuentaId}`
 }
 
+/**
+ * Preferencia del panel derecho (comprobante y totales) en pantallas 2xl+:
+ * plegado deja toda la banda para la tabla de renglones. Se recuerda en el
+ * navegador (misma convención `hola-…` que el sidebar).
+ */
+const LS_PANEL_PLEGADO = 'hola-factura-panel-plegado'
+
+/**
+ * Debajo de este ancho de ventana la tabla (piso de 1080 px) no entra al lado
+ * del panel abierto (420 px + paddings del modal al 97vw): 1536 × 0,97 − 461
+ * ≈ 1029 px. Sin preferencia guardada, ahí el panel arranca plegado; en un
+ * monitor de 1920 arranca abierto.
+ */
+const ANCHO_MIN_PANEL_ABIERTO = 1600
+
+function leerPanelPlegado(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    const guardado = window.localStorage.getItem(LS_PANEL_PLEGADO)
+    if (guardado === '1') return true
+    if (guardado === '0') return false
+  } catch {
+    // sin localStorage (modo privado, etc.): decide solo el ancho
+  }
+  return window.innerWidth < ANCHO_MIN_PANEL_ABIERTO
+}
+
+function guardarPanelPlegado(plegado: boolean): void {
+  try {
+    window.localStorage.setItem(LS_PANEL_PLEGADO, plegado ? '1' : '0')
+  } catch {
+    // sin localStorage la preferencia no se recuerda, nada más
+  }
+}
+
 /** dd/mm/aaaa desde un ISO (para mostrar vencimiento y fecha de pago). */
 function fechaCorta(iso: string | null): string {
   if (!iso) return '—'
@@ -409,6 +446,21 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   // Los "Falta …" de los datos obligatorios se muestran en ámbar hasta que
   // se intenta guardar; después, en rojo (patrón RecepcionMovil).
   const [intentoGuardar, setIntentoGuardar] = useState(false)
+  // Panel derecho plegado (solo cuenta en 2xl+; abajo de eso va debajo de la
+  // tabla y siempre visible). El componente queda montado en la pestaña
+  // aunque el modal esté cerrado, así que el valor se RECALCULA en cada
+  // apertura (preferencia guardada o, si no hay, el ancho de la ventana de
+  // ese momento). El inicializador perezoso evita el salto en la primera
+  // apertura; es seguro para la hidratación porque el Dialog cerrado no
+  // renderiza contenido.
+  const [panelPlegado, setPanelPlegado] = useState(leerPanelPlegado)
+  useEffect(() => {
+    if (abierto) setPanelPlegado(leerPanelPlegado())
+  }, [abierto])
+  function alternarPanel(plegado: boolean) {
+    setPanelPlegado(plegado)
+    guardarPanelPlegado(plegado)
+  }
   const ptoRef = useRef<HTMLInputElement>(null)
   const nroRef = useRef<HTMLInputElement>(null)
   const cuitRef = useRef<HTMLInputElement>(null)
@@ -1613,8 +1665,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     )
   }
 
+  // `md:text-xs` pisa el `md:text-sm` del Input base (twMerge solo reemplaza
+  // con el MISMO modificador): así el input mide lo mismo que la tabla. Las
+  // flechitas del type=number se ocultan (patrón CarritoVenta) para no
+  // comerse ancho útil.
   const inputCls =
-    'h-8 w-full text-right tabular-nums border-[#e4c9b0] text-xs px-1.5'
+    'h-8 w-full px-1.5 text-right text-xs md:text-xs tabular-nums border-[#e4c9b0] ' +
+    '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
 
   return (
     <>
@@ -1653,12 +1710,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        {/* Banda central: en lg+ dos columnas — la tabla de productos a la
-            IZQUIERDA (protagonista, con su propio scroll) y el detalle del
-            comprobante/totales/pago a la DERECHA en segundo plano; en
-            pantallas chicas todo apilado con el scroll de página de siempre. */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
-          <div className="flex flex-col gap-3 px-5 pt-4 pb-4 lg:flex-1 lg:min-w-0 lg:overflow-hidden">
+        {/* Banda central: en 2xl+ (≥1536px) dos columnas — la tabla de
+            productos a la IZQUIERDA (protagonista, con su propio scroll) y el
+            detalle del comprobante/totales/pago a la DERECHA (plegable); por
+            debajo de 2xl todo apilado con el scroll de la banda, porque la
+            tabla de 10 columnas no entra al lado del panel. */}
+        <div className="flex-1 min-h-0 flex flex-col 2xl:flex-row overflow-y-auto 2xl:overflow-hidden">
+          <div className="flex flex-col gap-3 px-5 pt-4 pb-4 2xl:flex-1 2xl:min-w-0 2xl:overflow-hidden">
           {/* Pre-guardado: se recuperó un borrador de esta cuenta */}
           {borradorRestaurado && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#f9b44c]/60 bg-[#f9b44c]/15 px-3 py-2">
@@ -2024,25 +2082,38 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               </div>
             </div>
 
-            {/* md+: tabla completa (la protagonista): en lg+ tiene scroll
-                propio con el encabezado fijo. Con gastos no debitables aparece
-                la columna read-only "Costo final" (costo neto + prorrateo). */}
-            <div className="hidden md:block rounded-xl border border-[#e4c9b0]/60 overflow-x-auto lg:flex-1 lg:min-h-0 lg:overflow-auto">
-              <table className="w-full text-xs">
+            {/* md+: tabla completa (la protagonista). Regla de oro: ningún
+                número se corta nunca. Cada columna tiene un ancho PISO en su
+                <th> (layout auto: el contenido nowrap solo puede ensancharla)
+                y la tabla un min-w total; si la banda es más angosta, scroll
+                horizontal con la columna Producto y el encabezado fijos.
+                Costo c/IVA, Subtotal c/IVA y Precio exacto viven como línea
+                chica debajo de su valor principal. En 2xl+ la tabla tiene
+                scroll propio ocupando todo el alto; por debajo, altura
+                acotada para que el encabezado se pegue igual (el contenedor
+                con overflow es su scroll container, no la banda). Con gastos
+                no debitables aparece la columna read-only "Costo final". */}
+            <div className="hidden md:block rounded-xl border border-[#e4c9b0]/60 overflow-auto max-2xl:max-h-[65vh] 2xl:flex-1 2xl:min-h-0">
+              <table className="w-full min-w-[1080px] text-xs border-separate border-spacing-0">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-[#391511] text-[#f9d2a2]">
-                    <th className="p-2 text-left" rowSpan={2}>
+                    {/* Esquina fija: el fondo propio es obligatorio porque el
+                        del <tr> no acompaña a la celda sticky al scrollear. */}
+                    <th
+                      className="sticky left-0 z-[1] bg-[#391511] border-r border-[#f9d2a2]/20 p-2 text-left min-w-[220px] whitespace-nowrap"
+                      rowSpan={2}
+                    >
                       Producto
                     </th>
                     <th
-                      className="p-2"
+                      className="w-[112px] p-2 whitespace-nowrap"
                       rowSpan={2}
                       title="Cantidad que dice el comprobante (editable)"
                     >
                       Cant. factura ✎
                     </th>
                     <th
-                      className="p-2"
+                      className="w-[104px] p-2 whitespace-nowrap"
                       rowSpan={2}
                       title="Unidades físicamente recibidas en la recepción (y lo pedido en la orden)"
                     >
@@ -2050,50 +2121,50 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     </th>
                     <th
                       className="p-2 text-center bg-[#6f3a2a]"
-                      colSpan={hayGastos ? 7 : 6}
+                      colSpan={hayGastos ? 5 : 4}
                     >
                       COMPRA
                     </th>
-                    <th className="p-2 text-center bg-[#c43e2c]" colSpan={4}>
+                    <th className="p-2 text-center bg-[#c43e2c]" colSpan={3}>
                       VENTA
                     </th>
                   </tr>
                   <tr className="bg-[#391511] text-[#f9d2a2]">
-                    <th className="p-1.5 font-medium">Costo s/IVA</th>
-                    <th className="p-1.5 font-medium">Desc. %</th>
-                    <th className="p-1.5 font-medium">Subtotal</th>
-                    <th className="p-1.5 font-medium">IVA %</th>
                     <th
-                      className="p-1.5 font-medium"
-                      title="Unitario, informativo del comprobante: el IVA es crédito fiscal, no forma parte del costo"
+                      className="w-[108px] p-1.5 font-medium whitespace-nowrap"
+                      title="Neto unitario del comprobante. Debajo, el mismo costo c/IVA (informativo: el IVA es crédito fiscal, no forma parte del costo)"
                     >
-                      Costo c/IVA
+                      Costo s/IVA
+                    </th>
+                    <th className="w-[64px] p-1.5 font-medium whitespace-nowrap">
+                      Desc. %
                     </th>
                     <th
-                      className="p-1.5 font-medium"
-                      title="Costo c/IVA × cantidad facturada"
+                      className="w-[112px] p-1.5 font-medium whitespace-nowrap"
+                      title="Neto × cantidad facturada. Debajo, el subtotal c/IVA"
                     >
-                      Subtotal c/IVA
+                      Subtotal
+                    </th>
+                    <th className="w-[84px] p-1.5 font-medium whitespace-nowrap">
+                      IVA %
                     </th>
                     {hayGastos && (
                       <th
-                        className="p-1.5 font-medium bg-[#5a2f22]"
-                        title="Unitario: costo neto + gastos no debitables prorrateados (es el costo que se guarda). No incluye IVA porque es crédito fiscal — por eso puede ser menor que el Costo c/IVA"
+                        className="w-[100px] p-1.5 font-medium whitespace-nowrap bg-[#5a2f22]"
+                        title="Unitario s/IVA: costo neto + gastos no debitables prorrateados (es el costo que se guarda). No incluye IVA porque es crédito fiscal — por eso puede ser menor que el Costo c/IVA"
                       >
-                        Costo final s/IVA
+                        Costo final
                       </th>
                     )}
-                    <th className="p-1.5 font-medium">Margen %</th>
-                    <th
-                      className="p-1.5 font-medium"
-                      title="Precio final exacto que asegura el margen (antes del redondeo comercial)"
-                    >
-                      Precio exacto
+                    <th className="w-[76px] p-1.5 font-medium whitespace-nowrap">
+                      Margen %
                     </th>
-                    <th className="p-1.5 font-medium">IVA %</th>
+                    <th className="w-[84px] p-1.5 font-medium whitespace-nowrap">
+                      IVA %
+                    </th>
                     <th
-                      className="p-1.5 font-medium"
-                      title="Editable: tipeá el precio que querés y el margen se deduce solo. Si no lo tocás, sale del margen (redondeado hacia arriba)."
+                      className="w-[116px] p-1.5 font-medium whitespace-nowrap"
+                      title="Editable: tipeá el precio que querés y el margen se deduce solo. Si no lo tocás, sale del margen (redondeado hacia arriba) y debajo se ve el precio exacto antes del redondeo."
                     >
                       Precio venta ✎
                     </th>
@@ -2103,9 +2174,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, precioTocado, error }) => (
                     <tr
                       key={l.key}
-                      className="border-b border-[#e4c9b0]/40 bg-white"
+                      // border-separate: el borde va en las celdas (`*:`), el
+                      // del <tr> no se dibuja. Todas las celdas alinean arriba
+                      // y el valor principal ocupa un bloque de 32px (como el
+                      // input) para que inputs y textos queden a la misma
+                      // altura aunque haya líneas secundarias debajo.
+                      className="bg-white *:border-b *:border-[#e4c9b0]/40"
                     >
-                      <td className="p-2 text-[#391511] font-medium min-w-[180px]">
+                      <td className="sticky left-0 z-[1] bg-white border-r border-[#e4c9b0]/60 p-2 align-top text-[#391511] font-medium">
                         <div className="flex items-start gap-2">
                           <button
                             type="button"
@@ -2162,7 +2238,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           </div>
                         </div>
                       </td>
-                      <td className="p-1 w-16">
+                      <td className="p-1 align-top">
                         <Input
                           type="number"
                           min="0"
@@ -2174,10 +2250,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           className={inputCls}
                         />
                       </td>
-                      <td className="p-2 w-20 text-center align-middle">
+                      <td className="px-2 py-1 align-top text-center whitespace-nowrap">
                         {l.item_pedido_id === null ||
                         l.cantidad_recibida == null ? (
-                          <span className="text-[#c8a58a]">—</span>
+                          <span className="block h-8 leading-8 text-[#c8a58a]">—</span>
                         ) : (
                           <div
                             title={
@@ -2188,7 +2264,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           >
                             <span
                               className={cn(
-                                'tabular-nums',
+                                'block h-8 leading-8 tabular-nums',
                                 Number(l.cantidad) !== l.cantidad_recibida
                                   ? 'font-bold text-[#c43e2c]'
                                   : 'font-semibold text-[#391511]'
@@ -2209,7 +2285,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           </div>
                         )}
                       </td>
-                      <td className="p-1 w-24">
+                      <td className="p-1 align-top whitespace-nowrap">
                         <Input
                           type="number"
                           min="0"
@@ -2220,8 +2296,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           }
                           className={inputCls}
                         />
+                        <span
+                          className="mt-0.5 block px-1.5 text-right text-[10px] leading-tight tabular-nums text-[#6f3a2a]"
+                          title="Unitario c/IVA, informativo del comprobante: el IVA es crédito fiscal, no forma parte del costo"
+                        >
+                          c/IVA <MontoARS monto={calc.costoConIva} />
+                        </span>
                       </td>
-                      <td className="p-1 w-16">
+                      <td className="p-1 align-top">
                         <Input
                           type="number"
                           min="0"
@@ -2234,30 +2316,34 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           className={inputCls}
                         />
                       </td>
-                      <td className="p-2 text-right tabular-nums text-[#6f3a2a]">
-                        <MontoARS monto={calc.costoNeto * cantidad} />
+                      <td className="px-2 py-1 align-top whitespace-nowrap text-right tabular-nums">
+                        <span className="block h-8 leading-8 text-[#391511]">
+                          <MontoARS monto={calc.costoNeto * cantidad} />
+                        </span>
+                        <span
+                          className="block text-[10px] leading-tight text-[#6f3a2a]"
+                          title="Costo c/IVA × cantidad facturada"
+                        >
+                          c/IVA <MontoARS monto={calc.costoConIva * cantidad} />
+                        </span>
                       </td>
-                      <td className="p-1 w-20">
+                      <td className="p-1 align-top">
                         <SelectAlicuota
-                          size="sm"
+                          size="default"
                           value={l.iva_compra}
                           onChange={(v) => setLineaCampo(l.key, 'iva_compra', v)}
                           ariaLabel={`IVA compra de ${l.nombre}`}
                           className="px-1.5 text-xs"
                         />
                       </td>
-                      <td className="p-2 text-right tabular-nums font-semibold text-[#391511]">
-                        <MontoARS monto={calc.costoConIva} />
-                      </td>
-                      <td className="p-2 text-right tabular-nums font-semibold text-[#391511]">
-                        <MontoARS monto={calc.costoConIva * cantidad} />
-                      </td>
                       {hayGastos && (
-                        <td className="p-2 text-right tabular-nums font-bold text-[#391511] bg-[#f9b44c]/12">
-                          <MontoARS monto={calc.costoFinal} />
+                        <td className="px-2 py-1 align-top whitespace-nowrap text-right tabular-nums font-bold text-[#391511] bg-[#f9b44c]/12">
+                          <span className="block h-8 leading-8">
+                            <MontoARS monto={calc.costoFinal} />
+                          </span>
                         </td>
                       )}
-                      <td className="p-1 w-16">
+                      <td className="p-1 align-top">
                         <Input
                           type="number"
                           value={
@@ -2289,39 +2375,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           )}
                         />
                       </td>
-                      <td
-                        className="p-2 text-right tabular-nums text-[#6f3a2a]"
-                        title={
-                          l.modoVenta === 'precio'
-                            ? precioTocado
-                              ? 'Precio nuevo: al guardar reemplaza al vigente'
-                              : 'Precio vigente en el punto de venta: guardar la factura no lo mueve'
-                            : (error ??
-                              (bonificada
-                                ? 'Bonificada: precio calculado sobre el costo de lista (sin descuento)'
-                                : undefined))
-                        }
-                      >
-                        {l.modoVenta === 'precio' ? (
-                          <span className="text-[#c8a58a]">—</span>
-                        ) : error ? (
-                          <span className="text-[#c43e2c] font-bold">—</span>
-                        ) : venta?.desglose ? (
-                          <MontoARS monto={venta.desglose.precioFinalExacto} />
-                        ) : (
-                          '…'
-                        )}
-                      </td>
-                      <td className="p-1 w-20">
+                      <td className="p-1 align-top">
                         <SelectAlicuota
-                          size="sm"
+                          size="default"
                           value={l.iva_venta}
                           onChange={(v) => setLineaCampo(l.key, 'iva_venta', v)}
                           ariaLabel={`IVA venta de ${l.nombre}`}
                           className="px-1.5 text-xs"
                         />
                       </td>
-                      <td className="p-1 w-24" title={error ?? undefined}>
+                      <td
+                        className="p-1 align-top whitespace-nowrap"
+                        title={error ?? undefined}
+                      >
                         <Input
                           type="number"
                           min="0"
@@ -2355,32 +2421,67 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             error && 'border-[#c43e2c]'
                           )}
                         />
+                        {/* Precio exacto (antes del redondeo comercial) solo
+                            tiene sentido en modo margen: en modo precio el
+                            precio tipeado manda y no hay "exacto" que mostrar.
+                            Los errores son oraciones largas: van en el title
+                            (y en el banner), acá solo el guion rojo. */}
+                        {l.modoVenta === 'margen' && (
+                          <span
+                            className={cn(
+                              'mt-0.5 block px-1.5 text-right text-[10px] leading-tight tabular-nums',
+                              error ? 'font-bold text-[#c43e2c]' : 'text-[#6f3a2a]'
+                            )}
+                            title={
+                              error ??
+                              (bonificada
+                                ? 'Bonificada: precio calculado sobre el costo de lista (sin descuento)'
+                                : 'Precio final exacto que asegura el margen (antes del redondeo comercial)')
+                            }
+                          >
+                            {error ? (
+                              '—'
+                            ) : venta?.desglose ? (
+                              <>
+                                exacto{' '}
+                                <MontoARS monto={venta.desglose.precioFinalExacto} />
+                              </>
+                            ) : (
+                              '…'
+                            )}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-[#e4c9b0] bg-[#fdfaf6] text-[11px] font-semibold text-[#391511]">
-                    <td className="p-2 text-right text-[10px] uppercase tracking-wide text-[#6f3a2a]">
+                  <tr className="bg-[#fdfaf6] text-[11px] font-semibold text-[#391511] *:border-t-2 *:border-[#e4c9b0]">
+                    <td className="sticky left-0 z-[1] bg-[#fdfaf6] border-r border-[#e4c9b0]/60 p-2 text-right text-[10px] uppercase tracking-wide text-[#6f3a2a]">
                       Σ unidades
                     </td>
-                    <td className="p-2 text-center tabular-nums">
+                    <td className="p-2 text-center tabular-nums whitespace-nowrap">
                       {fmtCantidad(totalesCantidad.facU, totalesCantidad.facKg)}
                     </td>
-                    <td className="p-2 text-center tabular-nums">
+                    <td className="p-2 text-center tabular-nums whitespace-nowrap">
                       {fmtCantidad(totalesCantidad.recU, totalesCantidad.recKg)}
                     </td>
+                    {/* Costo s/IVA · Desc. % */}
                     <td colSpan={2} />
-                    <td className="p-2 text-right tabular-nums">
-                      <MontoARS monto={totales.neto} />
+                    <td className="px-2 py-1 text-right tabular-nums whitespace-nowrap">
+                      <span className="block">
+                        <MontoARS monto={totales.neto} />
+                      </span>
+                      <span className="block text-[10px] font-normal text-[#6f3a2a]">
+                        c/IVA <MontoARS monto={totales.neto + totales.iva} />
+                      </span>
                     </td>
+                    {/* IVA % */}
                     <td />
-                    <td />
-                    <td className="p-2 text-right tabular-nums">
-                      <MontoARS monto={totales.neto + totales.iva} />
-                    </td>
+                    {/* Costo final */}
                     {hayGastos && <td />}
-                    <td colSpan={4} />
+                    {/* Margen % · IVA % · Precio venta */}
+                    <td colSpan={3} />
                   </tr>
                 </tfoot>
               </table>
@@ -2390,8 +2491,72 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           </div>
 
           {/* ── DERECHA: proveedor, comprobante, totales y pago, en segundo
-              plano. En lg+ es una columna angosta con su propio scroll. ── */}
-          <div className="shrink-0 border-t lg:border-t-0 lg:border-l border-[#e4c9b0]/60 bg-[#fdfaf6] px-5 py-4 space-y-3 lg:w-[400px] xl:w-[440px] lg:overflow-y-auto">
+              plano. En 2xl+ es una columna angosta con su propio scroll que
+              se puede PLEGAR a un riel para darle todo el ancho a la tabla;
+              por debajo de 2xl va debajo de la tabla, siempre visible. ── */}
+          <div
+            className={cn(
+              'shrink-0 border-t 2xl:border-t-0 2xl:border-l border-[#e4c9b0]/60 bg-[#fdfaf6]',
+              panelPlegado
+                ? '2xl:w-11 2xl:overflow-hidden'
+                : '2xl:w-[420px] 2xl:overflow-y-auto'
+            )}
+          >
+          {/* Riel plegado (solo 2xl+): reabrir, etiqueta vertical y, si falta
+              algo para guardar, la cantidad (misma lista que el banner). */}
+          <div
+            className={cn(
+              'hidden h-full w-11 flex-col items-center gap-3 py-3',
+              panelPlegado && '2xl:flex'
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => alternarPanel(false)}
+              aria-expanded={false}
+              aria-controls="panel-comprobante"
+              title="Mostrar comprobante y totales"
+              className="rounded-lg p-1.5 text-[#6f3a2a] transition-colors hover:bg-white hover:text-[#391511]"
+            >
+              <PanelRightOpen className="h-5 w-5" />
+            </button>
+            {bloqueos.length > 0 && (
+              <span
+                title={`${bloqueos.length} ${bloqueos.length === 1 ? 'cosa falta' : 'cosas faltan'} para guardar: abrí el panel`}
+                className={cn(
+                  'flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold tabular-nums text-white',
+                  intentoGuardar ? 'bg-[#c43e2c]' : 'bg-[#b3821b]'
+                )}
+              >
+                {bloqueos.length}
+              </span>
+            )}
+            <span className="select-none rotate-180 text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a] [writing-mode:vertical-rl]">
+              Comprobante y totales
+            </span>
+          </div>
+
+          {/* Contenido del panel: queda MONTADO al plegar (2xl:hidden) para no
+              perder el estado de la galería, los inputs y los pagos. */}
+          <div
+            id="panel-comprobante"
+            className={cn('space-y-3 px-5 py-4', panelPlegado && '2xl:hidden')}
+          >
+          <div className="hidden items-center justify-between 2xl:flex">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]">
+              Comprobante y totales
+            </span>
+            <button
+              type="button"
+              onClick={() => alternarPanel(true)}
+              aria-expanded
+              aria-controls="panel-comprobante"
+              title="Plegar el panel: la tabla usa todo el ancho"
+              className="rounded-lg p-1 text-[#6f3a2a] transition-colors hover:bg-white hover:text-[#391511]"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </button>
+          </div>
           {/* Ficha del proveedor: lo que va a salir en el comprobante y en el
               Libro IVA. Read-only a propósito — la fuente de verdad es
               Configuración › Proveedores. */}
@@ -3224,6 +3389,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               </div>
             ))}
 
+          </div>
           </div>
         </div>
 
