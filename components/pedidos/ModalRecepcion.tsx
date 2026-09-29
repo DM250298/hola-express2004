@@ -240,6 +240,12 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
     [itemsEstado]
   )
 
+  // "¿Se recibió algo?" se mide en CANTIDAD, no en plata: una orden con
+  // costos en $0 (precio pendiente, bonificada) igual se tiene que poder recibir.
+  const hayAlgoRecibido = itemsEstado.some(
+    (it) => (Number(it.cantidad_recibida) || 0) > 0
+  )
+
   // Los términos de pago de la ORDEN mandan; si la orden no los tiene, cae a
   // la condición de pago del proveedor (comportamiento previo).
   const condicionPagoTexto =
@@ -321,7 +327,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
 
   const procesando = recibir.isPending
   const accionDeshabilitada =
-    procesando || hayErrores || totalRecibido <= 0 || requiereAceptacion
+    procesando || hayErrores || !hayAlgoRecibido || requiereAceptacion
 
   function confirmar() {
     if (!usuario || hayErrores) return
@@ -807,7 +813,7 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                 )}
               </>
             )}
-            {ordenIncompleta && totalRecibido > 0 && (
+            {ordenIncompleta && hayAlgoRecibido && (
               <p className="text-[11px] text-[#c43e2c] font-medium mt-0.5 max-w-md">
                 Faltan{' '}
                 <span className="font-bold tabular-nums">
