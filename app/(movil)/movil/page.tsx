@@ -37,12 +37,20 @@ export default async function PaginaMovil() {
     ? [emp.nombre, emp.apellido].filter(Boolean).join(' ')
     : resPerfil.data?.nombre ?? 'Encargado'
 
-  // Conteo físico en curso: la RLS ya limita las zonas a las asignadas al
-  // usuario (o las libres, para reclamar). Si no hay sesión viva o el usuario
-  // no tiene zonas, la tarjeta no aparece.
+  // Conteo físico en curso: solo las tareas del usuario (las suyas, las que
+  // le toca recontar y las libres, para reclamar). La RLS deja ver todas a
+  // quien gestiona el conteo, y con tareas por área/proveedor/clase pueden ser
+  // decenas: en el teléfono cada uno ve lo que tiene que contar. Si no hay
+  // sesión viva o el usuario no tiene tareas, la tarjeta no aparece.
   let conteoFisico: {
     nombre: string
-    zonas: { id: number; nombre: string; estado: string }[]
+    zonas: {
+      id: number
+      nombre: string
+      estado: string
+      enLista: number
+      contados: number
+    }[]
   } | null = null
   const { data: sesionConteo } = await supabase
     .from('conteo_sesiones')
@@ -50,15 +58,29 @@ export default async function PaginaMovil() {
     .neq('estado', 'cerrada')
     .maybeSingle<{ id: number; nombre: string }>()
   if (sesionConteo) {
-    const { data: zonas } = await supabase
-      .from('conteo_zonas')
-      .select('id, nombre, estado, orden')
-      .eq('sesion_id', sesionConteo.id)
-      .order('orden', { ascending: true })
+    const [{ data: zonas }, { data: avance }] = await Promise.all([
+      supabase
+        .from('conteo_zonas')
+        .select('id, nombre, estado, orden')
+        .eq('sesion_id', sesionConteo.id)
+        .or(
+          `responsable_user_id.eq.${userId},reconteo_user_id.eq.${userId},responsable_user_id.is.null`
+        )
+        .order('orden', { ascending: true }),
+      // Sin la migración 227 viene con error y la tarjeta sale sin avance.
+      supabase.rpc('fn_conteo_avance', { p_sesion_id: sesionConteo.id }),
+    ])
     if (zonas && zonas.length > 0) {
+      const porZona = new Map((avance ?? []).map((a) => [a.zona_id, a]))
       conteoFisico = {
         nombre: sesionConteo.nombre,
-        zonas: zonas.map((z) => ({ id: z.id, nombre: z.nombre, estado: z.estado })),
+        zonas: zonas.map((z) => ({
+          id: z.id,
+          nombre: z.nombre,
+          estado: z.estado,
+          enLista: porZona.get(z.id)?.en_lista ?? 0,
+          contados: porZona.get(z.id)?.contados_lista ?? 0,
+        })),
       }
     }
   }

@@ -46,7 +46,23 @@ Las tres que estaban sin commitear. La 154 ya estaba aplicada; la 161 y la 162 s
 
 ## ⏳ Pendientes de correr
 
-Ninguna.
+Conteo físico con tareas por alcance (área, proveedor, clase ABC, categoría, marca, alertas,
+sin ubicar). **Corridas en PRUEBA el 2026-09-29** (chequeo T1 en 0 filas). **Faltan en
+PRODUCCIÓN (HEX-V1)**; se corren en orden:
+
+| Nº | Archivo | Qué hace |
+|---|---|---|
+| 222 | `222_conteo_tareas_esquema.sql` | `conteo_zonas.tipo` + `criterios`, tabla `conteo_zona_productos`, helpers |
+| 223 | `223_conteo_alcance.sql` | `fn_conteo_alcance`, `fn_conteo_candidatos` |
+| 224 | `224_conteo_crear_tareas.sql` | `fn_conteo_crear_tareas` (interna: listas, reclamos y reparto) |
+| 225 | `225_conteo_abrir_agregar_previsualizar.sql` | **Reemite** `fn_abrir_sesion_conteo` (v3, base 176) + agregar tareas + vista previa |
+| 226 | `226_conteo_registrar_con_alcance.sql` | **Reemite** `fn_registrar_conteo` (v2, base 098) |
+| 227 | `227_conteo_gestion_y_avance.sql` | Reasignar, quitar, reabrir sesión, avance por tarea |
+| 228 | `228_conteo_cerrar_zona_y_cobertura.sql` | **Reemite** `fn_cerrar_zona` (v3, base 176) + `fn_conteo_cobertura` |
+
+Después de la 225, la 226 y la 228 correr el chequeo T1. Prueba con rollback:
+`supabase/tests/test_conteo_tareas.sql` (y `test_conteo_fisico.sql` como regresión).
+La app tolera que falten: sin ellas el conteo sigue funcionando con zonas libres, como antes.
 
 
 **Verificado antes de renumerar** (el riesgo real de correr una migración vieja es que pise
