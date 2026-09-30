@@ -3297,6 +3297,32 @@ export type ItemPedidoTiendaUpdate = {
 export type EstadoConteoSesion = 'abierta' | 'en_revision' | 'cerrada'
 export type EstadoConteoZona = 'pendiente' | 'en_curso' | 'cerrada'
 
+/**
+ * Tipo de tarea de conteo (mig 222).
+ * `area`  = se cuenta lo que se ve en un lugar; el total suma con otras áreas.
+ * `lista` = se cuenta el total del producto en todo el local (exclusivo).
+ */
+export type TipoConteoZona = 'area' | 'lista'
+
+/** Clase ABC para armar tareas. `N` = sin ventas en los últimos 30 días. */
+export type ClaseConteo = 'A' | 'B' | 'C' | 'N'
+
+/**
+ * Filtro con el que se arma la lista de una tarea (fn_conteo_alcance, mig 223).
+ * Entre criterios es Y; dentro de cada uno es O.
+ */
+export type CriteriosConteo = {
+  ubicacion_ids?: number[]
+  proveedor_ids?: number[]
+  categoria_ids?: number[]
+  marca_ids?: number[]
+  clases_abc?: ClaseConteo[]
+  /** Códigos de `reglas_alerta`: productos con una alerta viva de esas reglas. */
+  reglas_alerta?: string[]
+  /** Productos que el mapa todavía no tiene ubicados. */
+  sin_ubicar?: boolean
+}
+
 export type ConteoSesionRow = {
   id: number
   nombre: string
@@ -3366,6 +3392,10 @@ export type ConteoZonaRow = {
   orden: number
   /** Nodo del árbol físico anclado a la zona (mig 175). NULL = sin anclar. */
   ubicacion_id: number | null
+  /** Mig 222. Las zonas anteriores quedan como `area`. */
+  tipo: TipoConteoZona
+  /** Mig 222. NULL = zona libre: sin lista, se escanea lo que haya. */
+  criterios: CriteriosConteo | null
   created_at: string
 }
 
@@ -3380,6 +3410,8 @@ export type ConteoZonaInsert = {
   ts_fin?: string | null
   orden?: number
   ubicacion_id?: number | null
+  tipo?: TipoConteoZona
+  criterios?: CriteriosConteo | null
   created_at?: string
 }
 
@@ -3392,6 +3424,99 @@ export type ConteoZonaUpdate = {
   ts_fin?: string | null
   orden?: number
   ubicacion_id?: number | null
+  tipo?: TipoConteoZona
+  criterios?: CriteriosConteo | null
+}
+
+/** Lista de productos de una tarea de conteo, en orden de recorrido (mig 222). */
+export type ConteoZonaProductoRow = {
+  zona_id: number
+  producto_id: number
+  orden: number
+  /** Dónde está según el mapa ("Salón › Góndola 3 · Depósito"). */
+  donde: string | null
+  /** Nodos del mapa que la tarea cubre para este producto. */
+  ubicacion_ids: number[]
+}
+
+export type ConteoZonaProductoInsert = {
+  zona_id: number
+  producto_id: number
+  orden?: number
+  donde?: string | null
+  ubicacion_ids?: number[]
+}
+
+export type ConteoZonaProductoUpdate = {
+  orden?: number
+  donde?: string | null
+  ubicacion_ids?: number[]
+}
+
+/** Fila de fn_conteo_alcance (mig 223). No trae stock: el conteo es ciego. */
+export type ConteoAlcanceRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+  clase_abc: ClaseConteo
+  donde: string | null
+  ubicacion_ids: number[]
+  /** Dónde más vive, fuera del área pedida. NULL si no aplica. */
+  otros: string | null
+  orden: number
+}
+
+/** Una tarea pedida, con lo que le toca (fn_conteo_crear_tareas, mig 224). */
+export type ConteoTareaResultado = {
+  /** Posición en el arreglo de tareas que se mandó. */
+  indice: number
+  nombre: string
+  tipo: TipoConteoZona
+  /** true = zona libre, sin lista. */
+  libre: boolean
+  /** Productos que cumplen el criterio. */
+  en_criterio: number
+  /** Los que quedan para esta tarea. */
+  productos: number
+  /** Los que ya son de otra tarea de la sesión. */
+  ya_asignados: number
+  /** De los que quedan, cuántos viven también fuera del área de la tarea. */
+  con_otros_lugares: number
+  /** En cuántas tareas se reparte (una por persona). 0 = quedó sin productos. */
+  partes: number
+  por_parte: number[]
+}
+
+/** Resultado de fn_conteo_previsualizar_tareas (mig 225). */
+export type ConteoVistaPrevia = {
+  tareas: ConteoTareaResultado[]
+  /** Día del snapshot del que sale la clase ABC. NULL = todavía no hay. */
+  fecha_abc: string | null
+}
+
+/** Fila de fn_conteo_avance (mig 227). */
+export type ConteoAvanceRow = {
+  zona_id: number
+  en_lista: number
+  contados: number
+  /** De los contados, los que están en la lista de la tarea. */
+  contados_lista: number
+}
+
+/**
+ * Fila de fn_conteo_cobertura (mig 228): un lugar donde vive un producto ya
+ * contado en otra área, y que quedó sin contar.
+ * `sin_tarea`  = nadie tiene ese lugar en su tarea.
+ * `sin_contar` = estaba en la tarea `tarea`, que cerró sin cargarlo.
+ */
+export type ConteoCoberturaRow = {
+  producto_id: number
+  nombre: string
+  ubicacion_id: number
+  ubicacion: string
+  motivo: 'sin_tarea' | 'sin_contar'
+  tarea: string | null
 }
 
 export type ConteoDetalleRow = {
@@ -4556,6 +4681,25 @@ export interface Database {
           },
         ]
       }
+      conteo_zona_productos: {
+        Row: ConteoZonaProductoRow
+        Insert: ConteoZonaProductoInsert
+        Update: ConteoZonaProductoUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'conteo_zona_productos_zona_id_fkey'
+            columns: ['zona_id']
+            referencedRelation: 'conteo_zonas'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'conteo_zona_productos_producto_id_fkey'
+            columns: ['producto_id']
+            referencedRelation: 'productos'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       conteo_detalle: {
         Row: ConteoDetalleRow
         Insert: ConteoDetalleInsert
@@ -5374,6 +5518,39 @@ export interface Database {
       fn_cerrar_sesion_conteo: {
         Args: { p_sesion_id: number; p_confirmo_sync?: boolean }
         Returns: Json
+      }
+      /** Tareas de conteo con alcance (migs 222 a 228). */
+      fn_conteo_alcance: {
+        Args: { p_criterios: Json }
+        Returns: ConteoAlcanceRow[]
+      }
+      fn_conteo_previsualizar_tareas: {
+        Args: { p_zonas: Json }
+        Returns: Json
+      }
+      fn_agregar_tareas_conteo: {
+        Args: { p_sesion_id: number; p_zonas: Json }
+        Returns: Json
+      }
+      fn_reasignar_tarea_conteo: {
+        Args: { p_zona_id: number; p_responsable: string | null }
+        Returns: ConteoZonaRow
+      }
+      fn_quitar_tarea_conteo: {
+        Args: { p_zona_id: number }
+        Returns: number
+      }
+      fn_reabrir_sesion_conteo: {
+        Args: { p_sesion_id: number }
+        Returns: ConteoSesionRow
+      }
+      fn_conteo_avance: {
+        Args: { p_sesion_id: number }
+        Returns: ConteoAvanceRow[]
+      }
+      fn_conteo_cobertura: {
+        Args: { p_sesion_id: number }
+        Returns: ConteoCoberturaRow[]
       }
       fn_aprobar_conteo: {
         Args: {

@@ -1,9 +1,15 @@
 import { createClient } from '@/lib/supabase/client'
+import { traerTodo } from '@/lib/supabase/paginacion'
 import type {
+  ConteoAvanceRow,
+  ConteoCoberturaRow,
   ConteoDetalleRow,
   ConteoDiferenciaRow,
   ConteoSesionRow,
+  ConteoTareaResultado,
+  ConteoVistaPrevia,
   ConteoZonaRow,
+  CriteriosConteo,
   Json,
   ResumenCierreConteo,
 } from '@/types/database'
@@ -194,13 +200,22 @@ export async function getProductoConteoPorCodigo(
 
 // ─── RPCs (todas las escrituras pasan por acá) ───────────────────────────────
 
-export interface ZonaNueva {
+/**
+ * Una tarea a crear (migs 222 a 228). Con `criterios` lleva lista: por área
+ * se cuenta lo que se ve en el lugar; sin área, el total del producto en todo
+ * el local. Sin `criterios` es una zona libre: se escanea lo que haya.
+ */
+export interface TareaNueva {
   nombre: string
-  responsable_user_id: string | null
-  orden: number
   /**
-   * Ancla opcional al árbol físico (migs 170/175/176): al cerrar la zona,
-   * los productos contados se asignan a esta ubicación en el mapa.
+   * Quién cuenta. Con más de uno, la lista se reparte en tramos seguidos del
+   * recorrido (una tarea por persona). Vacío = la toma quien la inicie.
+   */
+  responsables: string[]
+  criterios: CriteriosConteo | null
+  /**
+   * Ancla opcional de una zona libre al árbol físico (migs 170/175/176): al
+   * cerrarla, lo contado se ubica ahí. Las tareas por área se anclan solas.
    */
   ubicacion_id?: number | null
 }
@@ -208,8 +223,23 @@ export interface ZonaNueva {
 export interface AbrirSesionPayload {
   nombre: string
   umbral: number
-  zonas: ZonaNueva[]
+  zonas: TareaNueva[]
   notas?: string | null
+}
+
+/**
+ * `responsable_user_id` viaja además de `responsables` para que una base sin
+ * las migraciones 222+ (que solo conoce el campo único) siga asignando bien.
+ */
+function aPayloadZonas(zonas: TareaNueva[]): Json {
+  return zonas.map((z, i) => ({
+    nombre: z.nombre,
+    responsables: z.responsables,
+    responsable_user_id: z.responsables[0] ?? null,
+    criterios: z.criterios,
+    ubicacion_id: z.ubicacion_id ?? null,
+    orden: i,
+  })) as unknown as Json
 }
 
 export async function abrirSesionConteo(
@@ -219,11 +249,176 @@ export async function abrirSesionConteo(
   const { data, error } = await supabase.rpc('fn_abrir_sesion_conteo', {
     p_nombre: payload.nombre,
     p_umbral: payload.umbral,
-    p_zonas: payload.zonas as unknown as Json,
+    p_zonas: aPayloadZonas(payload.zonas),
     p_notas: payload.notas ?? null,
   })
   if (error) throw error
   return data as ConteoSesionRow
+}
+
+// ─── Tareas con alcance (migs 222 a 228) ─────────────────────────────────────
+// Convención del repo: si la migración no corrió, las lecturas devuelven
+// `null` y la pantalla avisa (o cae al comportamiento anterior) en vez de
+// romper.
+
+function faltaMigracion(error: { code?: string } | null | undefined): boolean {
+  return (
+    error?.code === 'PGRST202' ||
+    error?.code === 'PGRST205' ||
+    error?.code === '42P01' ||
+    error?.code === '42883'
+  )
+}
+
+/**
+ * Cuántos productos le tocan a cada tarea, antes de crearlas. La cuenta la
+ * hace la base con las mismas reglas que la creación (lo que ya es de otra
+ * tarea no entra), así el número es exactamente el que se va a crear.
+ */
+export async function previsualizarTareas(
+  zonas: TareaNueva[]
+): Promise<ConteoVistaPrevia | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteo_previsualizar_tareas', {
+    p_zonas: aPayloadZonas(zonas),
+  })
+  if (error) {
+    if (faltaMigracion(error)) return null
+    throw new Error(error.message)
+  }
+  return data as unknown as ConteoVistaPrevia
+}
+
+export async function agregarTareasConteo(payload: {
+  sesion_id: number
+  zonas: TareaNueva[]
+}): Promise<ConteoTareaResultado[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_agregar_tareas_conteo', {
+    p_sesion_id: payload.sesion_id,
+    p_zonas: aPayloadZonas(payload.zonas),
+  })
+  if (error) throw error
+  return (data ?? []) as unknown as ConteoTareaResultado[]
+}
+
+export async function reasignarTareaConteo(payload: {
+  zona_id: number
+  responsable: string | null
+}): Promise<ConteoZonaRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_reasignar_tarea_conteo', {
+    p_zona_id: payload.zona_id,
+    p_responsable: payload.responsable,
+  })
+  if (error) throw error
+  return data as ConteoZonaRow
+}
+
+export async function quitarTareaConteo(zonaId: number): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_quitar_tarea_conteo', {
+    p_zona_id: zonaId,
+  })
+  if (error) throw error
+}
+
+/** Vuelve una sesión de "en revisión" a "abierta" para seguir contando. */
+export async function reabrirSesionConteo(
+  sesionId: number
+): Promise<ConteoSesionRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_reabrir_sesion_conteo', {
+    p_sesion_id: sesionId,
+  })
+  if (error) throw error
+  return data as ConteoSesionRow
+}
+
+/** Avance por tarea. `null` = migración 227 pendiente. */
+export async function getAvanceConteo(
+  sesionId: number
+): Promise<Record<number, ConteoAvanceRow> | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteo_avance', {
+    p_sesion_id: sesionId,
+  })
+  if (error) {
+    if (faltaMigracion(error)) return null
+    throw new Error(error.message)
+  }
+  const filas = (data ?? []) as ConteoAvanceRow[]
+  return Object.fromEntries(filas.map((f) => [f.zona_id, f]))
+}
+
+/**
+ * Productos contados a medias: viven en un lugar que nadie contó.
+ * `null` = migración 228 pendiente.
+ */
+export async function getCoberturaConteo(
+  sesionId: number
+): Promise<ConteoCoberturaRow[] | null> {
+  const supabase = createClient()
+  try {
+    return await traerTodo<ConteoCoberturaRow>(() =>
+      supabase.rpc('fn_conteo_cobertura', { p_sesion_id: sesionId })
+    )
+  } catch (e) {
+    if (faltaMigracion(e as { code?: string })) return null
+    throw e
+  }
+}
+
+export interface ProductoDeLista {
+  producto_id: number
+  orden: number
+  /** Dónde está según el mapa. NULL = sin ubicar. */
+  donde: string | null
+  nombre: string
+  codigo_barras: string | null
+  venta_por_peso: boolean
+}
+
+/**
+ * La lista de una tarea, en orden de recorrido. Vacía = zona libre (o
+ * migración 222 pendiente): se escanea lo que haya, como siempre. Igual que
+ * la búsqueda, no pide stock ni precios: la pantalla del empleado es ciega.
+ */
+export async function getListaTarea(zonaId: number): Promise<ProductoDeLista[]> {
+  const supabase = createClient()
+  type Fila = {
+    producto_id: number
+    orden: number
+    donde: string | null
+    productos: {
+      nombre: string
+      codigo_barras: string | null
+      venta_por_peso: boolean
+    } | null
+  }
+  try {
+    const filas = await traerTodo<Fila>(() =>
+      supabase
+        .from('conteo_zona_productos')
+        .select(
+          'producto_id, orden, donde, productos(nombre, codigo_barras, venta_por_peso)'
+        )
+        .eq('zona_id', zonaId)
+        .order('orden', { ascending: true })
+        .order('producto_id', { ascending: true })
+    )
+    return filas.map((f) => ({
+      producto_id: f.producto_id,
+      orden: f.orden,
+      donde: f.donde,
+      nombre: f.productos?.nombre ?? `Producto #${f.producto_id}`,
+      codigo_barras: f.productos?.codigo_barras ?? null,
+      venta_por_peso: f.productos?.venta_por_peso ?? false,
+    }))
+  } catch (e) {
+    if (faltaMigracion(e as { code?: string })) return []
+    throw e
+  }
 }
 
 export async function iniciarZona(zonaId: number): Promise<ConteoZonaRow> {

@@ -318,6 +318,13 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 218 | `218_identidad_turnos.sql` | ✅ aplicada | 2026-09-24 (prueba + producción) | `5734647` |
 | 219 | `219_identidad_anular_venta_egresos.sql` | ✅ aplicada | 2026-09-25 (prueba + producción) | `c789014` |
 | 220 | `220_identidad_devoluciones_cobro_fiado.sql` | ✅ aplicada | 2026-09-25 (prueba + producción) | `452294c` |
+| 222 | `222_conteo_tareas_esquema.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 223 | `223_conteo_alcance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 224 | `224_conteo_crear_tareas.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 225 | `225_conteo_abrir_agregar_previsualizar.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 226 | `226_conteo_registrar_con_alcance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 227 | `227_conteo_gestion_y_avance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 228 | `228_conteo_cerrar_zona_y_cobertura.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
 
 ## Dos bases de Supabase (2026-09-17)
 

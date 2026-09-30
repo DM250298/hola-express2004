@@ -17,6 +17,10 @@ interface ZonaConteoMovil {
   id: number
   nombre: string
   estado: string
+  /** Productos de la lista de la tarea. 0 = zona libre (sin lista). */
+  enLista: number
+  /** De esos, cuántos ya se contaron. */
+  contados: number
 }
 
 interface Props {
@@ -79,7 +83,7 @@ export function HubMovil({
             <div className="min-w-0">
               <p className="font-bold text-[#391511]">Conteo físico en curso</p>
               <p className="truncate text-xs text-[#6f3a2a]">
-                {conteoFisico.nombre} · tocá tu zona para contar
+                {conteoFisico.nombre} · tocá tu tarea para contar
               </p>
             </div>
           </div>
@@ -93,8 +97,15 @@ export function HubMovil({
                   className="flex items-center gap-3 rounded-xl border border-[#e4c9b0]/70 bg-white px-3 py-3 transition active:scale-[0.99]"
                 >
                   <MapPin className="h-4 w-4 shrink-0 text-[#a3641c]" />
-                  <span className="min-w-0 flex-1 truncate font-medium text-[#391511]">
-                    {zona.nombre}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-[#391511]">
+                      {zona.nombre}
+                    </span>
+                    {zona.enLista > 0 && (
+                      <span className="block text-[11px] tabular-nums text-[#6f3a2a]">
+                        {zona.contados} de {zona.enLista} contados
+                      </span>
+                    )}
                   </span>
                   <span
                     className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold ${est.clase}`}

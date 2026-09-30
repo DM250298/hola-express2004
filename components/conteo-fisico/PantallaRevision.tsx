@@ -39,22 +39,33 @@ import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useUsuariosActivos } from '@/lib/hooks/useConteos'
 import {
   useCerrarSesionConteo,
+  useCoberturaConteo,
   useDiferenciasConteo,
   usePasarARevision,
+  useReabrirSesionConteo,
   useSesionConteo,
   useSolicitarReconteo,
 } from '@/lib/hooks/useConteoFisico'
 import type { ConteoDiferenciaRow } from '@/types/database'
+import { AvisoCobertura } from './AvisoCobertura'
 
 const SIN_RECONTADOR = '__sin__'
 
-type Filtro = 'relevantes' | 'todas' | 'observadas' | 'sin_contar'
+type Filtro =
+  | 'relevantes'
+  | 'todas'
+  | 'observadas'
+  | 'sin_contar'
+  | 'a_medias'
+  | 'en_cero'
 
 const FILTROS: { clave: Filtro; etiqueta: string }[] = [
   { clave: 'relevantes', etiqueta: 'Solo relevantes' },
   { clave: 'todas', etiqueta: 'Todas' },
   { clave: 'observadas', etiqueta: 'Con observaciones' },
   { clave: 'sin_contar', etiqueta: 'Sin contar' },
+  { clave: 'a_medias', etiqueta: 'A medias' },
+  { clave: 'en_cero', etiqueta: 'Contados en 0' },
 ]
 
 interface Props {
@@ -78,10 +89,28 @@ export function PantallaRevision({ sesionId }: Props) {
     refetch,
   } = useDiferenciasConteo(sesionId, esGestor)
   const { data: usuarios } = useUsuariosActivos()
+  // La cobertura se calcula contra el mapa de HOY: en una sesión ya cerrada
+  // no dice nada de lo que pasó cuando se ajustó, así que no se muestra.
+  const { data: cobertura } = useCoberturaConteo(
+    sesionId,
+    esGestor && sesion !== undefined && sesion?.estado !== 'cerrada'
+  )
 
   const pasar = usePasarARevision()
+  const reabrir = useReabrirSesionConteo()
   const reconteo = useSolicitarReconteo()
   const cierre = useCerrarSesionConteo()
+
+  /** Por producto contado a medias, los lugares que faltan. */
+  const faltaEn = useMemo(() => {
+    const mapa = new Map<number, string[]>()
+    for (const c of cobertura ?? []) {
+      const lugares = mapa.get(c.producto_id)
+      if (lugares) lugares.push(c.ubicacion)
+      else mapa.set(c.producto_id, [c.ubicacion])
+    }
+    return mapa
+  }, [cobertura])
 
   const [filtro, setFiltro] = useState<Filtro>('relevantes')
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set())
@@ -107,10 +136,18 @@ export function PantallaRevision({ sesionId }: Props) {
         return todas.filter((d) => d.observaciones.length > 0)
       case 'sin_contar':
         return todas.filter((d) => d.total_contado === null)
+      case 'a_medias':
+        return todas.filter((d) => faltaEn.has(d.producto_id))
+      case 'en_cero':
+        // Un 0 cargado con "No hay" sobre un producto que el sistema cree
+        // que existe: o no hay de verdad, o el mapa manda a buscarlo mal.
+        return todas.filter(
+          (d) => d.total_contado === 0 && d.teorico_esperado > 0
+        )
       default:
         return todas
     }
-  }, [diferencias, filtro])
+  }, [diferencias, filtro, faltaEn])
 
   const resumen = useMemo(() => {
     const conDiferencia = (diferencias ?? []).filter(
@@ -319,6 +356,31 @@ export function PantallaRevision({ sesionId }: Props) {
           </Button>
         )}
       </div>
+
+      <AvisoCobertura
+        filas={cobertura ?? []}
+        accion={
+          sesion?.estado === 'en_revision' ? (
+            <Button
+              size="sm"
+              onClick={() =>
+                reabrir.mutate(sesionId, {
+                  onSuccess: () => router.push('/inventario/conteo'),
+                })
+              }
+              disabled={reabrir.isPending}
+              className="bg-[#391511] text-white hover:bg-[#502019]"
+            >
+              {reabrir.isPending ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Volver a abrir para contar lo que falta
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -538,6 +600,16 @@ export function PantallaRevision({ sesionId }: Props) {
                         {d.reconteo_pendiente && (
                           <span className="rounded-lg bg-[#f9b44c]/25 px-2 py-0.5 text-xs font-semibold text-[#a3641c]">
                             Reconteo pendiente
+                          </span>
+                        )}
+                        {faltaEn.has(d.producto_id) && (
+                          <span
+                            title={`Falta contar en: ${faltaEn.get(d.producto_id)?.join(' · ')}`}
+                            className="rounded-lg bg-[#f9b44c]/25 px-2 py-0.5 text-xs font-semibold text-[#a3641c]"
+                          >
+                            A medias · falta {faltaEn.get(d.producto_id)?.[0]}
+                            {(faltaEn.get(d.producto_id)?.length ?? 0) > 1 &&
+                              ` y ${(faltaEn.get(d.producto_id)?.length ?? 0) - 1} más`}
                           </span>
                         )}
                         {d.relevante && !d.reconteo_pendiente && (

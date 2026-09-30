@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Loader2,
   Lock,
+  MapPin,
   Minus,
   Plus,
   RotateCcw,
@@ -34,9 +35,15 @@ import {
   useCerrarZona,
   useConteosZona,
   useIniciarZona,
+  useListaTarea,
   useRegistrarConteo,
   useZonaConteo,
 } from '@/lib/hooks/useConteoFisico'
+import {
+  AYUDA_TIPO_TAREA,
+  agruparPorLugar,
+  tipoDeZona,
+} from '@/lib/conteo/tareas'
 
 const OBSERVACIONES_RAPIDAS = ['vencido', 'roto'] as const
 
@@ -48,10 +55,13 @@ interface Props {
  * Pantalla de carga del empleado, pensada para usar con una mano parado
  * frente a la góndola. CIEGA a propósito: acá no existe el stock teórico.
  * Escaneás o buscás → cargás cuántos contaste → guardar → seguís.
+ * Si la tarea tiene lista (mig 222), además muestra qué falta contar y dónde
+ * está, en el orden del recorrido del local.
  */
 export function PantallaZonaConteo({ zonaId }: Props) {
   const { data, isLoading, isError, refetch } = useZonaConteo(zonaId)
   const { data: detalle, isLoading: cargandoDetalle } = useConteosZona(zonaId)
+  const { data: lista } = useListaTarea(zonaId)
 
   const iniciar = useIniciarZona()
   const cerrar = useCerrarZona()
@@ -72,9 +82,12 @@ export function PantallaZonaConteo({ zonaId }: Props) {
 
   const [listaAbierta, setListaAbierta] = useState(false)
   const [confirmarCierre, setConfirmarCierre] = useState(false)
+  // "No hay" pide un segundo toque: un 0 cargado sin querer es un faltante.
+  const [confirmandoCero, setConfirmandoCero] = useState<number | null>(null)
 
   const zona = data?.zona ?? null
   const sesion = data?.sesion ?? null
+  const tipo = zona ? tipoDeZona(zona) : 'libre'
 
   const originales = useMemo(
     () => (detalle ?? []).filter((d) => !d.es_reconteo),
@@ -93,6 +106,19 @@ export function PantallaZonaConteo({ zonaId }: Props) {
       ),
     [originales, reconteos]
   )
+
+  // Lista guiada: qué le toca a esta tarea y qué falta, por lugar.
+  const deLaLista = useMemo(
+    () => new Map((lista ?? []).map((p) => [p.producto_id, p])),
+    [lista]
+  )
+  const pendientes = useMemo(() => {
+    const contados = new Set(originales.map((o) => o.producto_id))
+    return (lista ?? []).filter((p) => !contados.has(p.producto_id))
+  }, [lista, originales])
+  const gruposPendientes = useMemo(() => agruparPorLugar(pendientes), [pendientes])
+  const totalLista = lista?.length ?? 0
+  const contadosDeLista = totalLista - pendientes.length
 
   // Búsqueda por nombre con debounce cortito.
   useEffect(() => {
@@ -120,6 +146,15 @@ export function PantallaZonaConteo({ zonaId }: Props) {
   }, [busqueda])
 
   function elegirProducto(prod: ProductoConteo, esReconteo: boolean) {
+    // Una tarea 'lista' cuenta solo lo suyo (la base lo rechaza igual: acá
+    // se avisa antes de hacerle cargar la cantidad).
+    if (!esReconteo && tipo === 'lista' && !deLaLista.has(prod.id)) {
+      toast.error(`${prod.nombre} no está en la lista de esta tarea.`)
+      setBusqueda('')
+      setResultados([])
+      return
+    }
+    setConfirmandoCero(null)
     setSeleccionado(prod)
     setModoReconteo(esReconteo)
     setObservacion('')
@@ -204,6 +239,23 @@ export function PantallaZonaConteo({ zonaId }: Props) {
     setCantidad(String(Math.max(0, actual + delta)))
   }
 
+  function noHay(productoId: number, nombre: string) {
+    if (!zona) return
+    if (confirmandoCero !== productoId) {
+      setConfirmandoCero(productoId)
+      return
+    }
+    registrar.mutate(
+      {
+        zona_id: zona.id,
+        producto_id: productoId,
+        cantidad: 0,
+        nombre_producto: nombre,
+      },
+      { onSettled: () => setConfirmandoCero(null) }
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="mx-auto max-w-lg space-y-4 px-4 py-6">
@@ -254,9 +306,41 @@ export function PantallaZonaConteo({ zonaId }: Props) {
         </div>
       </div>
 
+      {/* Avance de la lista */}
+      {totalLista > 0 && zona.estado !== 'pendiente' && (
+        <div className="rounded-2xl border border-[#e4c9b0]/70 bg-white px-4 py-3 shadow-sm">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-semibold text-[#391511]">
+              Contaste {formatearNumero(contadosDeLista)} de{' '}
+              {formatearNumero(totalLista)}
+            </p>
+            {originales.length > contadosDeLista && (
+              <p className="text-xs text-[#6f3a2a]">
+                +{formatearNumero(originales.length - contadosDeLista)} fuera de
+                lista
+              </p>
+            )}
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#e4c9b0]/50">
+            <div
+              className={`h-full rounded-full ${pendientes.length === 0 ? 'bg-[#2f7d4f]' : 'bg-[#f9b44c]'}`}
+              style={{
+                width: `${Math.round((contadosDeLista / totalLista) * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Zona pendiente → iniciar */}
       {sesionViva && zona.estado === 'pendiente' && (
         <div className="space-y-3 rounded-2xl border border-[#e4c9b0]/70 bg-white p-5 text-center shadow-sm">
+          {totalLista > 0 && (
+            <p className="text-sm font-semibold text-[#391511]">
+              Te tocan {formatearNumero(totalLista)} producto/s.{' '}
+              {AYUDA_TIPO_TAREA[tipo]}
+            </p>
+          )}
           <p className="text-sm text-[#6f3a2a]">
             Antes de arrancar: no repongan esta zona mientras se cuenta. Vas a
             escanear o buscar cada producto y cargar cuántas unidades hay.
@@ -335,6 +419,87 @@ export function PantallaZonaConteo({ zonaId }: Props) {
               })}
             </ul>
           )}
+
+          {/* Lo que falta de la lista, en el orden del recorrido */}
+          {busqueda.trim() === '' && pendientes.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-xs text-[#6f3a2a]">
+                <strong className="text-[#391511]">
+                  Te falta{pendientes.length === 1 ? '' : 'n'}{' '}
+                  {formatearNumero(pendientes.length)}.
+                </strong>{' '}
+                {AYUDA_TIPO_TAREA[tipo]} Si de alguno no hay, tocá “No hay”.
+              </p>
+              {gruposPendientes.map((grupo) => (
+                <div key={grupo.lugar} className="space-y-1.5">
+                  <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-[#6f3a2a]">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{grupo.lugar}</span>
+                    <span className="shrink-0 font-normal">
+                      · {grupo.items.length}
+                    </span>
+                  </p>
+                  <ul className="space-y-1.5">
+                    {grupo.items.map((p) => (
+                      <li
+                        key={p.producto_id}
+                        className="flex items-stretch gap-1.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            elegirProducto(
+                              {
+                                id: p.producto_id,
+                                nombre: p.nombre,
+                                codigo_barras: p.codigo_barras,
+                                venta_por_peso: p.venta_por_peso,
+                              },
+                              false
+                            )
+                          }
+                          className="min-w-0 flex-1 rounded-xl border border-[#e4c9b0]/70 bg-white px-3 py-2.5 text-left transition hover:border-[#f9b44c]"
+                        >
+                          <span className="block truncate text-sm font-medium text-[#391511]">
+                            {p.nombre}
+                            {p.venta_por_peso && (
+                              <span className="ml-1.5 rounded-full bg-[#f9b44c]/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#9e6b15]">
+                                Por kg
+                              </span>
+                            )}
+                          </span>
+                          {p.codigo_barras && (
+                            <span className="block truncate text-[11px] tabular-nums text-[#c8a58a]">
+                              {p.codigo_barras}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => noHay(p.producto_id, p.nombre)}
+                          disabled={registrar.isPending}
+                          className={
+                            confirmandoCero === p.producto_id
+                              ? 'w-24 shrink-0 rounded-xl bg-[#c43e2c] px-2 text-xs font-bold text-white'
+                              : 'w-24 shrink-0 rounded-xl border border-[#e4c9b0] bg-white px-2 text-xs font-medium text-[#6f3a2a]'
+                          }
+                        >
+                          {confirmandoCero === p.producto_id
+                            ? '¿Seguro? Cargar 0'
+                            : 'No hay'}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+          {totalLista > 0 && pendientes.length === 0 && (
+            <p className="rounded-2xl border border-[#2f7d4f]/30 bg-[#2f7d4f]/10 p-3 text-center text-sm font-semibold text-[#2f7d4f]">
+              Lista completa. Revisá que no quede nada suelto y cerrá la tarea.
+            </p>
+          )}
         </>
       )}
 
@@ -354,11 +519,28 @@ export function PantallaZonaConteo({ zonaId }: Props) {
               </span>
             )}
           </p>
+          {deLaLista.get(seleccionado.id)?.donde && (
+            <p className="flex items-start gap-1.5 rounded-xl bg-[#fdfaf6] px-3 py-2 text-xs text-[#6f3a2a]">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#a3641c]" />
+              <span>
+                <strong className="text-[#391511]">
+                  {deLaLista.get(seleccionado.id)?.donde}
+                </strong>
+                {tipo === 'lista' &&
+                  (deLaLista.get(seleccionado.id)?.donde ?? '').includes(' · ') &&
+                  ' — está en más de un lugar: sumá todo.'}
+              </span>
+            </p>
+          )}
           <div>
             <label className="text-[10px] font-semibold uppercase text-[#6f3a2a]">
-              {porPeso
-                ? '¿Cuántos kg contaste en esta zona?'
-                : '¿Cuántas unidades contaste en esta zona?'}
+              {tipo === 'lista'
+                ? porPeso
+                  ? '¿Cuántos kg hay en todo el local?'
+                  : '¿Cuántas unidades hay en todo el local?'
+                : porPeso
+                  ? '¿Cuántos kg contaste en esta zona?'
+                  : '¿Cuántas unidades contaste en esta zona?'}
             </label>
             <div className="mt-1 flex items-center gap-2">
               {/* Los pesables no se cuentan de a 1: se pesa la mercadería y se
@@ -612,6 +794,16 @@ export function PantallaZonaConteo({ zonaId }: Props) {
         <p>
           Cargaste <strong>{originales.length}</strong> producto/s en esta zona.
         </p>
+        {pendientes.length > 0 && (
+          <p className="mt-2 rounded-xl border border-[#f9b44c] bg-[#f9b44c]/10 p-2.5 text-[#391511]">
+            <strong>
+              Te {pendientes.length === 1 ? 'queda' : 'quedan'}{' '}
+              {formatearNumero(pendientes.length)} de la lista sin contar.
+            </strong>{' '}
+            Van a figurar como “sin contar”. Si de alguno no hay, volvé y tocá
+            “No hay”: no es lo mismo que no haberlo contado.
+          </p>
+        )}
       </ConfirmacionAccion>
     </div>
   )
