@@ -3,7 +3,7 @@ import { getPermisosUsuario } from '@/lib/permisosServidor'
 import { FichaEmpleado } from '@/components/rrhh/FichaEmpleado'
 
 export const metadata = {
-  title: 'Ficha de empleado — RRHH',
+  title: 'Ficha de empleado — Personal',
 }
 
 interface Props {
@@ -22,6 +22,7 @@ export default async function PaginaFichaEmpleado({ params }: Props) {
     <FichaEmpleado
       empleadoId={empleadoId}
       puedeVerSueldos={permisos.includes('rrhh_sueldos')}
+      puedeSancionar={permisos.includes('rrhh_sanciones')}
     />
   )
 }

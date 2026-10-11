@@ -88,7 +88,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **166**
+## Próximo número libre: **246**
 
 ---
 
@@ -325,6 +325,22 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 226 | `226_conteo_registrar_con_alcance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
 | 227 | `227_conteo_gestion_y_avance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
 | 228 | `228_conteo_cerrar_zona_y_cobertura.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 229 | `229_empleados_organigrama.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 230 | `230_incidencias_esquema.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 231 | `231_incidencias_rpcs.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 232 | `232_sanciones_rpc_permiso.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 233 | `233_pases_turno_esquema.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 234 | `234_pases_turno_rpcs.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 235 | `235_fn_dashboard_disciplina.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 236 | `236_patrones_cronograma_esquema.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 237 | `237_fn_generar_cronograma.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 239 | `239_patrones_orden_dias.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 240 | `240_fn_generar_cronograma_v2.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 241 | `241_patron_francos_jul2026.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 242 | `242_organigrama_datos.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 243 | `243_checklists_diarios_datos.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 244 | `244_fn_materializar_tareas_v3.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 245 | `245_fix_rls_tareas_participantes.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
 
 ## Dos bases de Supabase (2026-09-17)
 

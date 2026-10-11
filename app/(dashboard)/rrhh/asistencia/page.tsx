@@ -1,9 +1,6 @@
-import { PantallaAsistencia } from '@/components/rrhh/PantallaAsistencia'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Asistencia — RRHH',
-}
-
+/** La grilla de turnos ahora es la pestaña "Cronograma" del hub Personal. */
 export default function PaginaAsistencia() {
-  return <PantallaAsistencia />
+  redirect('/rrhh?tab=cronograma')
 }

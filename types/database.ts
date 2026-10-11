@@ -213,6 +213,16 @@ export type VistaClienteRow = ClienteRow & {
 // ─── empleados (RR.HH.) ──────────────────────────────────────────────────────
 
 export type UnidadNegocio = 'hola_express' | 'nor_construcciones' | 'otra'
+/** Nivel en la cadena de mando (Manual Maestro §3, mig 229). */
+export type RolOperativo =
+  | 'direccion'
+  | 'responsable_general'
+  | 'encargado'
+  | 'pivote'
+  | 'cajero'
+  | 'fiambreria'
+  | 'compras'
+  | 'otro'
 export type TipoContrato =
   | 'relacion_dependencia'
   | 'monotributista'
@@ -249,6 +259,10 @@ export type EmpleadoRow = {
   usuario_id: string | null
   notas: string | null
   activo: boolean
+  /** Cadena de mando (mig 229). */
+  rol_operativo: RolOperativo
+  /** Jefe directo (empleados.id); null = raíz del organigrama. */
+  reporta_a: number | null
   created_at: string
   updated_at: string
 }
@@ -286,12 +300,134 @@ export type EmpleadoInsert = {
   usuario_id?: string | null
   notas?: string | null
   activo?: boolean
+  rol_operativo?: RolOperativo
+  reporta_a?: number | null
   /** Virtual: el query lo escribe en `empleado_sueldo`, no en `empleados`. */
   sueldo_basico?: number
 }
 
 export type EmpleadoUpdate = Partial<EmpleadoInsert> & {
   updated_at?: string
+}
+
+// ─── Incidencias y sanciones (migs 230–232) ──────────────────────────
+export type GravedadIncidencia = 'leve' | 'grave'
+export type EstadoIncidencia = 'abierta' | 'cerrada'
+export type TipoSancion =
+  | 'llamado_atencion'
+  | 'apercibimiento'
+  | 'suspension'
+  | 'exclusion'
+
+export type TipologiaIncidenciaRow = {
+  id: number
+  codigo: string
+  nombre: string
+  gravedad_default: GravedadIncidencia
+  orden: number
+  activa: boolean
+}
+
+export type IncidenciaRow = {
+  id: number
+  empleado_id: number
+  tipologia_id: number
+  fecha: string
+  turno_id: number | null
+  tarea_turno_id: string | null
+  descripcion: string
+  gravedad: GravedadIncidencia
+  /** 1 = registro, 2 = observación formal, 3 = escalada (misma tipología en 30 días). */
+  instancia: number
+  reincidencias_30d: number
+  escalada: boolean
+  accion_correctiva: string | null
+  estado: EstadoIncidencia
+  cerrada_at: string | null
+  cerrada_por: string | null
+  registrada_por: string
+  created_at: string
+  updated_at: string
+}
+
+export type IncidenciaInsert = Partial<IncidenciaRow> & {
+  empleado_id: number
+  tipologia_id: number
+  fecha: string
+  descripcion: string
+  gravedad: GravedadIncidencia
+  instancia: number
+  registrada_por: string
+}
+
+export type SancionRow = {
+  id: number
+  empleado_id: number
+  tipo: TipoSancion
+  fecha: string
+  motivo: string
+  dias_suspension: number | null
+  referencia_acta: string | null
+  resolucion: string | null
+  va_al_legajo: boolean
+  aplicada_por: string
+  anulada_at: string | null
+  anulada_por: string | null
+  motivo_anulacion: string | null
+  created_at: string
+}
+
+export type SancionInsert = Partial<SancionRow> & {
+  empleado_id: number
+  tipo: TipoSancion
+  fecha: string
+  motivo: string
+  va_al_legajo: boolean
+  aplicada_por: string
+}
+
+export type SancionIncidenciaRow = {
+  sancion_id: number
+  incidencia_id: number
+}
+
+// ─── Pase de turno (migs 233–234) ─────────────────────────────────────
+export type EstadoPaseTurno = 'borrador' | 'entregado' | 'recibido'
+
+/** Ítem del bloque "pendientes" (jsonb[] validado en la RPC). */
+export type PendientePase = {
+  texto: string
+  responsable_empleado_id: number | null
+  hecho: boolean
+}
+
+export type PaseTurnoRow = {
+  id: number
+  fecha: string
+  turno_saliente_id: number
+  turno_entrante_id: number | null
+  saliente_empleado_id: number
+  entrante_empleado_id: number | null
+  estado: EstadoPaseTurno
+  reposicion: string | null
+  orden_limpieza: string | null
+  novedades: string | null
+  pendientes: PendientePase[]
+  conforme_reposicion: boolean | null
+  conforme_orden: boolean | null
+  conforme_novedades: boolean | null
+  conforme_pendientes: boolean | null
+  observaciones_entrante: string | null
+  entregado_at: string | null
+  recibido_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PaseTurnoInsert = Partial<PaseTurnoRow> & {
+  fecha: string
+  turno_saliente_id: number
+  saliente_empleado_id: number
 }
 
 export type EmpleadoSueldoRow = {
@@ -371,6 +507,8 @@ export type HorarioAsignadoRow = {
   estado: EstadoHorario
   notas: string | null
   usuario_id: string | null
+  /** Patrón que generó la fila (mig 236); null = carga manual. */
+  patron_id: number | null
   created_at: string
 }
 
@@ -382,6 +520,40 @@ export type HorarioAsignadoInsert = {
   estado?: EstadoHorario
   notas?: string | null
   usuario_id?: string | null
+  patron_id?: number | null
+}
+
+// ─── Patrones de cronograma (migs 236–237) ────────────────────────────
+export type TipoPatronCronograma = 'franco_rotativo' | 'noche_ab'
+
+export type PatronCronogramaRow = {
+  id: number
+  nombre: string
+  tipo: TipoPatronCronograma
+  turno_id: number | null
+  /** Primer día de la semana 1 del ciclo (lunes en noche_ab). */
+  fecha_ancla: string
+  /** franco_rotativo: posiciones 0..6 desde el ancla con franco, en orden de rotación. */
+  orden_dias: number[]
+  pivote_empleado_id: number | null
+  activo: boolean
+  notas: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type PatronCronogramaInsert = Partial<PatronCronogramaRow> & {
+  nombre: string
+  tipo: TipoPatronCronograma
+  fecha_ancla: string
+}
+
+export type PatronMiembroRow = {
+  patron_id: number
+  empleado_id: number
+  orden: number
+  /** Turno habitual del miembro; null = turno del patrón. */
+  turno_id: number | null
 }
 
 export type FichajeRow = {
@@ -4212,6 +4384,36 @@ export interface Database {
         Update: ClienteUpdate
         Relationships: []
       }
+      tipologias_incidencia: {
+        Row: TipologiaIncidenciaRow
+        Insert: Partial<TipologiaIncidenciaRow> & { codigo: string; nombre: string }
+        Update: Partial<TipologiaIncidenciaRow>
+        Relationships: []
+      }
+      incidencias: {
+        Row: IncidenciaRow
+        Insert: IncidenciaInsert
+        Update: Partial<IncidenciaRow>
+        Relationships: []
+      }
+      sanciones: {
+        Row: SancionRow
+        Insert: SancionInsert
+        Update: Partial<SancionRow>
+        Relationships: []
+      }
+      sancion_incidencias: {
+        Row: SancionIncidenciaRow
+        Insert: SancionIncidenciaRow
+        Update: Partial<SancionIncidenciaRow>
+        Relationships: []
+      }
+      pases_turno: {
+        Row: PaseTurnoRow
+        Insert: PaseTurnoInsert
+        Update: Partial<PaseTurnoRow>
+        Relationships: []
+      }
       empleados: {
         Row: EmpleadoRow
         Insert: EmpleadoInsert
@@ -4240,6 +4442,18 @@ export interface Database {
         Row: TurnoPlantillaRow
         Insert: Partial<TurnoPlantillaRow>
         Update: Partial<TurnoPlantillaRow>
+        Relationships: []
+      }
+      patrones_cronograma: {
+        Row: PatronCronogramaRow
+        Insert: PatronCronogramaInsert
+        Update: Partial<PatronCronogramaRow>
+        Relationships: []
+      }
+      patron_cronograma_miembros: {
+        Row: PatronMiembroRow
+        Insert: PatronMiembroRow
+        Update: Partial<PatronMiembroRow>
         Relationships: []
       }
       horarios_asignados: {
@@ -5024,6 +5238,16 @@ export interface Database {
         Args: { p_desde: string; p_hasta: string; p_empleado_id?: number | null }
         Returns: Json
       }
+      fn_generar_cronograma: {
+        Args: {
+          p_patron_id: number
+          p_desde: string
+          p_hasta: string
+          p_sobrescribir?: boolean
+          p_aplicar?: boolean
+        }
+        Returns: Json
+      }
       fn_cerrar_dia_asistencia: {
         Args: { p_fecha: string }
         Returns: number
@@ -5196,7 +5420,75 @@ export interface Database {
         }
         Returns: EvaluacionDesempenoRow
       }
+      fn_resumen_reincidencias: {
+        Args: { p_empleado_id: number; p_tipologia_id: number; p_fecha?: string | null }
+        Returns: Json
+      }
+      fn_registrar_incidencia: {
+        Args: {
+          p_empleado_id: number
+          p_tipologia_id: number
+          p_descripcion: string
+          p_fecha?: string | null
+          p_turno_id?: number | null
+          p_tarea_turno_id?: string | null
+          p_gravedad?: string | null
+          p_accion_correctiva?: string | null
+        }
+        Returns: IncidenciaRow
+      }
+      fn_cerrar_incidencia: {
+        Args: { p_id: number; p_accion_correctiva?: string | null }
+        Returns: IncidenciaRow
+      }
+      fn_aplicar_sancion: {
+        Args: {
+          p_empleado_id: number
+          p_tipo: string
+          p_fecha: string
+          p_motivo: string
+          p_dias?: number | null
+          p_incidencia_ids?: number[]
+          p_referencia_acta?: string | null
+          p_resolucion?: string | null
+        }
+        Returns: SancionRow
+      }
+      fn_anular_sancion: {
+        Args: { p_id: number; p_motivo: string }
+        Returns: SancionRow
+      }
+      fn_entregar_pase_turno: {
+        Args: {
+          p_fecha: string
+          p_turno_saliente_id: number
+          p_turno_entrante_id: number | null
+          p_reposicion: string | null
+          p_orden_limpieza: string | null
+          p_novedades: string | null
+          p_pendientes?: Json
+          p_entregar?: boolean
+          p_saliente_empleado_id?: number | null
+        }
+        Returns: PaseTurnoRow
+      }
+      fn_recibir_pase_turno: {
+        Args: {
+          p_pase_id: number
+          p_conforme_reposicion: boolean
+          p_conforme_orden: boolean
+          p_conforme_novedades: boolean
+          p_conforme_pendientes: boolean
+          p_observaciones?: string | null
+          p_entrante_empleado_id?: number | null
+        }
+        Returns: PaseTurnoRow
+      }
       fn_dashboard_rrhh: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      fn_dashboard_disciplina: {
         Args: Record<string, never>
         Returns: Json
       }

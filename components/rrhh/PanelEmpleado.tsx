@@ -11,6 +11,7 @@ import {
 import { es } from 'date-fns/locale'
 import {
   AlertTriangle,
+  ArrowLeftRight,
   CalendarCheck,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +24,8 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CalendarioAsistencia } from './CalendarioAsistencia'
+import { MisIncidencias } from './MisIncidencias'
+import { usePasesPendientesRecibir } from '@/lib/hooks/usePaseTurno'
 import { ScoreBadge, formatearScore as fmt } from './ScoreDesempeno'
 import { formatearMinutos } from './asistenciaConstantes'
 import { useAsistenciaEmpleado } from '@/lib/hooks/useAsistencia'
@@ -78,6 +81,8 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
   const periodo = format(mes, 'yyyy-MM')
   const { data: tareasHoy } = useTareasFecha(hoy)
   const { data: evaluacion } = useEvaluacionEmpleado(periodo, empleadoId)
+  const { data: pasesPend } = usePasesPendientesRecibir()
+  const pasesPorRecibir = (pasesPend ?? []).filter((p) => p.saliente_empleado_id !== empleadoId).length
 
   const misTareas = useMemo(() => {
     // tareaEsDe incluye las grupales donde participa (empleado_id null).
@@ -222,8 +227,28 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
         </div>
 
         <Link
+          href="/rrhh/pase-turno"
+          className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all"
+        >
+          <div className="shrink-0 p-2.5 rounded-xl bg-[#2f7d4f]/10">
+            <ArrowLeftRight className="h-5 w-5 text-[#2f7d4f]" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-[#c8a58a] font-semibold">
+              Pase de turno
+            </p>
+            <p className="text-[#391511] font-bold mt-0.5">
+              {pasesPorRecibir > 0
+                ? `${pasesPorRecibir} por recibir`
+                : 'Recibir y entregar'}
+            </p>
+          </div>
+          <ChevronRight className="h-4 w-4 text-[#c8a58a] group-hover:translate-x-0.5 group-hover:text-[#391511] transition-all" />
+        </Link>
+
+        <Link
           href="/rrhh/mi-cuenta"
-          className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all sm:col-span-2"
+          className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all"
         >
           <div className="shrink-0 p-2.5 rounded-xl bg-[#f9d2a2]/50">
             <Wallet className="h-5 w-5 text-[#9e6b15]" />
@@ -239,6 +264,8 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
           <ChevronRight className="h-4 w-4 text-[#c8a58a] group-hover:translate-x-0.5 group-hover:text-[#391511] transition-all" />
         </Link>
       </div>
+
+      <MisIncidencias empleadoId={empleadoId} />
 
       <CalendarioAsistencia empleadoId={empleadoId} />
 

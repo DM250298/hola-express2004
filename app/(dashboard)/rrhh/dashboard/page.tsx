@@ -1,9 +1,6 @@
-import { TableroRrhh } from '@/components/rrhh/TableroRrhh'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Tablero RRHH — ¡Hola! Express',
-}
-
+/** El tablero ahora es la pestaña "Hoy" del hub Personal. */
 export default function PaginaTableroRrhh() {
-  return <TableroRrhh />
+  redirect('/rrhh?tab=hoy')
 }

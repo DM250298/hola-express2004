@@ -1,15 +1,18 @@
 'use client'
 
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import {
   AlertTriangle,
+  ArrowLeftRight,
   CheckCircle2,
   CircleAlert,
   Clock,
   FileWarning,
   ListChecks,
   RefreshCw,
+  ShieldAlert,
   UserCheck,
   UserX,
 } from 'lucide-react'
@@ -19,11 +22,15 @@ import { useDashboardRrhh } from '@/lib/hooks/useDesempeno'
 import type { ClaseVencimiento } from '@/lib/queries/vencimientos'
 import type {
   DocPorVencer,
+  IncidenciasEmpleado30d,
+  PaseNoConforme,
   PersonaAusente,
   PersonaTrabajando,
   RachaTardanzas,
   TareasVencidasEmpleado,
 } from '@/lib/queries/desempeno'
+import { INSTANCIA_INCIDENCIA } from './incidenciasConstantes'
+import { fechaCortaLocal } from './constantes'
 import { cn } from '@/lib/utils'
 
 const nombre = (n: string, a: string | null) => [n, a].filter(Boolean).join(' ')
@@ -41,12 +48,18 @@ function etiquetaDoc(dias: number): string {
   return `En ${dias}d`
 }
 
-export function TableroRrhh() {
+interface Props {
+  /** Embebido como pestaña del hub Personal: sin padding exterior ni h1. */
+  enHub?: boolean
+}
+
+export function TableroRrhh({ enHub = false }: Props = {}) {
   const { data, isLoading, isError, isFetching } = useDashboardRrhh()
+  const clasePagina = cn(!enHub && 'p-4 sm:p-6', 'space-y-5')
 
   if (isLoading) {
     return (
-      <div className="p-4 sm:p-6 space-y-4">
+      <div className={cn(!enHub && 'p-4 sm:p-6', 'space-y-4')}>
         <Skeleton className="h-8 w-64 rounded-lg bg-[#f9d2a2]/30" />
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -60,7 +73,7 @@ export function TableroRrhh() {
 
   if (isError || !data) {
     return (
-      <div className="p-6">
+      <div className={cn(!enHub && 'p-6')}>
         <div className="bg-white border border-[#c43e2c]/30 rounded-2xl p-8 text-center text-[#c43e2c]">
           No se pudo cargar el tablero de RRHH.
         </div>
@@ -76,12 +89,17 @@ export function TableroRrhh() {
   // Todo hecho: hubo tareas y no quedan pendientes → mostrar en verde, no "0".
   const tareasOk = tareasTotal > 0 && tareasPend === 0
   const vencidasTotal = data.tareas_vencidas.reduce((s, t) => s + t.cantidad, 0)
+  const disc = data.disciplina
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
+    <div className={clasePagina}>
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-[#391511] text-2xl font-bold">Tablero RRHH</h1>
+          {enHub ? (
+            <h2 className="text-[#391511] text-lg font-bold">Hoy</h2>
+          ) : (
+            <h1 className="text-[#391511] text-2xl font-bold">Tablero RRHH</h1>
+          )}
           <p className="text-[#6f3a2a] text-sm mt-1 capitalize">
             {format(new Date(`${data.fecha}T00:00:00`), "EEEE d 'de' MMMM", {
               locale: es,
@@ -95,7 +113,7 @@ export function TableroRrhh() {
       </header>
 
       {/* Resumen */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={cn('grid grid-cols-2 gap-3', disc ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
         <KpiCard
           icono={UserCheck}
           label="Trabajando ahora"
@@ -135,6 +153,18 @@ export function TableroRrhh() {
           color="#9e2f25"
           alerta={vencidasTotal > 0}
         />
+        {disc && (
+          <Link href="/rrhh?tab=incidencias" className="block">
+            <KpiCard
+              icono={ShieldAlert}
+              label="Incidencias abiertas"
+              valor={disc.incidencias_abiertas}
+              sufijo={disc.reincidencias_30d > 0 ? `· ${disc.reincidencias_30d} reinc. 30d` : undefined}
+              color="#c43e2c"
+              alerta={disc.incidencias_abiertas > 0 || disc.reincidencias_30d > 0}
+            />
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -265,6 +295,85 @@ export function TableroRrhh() {
             </div>
           )}
         </Panel>
+
+        {disc && (
+          <Panel titulo="Disciplina (30 días)" icono={ShieldAlert} color="#c43e2c">
+            {disc.incidencias_empleados_30d.length === 0 ? (
+              <Vacio texto="Sin incidencias registradas en los últimos 30 días." />
+            ) : (
+              <ul className="divide-y divide-[#e4c9b0]/40">
+                {disc.incidencias_empleados_30d.map((e: IncidenciasEmpleado30d) => {
+                  const def = INSTANCIA_INCIDENCIA[Math.min(3, Math.max(1, e.max_instancia))]
+                  return (
+                    <li key={e.empleado_id} className="flex items-center justify-between py-2.5 gap-2">
+                      <Link
+                        href={`/rrhh/empleados/${e.empleado_id}`}
+                        className="text-[#391511] text-sm font-medium hover:underline truncate"
+                      >
+                        {nombre(e.nombre, e.apellido)}
+                      </Link>
+                      <span className="flex items-center gap-2 shrink-0">
+                        <span className="text-[#6f3a2a] text-xs tabular-nums">
+                          {e.cantidad} incid.
+                        </span>
+                        <span
+                          className={cn(
+                            'text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full',
+                            e.escalada ? INSTANCIA_INCIDENCIA[3].clase : def.clase
+                          )}
+                        >
+                          {e.escalada ? 'Escalada' : def.corta}
+                        </span>
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            <Link href="/rrhh?tab=incidencias" className="block text-[#6f3a2a] text-xs mt-2 hover:underline">
+              Ver todas las incidencias →
+            </Link>
+          </Panel>
+        )}
+
+        {disc && (
+          <Panel titulo="Pase de turno" icono={ArrowLeftRight} color="#2f7d4f">
+            <div className="space-y-3">
+              <p className="text-sm">
+                <span className={cn('font-bold tabular-nums text-lg', disc.pases_pendientes_recibir > 0 ? 'text-[#e4a42a]' : 'text-[#2f7d4f]')}>
+                  {disc.pases_pendientes_recibir}
+                </span>{' '}
+                <span className="text-[#6f3a2a]">
+                  {disc.pases_pendientes_recibir === 1 ? 'pase sin recibir' : 'pases sin recibir'} (48 h)
+                </span>
+              </p>
+              {disc.pases_no_conformes_7d.length === 0 ? (
+                <Vacio texto="Sin pases no conformes en la semana." />
+              ) : (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold mb-1.5">
+                    No conformes (7 días)
+                  </p>
+                  <ul className="space-y-1">
+                    {disc.pases_no_conformes_7d.map((p: PaseNoConforme) => (
+                      <li key={p.pase_id} className="flex items-center justify-between text-sm gap-2">
+                        <span className="text-[#391511] font-medium truncate">
+                          {fechaCortaLocal(p.fecha)} · <span className="capitalize">{p.turno}</span> · {nombre(p.nombre, p.apellido)}
+                        </span>
+                        <span className="text-[#c43e2c] font-bold tabular-nums shrink-0">
+                          {p.no_conformes} no conf.
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <Link href="/rrhh?tab=pase" className="block text-[#6f3a2a] text-xs hover:underline">
+                Ver pases de turno →
+              </Link>
+            </div>
+          </Panel>
+        )}
       </div>
     </div>
   )
