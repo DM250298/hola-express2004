@@ -94,6 +94,9 @@ export function ModalPatrones({ abierto, onCambioAbierto }: Props) {
                           {p.tipo === 'franco_rotativo' && (
                             <> · francos: {p.orden_dias.map((d) => abrevDiaDesdeAncla(p.fecha_ancla, d)).join(' → ')}</>
                           )}
+                          {p.tipo === 'bloques_alternados' && (
+                            <> · {p.bloque_dias} días corridos cada uno, desde el {abrevDiaDesdeAncla(p.fecha_ancla, 0)}</>
+                          )}
                           {p.turno_id != null && <> · turno {nombreTurno(p.turno_id)}</>}
                           {p.pivote_empleado_id != null && (
                             <> · pivote {nombrePorId.get(p.pivote_empleado_id) ?? '—'}</>

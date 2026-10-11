@@ -524,7 +524,7 @@ export type HorarioAsignadoInsert = {
 }
 
 // ─── Patrones de cronograma (migs 236–237) ────────────────────────────
-export type TipoPatronCronograma = 'franco_rotativo' | 'noche_ab'
+export type TipoPatronCronograma = 'franco_rotativo' | 'noche_ab' | 'bloques_alternados'
 
 export type PatronCronogramaRow = {
   id: number
@@ -535,6 +535,8 @@ export type PatronCronogramaRow = {
   fecha_ancla: string
   /** franco_rotativo: posiciones 0..6 desde el ancla con franco, en orden de rotación. */
   orden_dias: number[]
+  /** bloques_alternados: días corridos por persona (mig 246). */
+  bloque_dias: number
   pivote_empleado_id: number | null
   activo: boolean
   notas: string | null
