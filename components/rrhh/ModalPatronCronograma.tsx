@@ -58,6 +58,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
   const [pivote, setPivote] = useState(SIN)
   const [miembros, setMiembros] = useState<MiembroPatronInput[]>([])
   const [ordenDias, setOrdenDias] = useState<number[]>(ORDEN_DIAS_DEFAULT)
+  const [bloqueDias, setBloqueDias] = useState('7')
   const [agregar, setAgregar] = useState(SIN)
 
   useEffect(() => {
@@ -68,6 +69,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
     setAncla(patron?.fecha_ancla ?? lunesDe(new Date()))
     setPivote(patron?.pivote_empleado_id != null ? String(patron.pivote_empleado_id) : SIN)
     setOrdenDias(patron?.orden_dias?.length ? patron.orden_dias : ORDEN_DIAS_DEFAULT)
+    setBloqueDias(String(patron?.bloque_dias ?? 7))
     setMiembros(
       (patron?.patron_cronograma_miembros ?? []).map((m) => ({
         empleado_id: m.empleado_id,
@@ -89,7 +91,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
     Object.entries(TIPOS_PATRON).map(([k, v]) => [k, v.label])
   )
   const itemsTurno: Record<string, string> = {
-    [SIN]: tipo === 'noche_ab' ? 'Elegí el turno' : 'Sin turno por defecto',
+    [SIN]: tipo === 'franco_rotativo' ? 'Sin turno por defecto' : 'Elegí el turno',
     ...Object.fromEntries((turnos ?? []).filter((t) => t.activo).map((t) => [String(t.id), NOMBRE_TURNO[t.nombre]])),
   }
   const itemsTurnoMiembro: Record<string, string> = {
@@ -107,12 +109,14 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
 
   // franco_rotativo: el ancla es cualquier día (primer día de la semana 1);
   // noche_ab: tiene que ser el lunes de la semana A.
-  const anclaOk = !!ancla && (tipo === 'franco_rotativo' || esLunes(ancla))
-  const slotsOk = tipo === 'noche_ab' || ordenDias.length === miembros.length
-  const minMiembros = tipo === 'noche_ab' ? 2 : 2
+  const anclaOk = !!ancla && (tipo !== 'noche_ab' || esLunes(ancla))
+  const slotsOk = tipo !== 'franco_rotativo' || ordenDias.length === miembros.length
+  const minMiembros = 2
   const maxMiembros = tipo === 'noche_ab' ? 2 : 99
+  const bloqueNum = Number(bloqueDias)
+  const bloqueOk = tipo !== 'bloques_alternados' || (Number.isInteger(bloqueNum) && bloqueNum >= 1 && bloqueNum <= 31)
   const turnosOk =
-    tipo === 'noche_ab'
+    tipo !== 'franco_rotativo'
       ? turnoId !== SIN
       : miembros.every(
           (m) => m.turno_id != null || turnoId !== SIN || String(m.empleado_id) === pivote
@@ -125,6 +129,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
     miembros.length <= maxMiembros &&
     turnosOk &&
     slotsOk &&
+    bloqueOk &&
     !procesando
 
   function mover(i: number, dir: -1 | 1) {
@@ -148,6 +153,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
           turno_id: turnoId === SIN ? null : Number(turnoId),
           fecha_ancla: ancla,
           orden_dias: tipo === 'franco_rotativo' ? ordenDias : ORDEN_DIAS_DEFAULT,
+          bloque_dias: tipo === 'bloques_alternados' ? bloqueNum : 7,
           pivote_empleado_id: tipo === 'franco_rotativo' && pivote !== SIN ? Number(pivote) : null,
         },
         miembros,
@@ -186,7 +192,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
                 onValueChange={(v) => {
                   if (!v) return
                   setTipo(v as TipoPatronCronograma)
-                  if (v === 'noche_ab') setPivote(SIN)
+                  if (v !== 'franco_rotativo') setPivote(SIN)
                 }}
                 disabled={procesando || editando}
               >
@@ -204,7 +210,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
             </div>
             <div className="space-y-1.5">
               <Label className="text-[#391511] font-medium text-sm">
-                {tipo === 'noche_ab' ? 'Turno' : 'Turno por defecto'}
+                {tipo === 'franco_rotativo' ? 'Turno por defecto' : 'Turno'}
               </Label>
               <Select items={itemsTurno} value={turnoId} onValueChange={(v) => setTurnoId(v ?? SIN)} disabled={procesando}>
                 <SelectTrigger className={`w-full ${claseInput}`}>
@@ -221,7 +227,11 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
             </div>
             <div className="space-y-1.5">
               <Label className="text-[#391511] font-medium text-sm">
-                {tipo === 'noche_ab' ? 'Lunes de la semana A' : 'Primer día de la semana 1'}
+                {tipo === 'noche_ab'
+                  ? 'Lunes de la semana A'
+                  : tipo === 'bloques_alternados'
+                    ? 'Primer día del primer bloque (del 1º)'
+                    : 'Primer día de la semana 1'}
               </Label>
               <Input
                 type="date"
@@ -235,9 +245,26 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
                   ? 'Tiene que ser un lunes.'
                   : tipo === 'noche_ab'
                     ? 'Esa semana es la "A".'
-                    : `La semana arranca en ${nombreDiaDesdeAncla(ancla, 0)}; ese día descansa el 1º de la lista.`}
+                    : tipo === 'bloques_alternados'
+                      ? `Desde ese ${nombreDiaDesdeAncla(ancla, 0)} trabaja el 1º; cada bloque arranca un ${nombreDiaDesdeAncla(ancla, 0)}.`
+                      : `La semana arranca en ${nombreDiaDesdeAncla(ancla, 0)}; ese día descansa el 1º de la lista.`}
               </p>
             </div>
+            {tipo === 'bloques_alternados' && (
+              <div className="space-y-1.5">
+                <Label className="text-[#391511] font-medium text-sm">Días corridos por persona</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={bloqueDias}
+                  onChange={(e) => setBloqueDias(e.target.value)}
+                  disabled={procesando}
+                  className={cn(claseInput, 'tabular-nums', !bloqueOk && 'border-[#c43e2c]')}
+                />
+                <p className="text-[#c8a58a] text-[11px]">Ej: 7 = una semana cada uno.</p>
+              </div>
+            )}
             {tipo === 'franco_rotativo' && (
               <div className="space-y-1.5">
                 <Label className="text-[#391511] font-medium text-sm">Pivote (cubre francos)</Label>
@@ -312,7 +339,11 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-[#391511] font-medium text-sm">
-                {tipo === 'noche_ab' ? 'Las 2 personas (1º y 2º)' : 'Orden de la rotación'}
+                {tipo === 'noche_ab'
+                  ? 'Las 2 personas (1º y 2º)'
+                  : tipo === 'bloques_alternados'
+                    ? 'Orden de los bloques (1º arranca en el ancla)'
+                    : 'Orden de la rotación'}
               </Label>
               <span className="text-[#c8a58a] text-xs">{miembros.length} en la lista</span>
             </div>
@@ -320,7 +351,9 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
               <p className="text-[#c8a58a] text-xs">
                 {tipo === 'noche_ab'
                   ? 'Agregá las 2 personas.'
-                  : 'Agregá a las personas en el orden en que descansan la semana 1 (1º = primer día elegido arriba).'}
+                  : tipo === 'bloques_alternados'
+                    ? 'Agregá a las personas en el orden en que se turnan.'
+                    : 'Agregá a las personas en el orden en que descansan la semana 1 (1º = primer día elegido arriba).'}
               </p>
             ) : (
               <ol className="rounded-xl border border-[#e4c9b0]/60 divide-y divide-[#e4c9b0]/40">
@@ -412,7 +445,7 @@ export function ModalPatronCronograma({ abierto, onCambioAbierto, patron }: Prop
             )}
             {!turnosOk && miembros.length > 0 && (
               <p className="text-[#c43e2c] text-xs">
-                {tipo === 'noche_ab'
+                {tipo !== 'franco_rotativo'
                   ? 'Elegí el turno del patrón.'
                   : 'Cada miembro (salvo el pivote) necesita turno, o definí un turno por defecto.'}
               </p>

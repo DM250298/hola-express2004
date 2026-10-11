@@ -377,7 +377,10 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
   franco por semana en `orden_dias` (posiciones 0..6 desde el ancla, en el
   orden en que rota); `lista[(slot − semana) mod N]`; los días fuera de
   `orden_dias` nadie descansa; el pivote cubre el turno del que descansa con
-  nota "Cubre a X") y `noche_ab` (2 personas, ciclo 14 días, ancla lunes).
+  nota "Cubre a X"), `noche_ab` (2 personas, ciclo 14 días, ancla lunes) y
+  `bloques_alternados` (migs 246–247: N personas se turnan en bloques de
+  `bloque_dias` días corridos desde el ancla; es la noche real: 7 días de
+  jueves a miércoles).
   `fecha_ancla` = primer día de la semana 1. El patrón real desde jul-2026
   (mig 241): ancla domingo, `{0,1,3,2,4,6}` (viernes local lleno).
 - **Checklists diarios** (mig 243): los 30 ítems de la planilla (mañana 13,

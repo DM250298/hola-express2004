@@ -13,6 +13,11 @@ export const TIPOS_PATRON: Record<TipoPatronCronograma, { label: string; ayuda: 
     ayuda:
       'Semana A: lunes, martes, miércoles y domingo el 1º; jueves, viernes y sábado el 2º. Semana B al revés.',
   },
+  bloques_alternados: {
+    label: 'Bloques de días corridos alternados',
+    ayuda:
+      'Cada persona trabaja N días seguidos y después pasa a la siguiente de la lista, en rueda. Ej: noche de 7 días de jueves a miércoles, alternando dos personas.',
+  },
 }
 
 /** Lunes (yyyy-MM-dd) de la semana que contiene la fecha. */

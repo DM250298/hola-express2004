@@ -88,7 +88,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **246**
+## Próximo número libre: **248**
 
 ---
 
@@ -341,6 +341,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 243 | `243_checklists_diarios_datos.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
 | 244 | `244_fn_materializar_tareas_v3.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
 | 245 | `245_fix_rls_tareas_participantes.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
+| 246 | `246_patrones_bloques_alternados.sql` | ⏳ pendiente | — | en este commit |
+| 247 | `247_fn_generar_cronograma_v3.sql` | ⏳ pendiente | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 
