@@ -19,12 +19,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useCreateEmpleado, useUpdateEmpleado } from '@/lib/hooks/useRrhh'
+import { useCreateEmpleado, useEmpleados, useUpdateEmpleado } from '@/lib/hooks/useRrhh'
 import { useUsuariosAdmin } from '@/lib/hooks/useRoles'
-import { TIPOS_CONTRATO, UNIDADES_NEGOCIO } from './constantes'
+import {
+  ROLES_OPERATIVOS,
+  TIPOS_CONTRATO,
+  UNIDADES_NEGOCIO,
+  nombreCompleto,
+} from './constantes'
 import type {
   EmpleadoConSueldo,
   EmpleadoInsert,
+  RolOperativo,
   TipoContrato,
   UnidadNegocio,
 } from '@/types/database'
@@ -49,6 +55,7 @@ export function ModalEmpleado({
   const crear = useCreateEmpleado()
   const actualizar = useUpdateEmpleado()
   const { data: usuarios } = useUsuariosAdmin()
+  const { data: empleados } = useEmpleados()
   const editando = !!empleado
 
   const [nombre, setNombre] = useState('')
@@ -70,6 +77,8 @@ export function ModalEmpleado({
   const [notas, setNotas] = useState('')
   const [relojId, setRelojId] = useState('')
   const [usuarioId, setUsuarioId] = useState('__ninguna__')
+  const [rolOperativo, setRolOperativo] = useState<RolOperativo>('otro')
+  const [reportaA, setReportaA] = useState('__nadie__')
 
   useEffect(() => {
     if (abierto) {
@@ -90,6 +99,8 @@ export function ModalEmpleado({
       setNotas(empleado?.notas ?? '')
       setRelojId(empleado?.reloj_id != null ? String(empleado.reloj_id) : '')
       setUsuarioId(empleado?.usuario_id ?? '__ninguna__')
+      setRolOperativo(empleado?.rol_operativo ?? 'otro')
+      setReportaA(empleado?.reporta_a != null ? String(empleado.reporta_a) : '__nadie__')
     }
   }, [abierto, empleado])
 
@@ -97,6 +108,16 @@ export function ModalEmpleado({
     __ninguna__: 'Sin cuenta vinculada',
     ...Object.fromEntries(
       (usuarios ?? []).map((u) => [u.id, `${u.nombre} (${u.email})`])
+    ),
+  }
+
+  // Jefe directo: cualquier empleado activo salvo uno mismo.
+  const itemsReportaA: Record<string, string> = {
+    __nadie__: 'Nadie (raíz del organigrama)',
+    ...Object.fromEntries(
+      (empleados ?? [])
+        .filter((e) => e.activo && e.id !== empleado?.id)
+        .map((e) => [String(e.id), nombreCompleto(e)])
     ),
   }
 
@@ -122,6 +143,8 @@ export function ModalEmpleado({
       notas: notas.trim() || null,
       reloj_id: relojId.trim() ? Number(relojId) : null,
       usuario_id: usuarioId === '__ninguna__' ? null : usuarioId,
+      rol_operativo: rolOperativo,
+      reporta_a: reportaA === '__nadie__' ? null : Number(reportaA),
     }
     // Sólo quien ve sueldos lo envía (la RLS igual lo bloquearía para otros).
     if (puedeVerSueldos) datos.sueldo_basico = Number(sueldo) || 0
@@ -277,6 +300,56 @@ export function ModalEmpleado({
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium text-sm">
+                Rol operativo
+              </Label>
+              <Select
+                items={ROLES_OPERATIVOS}
+                value={rolOperativo}
+                onValueChange={(v) => v && setRolOperativo(v as RolOperativo)}
+                disabled={procesando}
+              >
+                <SelectTrigger className={`w-full ${claseInput}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ROLES_OPERATIVOS).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium text-sm">
+                Reporta a
+              </Label>
+              <Select
+                items={itemsReportaA}
+                value={reportaA}
+                onValueChange={(v) => setReportaA(v ?? '__nadie__')}
+                disabled={procesando}
+              >
+                <SelectTrigger className={`w-full ${claseInput}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(itemsReportaA).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[#c8a58a] text-[11px]">
+                Jefe directo en la cadena de mando.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

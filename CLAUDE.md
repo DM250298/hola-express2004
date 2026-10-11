@@ -347,9 +347,49 @@ Las dos conciliaciones viven acá (movidas de Finanzas en 2026-07):
 - **Conciliar banco** (`TabConciliacion`): tilde manual de movimientos por
   cuenta contra el saldo del extracto
 
-### 10. RRHH (`/rrhh`)
-Empleados, novedades (horas extra, faltas, adelantos), liquidación de
-sueldos, cuenta corriente de empleados.
+### 10. Personal (`/rrhh`) — hub único de RRHH
+Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
+**Hoy** (`TableroRrhh`: `fn_dashboard_rrhh` + `fn_dashboard_disciplina`),
+**Equipo** (empleados, organigrama por `empleados.rol_operativo` /
+`reporta_a`, desempeño), **Cronograma** (grilla de turnos y fichajes),
+**Tareas** (`tareas_gestion`), **Incidencias**, **Pase de turno** y
+**Sueldos** (solo `rrhh_sueldos`: novedades, liquidaciones, cta. cte.).
+`/rrhh/dashboard`, `/rrhh/asistencia` y `/rrhh/tareas` redirigen al tab.
+
+- **Incidencias** (migs 230–231, Manual §8): hecho objetivo por empleado y
+  tipología (`tipologias_incidencia`). `fn_registrar_incidencia` calcula la
+  **instancia** por reincidencia de la misma tipología en 30 días (1ª
+  corrección, 2ª observación formal, 3ª escalada; grave = escalada
+  inmediata). Alta solo por RPC; el empleado ve las propias en Mi panel.
+- **Sanciones formales** (mig 232, estatuto art. 13): permiso
+  `rrhh_sanciones` (solo admin por defecto). `fn_aplicar_sancion` exige días
+  (1–30) para suspensión y acta para suspensión/exclusión; el llamado de
+  atención no va al legajo (`va_al_legajo`). Viven en Ficha › Legajo
+  disciplinario.
+- **Pase de turno** (migs 233–234, Manual §6.6): `pases_turno`, un registro
+  por (fecha, turno saliente). `fn_entregar_pase_turno` exige los 3 bloques
+  de texto y pendientes con responsable; `fn_recibir_pase_turno` marca los 4
+  conformes y exige observaciones si hay no conforme. El saliente/entrante
+  es `fn_mi_empleado_id()` salvo que tenga `rrhh`. Pantalla del empleado en
+  `/rrhh/pase-turno` y `/movil/pase-turno`.
+- **Generador de cronograma** (migs 236–237, 239–240): `patrones_cronograma` +
+  miembros ordenados. Dos tipos: `franco_rotativo` (N personas, N slots de
+  franco por semana en `orden_dias` (posiciones 0..6 desde el ancla, en el
+  orden en que rota); `lista[(slot − semana) mod N]`; los días fuera de
+  `orden_dias` nadie descansa; el pivote cubre el turno del que descansa con
+  nota "Cubre a X") y `noche_ab` (2 personas, ciclo 14 días, ancla lunes).
+  `fecha_ancla` = primer día de la semana 1. El patrón real desde jul-2026
+  (mig 241): ancla domingo, `{0,1,3,2,4,6}` (viernes local lleno).
+- **Checklists diarios** (mig 243): los 30 ítems de la planilla (mañana 13,
+  tarde 10, noche 7) como `tareas_recurrentes` todos los días, asignadas por
+  rol. `fn_materializar_tareas_turno` v3 (mig 244) **respeta el cronograma**:
+  quien tiene franco/licencia ese día no recibe la instancia ni participa de
+  la grupal; si el franco lo generó un patrón con pivote y el pivote está
+  planificado, la tarea pasa al pivote con `notas = 'Cubre a X'`. `fn_generar_cronograma(patron, desde, hasta,
+  sobrescribir, aplicar)` es **parcial**: solo llena celdas vacías; con
+  `sobrescribir` reemplaza solo filas con el mismo `horarios_asignados.patron_id`
+  (nunca lo manual). `aplicar=false` = previsualización. UI en Cronograma ›
+  Patrones / Generar.
 
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.

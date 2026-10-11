@@ -88,7 +88,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **166**
+## Próximo número libre: **246**
 
 ---
 
@@ -325,6 +325,22 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 226 | `226_conteo_registrar_con_alcance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
 | 227 | `227_conteo_gestion_y_avance.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
 | 228 | `228_conteo_cerrar_zona_y_cobertura.sql` | ✅ aplicada | 2026-09-29 (prueba + producción) | `b459eb2` |
+| 229 | `229_empleados_organigrama.sql` | ⏳ pendiente | — | en este commit |
+| 230 | `230_incidencias_esquema.sql` | ⏳ pendiente | — | en este commit |
+| 231 | `231_incidencias_rpcs.sql` | ⏳ pendiente | — | en este commit |
+| 232 | `232_sanciones_rpc_permiso.sql` | ⏳ pendiente | — | en este commit |
+| 233 | `233_pases_turno_esquema.sql` | ⏳ pendiente | — | en este commit |
+| 234 | `234_pases_turno_rpcs.sql` | ⏳ pendiente | — | en este commit |
+| 235 | `235_fn_dashboard_disciplina.sql` | ⏳ pendiente | — | en este commit |
+| 236 | `236_patrones_cronograma_esquema.sql` | ✅ aplicada en prueba | 2026-10-10 | en este commit |
+| 237 | `237_fn_generar_cronograma.sql` | ✅ aplicada en prueba | 2026-10-10 | en este commit |
+| 239 | `239_patrones_orden_dias.sql` | ✅ aplicada en prueba | 2026-10-10 | en este commit |
+| 240 | `240_fn_generar_cronograma_v2.sql` | ✅ aplicada en prueba | 2026-10-10 | en este commit |
+| 241 | `241_patron_francos_jul2026.sql` | ✅ aplicada en prueba (datos; era la 238, renumerada porque depende de 239/240) | 2026-10-10 | en este commit |
+| 242 | `242_organigrama_datos.sql` | ✅ aplicada en prueba (datos) | 2026-10-10 | en este commit |
+| 243 | `243_checklists_diarios_datos.sql` | ✅ aplicada en prueba (datos) | 2026-10-10 | en este commit |
+| 244 | `244_fn_materializar_tareas_v3.sql` | ✅ aplicada en prueba | 2026-10-10 | en este commit |
+| 245 | `245_fix_rls_tareas_participantes.sql` | ⏳ pendiente (fix: recursión RLS de la 158, 42P17 con tareas grupales) | — | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 

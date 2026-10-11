@@ -32,7 +32,7 @@ export function TabTareasEmpleado({ empleadoId }: Props) {
           Tareas de hoy · {format(new Date(`${hoy}T00:00:00`), "d 'de' MMM", { locale: es })}
         </h3>
         <Link
-          href="/rrhh/tareas"
+          href="/rrhh?tab=tareas"
           className={cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
             'text-[#6f3a2a] gap-1 text-xs'

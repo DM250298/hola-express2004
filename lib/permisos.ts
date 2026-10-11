@@ -36,6 +36,7 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'alertas', etiqueta: 'Alertas: ver y decidir (crear tarea, posponer)', grupo: 'Análisis' },
   { clave: 'rrhh', etiqueta: 'Recursos Humanos (operativo, sin sueldos)', grupo: 'Análisis' },
   { clave: 'rrhh_sueldos', etiqueta: 'RRHH · Sueldos y liquidaciones', grupo: 'Análisis' },
+  { clave: 'rrhh_sanciones', etiqueta: 'RRHH · Sanciones formales (solo Dirección)', grupo: 'Análisis' },
   { clave: 'tareas_gestion', etiqueta: 'Tareas · Asignar y controlar cumplimiento', grupo: 'Análisis' },
   { clave: 'mi_panel', etiqueta: 'Mi panel (empleado)', grupo: 'General' },
   { clave: 'terminales', etiqueta: 'Terminales de cobro', grupo: 'Sistema' },

@@ -1,5 +1,6 @@
 import { formatearFechaCorta } from '@/lib/utils/formato'
 import type {
+  RolOperativo,
   TipoContrato,
   TipoDocumentoEmpleado,
   UnidadNegocio,
@@ -28,6 +29,75 @@ export const TIPOS_CONTRATO: Record<TipoContrato, string> = {
   monotributista: 'Monotributista',
   informal_a_regularizar: 'Informal (a regularizar)',
 }
+
+/** Etiquetas legibles de los roles operativos (cadena de mando, Manual §3). */
+export const ROLES_OPERATIVOS: Record<RolOperativo, string> = {
+  direccion: 'Dirección',
+  responsable_general: 'Responsable Operativa General',
+  encargado: 'Encargado/a de turno',
+  pivote: 'Pivote / cobertura',
+  compras: 'Compras',
+  cajero: 'Cajero/a',
+  fiambreria: 'Fiambrería / producción',
+  otro: 'Otro',
+}
+
+/** Nivel, autoridad y límites de cada rol (planilla "Organigrama y cadena de mando", Manual §3–4). */
+export const DETALLE_ROL_OPERATIVO: Record<
+  RolOperativo,
+  { nivel: number; autoridad: string; noPuede: string }
+> = {
+  direccion: {
+    nivel: 1,
+    autoridad:
+      'Personal, remuneraciones, cambios estructurales, sanciones graves, expulsiones.',
+    noPuede: '—',
+  },
+  responsable_general: {
+    nivel: 2,
+    autoridad:
+      'Supervisar encargados, corregir, mediar, controlar checklists, exigir cumplimiento. Reporte semanal lunes AM.',
+    noPuede: 'Sueldos; expulsiones y sanciones graves; compras directas; cancelar tareas críticas.',
+  },
+  encargado: {
+    nivel: 3,
+    autoridad: 'Coordinar el turno y exigir las tareas definidas.',
+    noPuede: 'Cambios importantes; reasignaciones salvo fuerza mayor.',
+  },
+  pivote: {
+    nivel: 3,
+    autoridad: 'Cubrir francos de mañana y tarde según cronograma.',
+    noPuede: 'Cambiar procesos o prioridades.',
+  },
+  compras: {
+    nivel: 3,
+    autoridad: 'Abastecimiento, proveedores y reclamos dentro de parámetros.',
+    noPuede: 'Compras extraordinarias sin Dirección.',
+  },
+  cajero: {
+    nivel: 4,
+    autoridad: 'Caja, orden, limpieza, aviso de faltantes e incidencias.',
+    noPuede: 'Ajustes de stock; decisiones disciplinarias; resolver inventario o compras.',
+  },
+  fiambreria: {
+    nivel: 4,
+    autoridad: 'Producción planificada, control de insumos, reposición y orden.',
+    noPuede: 'Cambiar el plan sin autorización; cambiar prioridades estructurales.',
+  },
+  otro: { nivel: 4, autoridad: '—', noPuede: '—' },
+}
+
+/** Orden jerárquico para listar el organigrama (de arriba hacia abajo). */
+export const ORDEN_ROL_OPERATIVO: RolOperativo[] = [
+  'direccion',
+  'responsable_general',
+  'encargado',
+  'pivote',
+  'compras',
+  'cajero',
+  'fiambreria',
+  'otro',
+]
 
 /** Etiquetas legibles de los tipos de documento. */
 export const TIPOS_DOCUMENTO: Record<TipoDocumentoEmpleado, string> = {

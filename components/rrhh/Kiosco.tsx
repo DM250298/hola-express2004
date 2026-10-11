@@ -123,7 +123,7 @@ export function Kiosco() {
             {sincronizando && <Loader2 className="h-3 w-3 animate-spin" />}
           </span>
           <Link
-            href="/rrhh/asistencia"
+            href="/rrhh?tab=cronograma"
             className="text-[#c8a58a] hover:text-white text-xs flex items-center gap-1"
           >
             <X className="h-4 w-4" /> Salir

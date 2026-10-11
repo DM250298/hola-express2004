@@ -8,13 +8,17 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  ListOrdered,
   Monitor,
   Upload,
+  Wand2,
 } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { ModalImportarReloj } from './ModalImportarReloj'
 import { ModalCeldaAsistencia } from './ModalCeldaAsistencia'
+import { ModalPatrones } from './ModalPatrones'
+import { ModalGenerarCronograma } from './ModalGenerarCronograma'
 import {
   ABREV_TURNO,
   ESTADO_ASISTENCIA,
@@ -38,7 +42,12 @@ function lunesDe(d: Date): string {
   return format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy-MM-dd')
 }
 
-export function PantallaAsistencia() {
+interface Props {
+  /** Embebida como pestaña "Cronograma" del hub Personal. */
+  enHub?: boolean
+}
+
+export function PantallaAsistencia({ enHub = false }: Props = {}) {
   const [inicio, setInicio] = useState(() => lunesDe(new Date()))
   const dias = useMemo(
     () => Array.from({ length: 7 }, (_, i) => format(addDays(parseISO(inicio), i), 'yyyy-MM-dd')),
@@ -54,6 +63,8 @@ export function PantallaAsistencia() {
 
   const [celda, setCelda] = useState<{ empleadoId: number; fecha: string } | null>(null)
   const [importAbierto, setImportAbierto] = useState(false)
+  const [patronesAbierto, setPatronesAbierto] = useState(false)
+  const [generarAbierto, setGenerarAbierto] = useState(false)
 
   const activos = useMemo(
     () => (empleados ?? []).filter((e) => e.activo),
@@ -79,10 +90,14 @@ export function PantallaAsistencia() {
   const cargando = cargandoEmp || cargandoHor
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto space-y-5">
+    <div className={cn(!enHub && 'p-4 sm:p-6', 'max-w-[1400px] mx-auto space-y-5')}>
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-[#391511] text-2xl font-bold">Asistencia</h1>
+          {enHub ? (
+            <h2 className="text-[#391511] text-lg font-bold">Cronograma de turnos</h2>
+          ) : (
+            <h1 className="text-[#391511] text-2xl font-bold">Asistencia</h1>
+          )}
           <p className="text-[#6f3a2a] text-sm mt-1">
             Grilla de turnos y fichajes. La fuente principal es el Excel del reloj.
           </p>
@@ -98,6 +113,21 @@ export function PantallaAsistencia() {
             <Monitor className="h-4 w-4" />
             Abrir kiosco
           </Link>
+          <Button
+            variant="outline"
+            onClick={() => setPatronesAbierto(true)}
+            className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+          >
+            <ListOrdered className="h-4 w-4" />
+            Patrones
+          </Button>
+          <Button
+            onClick={() => setGenerarAbierto(true)}
+            className="bg-[#391511] hover:bg-[#2a0f0c] text-[#f9d2a2] font-semibold gap-1.5"
+          >
+            <Wand2 className="h-4 w-4" />
+            Generar
+          </Button>
           <Button
             onClick={() => setImportAbierto(true)}
             className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
@@ -212,6 +242,7 @@ export function PantallaAsistencia() {
                           <button
                             type="button"
                             onClick={() => setCelda({ empleadoId: e.id, fecha: d })}
+                            title={hor?.notas ?? undefined}
                             className={cn(
                               'w-full min-h-[42px] rounded-lg border text-xs font-medium px-1 py-1 transition-colors',
                               estilo
@@ -222,7 +253,17 @@ export function PantallaAsistencia() {
                             )}
                           >
                             {turno && (
-                              <span className="block font-bold">{ABREV_TURNO[turno.nombre]}</span>
+                              <span className="block font-bold">
+                                {ABREV_TURNO[turno.nombre]}
+                                {hor?.notas?.startsWith('Cubre') && (
+                                  <span className="ml-0.5 text-[#2f7d4f]" aria-label={hor.notas}>*</span>
+                                )}
+                              </span>
+                            )}
+                            {!turno && hor && hor.estado !== 'planificado' && !asis && (
+                              <span className="block font-bold text-[#c43e2c]">
+                                {hor.estado === 'franco' ? 'F' : hor.estado === 'licencia' ? 'Lic' : hor.estado}
+                              </span>
                             )}
                             {asis ? (
                               <span className="block text-[10px] leading-tight">{estilo?.label}</span>
@@ -268,6 +309,12 @@ export function PantallaAsistencia() {
         />
       )}
       <ModalImportarReloj abierto={importAbierto} onCambioAbierto={setImportAbierto} />
+      <ModalPatrones abierto={patronesAbierto} onCambioAbierto={setPatronesAbierto} />
+      <ModalGenerarCronograma
+        abierto={generarAbierto}
+        onCambioAbierto={setGenerarAbierto}
+        semanaInicio={inicio}
+      />
     </div>
   )
 }

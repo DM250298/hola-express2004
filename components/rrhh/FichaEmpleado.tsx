@@ -12,6 +12,7 @@ import { ModalPin } from './ModalPin'
 import { TabDatosEmpleado } from './TabDatosEmpleado'
 import { TabDocumentosEmpleado } from './TabDocumentosEmpleado'
 import { TabTareasEmpleado } from './TabTareasEmpleado'
+import { TabLegajoDisciplinario } from './TabLegajoDisciplinario'
 import { CalendarioAsistencia } from './CalendarioAsistencia'
 import { UNIDADES_NEGOCIO, iniciales, nombreCompleto } from './constantes'
 import { useEmpleado, useSubirFoto } from '@/lib/hooks/useRrhh'
@@ -20,11 +21,13 @@ import { cn } from '@/lib/utils'
 interface Props {
   empleadoId: number
   puedeVerSueldos: boolean
+  /** Dirección (rrhh_sanciones): puede aplicar sanciones formales. */
+  puedeSancionar?: boolean
 }
 
 const claseTab = 'data-active:bg-[#f9b44c]/20 data-active:text-[#391511]'
 
-export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
+export function FichaEmpleado({ empleadoId, puedeVerSueldos, puedeSancionar = false }: Props) {
   const { data: empleado, isLoading, isError } = useEmpleado(empleadoId)
   const subirFoto = useSubirFoto()
   const inputFoto = useRef<HTMLInputElement>(null)
@@ -60,7 +63,7 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
     return (
       <div className="p-4 sm:p-6 space-y-4">
         <Link
-          href="/rrhh"
+          href="/rrhh?tab=equipo"
           className={cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
             'text-[#6f3a2a] gap-1.5'
@@ -79,7 +82,7 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
   return (
     <div className="p-4 sm:p-6 space-y-5">
       <Link
-        href="/rrhh"
+        href="/rrhh?tab=equipo"
         className={cn(
           buttonVariants({ variant: 'ghost', size: 'sm' }),
           'text-[#6f3a2a] gap-1.5 -ml-2'
@@ -183,6 +186,9 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
           <TabsTrigger value="tareas" className={claseTab}>
             Tareas
           </TabsTrigger>
+          <TabsTrigger value="legajo" className={claseTab}>
+            Legajo disciplinario
+          </TabsTrigger>
           {puedeVerSueldos && (
             <TabsTrigger value="liquidaciones" disabled className={claseTab}>
               Liquidaciones
@@ -207,6 +213,13 @@ export function FichaEmpleado({ empleadoId, puedeVerSueldos }: Props) {
         </TabsContent>
         <TabsContent value="tareas">
           <TabTareasEmpleado empleadoId={empleado.id} />
+        </TabsContent>
+        <TabsContent value="legajo">
+          <TabLegajoDisciplinario
+            empleadoId={empleado.id}
+            nombre={nombreCompleto(empleado)}
+            puedeSancionar={puedeSancionar}
+          />
         </TabsContent>
       </Tabs>
 

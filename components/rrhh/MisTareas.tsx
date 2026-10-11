@@ -50,6 +50,9 @@ function TarjetaMiTarea({
           {tarea.descripcion && (
             <p className="text-[#6f3a2a] text-sm mt-0.5">{tarea.descripcion}</p>
           )}
+          {tarea.notas?.startsWith('Cubre a') && (
+            <p className="text-[#2f7d4f] text-xs font-semibold mt-0.5">↺ {tarea.notas}</p>
+          )}
           {grupal && !hecha && (
             <p className="flex items-center gap-1 text-[11px] text-[#a06b00] mt-1">
               <Users className="h-3 w-3" />

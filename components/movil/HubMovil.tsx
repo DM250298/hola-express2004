@@ -12,6 +12,7 @@ import {
 import { tienePermiso } from '@/lib/permisos'
 import { TarjetaMisTareas } from './TarjetaMisTareas'
 import { TarjetaMiCuenta } from './TarjetaMiCuenta'
+import { TarjetaPaseTurno } from './TarjetaPaseTurno'
 
 interface ZonaConteoMovil {
   id: number
@@ -142,6 +143,8 @@ export function HubMovil({
         )}
 
         {empleadoId !== null && <TarjetaMisTareas empleadoId={empleadoId} />}
+
+        {empleadoId !== null && <TarjetaPaseTurno empleadoId={empleadoId} />}
 
         {empleadoId !== null && <TarjetaMiCuenta />}
 

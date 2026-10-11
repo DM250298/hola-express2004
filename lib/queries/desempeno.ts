@@ -103,6 +103,35 @@ export interface RachaTardanzas {
   tardanzas: number
 }
 
+export interface IncidenciasEmpleado30d {
+  empleado_id: number
+  nombre: string
+  apellido: string | null
+  cantidad: number
+  max_instancia: number
+  escalada: boolean
+}
+
+export interface PaseNoConforme {
+  pase_id: number
+  fecha: string
+  turno: string
+  saliente_empleado_id: number
+  nombre: string
+  apellido: string | null
+  no_conformes: number
+}
+
+/** fn_dashboard_disciplina (mig 235): incidencias + pase de turno. */
+export interface DashboardDisciplina {
+  incidencias_abiertas: number
+  reincidencias_30d: number
+  graves_30d: number
+  incidencias_empleados_30d: IncidenciasEmpleado30d[]
+  pases_pendientes_recibir: number
+  pases_no_conformes_7d: PaseNoConforme[]
+}
+
 export interface DashboardRrhh {
   fecha: string
   generado_at: string
@@ -112,11 +141,19 @@ export interface DashboardRrhh {
   tareas_vencidas: TareasVencidasEmpleado[]
   docs_por_vencer: DocPorVencer[]
   rachas_tardanzas: RachaTardanzas[]
+  /** null si la mig 235 todavía no corrió (el tablero oculta esa parte). */
+  disciplina: DashboardDisciplina | null
 }
 
 export async function getDashboardRrhh(): Promise<DashboardRrhh> {
   const supabase = createClient()
-  const { data, error } = await supabase.rpc('fn_dashboard_rrhh', {})
-  if (error) throw error
-  return data as unknown as DashboardRrhh
+  const [base, disc] = await Promise.all([
+    supabase.rpc('fn_dashboard_rrhh', {}),
+    supabase.rpc('fn_dashboard_disciplina', {}),
+  ])
+  if (base.error) throw base.error
+  // La RPC de disciplina es opcional: si falta (mig 235 sin correr) no
+  // tumba el tablero entero.
+  const disciplina = disc.error ? null : (disc.data as unknown as DashboardDisciplina)
+  return { ...(base.data as unknown as Omit<DashboardRrhh, 'disciplina'>), disciplina }
 }

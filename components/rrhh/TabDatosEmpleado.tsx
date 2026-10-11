@@ -1,7 +1,14 @@
 'use client'
 
 import { MontoARS } from '@/components/shared/MontoARS'
-import { TIPOS_CONTRATO, UNIDADES_NEGOCIO, fechaCortaLocal } from './constantes'
+import {
+  ROLES_OPERATIVOS,
+  TIPOS_CONTRATO,
+  UNIDADES_NEGOCIO,
+  fechaCortaLocal,
+  nombreCompleto,
+} from './constantes'
+import { useEmpleados } from '@/lib/hooks/useRrhh'
 import type { EmpleadoConSueldo } from '@/types/database'
 
 interface Props {
@@ -28,6 +35,8 @@ function Campo({
 
 export function TabDatosEmpleado({ empleado: e, puedeVerSueldos }: Props) {
   const guion = '—'
+  const { data: empleados } = useEmpleados()
+  const jefe = e.reporta_a != null ? empleados?.find((x) => x.id === e.reporta_a) : null
   return (
     <div className="space-y-4">
       <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-5">
@@ -58,6 +67,8 @@ export function TabDatosEmpleado({ empleado: e, puedeVerSueldos }: Props) {
             {UNIDADES_NEGOCIO[e.unidad_negocio]}
           </Campo>
           <Campo etiqueta="Puesto">{e.puesto || guion}</Campo>
+          <Campo etiqueta="Rol operativo">{ROLES_OPERATIVOS[e.rol_operativo]}</Campo>
+          <Campo etiqueta="Reporta a">{jefe ? nombreCompleto(jefe) : guion}</Campo>
           <Campo etiqueta="Tipo de contrato">
             {TIPOS_CONTRATO[e.tipo_contrato]}
           </Campo>

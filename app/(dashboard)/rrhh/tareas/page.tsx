@@ -1,9 +1,6 @@
-import { PantallaTareas } from '@/components/rrhh/PantallaTareas'
+import { redirect } from 'next/navigation'
 
-export const metadata = {
-  title: 'Tareas — RRHH',
-}
-
+/** La gestión de tareas ahora es la pestaña "Tareas" del hub Personal. */
 export default function PaginaTareas() {
-  return <PantallaTareas />
+  redirect('/rrhh?tab=tareas')
 }

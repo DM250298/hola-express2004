@@ -45,7 +45,12 @@ import type {
 
 const claseTab = 'data-active:bg-[#f9b44c]/20 data-active:text-[#391511]'
 
-export function PantallaTareas() {
+interface Props {
+  /** Embebida como pestaña "Tareas" del hub Personal. */
+  enHub?: boolean
+}
+
+export function PantallaTareas({ enHub = false }: Props = {}) {
   const [hoy] = useState(() => hoyAr())
   const [fecha, setFecha] = useState(hoy)
   const [modalTarea, setModalTarea] = useState<{ tarea: TareaConParticipantes | null } | null>(null)
@@ -104,7 +109,7 @@ export function PantallaTareas() {
   // 'rrhh' que llegue por URL ve el aviso (RLS igual le negaría escribir).
   if (!cargandoUsuario && !esGestor) {
     return (
-      <div className="p-6 max-w-lg mx-auto">
+      <div className={cn(!enHub && 'p-6', 'max-w-lg mx-auto')}>
         <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl p-8 text-center space-y-2">
           <div className="inline-flex p-3 rounded-full bg-[#f9d2a2]/40">
             <Lock className="h-6 w-6 text-[#6f3a2a]" />
@@ -121,10 +126,14 @@ export function PantallaTareas() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-[1400px] mx-auto space-y-5">
+    <div className={cn(!enHub && 'p-4 sm:p-6', 'max-w-[1400px] mx-auto space-y-5')}>
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-[#391511] text-2xl font-bold">Tareas</h1>
+          {enHub ? (
+            <h2 className="text-[#391511] text-lg font-bold">Tareas del personal</h2>
+          ) : (
+            <h1 className="text-[#391511] text-2xl font-bold">Tareas</h1>
+          )}
           <p className="text-[#6f3a2a] text-sm mt-1">
             Asigná tareas al personal, únicas o recurrentes, y controlá el cumplimiento.
           </p>
@@ -228,6 +237,11 @@ export function PantallaTareas() {
                             >
                               {PRIORIDAD_TAREA[t.prioridad].label}
                             </span>
+                            {t.notas?.startsWith('Cubre a') && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#2f7d4f]/15 text-[#2f7d4f]" title={t.notas}>
+                                ↺ {t.notas}
+                              </span>
+                            )}
                             {t.rechazos_count > 0 && t.estado !== 'completada' && (
                               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#c43e2c]/15 text-[#c43e2c]">
                                 Rechazada ×{t.rechazos_count}
