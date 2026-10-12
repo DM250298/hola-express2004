@@ -622,7 +622,7 @@ export type EstadoTareaTurno =
   | 'cancelada'
 export type ModoTarea = 'individual' | 'grupal'
 export type TipoRecurrenciaTarea = 'dias_semana' | 'dia_mes' | 'cada_n_dias'
-export type AlcanceTarea = 'empleados' | 'todos'
+export type AlcanceTarea = 'empleados' | 'todos' | 'puesto'
 
 export type TareaRecurrenteRow = {
   id: string
@@ -636,6 +636,8 @@ export type TareaRecurrenteRow = {
   requiere_evidencia: boolean
   activa: boolean
   alcance: AlcanceTarea
+  /** alcance 'puesto' (mig 248): roles operativos que la hacen, resueltos contra el cronograma del día. */
+  roles_puesto: RolOperativo[]
   modo: ModoTarea
   tipo_recurrencia: TipoRecurrenciaTarea
   dia_mes: number | null
@@ -658,6 +660,7 @@ export type TareaRecurrenteInsert = {
   requiere_evidencia?: boolean
   activa?: boolean
   alcance?: AlcanceTarea
+  roles_puesto?: RolOperativo[]
   modo?: ModoTarea
   tipo_recurrencia?: TipoRecurrenciaTarea
   dia_mes?: number | null
@@ -693,6 +696,8 @@ export type TareaTurnoRow = {
   rechazada_at: string | null
   motivo_rechazo: string | null
   rechazos_count: number
+  /** Reasignada a mano por gestión (mig 248): la sincronización con el cronograma no la toca. */
+  fijada: boolean
   notas: string | null
   usuario_id: string | null
   created_at: string
@@ -710,6 +715,7 @@ export type TareaTurnoInsert = {
   requiere_evidencia?: boolean
   estado?: EstadoTareaTurno
   modo?: ModoTarea
+  fijada?: boolean
   notas?: string | null
   usuario_id?: string | null
 }
@@ -5223,6 +5229,14 @@ export interface Database {
       fn_materializar_tareas_turno: {
         Args: { p_fecha: string }
         Returns: number
+      }
+      fn_plantillas_tareas_dia: {
+        Args: { p_fecha: string }
+        Returns: TareaRecurrenteRow[]
+      }
+      fn_asignados_tareas_dia: {
+        Args: { p_fecha: string }
+        Returns: { plantilla_id: string; empleado_id: number; notas: string | null }[]
       }
       fn_marcar_tareas_vencidas: {
         Args: Record<string, never>

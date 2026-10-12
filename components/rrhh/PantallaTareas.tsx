@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Lock,
   Plus,
+  RefreshCw,
   Repeat,
   Trash2,
   Users,
@@ -19,13 +20,15 @@ import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { ModalTarea } from './ModalTarea'
 import { ModalPlantilla } from './ModalPlantilla'
 import { TabCumplimiento } from './TabCumplimiento'
-import { nombreCompleto } from './constantes'
+import { ROLES_OPERATIVOS, nombreCompleto } from './constantes'
 import { hoyAr } from './asistenciaConstantes'
 import {
   COLUMNAS_KANBAN,
   ESTADO_TAREA,
   MODO_TAREA,
   PRIORIDAD_TAREA,
+  esCobertura,
+  esSinCronograma,
   recurrenciaResumen,
 } from './tareasConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
@@ -35,6 +38,7 @@ import {
   useDeletePlantilla,
   useMaterializar,
   usePlantillas,
+  useSincronizarTareas,
   useTareasFecha,
 } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
@@ -66,6 +70,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
   const { data: tareas, isLoading } = useTareasFecha(fecha)
   const { data: plantillas } = usePlantillas()
   const materializar = useMaterializar()
+  const sincronizar = useSincronizarTareas()
   const borrarPlantilla = useDeletePlantilla()
   const materializado = useRef(false)
 
@@ -95,8 +100,17 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
     return m
   }, [tareas])
 
+  // La RPC acepta hoy-1 … hoy+7 (mig 250): fuera de eso el botón se apaga.
+  const sincronizable =
+    fecha >= format(addDays(parseISO(hoy), -1), 'yyyy-MM-dd') &&
+    fecha <= format(addDays(parseISO(hoy), 7), 'yyyy-MM-dd')
+
   function resumenAsignados(p: PlantillaConAsignados): string {
     if (p.alcance === 'todos') return 'Todos los empleados'
+    if (p.alcance === 'puesto') {
+      const roles = (p.roles_puesto ?? []).map((r) => ROLES_OPERATIVOS[r]).join(' + ')
+      return `${roles || 'Sin puesto'} · según cronograma`
+    }
     const ids =
       p.tareas_recurrentes_asignados?.map((a) => a.empleado_id) ??
       (p.empleado_id ? [p.empleado_id] : [])
@@ -162,6 +176,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
 
         {/* ── Tablero (kanban por estado) ── */}
         <TabsContent value="tablero" className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2 bg-white border border-[#e4c9b0]/60 rounded-2xl px-3 py-2 w-fit">
             <Button
               variant="ghost"
@@ -194,6 +209,17 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
                 Hoy
               </Button>
             )}
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => sincronizar.mutate(fecha)}
+            disabled={sincronizar.isPending || !sincronizable}
+            title="Reasigna las tareas recurrentes del día según quién está en el cronograma (francos, licencias, coberturas). Lo completado o fijado a mano no se toca."
+            className="h-9 border-[#e4c9b0] bg-white text-[#6f3a2a] hover:text-[#391511] gap-1.5"
+          >
+            <RefreshCw className={cn('h-4 w-4', sincronizar.isPending && 'animate-spin')} />
+            Actualizar según cronograma
+          </Button>
           </div>
 
           {isLoading ? (
@@ -237,9 +263,19 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
                             >
                               {PRIORIDAD_TAREA[t.prioridad].label}
                             </span>
-                            {t.notas?.startsWith('Cubre a') && (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#2f7d4f]/15 text-[#2f7d4f]" title={t.notas}>
+                            {esCobertura(t.notas) && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#2f7d4f]/15 text-[#2f7d4f]" title={t.notas ?? undefined}>
                                 ↺ {t.notas}
+                              </span>
+                            )}
+                            {esSinCronograma(t.notas) && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#f9b44c]/25 text-[#a06b00]" title={t.notas ?? undefined}>
+                                Sin cronograma
+                              </span>
+                            )}
+                            {t.fijada && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#e4c9b0]/40 text-[#6f3a2a]" title="Reasignada a mano: Actualizar según cronograma no la toca.">
+                                Fijada
                               </span>
                             )}
                             {t.rechazos_count > 0 && t.estado !== 'completada' && (

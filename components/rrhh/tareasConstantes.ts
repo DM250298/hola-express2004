@@ -1,4 +1,5 @@
 import type {
+  AlcanceTarea,
   EstadoTareaTurno,
   ModoTarea,
   PrioridadTarea,
@@ -55,6 +56,31 @@ export function diasResumen(dias: number[]): string {
 export const MODO_TAREA: Record<ModoTarea, Estilo> = {
   individual: { label: 'Cada uno', clase: 'bg-[#e4c9b0]/40 text-[#6f3a2a]' },
   grupal: { label: 'Grupal', clase: 'bg-[#f9b44c]/25 text-[#a06b00]' },
+}
+
+/** Quién hace una recurrente (mig 248). */
+export const ALCANCE_TAREA: Record<AlcanceTarea, { label: string; ayuda: string }> = {
+  puesto: {
+    label: 'Por puesto (según cronograma)',
+    ayuda:
+      'Cada día va a quien esté planificado con ese puesto en el turno. Si el puesto falta (franco, licencia), la cubre alguien del turno: pivote, encargado o responsable general. Nunca queda sin dueño.',
+  },
+  empleados: {
+    label: 'Personas fijas',
+    ayuda:
+      'Siempre las mismas personas. Con franco o licencia se omite, salvo que el pivote del patrón la cubra.',
+  },
+  todos: { label: 'Todos', ayuda: 'Todo el personal activo.' },
+}
+
+/** La instancia la hace alguien que cubre un puesto o persona ausente ("Cubre a X" / "Cubre puesto X"). */
+export function esCobertura(notas: string | null | undefined): boolean {
+  return !!notas && notas.startsWith('Cubre')
+}
+
+/** Asignada por defecto porque ese día el turno no tenía a nadie en el cronograma. */
+export function esSinCronograma(notas: string | null | undefined): boolean {
+  return !!notas && notas.startsWith('Sin cronograma')
 }
 
 export const TIPO_RECURRENCIA: Record<TipoRecurrenciaTarea, string> = {

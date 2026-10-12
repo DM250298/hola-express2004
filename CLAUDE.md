@@ -383,12 +383,22 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
   jueves a miércoles).
   `fecha_ancla` = primer día de la semana 1. El patrón real desde jul-2026
   (mig 241): ancla domingo, `{0,1,3,2,4,6}` (viernes local lleno).
-- **Checklists diarios** (mig 243): los 30 ítems de la planilla (mañana 13,
-  tarde 10, noche 7) como `tareas_recurrentes` todos los días, asignadas por
-  rol. `fn_materializar_tareas_turno` v3 (mig 244) **respeta el cronograma**:
-  quien tiene franco/licencia ese día no recibe la instancia ni participa de
-  la grupal; si el franco lo generó un patrón con pivote y el pivote está
-  planificado, la tarea pasa al pivote con `notas = 'Cubre a X'`. `fn_generar_cronograma(patron, desde, hasta,
+- **Checklists diarios por puesto** (migs 243, 248–250): los 30 ítems de la
+  planilla (mañana 13, tarde 10, noche 7) como `tareas_recurrentes` todos los
+  días con `alcance='puesto'` + `roles_puesto` (rol_operativo). Cada día
+  `fn_asignados_tareas_dia(fecha)` resuelve quién la hace contra
+  `horarios_asignados`: los planificados en el turno con ese rol; si el rol
+  falta, UNA persona del turno (pivote → encargado → resp. general → resto)
+  con `notas='Cubre a X'`; si el turno está vacío, el asignado fijo / alguien
+  del rol / el resp. general con `notas='Sin cronograma…'`. **Nunca queda sin
+  dueño.** `alcance='empleados'/'todos'` conserva la regla v3 (franco/licencia
+  se omite salvo pivote del patrón). `fn_materializar_tareas_turno` v4 (mig
+  250) **sincroniza** en cada llamada (cron 06:00, apertura del tablero / Mis
+  tareas, botón "Actualizar según cronograma" en Tareas › Tablero): borra las
+  pendientes vírgenes de quien ya no corresponde, crea las que faltan y
+  reconcilia participantes de las grupales; lo completado, en curso,
+  rechazado o `tareas_turno.fijada` (responsable cambiado a mano) no se toca.
+  `fn_generar_cronograma(patron, desde, hasta,
   sobrescribir, aplicar)` es **parcial**: solo llena celdas vacías; con
   `sobrescribir` reemplaza solo filas con el mismo `horarios_asignados.patron_id`
   (nunca lo manual). `aplicar=false` = previsualización. UI en Cronograma ›

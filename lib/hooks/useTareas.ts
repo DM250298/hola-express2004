@@ -226,7 +226,28 @@ export function useCumplimiento(desde: string, hasta: string) {
   })
 }
 
-/** Genera las tareas recurrentes del día si todavía no están (fallback del cron). */
+/**
+ * Botón "Actualizar según cronograma": misma RPC que la materialización
+ * (mig 250, sincroniza con francos/licencias/coberturas) pero siempre avisa
+ * y refresca el tablero.
+ */
+export function useSincronizarTareas() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (fecha: string) => materializarFecha(fecha),
+    onSuccess: (n) => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      toast.success(
+        n > 0
+          ? `Se aplicaron ${n} ${n === 1 ? 'cambio' : 'cambios'} según el cronograma`
+          : 'Las tareas ya estaban al día con el cronograma'
+      )
+    },
+    onError: (e: Error) => toast.error(`No se pudo actualizar: ${e.message}`),
+  })
+}
+
+/** Genera y sincroniza las tareas recurrentes del día al entrar (fallback del cron). */
 export function useMaterializar() {
   const qc = useQueryClient()
   return useMutation({
