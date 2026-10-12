@@ -139,10 +139,16 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
       requiere_evidencia: requiereEvidencia,
     }
     if (editando && tarea) {
+      // Cambiar a mano el responsable de una recurrente la "fija": la
+      // sincronización con el cronograma (mig 250) ya no la reasigna.
+      const fijar =
+        !esGrupal && !!tarea.plantilla_id && Number(empleadoId) !== tarea.empleado_id
       actualizar.mutate(
         {
           id: tarea.id,
-          datos: esGrupal ? base : { ...base, empleado_id: Number(empleadoId) },
+          datos: esGrupal
+            ? base
+            : { ...base, empleado_id: Number(empleadoId), ...(fijar ? { fijada: true } : {}) },
         },
         { onSuccess: () => onCambioAbierto(false) }
       )
@@ -192,7 +198,11 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
             {editando
-              ? 'Asigná un responsable y, si hace falta, foto de evidencia.'
+              ? tarea?.fijada
+                ? 'Reasignada a mano: "Actualizar según cronograma" no la toca.'
+                : tarea?.plantilla_id && !esGrupal
+                  ? 'Si cambiás el responsable, queda fijada y el cronograma ya no la reasigna.'
+                  : 'Asigná un responsable y, si hace falta, foto de evidencia.'
               : 'Elegí a quién va y cómo se cumple.'}
           </DialogDescription>
         </DialogHeader>

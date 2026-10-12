@@ -88,7 +88,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **248**
+## Próximo número libre: **251**
 
 ---
 
@@ -341,8 +341,11 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 243 | `243_checklists_diarios_datos.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
 | 244 | `244_fn_materializar_tareas_v3.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
 | 245 | `245_fix_rls_tareas_participantes.sql` | ✅ aplicada | 2026-10-10 (prueba + producción) | `e325bfe` |
-| 246 | `246_patrones_bloques_alternados.sql` | ⏳ pendiente | — | en este commit |
-| 247 | `247_fn_generar_cronograma_v3.sql` | ⏳ pendiente | — | en este commit |
+| 246 | `246_patrones_bloques_alternados.sql` | ✅ aplicada | 2026-10-11 (prueba + producción) | `64c9c27` |
+| 247 | `247_fn_generar_cronograma_v3.sql` | ✅ aplicada | 2026-10-11 (prueba + producción) | `64c9c27` |
+| 248 | `248_tareas_por_puesto_esquema.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
+| 249 | `249_fn_asignados_tareas_dia.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
+| 250 | `250_fn_materializar_tareas_v4.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 
 ## Dos bases de Supabase (2026-09-17)
 

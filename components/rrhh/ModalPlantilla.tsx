@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, User, Users } from 'lucide-react'
+import { CalendarCheck, Loader2, User, UserCheck, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -21,8 +21,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { MultiSelectEmpleados } from './MultiSelectEmpleados'
-import { nombreCompleto } from './constantes'
-import { DIAS_SEMANA, PRIORIDAD_TAREA, TIPO_RECURRENCIA } from './tareasConstantes'
+import { ORDEN_ROL_OPERATIVO, ROLES_OPERATIVOS, nombreCompleto } from './constantes'
+import {
+  ALCANCE_TAREA,
+  DIAS_SEMANA,
+  PRIORIDAD_TAREA,
+  TIPO_RECURRENCIA,
+} from './tareasConstantes'
 import { NOMBRE_TURNO, hoyAr } from './asistenciaConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
@@ -30,8 +35,10 @@ import { useCreatePlantilla, useUpdatePlantilla } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
 import type { PlantillaConAsignados } from '@/lib/queries/tareas'
 import type {
+  AlcanceTarea,
   ModoTarea,
   PrioridadTarea,
+  RolOperativo,
   TipoRecurrenciaTarea,
 } from '@/types/database'
 
@@ -53,7 +60,8 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
 
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
-  const [todos, setTodos] = useState(false)
+  const [alcance, setAlcance] = useState<AlcanceTarea>('puesto')
+  const [roles, setRoles] = useState<RolOperativo[]>([])
   const [asignados, setAsignados] = useState<number[]>([])
   const [modo, setModo] = useState<ModoTarea>('individual')
   const [turnoId, setTurnoId] = useState('__ninguno__')
@@ -72,7 +80,8 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
     if (abierto) {
       setTitulo(plantilla?.titulo ?? '')
       setDescripcion(plantilla?.descripcion ?? '')
-      setTodos(plantilla?.alcance === 'todos')
+      setAlcance(plantilla?.alcance ?? 'puesto')
+      setRoles(plantilla?.roles_puesto ?? [])
       setAsignados(
         plantilla?.tareas_recurrentes_asignados?.map((a) => a.empleado_id) ??
           (plantilla?.empleado_id ? [plantilla.empleado_id] : [])
@@ -118,9 +127,14 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
   const procesando = crear.isPending || actualizar.isPending
   const puedeGuardar =
     titulo.trim().length > 0 &&
-    (todos || asignados.length > 0) &&
+    (alcance === 'todos' ||
+      (alcance === 'puesto' ? roles.length > 0 : asignados.length > 0)) &&
     recurrenciaValida &&
     !procesando
+
+  function toggleRol(r: RolOperativo) {
+    setRoles((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]))
+  }
 
   function toggleDia(n: number) {
     setDias((prev) => (prev.includes(n) ? prev.filter((d) => d !== n) : [...prev, n]))
@@ -133,7 +147,8 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
       descripcion: descripcion.trim() || null,
       empleado_id: null, // deprecado (mig 158): manda alcance + la tabla puente
       turno_id: turnoId === '__ninguno__' ? null : Number(turnoId),
-      alcance: (todos ? 'todos' : 'empleados') as 'todos' | 'empleados',
+      alcance,
+      roles_puesto: alcance === 'puesto' ? roles : [],
       modo,
       tipo_recurrencia: tipoRecurrencia,
       dias_semana: tipoRecurrencia === 'dias_semana' ? [...dias].sort((a, b) => a - b) : [],
@@ -146,7 +161,9 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
       requiere_evidencia: requiereEvidencia,
       activa,
     }
-    const listaAsignados = todos ? [] : asignados
+    // Con 'puesto' los asignados fijos se conservan: son el último recurso
+    // cuando el cronograma del día está vacío (mig 249).
+    const listaAsignados = alcance === 'todos' ? [] : asignados
     if (editando && plantilla) {
       actualizar.mutate(
         { id: plantilla.id, datos, asignados: listaAsignados },
@@ -195,14 +212,92 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
             />
           </div>
 
-          <MultiSelectEmpleados
-            opciones={opciones}
-            seleccionados={asignados}
-            onCambio={setAsignados}
-            todos={todos}
-            onCambioTodos={setTodos}
-            disabled={procesando}
-          />
+          {/* Quién la hace */}
+          <div className="space-y-1.5">
+            <Label className="text-[#391511] font-medium text-sm">Quién la hace</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setAlcance('puesto')}
+                disabled={procesando}
+                className={cn(
+                  'rounded-xl border px-3 py-2.5 text-left transition-colors',
+                  alcance === 'puesto'
+                    ? 'border-[#f9b44c] bg-[#f9b44c]/15'
+                    : 'border-[#e4c9b0]/60 bg-[#fdfaf6]'
+                )}
+              >
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-[#391511]">
+                  <CalendarCheck className="h-3.5 w-3.5" /> Por puesto
+                </span>
+                <span className="block text-[11px] text-[#6f3a2a] mt-0.5">
+                  Según quién esté en el cronograma del día.
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => alcance === 'puesto' && setAlcance('empleados')}
+                disabled={procesando}
+                className={cn(
+                  'rounded-xl border px-3 py-2.5 text-left transition-colors',
+                  alcance !== 'puesto'
+                    ? 'border-[#f9b44c] bg-[#f9b44c]/15'
+                    : 'border-[#e4c9b0]/60 bg-[#fdfaf6]'
+                )}
+              >
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-[#391511]">
+                  <UserCheck className="h-3.5 w-3.5" /> Personas fijas
+                </span>
+                <span className="block text-[11px] text-[#6f3a2a] mt-0.5">
+                  Siempre las mismas personas (o todos).
+                </span>
+              </button>
+            </div>
+            <p className="text-[11px] text-[#c8a58a]">{ALCANCE_TAREA[alcance].ayuda}</p>
+          </div>
+
+          {alcance === 'puesto' ? (
+            <div className="space-y-1.5">
+              <Label className="text-[#391511] font-medium text-sm">Puesto(s)</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {ORDEN_ROL_OPERATIVO.map((r) => {
+                  const activo = roles.includes(r)
+                  return (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => toggleRol(r)}
+                      disabled={procesando}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                        activo
+                          ? 'bg-[#f9b44c] border-[#f9b44c] text-[#391511]'
+                          : 'bg-[#fdfaf6] border-[#e4c9b0] text-[#6f3a2a]'
+                      )}
+                    >
+                      {ROLES_OPERATIVOS[r]}
+                    </button>
+                  )
+                })}
+              </div>
+              {roles.length === 0 ? (
+                <p className="text-[11px] text-[#c43e2c]">Elegí al menos un puesto.</p>
+              ) : turnoId === '__ninguno__' ? (
+                <p className="text-[11px] text-[#a06b00]">
+                  Sin turno se busca el puesto en cualquier turno del día. Conviene elegir el turno más abajo.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <MultiSelectEmpleados
+              opciones={opciones}
+              seleccionados={asignados}
+              onCambio={setAsignados}
+              todos={alcance === 'todos'}
+              onCambioTodos={(v) => setAlcance(v ? 'todos' : 'empleados')}
+              disabled={procesando}
+            />
+          )}
 
           {/* Modo de cumplimiento */}
           <div className="space-y-1.5">

@@ -7,7 +7,7 @@ import { CheckCircle2, Loader2, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SubirEvidencia } from './SubirEvidencia'
 import { hoyAr } from './asistenciaConstantes'
-import { MODO_TAREA, PRIORIDAD_TAREA, tareaEsDe } from './tareasConstantes'
+import { MODO_TAREA, PRIORIDAD_TAREA, esCobertura, tareaEsDe } from './tareasConstantes'
 import { useCompletarTarea, useMaterializar, useTareasFecha } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
 import type { TareaConParticipantes } from '@/lib/queries/tareas'
@@ -50,7 +50,7 @@ function TarjetaMiTarea({
           {tarea.descripcion && (
             <p className="text-[#6f3a2a] text-sm mt-0.5">{tarea.descripcion}</p>
           )}
-          {tarea.notas?.startsWith('Cubre a') && (
+          {esCobertura(tarea.notas) && (
             <p className="text-[#2f7d4f] text-xs font-semibold mt-0.5">↺ {tarea.notas}</p>
           )}
           {grupal && !hecha && (
