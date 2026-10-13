@@ -576,7 +576,7 @@ function VistaConTarea({ alertas }: { alertas: Alerta[] }) {
         </Link>{' '}
         y en el{' '}
         <Link href="/agenda" className="underline underline-offset-2 hover:text-[#391511]">
-          Mi día
+          Mi agenda
         </Link>{' '}
         de cada responsable.
       </p>

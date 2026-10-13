@@ -38,7 +38,7 @@ const TABS: TabDef[] = [
   { value: 'cronograma', etiqueta: 'Cronograma', icono: CalendarDays, permiso: 'rrhh' },
   { value: 'tareas', etiqueta: 'Tareas', icono: ClipboardList, permiso: 'tareas_gestion' },
   { value: 'incidencias', etiqueta: 'Incidencias', icono: AlertTriangle, permiso: 'rrhh' },
-  { value: 'pase', etiqueta: 'Pase de turno', icono: ArrowLeftRight, permiso: 'rrhh' },
+  { value: 'pase', etiqueta: 'Pases de turno', icono: ArrowLeftRight, permiso: 'rrhh' },
   { value: 'sueldos', etiqueta: 'Sueldos', icono: Wallet, permiso: 'rrhh_sueldos' },
 ]
 
@@ -88,13 +88,16 @@ export function PantallaPersonal({ permisos, tabInicial }: Props) {
   return (
     <div className="p-4 sm:p-6 space-y-5">
       <header>
+        <p className="text-[#6f3a2a] text-[10px] font-bold uppercase tracking-[0.18em]">
+          Operaciones
+        </p>
         <h1 className="text-[#391511] text-2xl font-bold flex items-center gap-2">
           <Users className="h-6 w-6 text-[#f9b44c]" />
-          Personal
+          Turnos y equipo
         </h1>
         <p className="text-[#6f3a2a] text-sm mt-1">
-          Equipo, cronograma de turnos, tareas y seguimiento del personal en un
-          solo lugar.
+          Equipo, cronograma de turnos, tareas, pases y seguimiento del personal
+          en un solo lugar.
         </p>
       </header>
 

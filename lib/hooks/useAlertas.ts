@@ -97,7 +97,7 @@ export function useCrearTareaAlertas() {
     mutationFn: (datos: DatosTareaAlertas) => crearTareaAlertas(datos),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ALERTAS_KEY })
-      toast.success('Tarea creada: ya está en el "Mi día" del responsable.')
+      toast.success('Tarea creada: ya está en "Mi agenda" del responsable.')
     },
     onError: (error: Error) => {
       toast.error(`No se pudo crear la tarea: ${error.message}`)

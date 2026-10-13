@@ -152,7 +152,7 @@ export function CentroCompras() {
               Falta correr la migración 151
             </p>
             <p className="text-[#6f3a2a] text-sm">
-              El Centro de Compras usa fn_sugerencias_compra
+              La reposición por cobertura usa fn_sugerencias_compra
               (151_compras_por_cobertura.sql). Corré la migración en el SQL
               Editor de Supabase y recargá.
             </p>

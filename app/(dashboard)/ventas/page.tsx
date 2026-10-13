@@ -1,7 +1,7 @@
 import { PantallaVentas } from '@/components/ventas/PantallaVentas'
 
 export const metadata = {
-  title: 'Ventas — ¡Hola! Express',
+  title: 'Historial de ventas — ¡Hola! Express',
 }
 
 export default function PaginaVentas() {

@@ -133,7 +133,7 @@ export function PantallaVentas() {
   return (
     <div className="p-4 sm:p-6 space-y-5">
       <header>
-        <h1 className="text-[#391511] text-2xl font-bold">Ventas</h1>
+        <h1 className="text-[#391511] text-2xl font-bold">Historial de ventas</h1>
         <p className="text-[#6f3a2a] text-sm mt-1">
           Detalle de todas las ventas realizadas en el punto de venta.
         </p>

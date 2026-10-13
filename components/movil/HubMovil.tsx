@@ -44,6 +44,17 @@ const ESTADO_ZONA: Record<string, { texto: string; clase: string }> = {
   cerrada: { texto: 'Cerrada', clase: 'bg-[#2f7d4f]/15 text-[#2f7d4f]' },
 }
 
+function GrupoHub({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <h2 className="px-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6f3a2a]">
+        {titulo}
+      </h2>
+      <div className="grid grid-cols-1 gap-3">{children}</div>
+    </div>
+  )
+}
+
 /**
  * Pantalla de inicio del modo móvil de la encargada: saludo + accesos grandes
  * a las dos acciones críticas (contar stock y recibir pedido) según permisos,
@@ -56,7 +67,6 @@ export function HubMovil({
   empleadoId,
   conteoFisico,
 }: Props) {
-  const tienePanel = empleadoId !== null
   const puedeContar =
     tienePermiso(permisos, 'inventario_ajustes') ||
     tienePermiso(permisos, 'conteo_gestion')
@@ -121,8 +131,9 @@ export function HubMovil({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3">
-        {tienePanel && (
+      {/* Tarjetas agrupadas con los mismos nombres que los pilares del menú. */}
+      {empleadoId !== null && (
+        <GrupoHub titulo="Mi turno">
           <Link
             href="/movil/panel"
             className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
@@ -140,35 +151,14 @@ export function HubMovil({
             </span>
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
           </Link>
-        )}
+          <TarjetaMisTareas empleadoId={empleadoId} />
+          <TarjetaPaseTurno empleadoId={empleadoId} />
+          <TarjetaMiCuenta />
+        </GrupoHub>
+      )}
 
-        {empleadoId !== null && <TarjetaMisTareas empleadoId={empleadoId} />}
-
-        {empleadoId !== null && <TarjetaPaseTurno empleadoId={empleadoId} />}
-
-        {empleadoId !== null && <TarjetaMiCuenta />}
-
-        {puedeContar && (
-          <Link
-            href="/movil/conteo"
-            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
-          >
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#f9b44c]/20 text-[#9e6b15]">
-              <Boxes className="h-7 w-7" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-lg font-bold text-[#391511]">
-                Contar stock
-              </span>
-              <span className="block text-xs text-[#6f3a2a]">
-                Escaneá con la cámara y ajustá el stock
-              </span>
-            </span>
-            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
-          </Link>
-        )}
-
-        {puedeRecibir && (
+      {puedeRecibir && (
+        <GrupoHub titulo="Compras">
           <Link
             href="/movil/recepcion"
             className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
@@ -191,6 +181,28 @@ export function HubMovil({
                       pedidosPendientes === 1 ? '' : 's'
                     } esperando recepción`
                   : 'Escaneá la mercadería que llega'}
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        </GrupoHub>
+      )}
+
+      <GrupoHub titulo="Stock">
+        {puedeContar && (
+          <Link
+            href="/movil/conteo"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#f9b44c]/20 text-[#9e6b15]">
+              <Boxes className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                Contar stock
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Escaneá con la cámara y ajustá el stock
               </span>
             </span>
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
@@ -258,7 +270,7 @@ export function HubMovil({
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
           </Link>
         )}
-      </div>
+      </GrupoHub>
     </section>
   )
 }

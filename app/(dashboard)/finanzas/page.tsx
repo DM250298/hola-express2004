@@ -4,7 +4,7 @@ import { PantallaFinanzas } from '@/components/finanzas/PantallaFinanzas'
 import { PERMISOS_POR_ROL_LEGACY } from '@/lib/permisos'
 
 export const metadata = {
-  title: 'Finanzas — ¡Hola! Express',
+  title: 'Finanzas y tesorería — ¡Hola! Express',
 }
 
 export default async function PaginaFinanzas() {

@@ -374,7 +374,7 @@ export function PanelReceta({
               <p className="text-xs text-[#c45e14] leading-snug">
                 No tenés productos marcados como “Elaboración propia” o
                 “Preparación intermedia”. Marcá el producto que vas a hacer en
-                Configuración › Productos (campo{' '}
+                Configuración › Productos y precios (campo{' '}
                 <span className="font-medium">Tipo</span>) y volvé acá.
               </p>
             )}

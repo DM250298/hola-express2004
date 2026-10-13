@@ -78,10 +78,10 @@ export function PantallaTerminales() {
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">
-            Terminales de cobro
+            Cobros con posnet
           </h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
-            Terminales Mercado Pago Point conectadas al sistema.
+            Terminales Mercado Pago Point conectadas al sistema y conciliación de sus cobros.
           </p>
         </div>
         {tab === 'terminales' && (
