@@ -4,6 +4,11 @@ export const metadata = {
   title: 'Vencimientos — ¡Hola! Express',
 }
 
-export default function PaginaVencimientos() {
-  return <PantallaVencimientos />
+export default async function PaginaVencimientos({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
+  const { tab } = await searchParams
+  return <PantallaVencimientos tabInicial={tab} />
 }

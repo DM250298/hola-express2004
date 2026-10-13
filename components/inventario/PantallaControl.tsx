@@ -9,18 +9,32 @@ import { PantallaMovimientos } from './movimientos/PantallaMovimientos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { MOSTRAR_CONTEOS_ASIGNADOS } from '@/lib/config/inventario'
+import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
 
-export function PantallaControl() {
+interface Props {
+  /** Pestaña inicial (viene de ?tab= en la URL). */
+  tabInicial?: string
+}
+
+export function PantallaControl({ tabInicial }: Props) {
   const { data: usuario } = useUsuario()
   const puedeAjustar = tienePermiso(usuario?.permisos, 'inventario_ajustes')
 
   // La pestaña Conteo (conteos asignados, flujo viejo) está escondida por D7:
   // los conteos se hacen en Conteo físico por zonas.
-  const tabInicial = MOSTRAR_CONTEOS_ASIGNADOS
+  const porDefecto = MOSTRAR_CONTEOS_ASIGNADOS
     ? 'conteo'
     : puedeAjustar
       ? 'ajustes'
       : 'movimientos'
+  const validas = [
+    ...(MOSTRAR_CONTEOS_ASIGNADOS ? ['conteo'] : []),
+    ...(puedeAjustar ? ['ajustes'] : []),
+    'movimientos',
+  ]
+  // Los permisos llegan después del primer render: ?tab=ajustes se muestra
+  // apenas se confirma el permiso, y sin ?tab= se pasa de movimientos a ajustes.
+  const [tab, setTab] = usePestanaUrl(validas, porDefecto, tabInicial)
 
   return (
     <div className="p-4 sm:p-6 space-y-5">
@@ -52,9 +66,7 @@ export function PantallaControl() {
         </p>
       </div>
 
-      {/* key: los permisos llegan después del primer render; al cambiar la
-          pestaña inicial (movimientos → ajustes) se vuelve a montar. */}
-      <Tabs key={tabInicial} defaultValue={tabInicial} className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           {MOSTRAR_CONTEOS_ASIGNADOS && (
             <TabsTrigger

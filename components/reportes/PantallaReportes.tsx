@@ -12,6 +12,14 @@ import {
   rangoPredefinido,
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
+import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
+
+const TABS = ['ventas', 'top', 'rotacion', 'mermas']
+
+interface Props {
+  /** Pestaña inicial (viene de ?tab= en la URL). */
+  tabInicial?: string
+}
 
 function isoHoy(): string {
   const d = new Date()
@@ -24,7 +32,8 @@ function inicioMes(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-export function PantallaReportes() {
+export function PantallaReportes({ tabInicial }: Props) {
+  const [tab, setTab] = usePestanaUrl(TABS, 'ventas', tabInicial)
   const [periodo, setPeriodo] = useState<ClavePeriodo>('mes_actual')
   const [desdePersonalizado, setDesdePersonalizado] = useState(inicioMes())
   const [hastaPersonalizado, setHastaPersonalizado] = useState(isoHoy())
@@ -56,7 +65,7 @@ export function PantallaReportes() {
         />
       </header>
 
-      <Tabs defaultValue="ventas" className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           <TabsTrigger
             value="ventas"

@@ -33,6 +33,14 @@ import {
   formatearNumero,
 } from '@/lib/utils/formato'
 import type { LoteConProducto } from '@/lib/queries/vencimientos'
+import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
+
+const TABS = ['vencidos', 'proximos', 'atencion', 'ok']
+
+interface Props {
+  /** Pestaña inicial (viene de ?tab= en la URL). */
+  tabInicial?: string
+}
 
 const ESTADO_LOTE_LABEL: Record<string, string> = {
   vencido: 'Vencido',
@@ -41,8 +49,9 @@ const ESTADO_LOTE_LABEL: Record<string, string> = {
   verde: 'OK',
 }
 
-export function PantallaVencimientos() {
+export function PantallaVencimientos({ tabInicial }: Props) {
   const { data: lotes, isLoading, isError } = useLotesActivos()
+  const [tab, setTab] = usePestanaUrl(TABS, 'proximos', tabInicial)
   const [modalNuevoAbierto, setModalNuevoAbierto] = useState(false)
   const [modalSincAbierto, setModalSincAbierto] = useState(false)
   const [loteBaja, setLoteBaja] = useState<LoteConProducto | null>(null)
@@ -202,7 +211,7 @@ export function PantallaVencimientos() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="proximos" className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           <TabsTrigger
             value="vencidos"

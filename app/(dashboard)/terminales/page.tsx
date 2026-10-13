@@ -4,6 +4,11 @@ export const metadata = {
   title: 'Cobros con posnet — ¡Hola! Express',
 }
 
-export default function PaginaTerminales() {
-  return <PantallaTerminales />
+export default async function PaginaTerminales({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
+  const { tab } = await searchParams
+  return <PantallaTerminales tabInicial={tab} />
 }

@@ -4,6 +4,11 @@ export const metadata = {
   title: 'Control de stock — ¡Hola! Express',
 }
 
-export default function PaginaControlStock() {
-  return <PantallaControl />
+export default async function PaginaControlStock({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
+  const { tab } = await searchParams
+  return <PantallaControl tabInicial={tab} />
 }
