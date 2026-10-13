@@ -144,7 +144,7 @@ export function Header({ nombre, rol, permisos }: HeaderProps) {
             <SheetTitle>Menú de navegación</SheetTitle>
           </SheetHeader>
           <div onClick={() => setSidebarAbierto(false)} className="h-full">
-            <Sidebar permisos={permisos} />
+            <Sidebar permisos={permisos} variante="hoja" />
           </div>
         </SheetContent>
       </Sheet>

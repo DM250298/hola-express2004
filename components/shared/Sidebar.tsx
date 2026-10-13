@@ -30,244 +30,64 @@ import {
   Map,
   TrendingUp,
   BellRing,
+  Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { MOSTRAR_CONTABILIDAD } from '@/lib/config/navegacion'
+import {
+  MENU_ACTIVO,
+  esItemActivo,
+  menuVisible,
+  todosLosItems,
+  type IconoNav,
+  type ItemNav,
+} from '@/lib/config/navegacion'
 import { BadgeProduccionPendiente } from '@/components/produccion/BadgeProduccionPendiente'
 
-interface ItemNav {
-  href: string
-  etiqueta: string
-  icono: React.ElementType
-  permiso: string
-  /** Permisos extra que también habilitan ver este item. */
-  permisosAlt?: string[]
-  /** Subtítulo aclaratorio opcional (ej: "Para tu contador"). */
-  nota?: string
+// Las secciones, los items y sus permisos viven en lib/config/navegacion.ts
+// (MENU_PILARES elige entre el menú por pilares y el anterior).
+const ICONOS: Record<IconoNav, React.ElementType> = {
+  UserRound,
+  ListChecks,
+  ArrowLeftRight,
+  Smartphone,
+  LayoutDashboard,
+  CalendarCheck,
+  FolderKanban,
+  TrendingUp,
+  BellRing,
+  BarChart3,
+  ShoppingCart,
+  Receipt,
+  Users,
+  Package,
+  CalendarX,
+  ClipboardList,
+  Map,
+  ChefHat,
+  Tag,
+  ShoppingBag,
+  Truck,
+  DollarSign,
+  Calculator,
+  Briefcase,
+  CreditCard,
+  Settings,
 }
 
-interface Seccion {
-  titulo?: string
-  items: ItemNav[]
-}
-
-const SECCIONES: Seccion[] = [
-  {
-    items: [
-      {
-        href: '/rrhh/mi-panel',
-        etiqueta: 'Mi panel',
-        icono: UserRound,
-        permiso: 'mi_panel',
-      },
-      {
-        href: '/rrhh/mis-tareas',
-        etiqueta: 'Mis tareas',
-        icono: ListChecks,
-        permiso: 'mi_panel',
-      },
-      {
-        href: '/rrhh/pase-turno',
-        etiqueta: 'Pase de turno',
-        icono: ArrowLeftRight,
-        permiso: 'mi_panel',
-        permisosAlt: ['rrhh'],
-      },
-      {
-        href: '/movil',
-        etiqueta: 'Modo móvil',
-        icono: Smartphone,
-        permiso: 'inventario',
-        // Conteo de stock + recepción desde el teléfono. Lo ve quien pueda
-        // operar stock o recibir mercadería (encargado y cajero).
-        permisosAlt: ['recepcion', 'conteo_gestion'],
-        nota: 'Contar stock y recibir',
-      },
-      {
-        href: '/',
-        etiqueta: 'Dashboard',
-        icono: LayoutDashboard,
-        permiso: 'dashboard',
-      },
-      {
-        href: '/agenda',
-        etiqueta: 'Mi día',
-        icono: CalendarCheck,
-        permiso: 'proyectos',
-      },
-      {
-        href: '/proyectos',
-        etiqueta: 'Tableros',
-        icono: FolderKanban,
-        permiso: 'proyectos',
-      },
-    ],
-  },
-  {
-    titulo: 'Gestión',
-    items: [
-      {
-        href: '/tablero',
-        etiqueta: 'Tablero del dueño',
-        icono: TrendingUp,
-        permiso: 'tablero',
-        nota: 'Márgenes, quiebres y decisiones',
-      },
-      {
-        href: '/alertas',
-        etiqueta: 'Alertas',
-        icono: BellRing,
-        permiso: 'alertas',
-        nota: 'Qué resolver y quién lo hace',
-      },
-      {
-        href: '/reportes',
-        etiqueta: 'Reportes',
-        icono: BarChart3,
-        permiso: 'reportes',
-        nota: 'Ventas, rotación y mermas',
-      },
-    ],
-  },
-  {
-    titulo: 'Ventas',
-    items: [
-      {
-        href: '/pos',
-        etiqueta: 'Punto de Venta',
-        icono: ShoppingCart,
-        permiso: 'pos',
-      },
-      {
-        href: '/ventas',
-        etiqueta: 'Ventas',
-        icono: Receipt,
-        permiso: 'ventas',
-      },
-      {
-        href: '/clientes',
-        etiqueta: 'Clientes',
-        icono: Users,
-        permiso: 'clientes',
-      },
-    ],
-  },
-  {
-    titulo: 'Stock',
-    items: [
-      {
-        href: '/inventario',
-        etiqueta: 'Stock',
-        icono: Package,
-        permiso: 'inventario',
-      },
-      {
-        href: '/vencimientos',
-        etiqueta: 'Vencimientos',
-        icono: CalendarX,
-        permiso: 'vencimientos',
-      },
-      {
-        href: '/inventario/conteo',
-        etiqueta: 'Conteo físico',
-        icono: ClipboardList,
-        permiso: 'conteo_cierre',
-        nota: 'Inventario por zonas',
-      },
-      {
-        href: '/mapa',
-        etiqueta: 'Mapa del local',
-        icono: Map,
-        permiso: 'inventario',
-        nota: 'Góndolas y ubicaciones',
-      },
-      {
-        href: '/produccion',
-        etiqueta: 'Producción',
-        icono: ChefHat,
-        permiso: 'produccion',
-      },
-      {
-        href: '/etiquetas',
-        etiqueta: 'Etiquetas de precio',
-        icono: Tag,
-        permiso: 'etiquetas',
-      },
-    ],
-  },
-  {
-    titulo: 'Compras',
-    items: [
-      {
-        href: '/compras',
-        etiqueta: 'Compras',
-        icono: ShoppingBag,
-        permiso: 'compras',
-        // El cajero recibe mercadería (permiso 'recepcion'); el encargado
-        // arma órdenes ('pedidos'). Cualquiera de los tres ve el módulo.
-        permisosAlt: ['pedidos', 'recepcion'],
-      },
-    ],
-  },
-  {
-    titulo: 'Finanzas y Tesorería',
-    items: [
-      {
-        href: '/finanzas',
-        etiqueta: 'Finanzas',
-        icono: DollarSign,
-        permiso: 'finanzas',
-      },
-      {
-        href: '/contabilidad',
-        etiqueta: 'Contabilidad',
-        icono: Calculator,
-        permiso: 'contabilidad',
-        nota: 'Para tu contador',
-      },
-    ],
-  },
-  {
-    titulo: 'Administración',
-    items: [
-      {
-        // Hub único del personal: Hoy, Equipo, Cronograma, Tareas, Sueldos.
-        // Cada pestaña se gatea por su permiso adentro de PantallaPersonal.
-        href: '/rrhh',
-        etiqueta: 'Personal',
-        icono: Briefcase,
-        permiso: 'rrhh',
-        permisosAlt: ['tareas_gestion', 'rrhh_sueldos'],
-        nota: 'Equipo, turnos y tareas',
-      },
-    ],
-  },
-  {
-    titulo: 'Sistema',
-    items: [
-      {
-        href: '/terminales',
-        etiqueta: 'Terminales de cobro',
-        icono: CreditCard,
-        permiso: 'terminales',
-      },
-      {
-        href: '/configuracion',
-        etiqueta: 'Configuración',
-        icono: Settings,
-        permiso: 'configuracion',
-      },
-    ],
-  },
-]
+const TODOS_LOS_ITEMS = todosLosItems(MENU_ACTIVO)
 
 const LS_SECCIONES = 'hola-sidebar-secciones-colapsadas'
 
 interface SidebarProps {
   permisos: string[]
+  /**
+   * 'fija' (default): columna lateral de escritorio, oculta en mobile.
+   * 'hoja': dentro del Sheet del menú hamburguesa (Header), siempre visible.
+   */
+  variante?: 'fija' | 'hoja'
 }
 
-export function Sidebar({ permisos }: SidebarProps) {
+export function Sidebar({ permisos, variante = 'fija' }: SidebarProps) {
   const pathname = usePathname()
   const [colapsadas, setColapsadas] = useState<Record<string, boolean>>({})
 
@@ -295,36 +115,54 @@ export function Sidebar({ permisos }: SidebarProps) {
     })
   }
 
-  function esActivo(href: string): boolean {
-    if (href === '/') return pathname === '/'
-    // Coincidencia exacta o sub-ruta directa, pero no si hay un item
-    // más específico registrado que también coincida con la ruta actual.
-    if (!pathname.startsWith(href)) return false
-    // Evitar que "/inventario" se marque activo en "/inventario/control"
-    // si existe un item con ese href más largo.
-    const todosLosItems = SECCIONES.flatMap((s) => s.items)
-    const hayMasEspecifico = todosLosItems.some(
-      (i) =>
-        i.href !== href &&
-        i.href.startsWith(href) &&
-        pathname.startsWith(i.href)
-    )
-    return !hayMasEspecifico
-  }
+  const esActivo = (href: string) => esItemActivo(pathname, href, TODOS_LOS_ITEMS)
 
   // Filtrar items por permiso y secciones que quedaron vacías
-  const seccionesFiltradas = SECCIONES.map((s) => ({
-    ...s,
-    items: s.items.filter(
-      (i) =>
-        (i.href !== '/contabilidad' || MOSTRAR_CONTABILIDAD) &&
-        (permisos.includes(i.permiso) ||
-          (i.permisosAlt?.some((p) => permisos.includes(p)) ?? false))
-    ),
-  })).filter((s) => s.items.length > 0)
+  const { secciones, pie } = menuVisible(MENU_ACTIVO, permisos)
+
+  function renderItem(item: ItemNav) {
+    const activo = esActivo(item.href)
+    const Icono = ICONOS[item.icono]
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
+          activo
+            ? 'bg-[#f9b44c] text-[#391511] shadow-sm'
+            : 'text-[#f9d2a2] hover:bg-white/10 hover:text-white'
+        )}
+      >
+        <Icono
+          className={cn('h-4.5 w-4.5 shrink-0', activo ? 'text-[#391511]' : 'text-[#c8a58a]')}
+          size={18}
+        />
+        <span className="flex flex-col leading-tight">
+          <span>{item.etiqueta}</span>
+          {item.nota && (
+            <span
+              className={cn(
+                'text-[10px] font-normal',
+                activo ? 'text-[#391511]/70' : 'text-[#c8a58a]'
+              )}
+            >
+              {item.nota}
+            </span>
+          )}
+        </span>
+        {item.href === '/produccion' && <BadgeProduccionPendiente activo={activo} />}
+      </Link>
+    )
+  }
 
   return (
-    <aside className="hidden md:flex flex-col w-60 shrink-0 bg-[#391511] h-screen sticky top-0">
+    <aside
+      className={cn(
+        'flex-col w-60 shrink-0 bg-[#391511]',
+        variante === 'hoja' ? 'flex h-full' : 'hidden md:flex h-screen sticky top-0'
+      )}
+    >
       {/* Logo */}
       <div className="px-6 py-7 border-b border-white/10">
         <div className="flex flex-col">
@@ -343,7 +181,7 @@ export function Sidebar({ permisos }: SidebarProps) {
 
       {/* Navegación agrupada por secciones */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
-        {seccionesFiltradas.map((seccion, idx) => {
+        {secciones.map((seccion, idx) => {
           const tieneActivo = seccion.items.some((i) => esActivo(i.href))
           // Una sección con la ruta activa nunca se muestra colapsada
           const colapsada =
@@ -368,50 +206,16 @@ export function Sidebar({ permisos }: SidebarProps) {
                   />
                 </button>
               )}
-              {!colapsada &&
-                seccion.items.map((item) => {
-                  const activo = esActivo(item.href)
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={cn(
-                        'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150',
-                        activo
-                          ? 'bg-[#f9b44c] text-[#391511] shadow-sm'
-                          : 'text-[#f9d2a2] hover:bg-white/10 hover:text-white'
-                      )}
-                    >
-                      <item.icono
-                        className={cn(
-                          'h-4.5 w-4.5 shrink-0',
-                          activo ? 'text-[#391511]' : 'text-[#c8a58a]'
-                        )}
-                        size={18}
-                      />
-                      <span className="flex flex-col leading-tight">
-                        <span>{item.etiqueta}</span>
-                        {item.nota && (
-                          <span
-                            className={cn(
-                              'text-[10px] font-normal',
-                              activo ? 'text-[#391511]/70' : 'text-[#c8a58a]'
-                            )}
-                          >
-                            {item.nota}
-                          </span>
-                        )}
-                      </span>
-                      {item.href === '/produccion' && (
-                        <BadgeProduccionPendiente activo={activo} />
-                      )}
-                    </Link>
-                  )
-                })}
+              {!colapsada && seccion.items.map(renderItem)}
             </div>
           )
         })}
       </nav>
+
+      {/* Accesos secundarios */}
+      {pie.length > 0 && (
+        <div className="px-3 py-3 border-t border-white/10 space-y-0.5">{pie.map(renderItem)}</div>
+      )}
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-white/10">
