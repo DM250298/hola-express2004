@@ -10,6 +10,7 @@ import {
   Truck,
 } from 'lucide-react'
 import { tienePermiso } from '@/lib/permisos'
+import { MOSTRAR_CONTEOS_ASIGNADOS } from '@/lib/config/inventario'
 import { TarjetaMisTareas } from './TarjetaMisTareas'
 import { TarjetaMiCuenta } from './TarjetaMiCuenta'
 import { TarjetaPaseTurno } from './TarjetaPaseTurno'
@@ -67,9 +68,11 @@ export function HubMovil({
   empleadoId,
   conteoFisico,
 }: Props) {
+  // Sin los conteos asignados (D7), "Contar stock" es solo el conteo rápido,
+  // que pide inventario_ajustes.
   const puedeContar =
     tienePermiso(permisos, 'inventario_ajustes') ||
-    tienePermiso(permisos, 'conteo_gestion')
+    (MOSTRAR_CONTEOS_ASIGNADOS && tienePermiso(permisos, 'conteo_gestion'))
   const puedeRecibir =
     tienePermiso(permisos, 'recepcion') || tienePermiso(permisos, 'pedidos')
   const puedeVerVencimientos = tienePermiso(permisos, 'vencimientos')

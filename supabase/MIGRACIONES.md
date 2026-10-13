@@ -88,7 +88,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **251**
+## Próximo número libre: **258**
 
 ---
 
@@ -346,6 +346,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 248 | `248_tareas_por_puesto_esquema.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 | 249 | `249_fn_asignados_tareas_dia.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 | 250 | `250_fn_materializar_tareas_v4.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
+| 256 | `256_cajero_fiambrero_mi_panel.sql` | ⏳ pendiente | — | en este commit (D8) |
+| 257 | `257_permiso_proveedores.sql` | ⏳ pendiente | — | en este commit (D9; test: `tests/test_permiso_proveedores.sql`) |
 
 ## Dos bases de Supabase (2026-09-17)
 

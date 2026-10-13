@@ -209,8 +209,8 @@ export const MENU_ANTERIOR: MenuNav = {
 
 /**
  * Menú por pilares (oct-2026). Mismas rutas y permisos que MENU_ANTERIOR,
- * más el atajo a Proveedores dentro de Compras (con el mismo permiso que su
- * pantalla, `configuracion`). Arriba quedan solo las entradas personales.
+ * más el atajo a Proveedores dentro de Compras (`configuracion` o el permiso
+ * `proveedores`, mig 257). Arriba quedan solo las entradas personales.
  */
 export const MENU_SEIS_PILARES: MenuNav = {
   secciones: [
@@ -305,11 +305,13 @@ export const MENU_SEIS_PILARES: MenuNav = {
           permisosAlt: ['pedidos', 'recepcion'],
         },
         {
-          // Atajo: la pantalla sigue en Configuración y pide el mismo permiso.
+          // Atajo: la pantalla sigue en Configuración. La abre 'configuracion'
+          // o 'proveedores' (quien compra, sin el resto de Configuración).
           href: '/configuracion/proveedores',
           etiqueta: 'Proveedores',
           icono: 'Truck',
           permiso: 'configuracion',
+          permisosAlt: ['proveedores'],
           nota: 'Catálogo y reposición',
         },
       ],

@@ -135,6 +135,12 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
   no se afectan. Desde la mig 218, `caja_turnos`, `ventas`, `items_venta` y
   `pagos_venta` son **solo SELECT** para authenticated: toda escritura pasa
   por RPC (`fn_abrir_turno`, `fn_cerrar_turno`, `fn_crear_venta`, …).
+- **Roles del mostrador y compras (oct-2026)**: cajero y fiambrero ven lo
+  propio de Personal con `mi_panel`, no `rrhh` (mig 256, D8). El permiso
+  `proveedores` (mig 257, D9) abre solo `/configuracion/proveedores` y el
+  catálogo `proveedor_producto` a quien compra sin `configuracion` (que
+  además abre usuarios y datos fiscales); todo rol con `configuracion` lo
+  tiene. La ficha `proveedores` sigue `using(true)`.
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
@@ -203,9 +209,15 @@ ABM + historial de compras.
   tabla con acciones (ver detalle, etiqueta, ajustar). Detalle por producto
   con gráfico de evolución 30 días e historial paginado
 - **Control de stock** (`/inventario/control`): operaciones de control en
-  tabs — Conteo (asignar/contar/aprobar), Ajustes (formulario + historial,
-  gated con `inventario_ajustes`), Movimientos (historial global con
-  filtros y export CSV). `/inventario/movimientos` redirige acá
+  tabs — Ajustes (formulario + historial, gated con `inventario_ajustes`) y
+  Movimientos (historial global con filtros y export CSV).
+  `/inventario/movimientos` redirige acá. La pestaña Conteo (flujo viejo de
+  `conteos`/`conteos_items`: asignar/contar/aprobar) está escondida desde
+  oct-2026 (D7, `MOSTRAR_CONTEOS_ASIGNADOS = false` en
+  `lib/config/inventario.ts`), igual que "Conteos asignados" del celular y la
+  tarjeta "Conteos por aprobar": se cuenta con el Conteo físico por zonas
+  (`/inventario/conteo`). Las tablas quedan; el Conteo rápido del celular no
+  cambia
 - **Clasificación ABC** (`/inventario/clasificacion-abc`): análisis Pareto
   por ingresos
 - ABM de productos vive en `/configuracion/productos` — no es parte

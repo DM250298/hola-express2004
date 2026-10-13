@@ -53,8 +53,13 @@ const FOTO_MENU_OCT_2026: Foto[] = [
   { href: '/configuracion', permiso: 'configuracion' },
 ]
 
-/** Lo único que el menú nuevo agrega: el atajo a Proveedores en Compras. */
-const AGREGADOS: Foto[] = [{ href: '/configuracion/proveedores', permiso: 'configuracion' }]
+/**
+ * Lo único que el menú nuevo agrega: el atajo a Proveedores en Compras. Lo ve
+ * quien tiene configuracion o el permiso proveedores (D9, mig 257).
+ */
+const AGREGADOS: Foto[] = [
+  { href: '/configuracion/proveedores', permiso: 'configuracion', permisosAlt: ['proveedores'] },
+]
 
 const PILARES = ['Resultados', 'Operaciones', 'Ventas', 'Compras', 'Stock', 'Finanzas']
 
@@ -78,11 +83,14 @@ function visibles(menu: MenuNav, permisos: string[]): string[] {
 const JUEGOS: Record<string, string[]> = {
   ...PERMISOS_POR_ROL_LEGACY,
   todos: TODOS_LOS_PERMISOS,
-  // supabase/scripts/paso1_prueba_personal.sql: cajero y fiambrero sin rrhh, con mi_panel
-  cajero_prueba: [
-    ...PERMISOS_POR_ROL_LEGACY.cajero.filter((p) => p !== 'rrhh'),
-    'mi_panel',
+  // Cajero antes de la mig 256 (D8): con rrhh y sin mi_panel
+  cajero_con_rrhh: [
+    ...PERMISOS_POR_ROL_LEGACY.cajero.filter((p) => p !== 'mi_panel'),
+    'rrhh',
   ],
+  // Quien compra sin configuracion (D9)
+  compras_con_proveedores: ['compras', 'pedidos', 'recepcion', 'proveedores'],
+  solo_proveedores: ['proveedores'],
   solo_conteo: ['conteo_gestion'],
   solo_sueldos: ['rrhh_sueldos'],
   solo_tareas: ['tareas_gestion'],
@@ -97,6 +105,16 @@ test('el menú por pilares tiene las mismas rutas con los mismos permisos, más 
   const esperado = [...FOTO_MENU_OCT_2026, ...AGREGADOS].map(normalizar).sort()
   const real = todosLosItems(MENU_SEIS_PILARES).map(foto).map(normalizar).sort()
   assert.deepEqual(real, esperado)
+})
+
+test('todo permiso que usa el menú existe en el catálogo de permisos', () => {
+  for (const menu of [MENU_ANTERIOR, MENU_SEIS_PILARES]) {
+    for (const i of todosLosItems(menu)) {
+      for (const p of [i.permiso, ...(i.permisosAlt ?? [])]) {
+        assert.ok(TODOS_LOS_PERMISOS.includes(p), `${i.href}: permiso "${p}" no existe`)
+      }
+    }
+  }
 })
 
 test('ningún menú repite una ruta', () => {
@@ -115,11 +133,11 @@ test('las secciones con título del menú nuevo son exactamente los seis pilares
   )
 })
 
-test('cada juego de permisos ve lo mismo antes y después (más Proveedores si tiene configuracion)', () => {
+test('cada juego de permisos ve lo mismo antes y después (más Proveedores con configuracion o proveedores)', () => {
   for (const [nombre, permisos] of Object.entries(JUEGOS)) {
     const antes = visibles(MENU_ANTERIOR, permisos)
     const despues = visibles(MENU_SEIS_PILARES, permisos)
-    const esperado = permisos.includes('configuracion')
+    const esperado = permisos.includes('configuracion') || permisos.includes('proveedores')
       ? [...antes, '/configuracion/proveedores'].sort()
       : antes
     assert.deepEqual(despues, esperado, `juego "${nombre}"`)

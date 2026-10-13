@@ -27,6 +27,7 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'compras', etiqueta: 'Compras y cotizaciones', grupo: 'Stock' },
   { clave: 'etiquetas', etiqueta: 'Etiquetas de precio', grupo: 'Stock' },
   { clave: 'pedidos', etiqueta: 'Pedidos a proveedores', grupo: 'Stock' },
+  { clave: 'proveedores', etiqueta: 'Proveedores: ficha y catálogo de productos', grupo: 'Stock' },
   { clave: 'recepcion', etiqueta: 'Recepción de mercadería', grupo: 'Stock' },
   { clave: 'produccion', etiqueta: 'Producción / Elaboración', grupo: 'Stock' },
   { clave: 'finanzas', etiqueta: 'Finanzas', grupo: 'Análisis' },
@@ -84,7 +85,8 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
   ],
   // Mostrador: cajeros y fiambreros comparten el mismo set operativo (nivel
   // encargada SIN los módulos que muestran costo: compras, pedidos, reportes,
-  // produccion, costos). Mantener sincronizado con la migración 096.
+  // produccion, costos). Ven lo propio de Personal con 'mi_panel', no 'rrhh'.
+  // Mantener sincronizado con las migraciones 096 y 256.
   cajero: [
     'dashboard',
     'proyectos',
@@ -100,7 +102,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'vencimientos',
     'etiquetas',
     'recepcion',
-    'rrhh',
+    'mi_panel',
   ],
   fiambrero: [
     'dashboard',
@@ -117,7 +119,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'vencimientos',
     'etiquetas',
     'recepcion',
-    'rrhh',
+    'mi_panel',
   ],
   empleado: ['mi_panel'],
 }
@@ -136,6 +138,7 @@ const RUTA_POR_PERMISO: Record<string, string> = {
   etiquetas: '/etiquetas',
   pedidos: '/pedidos',
   recepcion: '/recepcion',
+  proveedores: '/configuracion/proveedores',
   produccion: '/produccion',
   finanzas: '/finanzas',
   contabilidad: '/contabilidad',
@@ -159,6 +162,7 @@ const PRIORIDAD_INICIO: string[] = [
   'recepcion',
   'produccion',
   'compras',
+  'proveedores',
   'etiquetas',
   'clientes',
   'finanzas',
