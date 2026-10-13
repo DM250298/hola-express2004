@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { toast } from 'sonner'
-import { LogOut, Menu } from 'lucide-react'
+import { ChevronRight, LogOut, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -13,6 +14,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Sidebar } from '@/components/shared/Sidebar'
+import { MENU_ACTIVO, migaDe } from '@/lib/config/navegacion'
 import { createClient } from '@/lib/supabase/client'
 import { purgarShellSW } from '@/lib/offline/shell'
 import { cancelarSalida, iniciarSalida } from '@/lib/auth/sesionActual'
@@ -48,6 +50,8 @@ interface HeaderProps {
 export function Header({ nombre, rol, permisos }: HeaderProps) {
   const [cerrandoSesion, setCerrandoSesion] = useState(false)
   const [sidebarAbierto, setSidebarAbierto] = useState(false)
+  // Miga de pan por pilar ("Stock › Vencimientos"), del mismo menú que el Sidebar.
+  const miga = migaDe(usePathname() ?? '/', MENU_ACTIVO)
 
   async function handleLogout() {
     if (cerrandoSesion) return
@@ -101,8 +105,21 @@ export function Header({ nombre, rol, permisos }: HeaderProps) {
           ¡Hola!
         </span>
 
-        {/* Espacio en desktop (el logo está en el sidebar) */}
-        <div className="hidden md:block" />
+        {/* Desktop: dónde estoy (el logo está en el sidebar) */}
+        <nav
+          aria-label="Ubicación"
+          className="hidden md:flex items-center gap-1.5 min-w-0 text-sm"
+        >
+          {miga?.pilar && (
+            <>
+              <span className="text-[#6f3a2a]">{miga.pilar}</span>
+              <ChevronRight className="h-3.5 w-3.5 text-[#c8a58a] shrink-0" />
+            </>
+          )}
+          {miga && (
+            <span className="text-[#391511] font-semibold truncate">{miga.etiqueta}</span>
+          )}
+        </nav>
 
         {/* Info del usuario + logout */}
         <div className="flex items-center gap-3">

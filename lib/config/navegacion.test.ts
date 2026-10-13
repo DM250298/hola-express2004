@@ -18,6 +18,7 @@ import {
   MENU_SEIS_PILARES,
   esItemActivo,
   menuVisible,
+  migaDe,
   todosLosItems,
   type ItemNav,
   type MenuNav,
@@ -206,4 +207,18 @@ test('ítem activo: gana el más específico', () => {
   assert.deepEqual(activos('/rrhh/mi-panel'), ['/rrhh/mi-panel'])
   assert.deepEqual(activos('/rrhh/empleados/3'), ['/rrhh'])
   assert.deepEqual(activos('/pedidos/nuevo'), [])
+})
+
+test('migas de pan: pilar e ítem activo del menú por pilares', () => {
+  const miga = (ruta: string) => migaDe(ruta, MENU_SEIS_PILARES)
+  assert.deepEqual(miga('/vencimientos'), { pilar: 'Stock', etiqueta: 'Vencimientos' })
+  assert.deepEqual(miga('/configuracion/proveedores'), { pilar: 'Compras', etiqueta: 'Proveedores' })
+  assert.deepEqual(miga('/rrhh/empleados/3'), { pilar: 'Operaciones', etiqueta: 'Turnos y equipo' })
+  assert.deepEqual(miga('/terminales'), { pilar: 'Finanzas', etiqueta: 'Cobros con posnet' })
+  // Pilar con el mismo nombre que su ítem: se muestra una sola vez.
+  assert.deepEqual(miga('/inventario/control'), { pilar: undefined, etiqueta: 'Stock' })
+  // Arriba y pie: sin pilar.
+  assert.deepEqual(miga('/'), { pilar: undefined, etiqueta: 'Inicio' })
+  assert.deepEqual(miga('/configuracion/productos'), { etiqueta: 'Configuración' })
+  assert.equal(miga('/pedidos/nuevo'), null)
 })

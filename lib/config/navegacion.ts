@@ -417,3 +417,28 @@ export function esItemActivo(pathname: string, href: string, items: readonly Ite
   )
   return !hayMasEspecifico
 }
+
+export interface MigaNav {
+  /** Título del pilar; sin pilar en las entradas de arriba y del pie. */
+  pilar?: string
+  etiqueta: string
+}
+
+/**
+ * Miga de pan del encabezado ("Stock › Vencimientos"): el ítem activo del
+ * menú y el pilar que lo agrupa. null si la ruta no tiene entrada (ej.
+ * /pedidos/nuevo). Usa el menú completo, sin filtrar por permiso.
+ */
+export function migaDe(pathname: string, menu: MenuNav): MigaNav | null {
+  const items = todosLosItems(menu)
+  for (const seccion of menu.secciones) {
+    const item = seccion.items.find((i) => esItemActivo(pathname, i.href, items))
+    if (item) {
+      // "Stock › Stock" (o "Compras › Compras") se muestra una sola vez.
+      const pilar = seccion.titulo !== item.etiqueta ? seccion.titulo : undefined
+      return { pilar, etiqueta: item.etiqueta }
+    }
+  }
+  const delPie = menu.pie.find((i) => esItemActivo(pathname, i.href, items))
+  return delPie ? { etiqueta: delPie.etiqueta } : null
+}
