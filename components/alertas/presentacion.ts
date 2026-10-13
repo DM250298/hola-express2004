@@ -49,7 +49,16 @@ export interface AccionRegla {
   href: string
   /** Arranque del título sugerido para la tarea. */
   verbo: string
+  /**
+   * Permiso que pide `href` cuando no lo tiene todo el que ve Alertas. Sin él,
+   * el link no se muestra (rebotaría a Inicio) y se avisa quién lo resuelve.
+   */
+  permiso?: string
+  /** Quién lo resuelve, para el aviso cuando falta `permiso`. */
+  loHace?: string
 }
+
+const LO_HACE_CONFIGURACION = 'Lo resuelve quien administra Productos y precios'
 
 export const ACCION_REGLA: Record<string, AccionRegla> = {
   quiebre_clave: { etiqueta: 'Ir a compras', href: '/compras', verbo: 'Reponer' },
@@ -75,6 +84,8 @@ export const ACCION_REGLA: Record<string, AccionRegla> = {
     etiqueta: 'Revisar precios',
     href: '/configuracion/productos',
     verbo: 'Revisar precio o costo de',
+    permiso: 'configuracion',
+    loHace: LO_HACE_CONFIGURACION,
   },
   inmovilizado: {
     etiqueta: 'Ver en análisis',
@@ -90,11 +101,15 @@ export const ACCION_REGLA: Record<string, AccionRegla> = {
     etiqueta: 'Cargar costos',
     href: '/configuracion/productos',
     verbo: 'Cargar el costo de',
+    permiso: 'configuracion',
+    loHace: LO_HACE_CONFIGURACION,
   },
   sin_categoria: {
     etiqueta: 'Categorizar',
     href: '/configuracion/productos',
     verbo: 'Categorizar',
+    permiso: 'configuracion',
+    loHace: LO_HACE_CONFIGURACION,
   },
   sin_ubicacion: { etiqueta: 'Ir al mapa', href: '/mapa', verbo: 'Ubicar en góndola' },
 }
