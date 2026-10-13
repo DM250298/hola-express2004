@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Calendar } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowUpRight, Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -12,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
 import { TabTableroDirectivo } from './TabTableroDirectivo'
 import { TabFlujoProyectado } from './TabFlujoProyectado'
 import { TabComprobantes } from './TabComprobantes'
@@ -29,7 +31,20 @@ import {
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
 
-const GRUPOS: { titulo: string; tabs: { value: string; label: string }[] }[] = [
+interface EnlaceGrupo {
+  href: string
+  label: string
+  /** Dónde vive la pantalla (se muestra como ayuda al pasar el mouse). */
+  donde: string
+  permiso: string
+}
+
+const GRUPOS: {
+  titulo: string
+  tabs: { value: string; label: string }[]
+  /** Pantallas de otra área que se abren desde este grupo (no son pestañas). */
+  enlaces?: EnlaceGrupo[]
+}[] = [
   { titulo: 'Mi negocio', tabs: [{ value: 'tablero', label: 'Tablero' }] },
   {
     titulo: 'Plata que entra y sale',
@@ -50,8 +65,26 @@ const GRUPOS: { titulo: string; tabs: { value: string; label: string }[] }[] = [
       { value: 'impuestos', label: 'Impuestos' },
       { value: 'flujo', label: 'Flujo proyectado' },
     ],
+    // D2: los sueldos se liquidan en Operaciones; desde acá solo se enlazan.
+    enlaces: [
+      {
+        href: '/rrhh?tab=sueldos',
+        label: 'Sueldos',
+        donde: 'Operaciones › Turnos y equipo › Sueldos',
+        permiso: 'rrhh_sueldos',
+      },
+    ],
   },
 ]
+
+const TABS_VALIDAS = GRUPOS.flatMap((g) => g.tabs.map((t) => t.value))
+
+interface Props {
+  /** Permisos del usuario (los resuelve el server en page.tsx). */
+  permisos: string[]
+  /** Pestaña inicial (viene de ?tab= en la URL). */
+  tabInicial?: string
+}
 
 function isoLocalAHoy(): string {
   const d = new Date()
@@ -72,13 +105,13 @@ const ITEMS_PERIODO_FIN: Record<string, string> = {
   personalizado: 'Personalizado',
 }
 
-export function PantallaFinanzas() {
+export function PantallaFinanzas({ permisos, tabInicial }: Props) {
   const [periodo, setPeriodo] = useState<ClavePeriodo>('mes_actual')
   const [desdePersonalizado, setDesdePersonalizado] =
     useState<string>(inicioMesIso())
   const [hastaPersonalizado, setHastaPersonalizado] =
     useState<string>(isoLocalAHoy())
-  const [tab, setTab] = useState<string>('tablero')
+  const [tab, setTab] = usePestanaUrl(TABS_VALIDAS, 'tablero', tabInicial)
   // Cuenta por la que se filtran los Movimientos al llegar desde una card.
   const [cuentaMovs, setCuentaMovs] = useState<number | null>(null)
 
@@ -192,6 +225,19 @@ export function PantallaFinanzas() {
                     {t.label}
                   </button>
                 ))}
+                {g.enlaces
+                  ?.filter((e) => permisos.includes(e.permiso))
+                  .map((e) => (
+                    <Link
+                      key={e.href}
+                      href={e.href}
+                      title={`Se abre en ${e.donde}`}
+                      className="inline-flex items-center gap-1 rounded-md border border-dashed border-[#e4c9b0] px-2.5 py-1 text-sm font-medium text-[#6f3a2a] transition-colors hover:bg-[#f9d2a2]/40 hover:text-[#391511]"
+                    >
+                      {e.label}
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  ))}
               </div>
             </div>
           ))}
