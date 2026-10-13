@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
 import { MisTareas } from '@/components/rrhh/MisTareas'
+import { TareasDeTableros } from '@/components/rrhh/TareasDeTableros'
 
 export const metadata = {
   title: 'Mis tareas — Móvil',
@@ -52,6 +53,10 @@ export default async function PaginaTareasMovil() {
           </div>
         </div>
       )}
+
+      <div className="mt-4">
+        <TareasDeTableros enMovil />
+      </div>
     </div>
   )
 }
