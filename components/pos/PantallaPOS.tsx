@@ -881,6 +881,7 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       <OverlayAtajos
         abierto={overlayAtajosAbierto}
         onCambioAbierto={setOverlayAtajosAbierto}
+        puedeGasto={puedeGasto}
       />
 
       <SelectorCliente
