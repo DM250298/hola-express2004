@@ -140,7 +140,8 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
   `proveedores` (mig 257, D9) abre solo `/configuracion/proveedores` y el
   catálogo `proveedor_producto` a quien compra sin `configuracion` (que
   además abre usuarios y datos fiscales); todo rol con `configuracion` lo
-  tiene. La ficha `proveedores` sigue `using(true)`.
+  tiene. La ficha `proveedores` la lee cualquier sesión y la escriben solo
+  `compras`, `pedidos`, `configuracion`, `proveedores` o `finanzas` (mig 258).
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
