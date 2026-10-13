@@ -38,7 +38,23 @@ import { cn } from '@/lib/utils'
 interface Props {
   empleadoId: number
   nombre: string
+  /** Dentro de /movil: los accesos van a las pantallas del celular. */
+  enMovil?: boolean
 }
+
+/** Accesos del panel: escritorio (/rrhh/*) o celular (/movil/*). */
+const ENLACES = {
+  escritorio: {
+    tareas: '/rrhh/mis-tareas',
+    pase: '/rrhh/pase-turno',
+    cuenta: '/rrhh/mi-cuenta',
+  },
+  movil: {
+    tareas: '/movil/tareas',
+    pase: '/movil/pase-turno',
+    cuenta: '/movil/mi-cuenta',
+  },
+} as const
 
 // Umbrales de presentismo para el indicador (la liquidación real usa rrhh_config
 // en el Sprint 4; acá es sólo un semáforo informativo para el empleado).
@@ -69,7 +85,8 @@ function Kpi({
   )
 }
 
-export function PanelEmpleado({ empleadoId, nombre }: Props) {
+export function PanelEmpleado({ empleadoId, nombre, enMovil = false }: Props) {
+  const enlaces = enMovil ? ENLACES.movil : ENLACES.escritorio
   const [mes, setMes] = useState(() => startOfMonth(new Date()))
   const desde = format(startOfMonth(mes), 'yyyy-MM-dd')
   const hasta = format(endOfMonth(mes), 'yyyy-MM-dd')
@@ -184,7 +201,7 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
       {/* Mis tareas de hoy + mi desempeño del mes */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Link
-          href="/rrhh/mis-tareas"
+          href={enlaces.tareas}
           className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all"
         >
           <div className="shrink-0 p-2.5 rounded-xl bg-[#f9b44c]/15">
@@ -227,7 +244,7 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
         </div>
 
         <Link
-          href="/rrhh/pase-turno"
+          href={enlaces.pase}
           className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all"
         >
           <div className="shrink-0 p-2.5 rounded-xl bg-[#2f7d4f]/10">
@@ -247,7 +264,7 @@ export function PanelEmpleado({ empleadoId, nombre }: Props) {
         </Link>
 
         <Link
-          href="/rrhh/mi-cuenta"
+          href={enlaces.cuenta}
           className="group bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-4 flex items-center gap-3 hover:border-[#f9b44c] hover:shadow-md transition-all"
         >
           <div className="shrink-0 p-2.5 rounded-xl bg-[#f9d2a2]/50">
