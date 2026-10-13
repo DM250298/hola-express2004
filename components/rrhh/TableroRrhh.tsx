@@ -19,6 +19,9 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Semaforo } from '@/components/shared/Semaforo'
 import { useDashboardRrhh } from '@/lib/hooks/useDesempeno'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
+import { TarjetaProduccionPendiente } from '@/components/produccion/TarjetaProduccionPendiente'
 import type { ClaseVencimiento } from '@/lib/queries/vencimientos'
 import type {
   DocPorVencer,
@@ -55,6 +58,10 @@ interface Props {
 
 export function TableroRrhh({ enHub = false }: Props = {}) {
   const { data, isLoading, isError, isFetching } = useDashboardRrhh()
+  // Producción pendiente (Bloque 3): solo con permiso produccion; la tarjeta
+  // se monta recién ahí, así la consulta no corre para el resto.
+  const { data: usuario } = useUsuario()
+  const verProduccion = tienePermiso(usuario?.permisos, 'produccion')
   const clasePagina = cn(!enHub && 'p-4 sm:p-6', 'space-y-5')
 
   if (isLoading) {
@@ -166,6 +173,8 @@ export function TableroRrhh({ enHub = false }: Props = {}) {
           </Link>
         )}
       </div>
+
+      {verProduccion && <TarjetaProduccionPendiente />}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Trabajando ahora */}
