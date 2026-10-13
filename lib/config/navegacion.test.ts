@@ -12,6 +12,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   MENU_ANTERIOR,
   MENU_SEIS_PILARES,
@@ -61,6 +62,29 @@ const AGREGADOS: Foto[] = [
   { href: '/configuracion/proveedores', permiso: 'configuracion', permisosAlt: ['proveedores'] },
 ]
 
+/**
+ * Excepción documentada (Bloque 2, oct-2026): Modo móvil se muestra con el
+ * mismo criterio que el middleware deja abrir /movil (inventario, pedidos,
+ * recepcion o mi_panel). Antes lo veía quien solo tenía conteo_gestion y
+ * rebotaba, y no lo veía el empleado, que sí puede entrar. El menú anterior
+ * conserva el criterio viejo (es la foto para volver atrás).
+ */
+const CAMBIOS: Record<string, Foto> = {
+  '/movil': { href: '/movil', permiso: 'inventario', permisosAlt: ['pedidos', 'recepcion', 'mi_panel'] },
+}
+
+/** Permisos que abren `ruta` según PERMISO_RUTA de middleware.ts (leído como texto). */
+function permisosQueAbren(ruta: string): string[] {
+  const fuente = readFileSync(new URL('../../middleware.ts', import.meta.url), 'utf8')
+  const bloque = fuente.slice(fuente.indexOf('const PERMISO_RUTA'), fuente.indexOf('export async function middleware'))
+  const permisos: string[] = []
+  for (const m of bloque.matchAll(/^\s*(\w+):\s*\[([^\]]*)\]/gm)) {
+    const rutas = [...m[2].matchAll(/'([^']+)'/g)].map((r) => r[1])
+    if (rutas.includes(ruta)) permisos.push(m[1])
+  }
+  return permisos.sort()
+}
+
 const PILARES = ['Resultados', 'Operaciones', 'Ventas', 'Compras', 'Stock', 'Finanzas']
 
 function foto(i: ItemNav): Foto {
@@ -102,7 +126,9 @@ test('el menú anterior es idéntico a la foto de oct-2026 (mismo orden)', () =>
 })
 
 test('el menú por pilares tiene las mismas rutas con los mismos permisos, más el atajo a Proveedores', () => {
-  const esperado = [...FOTO_MENU_OCT_2026, ...AGREGADOS].map(normalizar).sort()
+  const esperado = [...FOTO_MENU_OCT_2026.map((f) => CAMBIOS[f.href] ?? f), ...AGREGADOS]
+    .map(normalizar)
+    .sort()
   const real = todosLosItems(MENU_SEIS_PILARES).map(foto).map(normalizar).sort()
   assert.deepEqual(real, esperado)
 })
@@ -133,15 +159,29 @@ test('las secciones con título del menú nuevo son exactamente los seis pilares
   )
 })
 
-test('cada juego de permisos ve lo mismo antes y después (más Proveedores con configuracion o proveedores)', () => {
+test('cada juego de permisos ve lo mismo antes y después (más Proveedores con configuracion o proveedores; Modo móvil según el middleware)', () => {
+  const abrenMovil = permisosQueAbren('/movil')
   for (const [nombre, permisos] of Object.entries(JUEGOS)) {
-    const antes = visibles(MENU_ANTERIOR, permisos)
+    const antes = visibles(MENU_ANTERIOR, permisos).filter((h) => h !== '/movil')
     const despues = visibles(MENU_SEIS_PILARES, permisos)
-    const esperado = permisos.includes('configuracion') || permisos.includes('proveedores')
-      ? [...antes, '/configuracion/proveedores'].sort()
-      : antes
-    assert.deepEqual(despues, esperado, `juego "${nombre}"`)
+    const esperado = [...antes]
+    if (permisos.includes('configuracion') || permisos.includes('proveedores')) {
+      esperado.push('/configuracion/proveedores')
+    }
+    if (permisos.some((p) => abrenMovil.includes(p))) esperado.push('/movil')
+    assert.deepEqual(despues, esperado.sort(), `juego "${nombre}"`)
   }
+})
+
+test('Modo móvil se muestra con los mismos permisos con que el middleware abre /movil', () => {
+  const movil = MENU_SEIS_PILARES.pie.find((i) => i.href === '/movil')
+  assert.ok(movil)
+  const delMenu = [movil.permiso, ...(movil.permisosAlt ?? [])].sort()
+  assert.deepEqual(delMenu, permisosQueAbren('/movil'))
+  assert.deepEqual(delMenu, ['inventario', 'mi_panel', 'pedidos', 'recepcion'])
+  // Los dos casos que motivaron el cambio:
+  assert.ok(!visibles(MENU_SEIS_PILARES, ['conteo_gestion']).includes('/movil'))
+  assert.ok(visibles(MENU_SEIS_PILARES, PERMISOS_POR_ROL_LEGACY.empleado).includes('/movil'))
 })
 
 test('las entradas personales quedan arriba, sin título', () => {

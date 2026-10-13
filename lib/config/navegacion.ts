@@ -211,6 +211,7 @@ export const MENU_ANTERIOR: MenuNav = {
  * Menú por pilares (oct-2026). Mismas rutas y permisos que MENU_ANTERIOR,
  * más el atajo a Proveedores dentro de Compras (`configuracion` o el permiso
  * `proveedores`, mig 257). Arriba quedan solo las entradas personales.
+ * Excepción: Modo móvil se muestra con el criterio del middleware (ver el pie).
  */
 export const MENU_SEIS_PILARES: MenuNav = {
   secciones: [
@@ -361,12 +362,16 @@ export const MENU_SEIS_PILARES: MenuNav = {
   ],
   pie: [
     {
+      // Mismo criterio que el middleware (PERMISO_RUTA de '/movil'): inventario,
+      // pedidos, recepcion o mi_panel. En el menú anterior lo veía quien solo
+      // tenía conteo_gestion (y rebotaba) y no lo veía el empleado, que sí
+      // entra. Única diferencia de permisos entre los dos menús (Bloque 2).
       href: '/movil',
       etiqueta: 'Modo móvil',
       icono: 'Smartphone',
       permiso: 'inventario',
-      permisosAlt: ['recepcion', 'conteo_gestion'],
-      nota: 'Contar stock y recibir',
+      permisosAlt: ['pedidos', 'recepcion', 'mi_panel'],
+      nota: 'Stock, recepción y mi turno',
     },
     { href: '/configuracion', etiqueta: 'Configuración', icono: 'Settings', permiso: 'configuracion' },
   ],
