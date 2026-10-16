@@ -60,7 +60,8 @@ requiere login, max-w-lg mobile-first).
 **Rutas autenticadas:** `/` (dashboard), `/pos`, `/ventas`, `/inventario`
 (con `/movimientos` y `/clasificacion-abc`), `/vencimientos`, `/compras`
 (unificado), `/etiquetas`, `/finanzas`, `/contabilidad`, `/rrhh`,
-`/clientes`, `/tableros`, `/proyectos`, `/agenda`, `/reportes`,
+`/clientes`, `/proyectos`, `/agenda`, `/reportes`, `/tablero`, `/alertas`,
+`/mapa`, `/produccion`,
 `/terminales`, `/configuracion` (productos, categorías, proveedores,
 usuarios).
 
@@ -122,7 +123,8 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
 - **Layout**: lee permisos de la DB y los pasa down como props.
 - **Sidebar**: filtra items por permiso. Soporta `permisosAlt` para items
   visibles con cualquiera de N permisos (ej: `/compras` se ve con
-  `compras`, `pedidos` o `recepcion`).
+  `compras`, `pedidos` o `recepcion`). Los datos del menú viven en
+  `lib/config/navegacion.ts` (ver "Menú por pilares").
 - **RLS real (migración 047+)**: las tablas sensibles dejaron de ser
   `using(true)`. Ahora están gateadas por permiso vía
   `fn_tiene_permiso(clave)` (que lee `usuarios.rol` + `roles.permisos`;
@@ -145,7 +147,33 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
-asignarla a roles en la tabla `roles`.
+asignarla a roles en la tabla `roles` y, si va en el menú, sumarla en
+`lib/config/navegacion.ts` y en `FOTO_MENU_OCT_2026` del test.
+
+### Menú por pilares (oct-2026)
+
+`lib/config/navegacion.ts` tiene los dos menús como datos puros (íconos por
+nombre, sin imports con alias) y `Sidebar.tsx` solo los dibuja:
+- `MENU_SEIS_PILARES`: arriba sin título Inicio, Mi panel, Mis tareas, Mi pase
+  de turno y Mi agenda; después **Resultados** (Tablero del dueño, Reportes),
+  **Operaciones** (Turnos y equipo = `/rrhh`, Alertas, Producción, Tableros de
+  tareas), **Ventas** (Punto de venta, Historial de ventas, Clientes y fiado),
+  **Compras** (Compras + atajo a `/configuracion/proveedores`), **Stock**
+  (Stock, Conteo físico, Vencimientos, Mapa, Etiquetas) y **Finanzas**
+  (Finanzas y tesorería, Cobros con posnet = `/terminales`, Contabilidad); al
+  pie Modo móvil y Configuración.
+- `MENU_ANTERIOR`: el menú hasta oct-2026, intacto. `MENU_PILARES = false`
+  vuelve a él sin tocar nada más.
+- Las rutas y los permisos son los mismos en los dos (el único agregado es el
+  atajo a Proveedores, que ve quien tiene `configuracion` o el permiso
+  `proveedores`, mig 257).
+  `lib/config/navegacion.test.ts` (`npm test`) lo verifica contra una foto
+  del menú anterior y por rol.
+- `<Sidebar variante="hoja">` es el que va dentro del menú hamburguesa del
+  Header (la variante fija está oculta por debajo de `md`).
+- Las decisiones del dueño (2026-10-13) están en el plan
+  `pasted-content-id-ff5d-revis-hex-v1-zesty-token.md` y en la página
+  "Pilares de navegación HEX".
 
 ### Modo offline (solo POS)
 
@@ -308,7 +336,8 @@ Tabs:
   `getSaldoCajaFuerte` (referencia_tipo egreso/cuenta_a_pagar) para no
   disparar descuadre falso
 
-Sidebar: sección **"Finanzas y Tesorería"** agrupa Finanzas + Contabilidad.
+Sidebar: pilar **"Finanzas"** agrupa Finanzas y tesorería, Cobros con posnet
+(`/terminales`) y Contabilidad.
 
 #### Medios de pago y comisiones MP (cross-cutting POS ↔ Finanzas)
 
@@ -361,7 +390,8 @@ Las dos conciliaciones viven acá (movidas de Finanzas en 2026-07):
   cuenta contra el saldo del extracto
 
 ### 10. Personal (`/rrhh`) — hub único de RRHH
-Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
+Una sola entrada de sidebar ("Turnos y equipo", pilar Operaciones) con
+pestañas por `?tab=`:
 **Hoy** (`TableroRrhh`: `fn_dashboard_rrhh` + `fn_dashboard_disciplina`),
 **Equipo** (empleados, organigrama por `empleados.rol_operativo` /
 `reporta_a`, desempeño), **Cronograma** (grilla de turnos y fichajes),
@@ -471,7 +501,7 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.
 
-### 12. Proyectos y Agenda (`/proyectos`, `/tableros`, `/agenda`)
+### 12. Tableros de tareas y Mi agenda (`/proyectos`, `/agenda`)
 Kanban con subtareas, tareas recurrentes, "Mi día".
 
 ### 13. Terminales (`/terminales`)
