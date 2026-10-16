@@ -9,6 +9,11 @@
  * sin tocar el módulo: la ruta /contabilidad, sus permisos y los asientos
  * automáticos siguen funcionando igual. En `false` lo oculta del menú.
  *
+ * MOSTRAR_TABLEROS_TAREAS: lo mismo para "Tableros de tareas" (/proyectos).
+ * Oculto desde oct-2026 a pedido del dueño ("por el momento"): la ruta, el
+ * permiso `proyectos`, Mi agenda y el tablero "Acciones de HEX" que usan las
+ * Alertas siguen funcionando. `true` lo vuelve a mostrar.
+ *
  * MENU_PILARES: elige qué menú se muestra. `true` = menú por los seis
  * pilares (Resultados, Operaciones, Ventas, Compras, Stock, Finanzas) con
  * Modo móvil y Configuración al pie. `false` = el menú anterior, tal cual
@@ -16,6 +21,7 @@
  * permisos (lo verifica el test), así que volver atrás es cambiar esta línea.
  */
 export const MOSTRAR_CONTABILIDAD = true
+export const MOSTRAR_TABLEROS_TAREAS = false
 export const MENU_PILARES = true
 
 export type IconoNav =
@@ -386,6 +392,7 @@ export function todosLosItems(menu: MenuNav): ItemNav[] {
 
 export function puedeVerItem(item: ItemNav, permisos: readonly string[]): boolean {
   if (item.href === '/contabilidad' && !MOSTRAR_CONTABILIDAD) return false
+  if (item.href === '/proyectos' && !MOSTRAR_TABLEROS_TAREAS) return false
   return (
     permisos.includes(item.permiso) ||
     (item.permisosAlt?.some((p) => permisos.includes(p)) ?? false)

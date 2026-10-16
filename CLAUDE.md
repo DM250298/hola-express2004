@@ -157,7 +157,8 @@ nombre, sin imports con alias) y `Sidebar.tsx` solo los dibuja:
 - `MENU_SEIS_PILARES`: arriba sin título Inicio, Mi panel, Mis tareas, Mi pase
   de turno y Mi agenda; después **Resultados** (Tablero del dueño, Reportes),
   **Operaciones** (Turnos y equipo = `/rrhh`, Alertas, Producción, Tableros de
-  tareas), **Ventas** (Punto de venta, Historial de ventas, Clientes y fiado),
+  tareas — oculto por ahora con `MOSTRAR_TABLEROS_TAREAS = false`; la ruta
+  `/proyectos` sigue andando), **Ventas** (Punto de venta, Historial de ventas, Clientes y fiado),
   **Compras** (Compras + atajo a `/configuracion/proveedores`), **Stock**
   (Stock, Conteo físico, Vencimientos, Mapa, Etiquetas) y **Finanzas**
   (Finanzas y tesorería, Cobros con posnet = `/terminales`, Contabilidad); al

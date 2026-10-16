@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs'
 import {
   MENU_ANTERIOR,
   MENU_SEIS_PILARES,
+  MOSTRAR_TABLEROS_TAREAS,
   esItemActivo,
   menuVisible,
   migaDe,
@@ -183,6 +184,15 @@ test('Modo móvil se muestra con los mismos permisos con que el middleware abre 
   // Los dos casos que motivaron el cambio:
   assert.ok(!visibles(MENU_SEIS_PILARES, ['conteo_gestion']).includes('/movil'))
   assert.ok(visibles(MENU_SEIS_PILARES, PERMISOS_POR_ROL_LEGACY.empleado).includes('/movil'))
+})
+
+test('Tableros de tareas sigue en los datos pero se ve solo con MOSTRAR_TABLEROS_TAREAS; Mi agenda se ve igual', () => {
+  for (const menu of [MENU_SEIS_PILARES, MENU_ANTERIOR]) {
+    assert.ok(todosLosItems(menu).some((i) => i.href === '/proyectos'))
+    const conProyectos = visibles(menu, ['proyectos'])
+    assert.equal(conProyectos.includes('/proyectos'), MOSTRAR_TABLEROS_TAREAS)
+    assert.ok(conProyectos.includes('/agenda'))
+  }
 })
 
 test('las entradas personales quedan arriba, sin título', () => {
