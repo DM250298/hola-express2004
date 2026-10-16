@@ -17,8 +17,22 @@ export const ESTADO_TAREA: Record<EstadoTareaTurno, Estilo> = {
   pendiente: { label: 'Pendiente', clase: 'bg-[#e4c9b0]/40 text-[#6f3a2a]' },
   en_curso: { label: 'En curso', clase: 'bg-[#f9b44c]/25 text-[#a06b00]' },
   completada: { label: 'Completada', clase: 'bg-[#2f7d4f]/15 text-[#2f7d4f]' },
+  no_se_pudo: { label: 'No se pudo', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
   vencida: { label: 'Vencida', clase: 'bg-[#c43e2c]/15 text-[#c43e2c]' },
   cancelada: { label: 'Cancelada', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
+}
+
+/**
+ * Estilo del estado guardado. Si la base devuelve un valor que esta versión
+ * de la app todavía no conoce, muestra el texto tal cual en vez de romper.
+ */
+export function estiloEstado(estado: string): Estilo {
+  return (
+    ESTADO_TAREA[estado as EstadoTareaTurno] ?? {
+      label: estado,
+      clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]',
+    }
+  )
 }
 
 /** Tipo de actividad (mig 251). */
@@ -49,6 +63,7 @@ export type EstadoDerivado =
   | 'en_curso'
   | 'atrasada'
   | 'completada'
+  | 'no_se_pudo'
   | 'omitida'
   | 'trasladada'
   | 'vencida'
@@ -60,6 +75,7 @@ export const ESTADO_DERIVADO: Record<EstadoDerivado, Estilo> = {
   en_curso: { label: 'En curso', clase: 'bg-[#f9b44c]/25 text-[#a06b00]' },
   atrasada: { label: 'Atrasada', clase: 'bg-[#c43e2c]/15 text-[#c43e2c]' },
   completada: { label: 'Hecha', clase: 'bg-[#2f7d4f]/15 text-[#2f7d4f]' },
+  no_se_pudo: { label: 'No se pudo', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
   omitida: { label: 'Omitida', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
   trasladada: { label: 'Trasladada', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
   vencida: { label: 'Vencida', clase: 'bg-[#c43e2c]/15 text-[#c43e2c]' },

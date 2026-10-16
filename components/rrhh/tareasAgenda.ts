@@ -140,6 +140,11 @@ export function tareasSinTurno(tareas: TareaConParticipantes[], fecha: string) {
 
 // ─── Estado derivado ───────────────────────────────────────────────────────
 
+/** Cerrada sin hacerse: cancelada (omitida o trasladada) o "no se pudo". No cuenta ni carga a nadie. */
+export function cerradaSinHacer(estado: string): boolean {
+  return estado === 'cancelada' || estado === 'no_se_pudo'
+}
+
 export interface Derivado {
   estado: EstadoDerivado
   /** Ventana vencida y sigue abierta (aunque esté en curso). */
@@ -175,6 +180,7 @@ export function estadoDerivado(
   const limite = inicio === null ? null : inicio + ventana
   const base = { inicio, limite }
   if (t.estado === 'completada') return { ...base, estado: 'completada', atrasada: false }
+  if (t.estado === 'no_se_pudo') return { ...base, estado: 'no_se_pudo', atrasada: false }
   if (t.estado === 'cancelada')
     return { ...base, estado: t.trasladada_a ? 'trasladada' : 'omitida', atrasada: false }
   if (t.estado === 'vencida') return { ...base, estado: 'vencida', atrasada: true }
@@ -228,10 +234,10 @@ export function focoDelTurno(lista: TareaAgenda[]): { tipo: TipoFoco; item: Tare
   return null
 }
 
-/** completadas / total, sin contar continuas ni canceladas. */
+/** completadas / total, sin contar continuas, canceladas ni "no se pudo". */
 export function conteoTurno(lista: TareaAgenda[]): { hechas: number; total: number } {
   const cuentan = lista.filter(
-    (x) => x.tarea.tipo_actividad !== 'continua' && x.tarea.estado !== 'cancelada'
+    (x) => x.tarea.tipo_actividad !== 'continua' && !cerradaSinHacer(x.tarea.estado)
   )
   return {
     hechas: cuentan.filter((x) => x.tarea.estado === 'completada').length,
@@ -243,7 +249,7 @@ export function conteoTurno(lista: TareaAgenda[]): { hechas: number; total: numb
 
 /** Individual sin responsable o grupal sin participantes. */
 export function sinAsignar(t: TareaConParticipantes): boolean {
-  if (t.estado === 'cancelada') return false
+  if (cerradaSinHacer(t.estado)) return false
   if (t.empleado_id !== null) return false
   return (t.tareas_turno_participantes ?? []).length === 0
 }
@@ -280,7 +286,7 @@ export function solapamientosPorPersona(lista: TareaAgenda[]): Solapamiento[] {
     const t = x.tarea
     if (
       t.empleado_id === null ||
-      t.estado === 'cancelada' ||
+      cerradaSinHacer(t.estado) ||
       t.tipo_actividad === 'continua' ||
       x.derivado.inicio === null ||
       !t.duracion_min
@@ -308,7 +314,7 @@ export function cargaPorPersona(lista: TareaAgenda[]): Map<number, number> {
   const m = new Map<number, number>()
   for (const x of lista) {
     const t = x.tarea
-    if (t.empleado_id === null || t.estado === 'cancelada' || t.tipo_actividad === 'continua') continue
+    if (t.empleado_id === null || cerradaSinHacer(t.estado) || t.tipo_actividad === 'continua') continue
     m.set(t.empleado_id, (m.get(t.empleado_id) ?? 0) + (t.duracion_min ?? 0))
   }
   return m

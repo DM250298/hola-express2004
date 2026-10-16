@@ -16,6 +16,10 @@ import { createAdminClient } from '@/lib/supabase/admin'
  * Lo dispara Vercel con GET + header Authorization Bearer CRON_SECRET
  * (Vercel → Settings → Environment Variables). Si querés correrlo a mano:
  * GET con el mismo header.
+ *
+ * Si falla uno de los pasos 1 a 3, se anota el error y los demás corren
+ * igual (antes un error cortaba el cron y ese día se perdían también el
+ * snapshot y las alertas). La respuesta es 500 al final, con cada error.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
@@ -45,24 +49,25 @@ export async function GET(request: Request) {
 
   try {
     const supabase = createAdminClient()
+    const errores: Record<string, string> = {}
 
     const { data: cerrados, error: e1 } = await supabase.rpc(
       'fn_cerrar_dia_asistencia',
       { p_fecha: ayer }
     )
-    if (e1) return NextResponse.json({ error: e1.message }, { status: 500 })
+    if (e1) errores.asistencia = e1.message
 
     const { data: materializadas, error: e2 } = await supabase.rpc(
       'fn_materializar_tareas_turno',
       { p_fecha: hoy }
     )
-    if (e2) return NextResponse.json({ error: e2.message }, { status: 500 })
+    if (e2) errores.tareas = e2.message
 
     const { data: vencidas, error: e3 } = await supabase.rpc(
       'fn_marcar_tareas_vencidas',
       {}
     )
-    if (e3) return NextResponse.json({ error: e3.message }, { status: 500 })
+    if (e3) errores.vencidas = e3.message
 
     // 4. Snapshot de métricas por SKU de ayer (mig 173). Idempotente por
     // fecha; si falla o la migración no corrió, no tumba el resto del cron.
@@ -81,17 +86,22 @@ export async function GET(request: Request) {
       p_origen: 'cron',
     })
 
-    return NextResponse.json({
-      ok: true,
-      ayer,
-      hoy,
-      cerrados: cerrados ?? 0,
-      tareas_materializadas: materializadas ?? 0,
-      tareas_vencidas: vencidas ?? 0,
-      filas_snapshot: filasSnapshot,
-      snapshot_error: snapshotError,
-      alertas: e5 ? { error: e5.message } : alertas,
-    })
+    const hayErrores = Object.keys(errores).length > 0
+    return NextResponse.json(
+      {
+        ok: !hayErrores,
+        ayer,
+        hoy,
+        errores: hayErrores ? errores : null,
+        cerrados: e1 ? null : (cerrados ?? 0),
+        tareas_materializadas: e2 ? null : (materializadas ?? 0),
+        tareas_vencidas: e3 ? null : (vencidas ?? 0),
+        filas_snapshot: filasSnapshot,
+        snapshot_error: snapshotError,
+        alertas: e5 ? { error: e5.message } : alertas,
+      },
+      { status: hayErrores ? 500 : 200 }
+    )
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Error interno.' },

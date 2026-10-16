@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **259**
+## Próximo número libre: **260**
 
 ---
 
@@ -358,6 +358,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 256 | `256_cajero_fiambrero_mi_panel.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D8) |
 | 257 | `257_permiso_proveedores.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D9; test: `tests/test_permiso_proveedores.sql`) |
 | 258 | `258_rls_proveedores_escritura.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `2894830` (test: `tests/test_rls_proveedores.sql`) |
+| 259 | `259_revocar_funciones_sueldo.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; en producción verificado con `scripts/tareas_v2_relevamiento.sql`: anon y authenticated sin EXECUTE) | en este commit (urgente: `fn_sueldo`/`fn_set_sueldo` eran ejecutables sin iniciar sesión) |
 
 ## Dos bases de Supabase (2026-09-17)
 

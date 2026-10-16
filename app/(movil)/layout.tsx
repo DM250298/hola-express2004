@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { createServerClient } from '@/lib/supabase/server'
 import { BotonSalirMovil } from '@/components/movil/BotonSalirMovil'
 import { GuardianSesion } from '@/components/shared/GuardianSesion'
+import { AvisoVersion } from '@/components/shared/AvisoVersion'
 
 // Manifest propio del modo móvil: la app instalada desde /movil arranca en
 // /movil (no en el POS). Sobreescribe el manifest por defecto del layout raíz.
@@ -43,6 +44,8 @@ export default async function LayoutMovil({
         </Link>
         <BotonSalirMovil />
       </header>
+      {/* Pegado debajo del encabezado: en el celular la página scrollea entera. */}
+      <AvisoVersion className="sticky top-14 z-20" />
       <main className="flex-1">{children}</main>
     </div>
   )

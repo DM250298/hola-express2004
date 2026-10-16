@@ -38,6 +38,15 @@ export const LIQUIDACIONES_KEY = ['liquidaciones'] as const
 
 // ─── Empleados ───────────────────────────────────────────────────────────────
 
+/** Una cuenta de login va con un solo legajo (índice único de la mig 260). */
+function mensajeErrorEmpleado(e: Error): string {
+  const codigo = (e as Error & { code?: string }).code
+  if (codigo === '23505' && e.message.includes('usuario_id')) {
+    return 'Esa cuenta de login ya está vinculada a otro legajo.'
+  }
+  return e.message
+}
+
 export function useEmpleados() {
   return useQuery({
     queryKey: EMPLEADOS_KEY,
@@ -54,7 +63,7 @@ export function useCreateEmpleado() {
       qc.invalidateQueries({ queryKey: EMPLEADOS_KEY })
       toast.success('Empleado creado')
     },
-    onError: (e: Error) => toast.error(`No se pudo crear: ${e.message}`),
+    onError: (e: Error) => toast.error(`No se pudo crear: ${mensajeErrorEmpleado(e)}`),
   })
 }
 
@@ -67,7 +76,7 @@ export function useUpdateEmpleado() {
       qc.invalidateQueries({ queryKey: EMPLEADOS_KEY })
       toast.success('Empleado actualizado')
     },
-    onError: (e: Error) => toast.error(`No se pudo actualizar: ${e.message}`),
+    onError: (e: Error) => toast.error(`No se pudo actualizar: ${mensajeErrorEmpleado(e)}`),
   })
 }
 

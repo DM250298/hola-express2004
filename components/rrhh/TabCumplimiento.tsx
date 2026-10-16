@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input'
 import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
 import { nombreCompleto } from './constantes'
 import { hoyAr } from './asistenciaConstantes'
-import { ESTADO_TAREA, MODO_TAREA, tareaEsDe } from './tareasConstantes'
+import { MODO_TAREA, estiloEstado, tareaEsDe } from './tareasConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useCumplimiento, useTareasRango } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
@@ -266,8 +266,8 @@ export function TabCumplimiento() {
                                           ×{t.rechazos_count} rech.
                                         </span>
                                       )}
-                                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', ESTADO_TAREA[t.estado].clase)}>
-                                        {ESTADO_TAREA[t.estado].label}
+                                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', estiloEstado(t.estado).clase)}>
+                                        {estiloEstado(t.estado).label}
                                       </span>
                                     </li>
                                   ))}
@@ -369,8 +369,8 @@ export function TabCumplimiento() {
                                             ×{d.rechazos_count} rech.
                                           </span>
                                         )}
-                                        <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', ESTADO_TAREA[d.estado].clase)}>
-                                          {ESTADO_TAREA[d.estado].label}
+                                        <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', estiloEstado(d.estado).clase)}>
+                                          {estiloEstado(d.estado).label}
                                         </span>
                                       </li>
                                     ))}

@@ -148,6 +148,7 @@ export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }
   const solapes = solapamientosPorPersona(listaSel)
   const sinDueno = cronologicas.filter((x) => sinAsignar(x.tarea))
   const atrasadas = cronologicas.filter((x) => x.derivado.atrasada && estaAbierta(x.derivado))
+  const noSePudieron = cronologicas.filter((x) => x.derivado.estado === 'no_se_pudo').length
   const personas = turnoSel ? personasEnTurno(horarios ?? [], turnoSel.id, fechaSel) : []
   const huecos = segmentos.filter((s) => !s.turno)
   const porTerminar = !!turnoSel && sel ? turnoPorTerminar(turnoSel, sel.origen, reloj) : false
@@ -332,6 +333,11 @@ export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }
               onAbrir={() => onAbrirTarea(foco.item.tarea)}
               ocupado={iniciar.isPending || completar.isPending}
             />
+          ) : cronologicas.length > 0 && noSePudieron > 0 ? (
+            <div className="rounded-2xl bg-[#f3ece4] border border-[#e4c9b0] px-4 py-3 text-[#6f3a2a] text-sm font-medium">
+              No quedan tareas abiertas: {conteo.hechas} hechas y {noSePudieron}{' '}
+              {noSePudieron === 1 ? 'que no se pudo hacer' : 'que no se pudieron hacer'}.
+            </div>
           ) : cronologicas.length > 0 ? (
             <div className="rounded-2xl bg-[#2f7d4f]/10 border border-[#2f7d4f]/25 px-4 py-3 text-[#2f7d4f] text-sm font-medium flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4" />
@@ -656,7 +662,11 @@ function FilaTarea({
   const est = ESTADO_DERIVADO[d.estado]
   const abierta = estaAbierta(d)
   const esBloque = t.tipo_actividad === 'bloque'
-  const cerrada = d.estado === 'completada' || d.estado === 'omitida' || d.estado === 'trasladada'
+  const cerrada =
+    d.estado === 'completada' ||
+    d.estado === 'no_se_pudo' ||
+    d.estado === 'omitida' ||
+    d.estado === 'trasladada'
   return (
     <li
       aria-current={d.estado === 'ahora' || d.estado === 'en_curso' ? 'true' : undefined}

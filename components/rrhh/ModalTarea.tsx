@@ -38,7 +38,7 @@ import { MultiSelectEmpleados } from './MultiSelectEmpleados'
 import { ModalIncidencia } from './ModalIncidencia'
 import { nombreCompleto } from './constantes'
 import {
-  ESTADO_TAREA,
+  estiloEstado,
   MODO_TAREA,
   PRIORIDAD_TAREA,
   TIPO_ACTIVIDAD,
@@ -189,7 +189,8 @@ export function ModalTarea({
     (editando ? esGrupal || !!empleadoId : todos || seleccionados.length > 0)
   const completada = tarea?.estado === 'completada'
   const cancelada = tarea?.estado === 'cancelada'
-  const abierta = !!tarea && !completada && !cancelada
+  const noSePudo = tarea?.estado === 'no_se_pudo'
+  const abierta = !!tarea && !completada && !cancelada && !noSePudo
   const ocupado =
     iniciar.isPending || omitir.isPending || trasladar.isPending || reabrir.isPending
 
@@ -259,8 +260,8 @@ export function ModalTarea({
           <DialogTitle className="text-[#391511] text-lg flex items-center gap-2">
             {editando ? 'Tarea' : 'Nueva tarea'}
             {tarea && (
-              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', ESTADO_TAREA[tarea.estado].clase)}>
-                {ESTADO_TAREA[tarea.estado].label}
+              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', estiloEstado(tarea.estado).clase)}>
+                {estiloEstado(tarea.estado).label}
               </span>
             )}
             {tarea && tarea.empleado_id === null && (
@@ -565,7 +566,7 @@ export function ModalTarea({
           )}
 
           {/* Completar (solo edición, si no está completada) */}
-          {editando && !completada && tarea?.estado !== 'cancelada' && (
+          {editando && !completada && !cancelada && !noSePudo && (
             <div className="rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60 p-3 space-y-2">
               <p className="text-[#391511] text-sm font-semibold">Completar tarea</p>
               {/* El gate usa el valor PERSISTIDO (no el toggle sin guardar). */}
@@ -661,8 +662,8 @@ export function ModalTarea({
             </div>
           )}
 
-          {/* Reabrir (solo gestión): completada, omitida o vencida vuelve a pendiente */}
-          {tarea && esGestor && (cancelada || tarea.estado === 'vencida') && !tarea.trasladada_a && (
+          {/* Reabrir (solo gestión): omitida, "no se pudo" o vencida vuelve a pendiente */}
+          {tarea && esGestor && (cancelada || noSePudo || tarea.estado === 'vencida') && !tarea.trasladada_a && (
             <Button
               variant="outline"
               onClick={() => reabrir.mutate(tarea.id, { onSuccess: () => onCambioAbierto(false) })}

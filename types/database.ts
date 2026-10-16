@@ -630,10 +630,12 @@ export type ImportacionFichajesInsert = {
 // ─── tareas operativas (Sprint 3) ────────────────────────────────────────────
 
 export type PrioridadTarea = 'baja' | 'media' | 'alta'
+/** 'completada' se muestra "Hecha"; 'no_se_pudo' llega con Tareas v2 (mig 261). */
 export type EstadoTareaTurno =
   | 'pendiente'
   | 'en_curso'
   | 'completada'
+  | 'no_se_pudo'
   | 'vencida'
   | 'cancelada'
 export type ModoTarea = 'individual' | 'grupal'

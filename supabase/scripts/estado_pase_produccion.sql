@@ -100,7 +100,16 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     (select string_agg(codigo || ' = ' || array_to_string(permisos, ','), ' | ' order by codigo)
        from public.roles where codigo in ('empleado', 'encargado'))
   union all
-  select 14, 'T1', 'Sin funciones duplicadas',
+  -- "revoke ... from public" no alcanza en Supabase: anon y authenticated tienen
+  -- EXECUTE explícito. Las de sueldo no chequean permisos (SECURITY DEFINER).
+  select 14, '259', 'Sueldos: fn_sueldo / fn_set_sueldo cerradas a la app',
+    not has_function_privilege('anon', 'public.fn_sueldo(integer)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.fn_sueldo(integer)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.fn_set_sueldo(integer,numeric)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.fn_set_sueldo(integer,numeric)', 'EXECUTE'),
+    null
+  union all
+  select 15, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)
