@@ -22,7 +22,7 @@ El menú se organiza en seis pilares:
 
 - **Resultados:** Tablero del dueño · Reportes
 - **Operaciones:** Turnos y equipo (personal, cronograma, tareas, pases, sueldos) · Alertas · Producción · Tableros de tareas
-- **Ventas:** Punto de venta (con modo offline) · Historial de ventas · Clientes y fiado
+- **Ventas:** Punto de venta (con modo offline) · Historial de ventas · Clientes y cuentas corrientes
 - **Compras:** Reposición por cobertura, órdenes, recepción, facturas y costos · Proveedores
 - **Stock:** Stock · Conteo físico · Vencimientos · Mapa del local · Etiquetas de precio
 - **Finanzas:** Finanzas y tesorería · Cobros con posnet · Contabilidad

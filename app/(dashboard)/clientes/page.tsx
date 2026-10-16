@@ -1,7 +1,7 @@
 import { PantallaClientes } from '@/components/clientes/PantallaClientes'
 
 export const metadata = {
-  title: 'Clientes y fiado — ¡Hola! Express',
+  title: 'Clientes y cuentas corrientes — ¡Hola! Express',
 }
 
 export default function PaginaClientes() {
