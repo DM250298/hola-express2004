@@ -350,6 +350,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 252 | `252_fn_materializar_tareas_v5.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 | 253 | `253_tareas_acciones_rpcs.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 | 254 | `254_organigrama_puestos_2026_10.sql` | ⏳ pendiente | — | en este commit |
+| 255 | `255_cronograma_dotacion_recalculo.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba, test OK) | en este commit (test: `tests/test_cronograma_recalculo.sql`) |
 | 256 | `256_cajero_fiambrero_mi_panel.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba) | `5fbc967` (D8) |
 | 257 | `257_permiso_proveedores.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba) | `5fbc967` (D9; test: `tests/test_permiso_proveedores.sql`) |
 | 258 | `258_rls_proveedores_escritura.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba) | en este commit (test: `tests/test_rls_proveedores.sql`) |

@@ -4,34 +4,62 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   anularFichaje,
+  aplicarCopiaSemana,
   cerrarDia,
   confirmarImportReloj,
-  copiarSemana,
   corregirFichaje,
-  eliminarHorario,
+  eliminarHorarioYSincronizar,
   getAsistenciaEmpleado,
   getAsistenciaRango,
   getFichajesDia,
   getHorariosRango,
   getTurnos,
+  getUltimaImportacion,
+  guardarHorarioYSincronizar,
+  materializarSiEnVentana,
+  previsualizarCopiaSemana,
   setPin,
   tienePin,
   updateTurno,
-  upsertHorario,
   vincularReloj,
+  type FilaCopiaSemana,
   type PreviewReloj,
+  type ResultadoSincronizacionPlan,
 } from '@/lib/queries/asistencia'
-import type { HorarioAsignadoInsert, TipoFichaje } from '@/types/database'
+import { TAREAS_KEY } from './useTareas'
+import type {
+  HorarioAsignadoInsert,
+  HorarioAsignadoRow,
+  TipoFichaje,
+} from '@/types/database'
 
 export const TURNOS_KEY = ['turnos'] as const
 export const HORARIOS_KEY = ['horarios'] as const
 export const ASISTENCIA_KEY = ['asistencia'] as const
 export const FICHAJES_KEY = ['fichajes'] as const
+export const IMPORTACIONES_KEY = ['importaciones'] as const
 
 function invalidarAsistencia(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: HORARIOS_KEY })
   qc.invalidateQueries({ queryKey: ASISTENCIA_KEY })
   qc.invalidateQueries({ queryKey: FICHAJES_KEY })
+}
+
+/** Aviso único tras tocar el plan: qué más se actualizó. */
+function avisarSincronizacion(
+  qc: ReturnType<typeof useQueryClient>,
+  r: ResultadoSincronizacionPlan,
+  base: string
+) {
+  if (r.tareasCambiadas !== null) qc.invalidateQueries({ queryKey: TAREAS_KEY })
+  const extras: string[] = []
+  if (r.asistenciaRecalculada) extras.push('asistencia recalculada')
+  if (r.tareasCambiadas && r.tareasCambiadas > 0) {
+    extras.push(
+      `${r.tareasCambiadas} ${r.tareasCambiadas === 1 ? 'tarea actualizada' : 'tareas actualizadas'}`
+    )
+  }
+  toast.success(extras.length ? `${base} · ${extras.join(' · ')}` : base)
 }
 
 // ─── Turnos ───────────────────────────────────────────────────────────────────
@@ -95,8 +123,11 @@ export function useAsistenciaEmpleado(
 export function useUpsertHorario() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (datos: HorarioAsignadoInsert) => upsertHorario(datos),
-    onSuccess: () => invalidarAsistencia(qc),
+    mutationFn: (datos: HorarioAsignadoInsert) => guardarHorarioYSincronizar(datos),
+    onSuccess: (r) => {
+      invalidarAsistencia(qc)
+      avisarSincronizacion(qc, r, 'Plan guardado')
+    },
     onError: (e: Error) => toast.error(`No se pudo guardar el horario: ${e.message}`),
   })
 }
@@ -104,22 +135,55 @@ export function useUpsertHorario() {
 export function useEliminarHorario() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => eliminarHorario(id),
-    onSuccess: () => invalidarAsistencia(qc),
+    mutationFn: (horario: Pick<HorarioAsignadoRow, 'id' | 'empleado_id' | 'fecha'>) =>
+      eliminarHorarioYSincronizar(horario),
+    onSuccess: (r) => {
+      invalidarAsistencia(qc)
+      avisarSincronizacion(qc, r, 'Asignación quitada')
+    },
     onError: (e: Error) => toast.error(`No se pudo borrar: ${e.message}`),
+  })
+}
+
+export function usePreviewCopiaSemana(desde: string, hacia: string, habilitado: boolean) {
+  return useQuery({
+    queryKey: [...HORARIOS_KEY, 'copia', desde, hacia],
+    queryFn: () => previsualizarCopiaSemana(desde, hacia),
+    enabled: habilitado && !!desde && !!hacia,
+    staleTime: 0,
   })
 }
 
 export function useCopiarSemana() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ desde, hacia }: { desde: string; hacia: string }) =>
-      copiarSemana(desde, hacia),
-    onSuccess: (n) => {
+    mutationFn: async (filas: FilaCopiaSemana[]) => {
+      const n = await aplicarCopiaSemana(filas)
+      // Re-sincronizar tareas de los días copiados que caen en la ventana de
+      // materialización (los demás los toma el cron / la apertura del tablero).
+      let tareas = 0
+      for (const fecha of [...new Set(filas.map((f) => f.fecha))]) {
+        tareas += (await materializarSiEnVentana(fecha)) ?? 0
+      }
+      return { n, tareas }
+    },
+    onSuccess: ({ n, tareas }) => {
       invalidarAsistencia(qc)
-      toast.success(`${n} horario${n === 1 ? '' : 's'} copiado${n === 1 ? '' : 's'}`)
+      if (tareas > 0) qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      toast.success(
+        `${n} horario${n === 1 ? '' : 's'} copiado${n === 1 ? '' : 's'}` +
+          (tareas > 0 ? ` · ${tareas} tareas actualizadas` : '')
+      )
     },
     onError: (e: Error) => toast.error(`No se pudo copiar: ${e.message}`),
+  })
+}
+
+export function useUltimaImportacion() {
+  return useQuery({
+    queryKey: IMPORTACIONES_KEY,
+    queryFn: getUltimaImportacion,
+    staleTime: 60 * 1000,
   })
 }
 
@@ -179,7 +243,7 @@ export function useConfirmarImportReloj() {
     mutationFn: (preview: PreviewReloj) => confirmarImportReloj(preview),
     onSuccess: (r) => {
       invalidarAsistencia(qc)
-      qc.invalidateQueries({ queryKey: ['importaciones'] })
+      qc.invalidateQueries({ queryKey: IMPORTACIONES_KEY })
       toast.success(
         `Importado: ${r.nuevas} nuevas, ${r.duplicadas} duplicadas` +
           (r.sin_match > 0 ? `, ${r.sin_match} sin vincular` : '')

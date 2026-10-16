@@ -499,6 +499,22 @@ export type TurnoPlantillaRow = {
   activo: boolean
 }
 
+/** Mínimo de personas por turno y día de semana (mig 255). dia_semana 0=domingo…6; null = todos. */
+export type DotacionRequeridaRow = {
+  id: number
+  turno_id: number
+  dia_semana: number | null
+  minimo: number
+  updated_at: string
+}
+
+export type DotacionRequeridaInsert = {
+  id?: number
+  turno_id: number
+  dia_semana?: number | null
+  minimo: number
+}
+
 export type HorarioAsignadoRow = {
   id: string
   empleado_id: number
@@ -4486,6 +4502,12 @@ export interface Database {
         Update: Partial<TurnoPlantillaRow>
         Relationships: []
       }
+      dotacion_requerida: {
+        Row: DotacionRequeridaRow
+        Insert: DotacionRequeridaInsert
+        Update: Partial<DotacionRequeridaInsert>
+        Relationships: []
+      }
       patrones_cronograma: {
         Row: PatronCronogramaRow
         Insert: PatronCronogramaInsert
@@ -5317,6 +5339,10 @@ export interface Database {
       fn_cerrar_dia_asistencia: {
         Args: { p_fecha: string }
         Returns: number
+      }
+      fn_recalcular_asistencia_empleado: {
+        Args: { p_empleado_id: number; p_fecha: string }
+        Returns: undefined
       }
       fn_corregir_fichaje: {
         Args: {

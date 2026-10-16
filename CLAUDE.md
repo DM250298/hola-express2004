@@ -418,6 +418,24 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
   `pivote` = Pivot (Matias), `compras` (Fernanda). Todos reportan a Sonia salvo
   Sonia y Fernanda, que reportan a Dirección (Rodrigo). La seed matchea por
   nombre + apellido; no volver a sembrar por primer nombre.
+- **Cronograma: Planificación / Fichadas (mig 255, oct-2026)**: la pestaña
+  (`PantallaAsistencia.tsx`) tiene dos vistas sobre la misma grilla semanal
+  (`GrillaCronograma.tsx`, lógica pura en `cronogramaCalculos.ts`). **Planificación**
+  muestra solo `horarios_asignados` (turno con nombre y horas, franco, licencia,
+  "sin asignar", "Cubre a X" leído de `notas` con la convención de la 247) y el panel
+  de cobertura del día seleccionado contra `dotacion_requerida` (turno × día de
+  semana, null = todos; sin filas = "sin configurar", nunca se inventan mínimos).
+  **Fichadas** deriva el estado en cliente (`estadoFichada`): un día pasado sin
+  marcaciones es "Ausente" SOLO si la última importación del reloj
+  (`importaciones_fichajes` completada con `dias_recalculados > 0`) cubre esa fecha;
+  si no, "Revisar fichada". Futuro = "Programado". Editar una celda (Sheet
+  `PanelAsignacion`) escribe como manual (`patron_id null`, `usuario_id`) y después
+  `sincronizarPlan`: si el día ya pasó llama `fn_recalcular_asistencia_empleado`
+  (D y D+1; el cron solo cierra planificados y dejaba "ausente" un cambio a franco) y
+  si cae en [hoy−1, hoy+7] re-materializa las tareas (no bloqueante). "Copiar semana
+  anterior" previsualiza, no pisa por defecto y no copia notas "Cubre a…". Horas por
+  empleado = brutas planificadas (la noche cuenta en el día en que empieza). El route
+  de importar reloj gatea por permiso `rrhh` (antes por rol).
 - **Agenda por turno** (migs 251–253): Tareas ya no es un kanban por estado
   sino una agenda cronológica por turno (`AgendaTurnos.tsx`, lógica pura en
   `tareasAgenda.ts`). `tareas_recurrentes` y `tareas_turno` tienen `hora`
