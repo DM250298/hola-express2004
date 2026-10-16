@@ -296,7 +296,7 @@ export const MENU_SEIS_PILARES: MenuNav = {
       items: [
         { href: '/pos', etiqueta: 'Punto de venta', icono: 'ShoppingCart', permiso: 'pos' },
         { href: '/ventas', etiqueta: 'Historial de ventas', icono: 'Receipt', permiso: 'ventas' },
-        { href: '/clientes', etiqueta: 'Clientes y fiado', icono: 'Users', permiso: 'clientes' },
+        { href: '/clientes', etiqueta: 'Clientes y cuentas corrientes', icono: 'Users', permiso: 'clientes' },
       ],
     },
     {

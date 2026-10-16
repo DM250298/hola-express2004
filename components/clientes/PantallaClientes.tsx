@@ -60,9 +60,9 @@ export function PantallaClientes() {
     <div className="p-4 sm:p-6 space-y-5">
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-[#391511] text-2xl font-bold">Clientes y fiado</h1>
+          <h1 className="text-[#391511] text-2xl font-bold">Clientes y cuentas corrientes</h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
-            Registro de clientes, historial de compras y cuenta corriente (fiado).
+            Registro de clientes, historial de compras y cuentas corrientes.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
