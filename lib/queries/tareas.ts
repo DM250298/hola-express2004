@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
+import { isoMasDias } from '@/lib/utils/periodos'
 import type {
   EstadoTareaTurno,
   ModoTarea,
@@ -153,6 +154,27 @@ export async function getTareasFecha(
 }
 
 /**
+ * Tareas para la agenda del día (mig 251): las de la fecha y las del día
+ * anterior, porque la noche que arrancó ayer sigue viva hasta su hora_fin
+ * de hoy. `fecha` es siempre el día en que EMPIEZA el turno; la UI decide
+ * en qué franja mostrarlas (agendaTurnos.ts).
+ */
+export async function getTareasAgenda(
+  fecha: string
+): Promise<TareaConParticipantes[]> {
+  const supabase = createClient()
+  const ayer = isoMasDias(fecha, -1)
+  const { data, error } = await supabase
+    .from('tareas_turno')
+    .select('*, tareas_turno_participantes(empleado_id)')
+    .in('fecha', [ayer, fecha])
+    .order('hora', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as TareaConParticipantes[]
+}
+
+/**
  * Tareas de un rango (drill-down de cumplimiento; solo gestión por RLS).
  * El filtro por empleado (incl. participante de grupales) se hace en cliente.
  */
@@ -275,6 +297,41 @@ export async function completarTarea(
     p_evidencia_url: evidenciaUrl ?? null,
   })
   if (error) throw error
+}
+
+/** Pendiente/vencida → en curso; registra quién y cuándo (mig 253). */
+export async function iniciarTarea(id: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_iniciar_tarea', { p_tarea_id: id })
+  if (error) throw error
+}
+
+/** Completada/cancelada/vencida → pendiente (solo gestión, mig 253). */
+export async function reabrirTarea(id: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_reabrir_tarea', { p_tarea_id: id })
+  if (error) throw error
+}
+
+/** Omite con motivo obligatorio (→ cancelada); gestión o el responsable. */
+export async function omitirTarea(id: string, motivo: string): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_omitir_tarea', {
+    p_tarea_id: id,
+    p_motivo: motivo,
+  })
+  if (error) throw error
+}
+
+/**
+ * Traslada al turno siguiente (mig 253): crea la instancia nueva (con
+ * trasladada_de) y cancela la original (trasladada_a). Devuelve el id nuevo.
+ */
+export async function trasladarTarea(id: string): Promise<string> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_trasladar_tarea', { p_tarea_id: id })
+  if (error) throw error
+  return data as string
 }
 
 /** Rechaza una completada (solo gestión): vuelve a pendiente con motivo. */

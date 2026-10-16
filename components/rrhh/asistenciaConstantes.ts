@@ -65,6 +65,11 @@ export function horaAr(iso: string | null): string {
   }).format(new Date(iso))
 }
 
+/** Primera letra en mayúscula (date-fns devuelve "martes 13 de octubre"). */
+export function capitalizar(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s
+}
+
 /** Minutos → "8h 15m". */
 export function formatearMinutos(min: number): string {
   if (!min) return '0h'

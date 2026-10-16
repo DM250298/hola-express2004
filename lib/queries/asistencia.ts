@@ -32,6 +32,22 @@ export async function getTurnos(): Promise<TurnoPlantillaRow[]> {
   return (data ?? []) as TurnoPlantillaRow[]
 }
 
+/** Horario de un turno (Configurar rutina › Horarios de turno; permiso rrhh por RLS). */
+export async function updateTurno(
+  id: number,
+  datos: { hora_inicio: string; hora_fin: string; activo: boolean }
+): Promise<TurnoPlantillaRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('turnos_plantilla')
+    .update(datos)
+    .eq('id', id)
+    .select()
+    .single<TurnoPlantillaRow>()
+  if (error) throw error
+  return data
+}
+
 // ─── Horarios asignados ───────────────────────────────────────────────────────
 
 export async function getHorariosRango(

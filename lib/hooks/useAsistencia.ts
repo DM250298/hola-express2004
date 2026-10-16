@@ -16,6 +16,7 @@ import {
   getTurnos,
   setPin,
   tienePin,
+  updateTurno,
   upsertHorario,
   vincularReloj,
   type PreviewReloj,
@@ -40,6 +41,24 @@ export function useTurnos() {
     queryKey: TURNOS_KEY,
     queryFn: getTurnos,
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+export function useUpdateTurno() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      id,
+      datos,
+    }: {
+      id: number
+      datos: { hora_inicio: string; hora_fin: string; activo: boolean }
+    }) => updateTurno(id, datos),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TURNOS_KEY })
+      toast.success('Horario del turno guardado')
+    },
+    onError: (e: Error) => toast.error(`No se pudo guardar el turno: ${e.message}`),
   })
 }
 

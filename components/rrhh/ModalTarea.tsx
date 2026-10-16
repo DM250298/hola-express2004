@@ -3,7 +3,18 @@
 import { useEffect, useState } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { CheckCircle2, Loader2, Trash2, Undo2, User, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowRightToLine,
+  CheckCircle2,
+  Loader2,
+  Play,
+  RotateCcw,
+  Trash2,
+  Undo2,
+  User,
+  Users,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,28 +35,43 @@ import {
 } from '@/components/ui/dialog'
 import { SubirEvidencia } from './SubirEvidencia'
 import { MultiSelectEmpleados } from './MultiSelectEmpleados'
+import { ModalIncidencia } from './ModalIncidencia'
 import { nombreCompleto } from './constantes'
-import { ESTADO_TAREA, MODO_TAREA, PRIORIDAD_TAREA } from './tareasConstantes'
+import {
+  ESTADO_TAREA,
+  MODO_TAREA,
+  PRIORIDAD_TAREA,
+  TIPO_ACTIVIDAD,
+  formatoDuracion,
+  formatoHora,
+} from './tareasConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
 import {
-  useCambiarEstadoTarea,
   useCompletarTarea,
   useCreateTareas,
   useDeleteTarea,
+  useIniciarTarea,
+  useOmitirTarea,
+  useReabrirTarea,
   useRechazarTarea,
+  useTrasladarTarea,
   useUpdateTarea,
 } from '@/lib/hooks/useTareas'
 import { NOMBRE_TURNO } from './asistenciaConstantes'
 import { cn } from '@/lib/utils'
 import type { TareaConParticipantes } from '@/lib/queries/tareas'
-import type { ModoTarea, PrioridadTarea } from '@/types/database'
+import type { ModoTarea, PrioridadTarea, TipoActividadTarea } from '@/types/database'
 
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   tarea: TareaConParticipantes | null
   fechaDefault: string
+  /** Puede reabrir y operar cualquier tarea (tareas_gestion). */
+  esGestor?: boolean
+  /** Puede registrar incidencias (permiso rrhh): muestra "Registrar impedimento". */
+  puedeIncidencia?: boolean
 }
 
 const claseInput = 'border-[#e4c9b0] focus-visible:ring-[#f9b44c]'
@@ -55,7 +81,14 @@ const ITEMS_PRIORIDAD: Record<string, string> = {
   alta: 'Alta',
 }
 
-export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Props) {
+export function ModalTarea({
+  abierto,
+  onCambioAbierto,
+  tarea,
+  fechaDefault,
+  esGestor = true,
+  puedeIncidencia = false,
+}: Props) {
   const editando = !!tarea
   const { data: empleados } = useEmpleados()
   const { data: turnos } = useTurnos()
@@ -63,7 +96,10 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
   const actualizar = useUpdateTarea()
   const completar = useCompletarTarea()
   const rechazar = useRechazarTarea()
-  const cambiarEstado = useCambiarEstadoTarea()
+  const iniciar = useIniciarTarea()
+  const reabrir = useReabrirTarea()
+  const omitir = useOmitirTarea()
+  const trasladar = useTrasladarTarea()
   const borrar = useDeleteTarea()
 
   const [titulo, setTitulo] = useState('')
@@ -80,9 +116,27 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
   const [evidenciaUrl, setEvidenciaUrl] = useState<string | null>(null)
   const [mostrarRechazo, setMostrarRechazo] = useState(false)
   const [motivoRechazo, setMotivoRechazo] = useState('')
+  // Horario (mig 251)
+  const [hora, setHora] = useState('')
+  const [duracion, setDuracion] = useState('')
+  const [ventana, setVentana] = useState('')
+  const [tipoActividad, setTipoActividad] = useState<TipoActividadTarea>('puntual')
+  const [checklist, setChecklist] = useState('')
+  // Acciones (mig 253)
+  const [mostrarOmision, setMostrarOmision] = useState(false)
+  const [motivoOmision, setMotivoOmision] = useState('')
+  const [incidenciaAbierta, setIncidenciaAbierta] = useState(false)
 
   useEffect(() => {
     if (abierto) {
+      setHora(tarea?.hora ? tarea.hora.slice(0, 5) : '')
+      setDuracion(tarea?.duracion_min ? String(tarea.duracion_min) : '')
+      setVentana(tarea?.ventana_min ? String(tarea.ventana_min) : '')
+      setTipoActividad(tarea?.tipo_actividad ?? 'puntual')
+      setChecklist((tarea?.checklist ?? []).join('\n'))
+      setMostrarOmision(false)
+      setMotivoOmision('')
+      setIncidenciaAbierta(false)
       setTitulo(tarea?.titulo ?? '')
       setDescripcion(tarea?.descripcion ?? '')
       setSeleccionados([])
@@ -122,11 +176,22 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
 
   const esGrupal = editando ? tarea?.empleado_id === null : modo === 'grupal'
   const procesando = crear.isPending || actualizar.isPending
+  const duracionNum = Number(duracion)
+  const ventanaNum = Number(ventana)
+  const horarioValido =
+    (hora === '' || /^\d{2}:\d{2}$/.test(hora)) &&
+    (duracion === '' || (Number.isInteger(duracionNum) && duracionNum > 0)) &&
+    (ventana === '' || (Number.isInteger(ventanaNum) && ventanaNum > 0))
   const puedeGuardar =
     titulo.trim().length > 0 &&
     !procesando &&
+    horarioValido &&
     (editando ? esGrupal || !!empleadoId : todos || seleccionados.length > 0)
   const completada = tarea?.estado === 'completada'
+  const cancelada = tarea?.estado === 'cancelada'
+  const abierta = !!tarea && !completada && !cancelada
+  const ocupado =
+    iniciar.isPending || omitir.isPending || trasladar.isPending || reabrir.isPending
 
   function guardar() {
     if (!puedeGuardar) return
@@ -137,6 +202,14 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
       fecha,
       prioridad,
       requiere_evidencia: requiereEvidencia,
+      hora: hora || null,
+      duracion_min: duracion === '' ? null : duracionNum,
+      ventana_min: ventana === '' ? null : ventanaNum,
+      tipo_actividad: tipoActividad,
+      checklist: checklist
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean),
     }
     if (editando && tarea) {
       // Cambiar a mano el responsable de una recurrente la "fija": la
@@ -193,6 +266,12 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
             {tarea && tarea.empleado_id === null && (
               <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', MODO_TAREA.grupal.clase)}>
                 Grupal
+              </span>
+            )}
+            {tarea?.hora && (
+              <span className="text-xs font-normal text-[#6f3a2a] tabular-nums">
+                {formatoHora(tarea.hora)}
+                {tarea.duracion_min ? ` · ${formatoDuracion(tarea.duracion_min)}` : ''}
               </span>
             )}
           </DialogTitle>
@@ -372,6 +451,77 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
             </div>
           </div>
 
+          {/* Horario dentro del turno (mig 251) */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 p-3 space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[#6f3a2a] text-xs">Hora</Label>
+                <Input
+                  type="time"
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  disabled={procesando}
+                  className={`${claseInput} tabular-nums`}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[#6f3a2a] text-xs">Duración (min)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={duracion}
+                  onChange={(e) => setDuracion(e.target.value)}
+                  placeholder="20"
+                  disabled={procesando}
+                  className={`${claseInput} tabular-nums`}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[#6f3a2a] text-xs">Ventana (min)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={ventana}
+                  onChange={(e) => setVentana(e.target.value)}
+                  placeholder={duracion || '30'}
+                  disabled={procesando}
+                  className={`${claseInput} tabular-nums`}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(Object.keys(TIPO_ACTIVIDAD) as TipoActividadTarea[]).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setTipoActividad(k)}
+                  disabled={procesando}
+                  aria-pressed={tipoActividad === k}
+                  className={cn(
+                    'rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors',
+                    tipoActividad === k
+                      ? 'bg-[#f9b44c] border-[#f9b44c] text-[#391511]'
+                      : 'bg-[#fdfaf6] border-[#e4c9b0] text-[#6f3a2a]'
+                  )}
+                >
+                  {TIPO_ACTIVIDAD[k].label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-[#c8a58a]">
+              Sin hora va al final del turno como “durante el turno”. Pasada la ventana figura
+              “Atrasada”.
+            </p>
+            <textarea
+              value={checklist}
+              onChange={(e) => setChecklist(e.target.value)}
+              rows={2}
+              disabled={procesando}
+              placeholder="Checklist, una línea por ítem (opcional)"
+              className="w-full rounded-lg border border-[#e4c9b0] bg-white px-3 py-2 text-sm text-[#391511] placeholder:text-[#c8a58a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c]"
+            />
+          </div>
+
           <div className="flex items-center justify-between rounded-xl border border-[#e4c9b0]/60 px-3 py-2.5">
             <div>
               <p className="text-[#391511] text-sm font-medium">Pide foto de evidencia</p>
@@ -383,6 +533,22 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
               disabled={procesando}
             />
           </div>
+
+          {/* Trazabilidad: quién la inició, de dónde viene, a dónde fue */}
+          {tarea && (tarea.iniciada_at || tarea.trasladada_de || tarea.trasladada_a || tarea.motivo_omision) && (
+            <div className="rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/60 px-3 py-2 text-xs text-[#6f3a2a] space-y-0.5">
+              {tarea.iniciada_at && (
+                <p>
+                  Iniciada por {tarea.iniciada_por != null ? nombrePorId.get(tarea.iniciada_por) ?? '—' : '—'}
+                  {' · '}
+                  {format(new Date(tarea.iniciada_at), "d 'de' MMM HH:mm", { locale: es })}
+                </p>
+              )}
+              {tarea.trasladada_de && <p>↩ Viene del turno anterior{tarea.notas ? ` (${tarea.notas})` : ''}.</p>}
+              {tarea.trasladada_a && <p>→ Trasladada al turno siguiente.</p>}
+              {tarea.motivo_omision && !tarea.trasladada_a && <p>Omitida: “{tarea.motivo_omision}”.</p>}
+            </div>
+          )}
 
           {/* Último rechazo (si la devolvieron) */}
           {tarea && tarea.rechazos_count > 0 && !completada && (
@@ -422,33 +588,90 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
                 )}
                 Marcar completada
               </Button>
-              <div className="flex gap-2">
-                {tarea?.estado === 'pendiente' && (
+              <div className="grid grid-cols-2 gap-2">
+                {tarea && tarea.estado !== 'en_curso' && (
                   <Button
                     variant="outline"
-                    onClick={() => cambiarEstado.mutate({ id: tarea.id, estado: 'en_curso' })}
-                    disabled={cambiarEstado.isPending}
-                    className="flex-1 border-[#e4c9b0] text-[#6f3a2a] text-xs h-8"
+                    onClick={() => iniciar.mutate(tarea.id)}
+                    disabled={ocupado}
+                    className="border-[#e4c9b0] text-[#391511] text-xs h-8 gap-1"
                   >
-                    Marcar en curso
+                    <Play className="h-3.5 w-3.5" /> Iniciar
+                  </Button>
+                )}
+                {tarea && !tarea.trasladada_a && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (confirm('¿Trasladar esta tarea al turno siguiente? La actual queda registrada como trasladada.'))
+                        trasladar.mutate(tarea.id, { onSuccess: () => onCambioAbierto(false) })
+                    }}
+                    disabled={ocupado}
+                    className="border-[#e4c9b0] text-[#6f3a2a] text-xs h-8 gap-1"
+                  >
+                    <ArrowRightToLine className="h-3.5 w-3.5" /> Trasladar al turno siguiente
+                  </Button>
+                )}
+                {puedeIncidencia && tarea && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setIncidenciaAbierta(true)}
+                    disabled={ocupado}
+                    className="border-[#e4c9b0] text-[#6f3a2a] text-xs h-8 gap-1"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" /> Registrar impedimento
                   </Button>
                 )}
                 <Button
                   variant="ghost"
-                  onClick={() => {
-                    if (tarea && confirm('¿Cancelar esta tarea?'))
-                      cambiarEstado.mutate(
-                        { id: tarea.id, estado: 'cancelada' },
-                        { onSuccess: () => onCambioAbierto(false) }
-                      )
-                  }}
-                  disabled={cambiarEstado.isPending}
-                  className="flex-1 text-[#c43e2c] hover:bg-[#c43e2c]/10 text-xs h-8"
+                  onClick={() => setMostrarOmision((v) => !v)}
+                  disabled={ocupado}
+                  className="text-[#c43e2c] hover:bg-[#c43e2c]/10 text-xs h-8"
                 >
-                  Cancelar tarea
+                  Omitir con motivo
                 </Button>
               </div>
+              {mostrarOmision && tarea && (
+                <div className="rounded-xl border border-[#c43e2c]/30 bg-[#c43e2c]/5 p-3 space-y-2">
+                  <Label className="text-[#391511] font-medium text-sm">
+                    ¿Por qué no se hace? Queda registrado y no cuenta como incumplimiento.
+                  </Label>
+                  <textarea
+                    value={motivoOmision}
+                    onChange={(e) => setMotivoOmision(e.target.value)}
+                    placeholder="Ej: No llegó la mercadería del proveedor."
+                    disabled={omitir.isPending}
+                    rows={2}
+                    className="w-full rounded-lg border border-[#e4c9b0] bg-white px-3 py-2 text-sm text-[#391511] placeholder:text-[#c8a58a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c]"
+                  />
+                  <Button
+                    onClick={() =>
+                      omitir.mutate(
+                        { id: tarea.id, motivo: motivoOmision.trim() },
+                        { onSuccess: () => onCambioAbierto(false) }
+                      )
+                    }
+                    disabled={omitir.isPending || motivoOmision.trim().length < 5}
+                    className="w-full bg-[#c43e2c] hover:bg-[#a93325] text-white font-semibold text-xs h-9 disabled:opacity-50"
+                  >
+                    {omitir.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Omitir tarea'}
+                  </Button>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Reabrir (solo gestión): completada, omitida o vencida vuelve a pendiente */}
+          {tarea && esGestor && (cancelada || tarea.estado === 'vencida') && !tarea.trasladada_a && (
+            <Button
+              variant="outline"
+              onClick={() => reabrir.mutate(tarea.id, { onSuccess: () => onCambioAbierto(false) })}
+              disabled={ocupado}
+              className="w-full border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reabrir (vuelve a pendiente)
+            </Button>
           )}
 
           {/* Completada: evidencia + quién + rechazo (control de la encargada) */}
@@ -475,14 +698,27 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
               </div>
 
               {!mostrarRechazo ? (
-                <Button
-                  variant="outline"
-                  onClick={() => setMostrarRechazo(true)}
-                  className="w-full border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 gap-1.5"
-                >
-                  <Undo2 className="h-4 w-4" />
-                  Rechazar (está mal hecha)
-                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setMostrarRechazo(true)}
+                    className="border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 gap-1.5"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                    Rechazar
+                  </Button>
+                  {esGestor && (
+                    <Button
+                      variant="outline"
+                      onClick={() => reabrir.mutate(tarea.id, { onSuccess: () => onCambioAbierto(false) })}
+                      disabled={ocupado}
+                      className="border-[#e4c9b0] text-[#6f3a2a] gap-1.5"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Reabrir
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <div className="rounded-xl border border-[#c43e2c]/30 bg-[#c43e2c]/5 p-3 space-y-2">
                   <Label className="text-[#391511] font-medium text-sm">
@@ -561,6 +797,20 @@ export function ModalTarea({ abierto, onCambioAbierto, tarea, fechaDefault }: Pr
           </Button>
         </div>
       </DialogContent>
+      {puedeIncidencia && tarea && (
+        <ModalIncidencia
+          abierto={incidenciaAbierta}
+          onCambioAbierto={setIncidenciaAbierta}
+          empleadoIdFijo={tarea.empleado_id}
+          prefill={{
+            fecha: tarea.fecha,
+            turnoId: tarea.turno_id,
+            tareaTurnoId: tarea.id,
+            tareaTitulo: tarea.titulo,
+            descripcion: `Impedimento en la tarea “${tarea.titulo}”${tarea.hora ? ` (${formatoHora(tarea.hora)})` : ''}: `,
+          }}
+        />
+      )}
     </Dialog>
   )
 }

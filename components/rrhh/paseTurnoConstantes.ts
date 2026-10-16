@@ -35,7 +35,7 @@ export function noConformes(p: PaseTurnoRow): number {
 }
 
 /** Hora actual en Argentina como "HH:mm". */
-function horaActualAr(): string {
+export function horaActualAr(): string {
   return new Intl.DateTimeFormat('en-GB', {
     timeZone: 'America/Argentina/Buenos_Aires',
     hour: '2-digit',

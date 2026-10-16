@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CalendarCheck, Loader2, User, UserCheck, Users } from 'lucide-react'
+import { CalendarCheck, Clock, Loader2, User, UserCheck, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,8 +26,10 @@ import {
   ALCANCE_TAREA,
   DIAS_SEMANA,
   PRIORIDAD_TAREA,
+  TIPO_ACTIVIDAD,
   TIPO_RECURRENCIA,
 } from './tareasConstantes'
+import { horaDeMinutos, minutosDeHora } from './tareasAgenda'
 import { NOMBRE_TURNO, hoyAr } from './asistenciaConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
@@ -39,6 +41,7 @@ import type {
   ModoTarea,
   PrioridadTarea,
   RolOperativo,
+  TipoActividadTarea,
   TipoRecurrenciaTarea,
 } from '@/types/database'
 
@@ -46,12 +49,16 @@ interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   plantilla: PlantillaConAsignados | null
+  /** Turno preseleccionado al crear (desde Configurar rutina). */
+  turnoDefault?: number | null
 }
+
+type ModoHora = 'fija' | 'desde_inicio' | 'sin_hora'
 
 const claseInput = 'border-[#e4c9b0] focus-visible:ring-[#f9b44c]'
 const ITEMS_PRIORIDAD: Record<string, string> = { baja: 'Baja', media: 'Media', alta: 'Alta' }
 
-export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
+export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefault }: Props) {
   const editando = !!plantilla
   const { data: empleados } = useEmpleados()
   const { data: turnos } = useTurnos()
@@ -75,9 +82,28 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
   const [prioridad, setPrioridad] = useState<PrioridadTarea>('media')
   const [requiereEvidencia, setRequiereEvidencia] = useState(false)
   const [activa, setActiva] = useState(true)
+  // Horario (mig 251)
+  const [modoHora, setModoHora] = useState<ModoHora>('sin_hora')
+  const [hora, setHora] = useState('')
+  const [minutosDesde, setMinutosDesde] = useState('')
+  const [duracion, setDuracion] = useState('')
+  const [ventana, setVentana] = useState('')
+  const [tipoActividad, setTipoActividad] = useState<TipoActividadTarea>('puntual')
+  const [checklist, setChecklist] = useState('')
 
   useEffect(() => {
     if (abierto) {
+      setModoHora(
+        plantilla?.hora ? 'fija' : plantilla?.minutos_desde_inicio != null ? 'desde_inicio' : 'sin_hora'
+      )
+      setHora(plantilla?.hora ? plantilla.hora.slice(0, 5) : '')
+      setMinutosDesde(
+        plantilla?.minutos_desde_inicio != null ? String(plantilla.minutos_desde_inicio) : ''
+      )
+      setDuracion(plantilla?.duracion_min ? String(plantilla.duracion_min) : '')
+      setVentana(plantilla?.ventana_min ? String(plantilla.ventana_min) : '')
+      setTipoActividad(plantilla?.tipo_actividad ?? 'puntual')
+      setChecklist((plantilla?.checklist ?? []).join('\n'))
       setTitulo(plantilla?.titulo ?? '')
       setDescripcion(plantilla?.descripcion ?? '')
       setAlcance(plantilla?.alcance ?? 'puesto')
@@ -87,21 +113,42 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
           (plantilla?.empleado_id ? [plantilla.empleado_id] : [])
       )
       setModo(plantilla?.modo ?? 'individual')
-      setTurnoId(plantilla?.turno_id ? String(plantilla.turno_id) : '__ninguno__')
+      setTurnoId(
+        plantilla?.turno_id
+          ? String(plantilla.turno_id)
+          : turnoDefault
+            ? String(turnoDefault)
+            : '__ninguno__'
+      )
       setTipoRecurrencia(plantilla?.tipo_recurrencia ?? 'dias_semana')
-      setDias(plantilla?.dias_semana ?? [])
+      setDias(plantilla?.dias_semana ?? (plantilla ? [] : [0, 1, 2, 3, 4, 5, 6]))
       setDiaMes(plantilla?.dia_mes ? String(plantilla.dia_mes) : '')
       setCadaN(plantilla?.cada_n_dias ? String(plantilla.cada_n_dias) : '')
       setFechaBase(plantilla?.fecha_base ?? hoyAr())
-      setVigenciaDesde(plantilla?.vigencia_desde ?? '')
+      // Al editar, los cambios rigen desde hoy salvo que se elija otra fecha.
+      setVigenciaDesde(plantilla ? hoyAr() : '')
       setVigenciaHasta(plantilla?.vigencia_hasta ?? '')
       setPrioridad(plantilla?.prioridad ?? 'media')
       setRequiereEvidencia(plantilla?.requiere_evidencia ?? false)
       setActiva(plantilla?.activa ?? true)
     }
-  }, [abierto, plantilla])
+  }, [abierto, plantilla, turnoDefault])
 
   const activos = (empleados ?? []).filter((e) => e.activo)
+  const turnoSel = (turnos ?? []).find((t) => String(t.id) === turnoId) ?? null
+  const minutosDesdeNum = Number(minutosDesde)
+  const duracionNum = Number(duracion)
+  const ventanaNum = Number(ventana)
+  const horaValida =
+    modoHora === 'sin_hora' ||
+    (modoHora === 'fija' && /^\d{2}:\d{2}$/.test(hora)) ||
+    (modoHora === 'desde_inicio' && Number.isInteger(minutosDesdeNum) && minutosDesdeNum >= 0 && !!turnoSel)
+  const duracionValida = duracion === '' || (Number.isInteger(duracionNum) && duracionNum > 0)
+  const ventanaValida = ventana === '' || (Number.isInteger(ventanaNum) && ventanaNum > 0)
+  const horaPrevia =
+    modoHora === 'desde_inicio' && turnoSel && Number.isInteger(minutosDesdeNum)
+      ? horaDeMinutos(minutosDeHora(turnoSel.hora_inicio) + minutosDesdeNum)
+      : null
   // Asignados que quedaron inactivos: se muestran igual para poder sacarlos.
   const asignadosInactivos = (empleados ?? []).filter(
     (e) => !e.activo && asignados.includes(e.id)
@@ -130,6 +177,9 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
     (alcance === 'todos' ||
       (alcance === 'puesto' ? roles.length > 0 : asignados.length > 0)) &&
     recurrenciaValida &&
+    horaValida &&
+    duracionValida &&
+    ventanaValida &&
     !procesando
 
   function toggleRol(r: RolOperativo) {
@@ -160,6 +210,15 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
       prioridad,
       requiere_evidencia: requiereEvidencia,
       activa,
+      hora: modoHora === 'fija' ? hora : null,
+      minutos_desde_inicio: modoHora === 'desde_inicio' ? minutosDesdeNum : null,
+      duracion_min: duracion === '' ? null : duracionNum,
+      ventana_min: ventana === '' ? null : ventanaNum,
+      tipo_actividad: tipoActividad,
+      checklist: checklist
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean),
     }
     // Con 'puesto' los asignados fijos se conservan: son el último recurso
     // cuando el cronograma del día está vacío (mig 249).
@@ -185,8 +244,9 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
             {editando ? 'Tarea recurrente' : 'Nueva tarea recurrente'}
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            Se genera sola según la frecuencia elegida.
-            {editando && ' Los cambios rigen desde mañana; las tareas de hoy no se modifican.'}
+            Se genera sola según la frecuencia elegida, con su hora dentro del turno.
+            {editando &&
+              ' Los cambios alcanzan a las pendientes desde "Aplicar cambios desde"; lo iniciado o completado no se toca.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -431,7 +491,9 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
           {/* Vigencia */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-[#391511] font-medium text-sm">Vigente desde</Label>
+              <Label className="text-[#391511] font-medium text-sm">
+                {editando ? 'Aplicar cambios desde' : 'Vigente desde'}
+              </Label>
               <Input
                 type="date"
                 value={vigenciaDesde}
@@ -492,6 +554,140 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla }: Props) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Horario dentro del turno (mig 251) */}
+          <div className="rounded-xl border border-[#e4c9b0]/60 p-3 space-y-3">
+            <div className="flex items-center gap-1.5">
+              <Clock className="h-4 w-4 text-[#6f3a2a]" />
+              <Label className="text-[#391511] font-medium text-sm">Horario y duración</Label>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[#6f3a2a] text-xs">Tipo de actividad</Label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(Object.keys(TIPO_ACTIVIDAD) as TipoActividadTarea[]).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setTipoActividad(k)}
+                    disabled={procesando}
+                    aria-pressed={tipoActividad === k}
+                    className={cn(
+                      'rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors',
+                      tipoActividad === k
+                        ? 'bg-[#f9b44c] border-[#f9b44c] text-[#391511]'
+                        : 'bg-[#fdfaf6] border-[#e4c9b0] text-[#6f3a2a]'
+                    )}
+                  >
+                    {TIPO_ACTIVIDAD[k].label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-[#c8a58a]">{TIPO_ACTIVIDAD[tipoActividad].ayuda}</p>
+            </div>
+
+            {tipoActividad !== 'continua' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-[#6f3a2a] text-xs">Cuándo empieza</Label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(
+                      [
+                        ['fija', 'Hora fija'],
+                        ['desde_inicio', 'Desde el inicio del turno'],
+                        ['sin_hora', 'Durante el turno'],
+                      ] as [ModoHora, string][]
+                    ).map(([k, l]) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setModoHora(k)}
+                        disabled={procesando || (k === 'desde_inicio' && !turnoSel)}
+                        aria-pressed={modoHora === k}
+                        className={cn(
+                          'rounded-lg border px-2 py-1.5 text-xs font-semibold transition-colors disabled:opacity-40',
+                          modoHora === k
+                            ? 'bg-[#f9b44c] border-[#f9b44c] text-[#391511]'
+                            : 'bg-[#fdfaf6] border-[#e4c9b0] text-[#6f3a2a]'
+                        )}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  {modoHora === 'fija' && (
+                    <Input
+                      type="time"
+                      value={hora}
+                      onChange={(e) => setHora(e.target.value)}
+                      disabled={procesando}
+                      className={`${claseInput} tabular-nums`}
+                    />
+                  )}
+                  {modoHora === 'desde_inicio' && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={minutosDesde}
+                        onChange={(e) => setMinutosDesde(e.target.value)}
+                        placeholder="Minutos"
+                        disabled={procesando}
+                        className={`${claseInput} tabular-nums w-28`}
+                      />
+                      <span className="text-xs text-[#6f3a2a]">
+                        min después de las {turnoSel?.hora_inicio.slice(0, 5)}
+                        {horaPrevia && ` → ${horaPrevia}`}. Si cambia el turno, se mueve sola.
+                      </span>
+                    </div>
+                  )}
+                  {modoHora === 'sin_hora' && (
+                    <p className="text-[11px] text-[#c8a58a]">
+                      Va al final de la agenda del turno, como “durante el turno”.
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-[#6f3a2a] text-xs">Duración estimada (min)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={duracion}
+                      onChange={(e) => setDuracion(e.target.value)}
+                      placeholder="Ej: 20"
+                      disabled={procesando}
+                      className={`${claseInput} tabular-nums`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[#6f3a2a] text-xs">Ventana para completar (min)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={ventana}
+                      onChange={(e) => setVentana(e.target.value)}
+                      placeholder={duracion || '30'}
+                      disabled={procesando}
+                      className={`${claseInput} tabular-nums`}
+                    />
+                    <p className="text-[11px] text-[#c8a58a]">Pasada la ventana figura “Atrasada”.</p>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="space-y-1">
+              <Label className="text-[#6f3a2a] text-xs">Checklist / instrucciones (una por línea, opcional)</Label>
+              <textarea
+                value={checklist}
+                onChange={(e) => setChecklist(e.target.value)}
+                rows={3}
+                disabled={procesando}
+                placeholder={'Revisar heladera 1\nRevisar heladera 2'}
+                className="w-full rounded-lg border border-[#e4c9b0] bg-white px-3 py-2 text-sm text-[#391511] placeholder:text-[#c8a58a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f9b44c]"
+              />
             </div>
           </div>
 

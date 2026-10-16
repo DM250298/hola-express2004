@@ -623,6 +623,8 @@ export type EstadoTareaTurno =
 export type ModoTarea = 'individual' | 'grupal'
 export type TipoRecurrenciaTarea = 'dias_semana' | 'dia_mes' | 'cada_n_dias'
 export type AlcanceTarea = 'empleados' | 'todos' | 'puesto'
+/** mig 251: puntual (con hora), continua (todo el turno), bloque (descanso / pase). */
+export type TipoActividadTarea = 'puntual' | 'continua' | 'bloque'
 
 export type TareaRecurrenteRow = {
   id: string
@@ -645,6 +647,15 @@ export type TareaRecurrenteRow = {
   fecha_base: string | null
   vigencia_desde: string | null
   vigencia_hasta: string | null
+  /** mig 251: hora del reloj (HH:mm:ss) o null = durante el turno. */
+  hora: string | null
+  /** mig 251: alternativa a hora, minutos desde hora_inicio del turno. */
+  minutos_desde_inicio: number | null
+  duracion_min: number | null
+  /** Minutos desde `hora` para completarla; null = duracion_min. */
+  ventana_min: number | null
+  tipo_actividad: TipoActividadTarea
+  checklist: string[]
   usuario_id: string | null
   created_at: string
 }
@@ -668,6 +679,12 @@ export type TareaRecurrenteInsert = {
   fecha_base?: string | null
   vigencia_desde?: string | null
   vigencia_hasta?: string | null
+  hora?: string | null
+  minutos_desde_inicio?: number | null
+  duracion_min?: number | null
+  ventana_min?: number | null
+  tipo_actividad?: TipoActividadTarea
+  checklist?: string[]
   usuario_id?: string | null
 }
 
@@ -699,6 +716,18 @@ export type TareaTurnoRow = {
   /** Reasignada a mano por gestión (mig 248): la sincronización con el cronograma no la toca. */
   fijada: boolean
   notas: string | null
+  /** mig 251: hora del reloj (HH:mm:ss) o null = durante el turno. La fecha es el día en que EMPIEZA el turno. */
+  hora: string | null
+  duracion_min: number | null
+  ventana_min: number | null
+  tipo_actividad: TipoActividadTarea
+  checklist: string[]
+  iniciada_por: number | null
+  iniciada_at: string | null
+  motivo_omision: string | null
+  /** Traslado al turno siguiente (mig 253): de dónde viene / a dónde fue. */
+  trasladada_de: string | null
+  trasladada_a: string | null
   usuario_id: string | null
   created_at: string
 }
@@ -717,6 +746,11 @@ export type TareaTurnoInsert = {
   modo?: ModoTarea
   fijada?: boolean
   notas?: string | null
+  hora?: string | null
+  duracion_min?: number | null
+  ventana_min?: number | null
+  tipo_actividad?: TipoActividadTarea
+  checklist?: string[]
   usuario_id?: string | null
 }
 
@@ -5249,6 +5283,22 @@ export interface Database {
       fn_rechazar_tarea: {
         Args: { p_tarea_id: string; p_motivo: string }
         Returns: undefined
+      }
+      fn_iniciar_tarea: {
+        Args: { p_tarea_id: string }
+        Returns: undefined
+      }
+      fn_omitir_tarea: {
+        Args: { p_tarea_id: string; p_motivo: string }
+        Returns: undefined
+      }
+      fn_reabrir_tarea: {
+        Args: { p_tarea_id: string }
+        Returns: undefined
+      }
+      fn_trasladar_tarea: {
+        Args: { p_tarea_id: string }
+        Returns: string
       }
       fn_cumplimiento_tareas: {
         Args: { p_desde: string; p_hasta: string; p_empleado_id?: number | null }

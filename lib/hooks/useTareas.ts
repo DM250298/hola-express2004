@@ -13,10 +13,15 @@ import {
   deleteTarea,
   getCumplimiento,
   getPlantillas,
+  getTareasAgenda,
   getTareasFecha,
   getTareasRango,
+  iniciarTarea,
   materializarFecha,
+  omitirTarea,
+  reabrirTarea,
   rechazarTarea,
+  trasladarTarea,
   updatePlantilla,
   updateTarea,
 } from '@/lib/queries/tareas'
@@ -196,6 +201,71 @@ export function useCompletarTarea() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TAREAS_KEY })
       toast.success('¡Tarea completada!')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Agenda del día (mig 251): tareas de la fecha + las de ayer (noche viva). */
+export function useTareasAgenda(fecha: string) {
+  return useQuery({
+    queryKey: [...TAREAS_KEY, 'agenda', fecha],
+    queryFn: () => getTareasAgenda(fecha),
+    enabled: !!fecha,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+  })
+}
+
+export function useIniciarTarea() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => iniciarTarea(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      toast.success('Tarea en curso')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Solo gestión: vuelve a pendiente una completada, omitida o vencida. */
+export function useReabrirTarea() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => reabrirTarea(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: CUMPLIMIENTO_KEY })
+      toast.success('Tarea reabierta: vuelve a pendiente')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Omite con motivo (impedimento): queda cancelada y no cuenta en cumplimiento. */
+export function useOmitirTarea() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, motivo }: { id: string; motivo: string }) => omitirTarea(id, motivo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: CUMPLIMIENTO_KEY })
+      toast.success('Tarea omitida con motivo')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Traslada al turno siguiente con trazabilidad (mig 253). */
+export function useTrasladarTarea() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => trasladarTarea(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: CUMPLIMIENTO_KEY })
+      toast.success('Tarea trasladada al turno siguiente')
     },
     onError: (e: Error) => toast.error(e.message),
   })

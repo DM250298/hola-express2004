@@ -4,6 +4,7 @@ import type {
   ModoTarea,
   PrioridadTarea,
   TareaRecurrenteRow,
+  TipoActividadTarea,
   TipoRecurrenciaTarea,
 } from '@/types/database'
 
@@ -20,13 +21,63 @@ export const ESTADO_TAREA: Record<EstadoTareaTurno, Estilo> = {
   cancelada: { label: 'Cancelada', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
 }
 
-/** Columnas del kanban, en orden. */
-export const COLUMNAS_KANBAN: EstadoTareaTurno[] = [
-  'pendiente',
-  'en_curso',
-  'completada',
-  'vencida',
-]
+/** Tipo de actividad (mig 251). */
+export const TIPO_ACTIVIDAD: Record<TipoActividadTarea, { label: string; ayuda: string }> = {
+  puntual: {
+    label: 'Tarea puntual',
+    ayuda: 'Tiene hora y duración: entra en la agenda del turno y se completa.',
+  },
+  continua: {
+    label: 'Actividad continua',
+    ayuda: 'Durante todo el turno (atención al público, orden del salón). No se lista ni se completa.',
+  },
+  bloque: {
+    label: 'Descanso / pase de turno',
+    ayuda: 'Bloque de tiempo reservado: se ve en la agenda y cuenta en la carga, no como tarea.',
+  },
+}
+
+/**
+ * Estado derivado para la agenda (estado real + reloj). Siempre con texto,
+ * no solo color. `atrasada` y `ahora` / `futura` se calculan en cliente con
+ * la hora argentina; el enum de la base no cambia.
+ */
+export type EstadoDerivado =
+  | 'futura'
+  | 'ahora'
+  | 'pendiente'
+  | 'en_curso'
+  | 'atrasada'
+  | 'completada'
+  | 'omitida'
+  | 'trasladada'
+  | 'vencida'
+
+export const ESTADO_DERIVADO: Record<EstadoDerivado, Estilo> = {
+  futura: { label: 'Más tarde', clase: 'bg-[#f3ece4] text-[#6f3a2a]' },
+  ahora: { label: 'Ahora', clase: 'bg-[#f9b44c] text-[#391511]' },
+  pendiente: { label: 'Por hacer', clase: 'bg-[#e4c9b0]/40 text-[#6f3a2a]' },
+  en_curso: { label: 'En curso', clase: 'bg-[#f9b44c]/25 text-[#a06b00]' },
+  atrasada: { label: 'Atrasada', clase: 'bg-[#c43e2c]/15 text-[#c43e2c]' },
+  completada: { label: 'Hecha', clase: 'bg-[#2f7d4f]/15 text-[#2f7d4f]' },
+  omitida: { label: 'Omitida', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
+  trasladada: { label: 'Trasladada', clase: 'bg-[#c8a58a]/20 text-[#6f3a2a]' },
+  vencida: { label: 'Vencida', clase: 'bg-[#c43e2c]/15 text-[#c43e2c]' },
+}
+
+/** "07:20:00" → "07:20"; null → "—". */
+export function formatoHora(hora: string | null | undefined): string {
+  return hora ? hora.slice(0, 5) : '—'
+}
+
+/** 40 → "40 min"; 90 → "1 h 30"; null → "". */
+export function formatoDuracion(min: number | null | undefined): string {
+  if (!min) return ''
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`
+}
 
 export const PRIORIDAD_TAREA: Record<PrioridadTarea, Estilo> = {
   baja: { label: 'Baja', clase: 'bg-[#c8a58a]/25 text-[#6f3a2a]' },

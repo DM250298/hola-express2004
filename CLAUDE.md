@@ -407,10 +407,36 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
   dueño.** `alcance='empleados'/'todos'` conserva la regla v3 (franco/licencia
   se omite salvo pivote del patrón). `fn_materializar_tareas_turno` v4 (mig
   250) **sincroniza** en cada llamada (cron 06:00, apertura del tablero / Mis
-  tareas, botón "Actualizar según cronograma" en Tareas › Tablero): borra las
+  tareas, botón "Actualizar según cronograma" en Tareas › Agenda del día): borra las
   pendientes vírgenes de quien ya no corresponde, crea las que faltan y
   reconcilia participantes de las grupales; lo completado, en curso,
   rechazado o `tareas_turno.fijada` (responsable cambiado a mano) no se toca.
+- **Agenda por turno** (migs 251–253): Tareas ya no es un kanban por estado
+  sino una agenda cronológica por turno (`AgendaTurnos.tsx`, lógica pura en
+  `tareasAgenda.ts`). `tareas_recurrentes` y `tareas_turno` tienen `hora`
+  (NULL = "durante el turno"), `duracion_min`, `ventana_min`, `tipo_actividad`
+  (`puntual` | `continua` = banner sin completar | `bloque` = descanso/pase) y
+  `checklist`; la plantilla además `minutos_desde_inicio` (alternativa a la
+  hora fija: la materialización resuelve `hora_inicio` del turno + minutos).
+  **`tareas_turno.fecha` = día en que EMPIEZA el turno**: la agenda del día D
+  consulta `fecha in (D−1, D)` y muestra la cola de la noche de D−1 en la
+  franja 00:00–hora_fin. `fn_materializar_tareas_turno` v5 (mig 252) copia el
+  horario y, paso 2b, aplica los cambios de la rutina a las pendientes
+  vírgenes con `fecha ≥ vigencia_desde` ("Aplicar cambios desde" en el modal).
+  "Atrasada" es un estado derivado en cliente (`hora + ventana < ahora AR`),
+  el enum `estado` no cambia. Acciones por RPC (mig 253, misma regla de
+  permiso que `fn_completar_tarea`): `fn_iniciar_tarea` (registra
+  `iniciada_por/at`), `fn_omitir_tarea(id, motivo)` (→ cancelada, no cuenta en
+  cumplimiento), `fn_trasladar_tarea(id)` (nueva instancia en el turno
+  siguiente —día +1 si cruza medianoche— con `trasladada_de`, original
+  cancelada con `trasladada_a`, auditada) y `fn_reabrir_tarea` (solo gestión).
+  `fn_marcar_tareas_vencidas` v2 no vence la noche de ayer mientras su
+  `hora_fin` no pasó. Los horarios de turno se editan en Configurar rutina ›
+  Horarios de turno (`EditorTurnos.tsx`, `turnos_plantilla`, permiso `rrhh`);
+  `mi_panel` lee `turnos_plantilla` para la agenda del empleado. Las
+  incidencias siguen requiriendo `rrhh`: el empleado registra un impedimento
+  con "Omitir con motivo"; gestión abre `ModalIncidencia` prellenado con la
+  tarea.
   `fn_generar_cronograma(patron, desde, hasta,
   sobrescribir, aplicar)` es **parcial**: solo llena celdas vacías; con
   `sobrescribir` reemplaza solo filas con el mismo `horarios_asignados.patron_id`
