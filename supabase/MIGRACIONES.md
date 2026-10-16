@@ -21,6 +21,10 @@ registro no se puede clonar producción de forma confiable ni usar Branching.
    esté pendiente. La 153 partió de una firma vieja y creó una sobrecarga duplicada que hubo
    que arreglar con la 154.
 6. **Actualizar este archivo en el mismo commit que agrega la migración.**
+7. **Antes de pasar a producción, correr `scripts/estado_pase_produccion.sql` en producción.**
+   Revisa los objetos que crea cada migración, no esta tabla, que puede ir atrasada: el
+   2026-10-16 la 251–253 figuraban corridas en producción y no estaban. Al agregar migraciones
+   nuevas, sumarles una fila a esa consulta.
 
 ## Cómo se dedujo el estado
 
@@ -266,7 +270,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 166 | `166_factura_extras_mueven_stock.sql` | ✅ aplicada | 2026-09-07 | en este commit |
 | 167 | `167_recepcion_no_toca_costo.sql` | ✅ aplicada | verificada 2026-09-08 | `cd21662` |
 | 168 | `168_factura_guarda_iva_producto.sql` | ✅ aplicada | verificada 2026-09-08 | `c75b919` |
-| 169 | `169_compra_directa_precio_congelado.sql` | ⏳ pendiente | — | en este commit |
+| 169 | `169_compra_directa_precio_congelado.sql` | ⏳ pendiente | verificado 2026-10-16: NO está en producción | en este commit |
 | 170 | `170_ubicaciones_fisicas.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
 | 171 | `171_costo_congelado_en_venta.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
 | 172 | `172_quiebres_stock.sql` | ✅ aplicada | verificada 2026-09-15 | `ba158e3` |
@@ -285,8 +289,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 185 | `185_alertas_reglas_catalogo.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 190) | `fd529f8` |
 | 186 | `186_fn_evaluar_alertas.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
 | 187 | `187_fn_alertas_lectura.sql` | ✅ aplicada | verificada 2026-09-15 | `fd529f8` |
-| 188 | `188_fn_alertas_acciones.sql` | ⏳ pendiente | — | `fd529f8` |
-| 189 | `189_fn_actualizar_regla_alerta.sql` | ⏳ pendiente | — | en este commit |
+| 188 | `188_fn_alertas_acciones.sql` | ✅ aplicada | verificada 2026-10-16 (producción) | `fd529f8` |
+| 189 | `189_fn_actualizar_regla_alerta.sql` | ✅ aplicada | verificada 2026-10-16 (producción) | en este commit |
 | 190 | `190_alertas_reglas_stock_real.sql` | ✅ aplicada | verificada 2026-09-15 | `4bad2e7` |
 | 191 | `191_alertas_quiebre_vs_desfasaje.sql` | ✅ aplicada | verificada 2026-09-15 (la reemplaza la 192) | `4bad2e7` |
 | 192 | `192_stock_desfasado_por_clase.sql` | ✅ aplicada | verificada 2026-09-15 | `99077e9` |
@@ -346,14 +350,14 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 248 | `248_tareas_por_puesto_esquema.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 | 249 | `249_fn_asignados_tareas_dia.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
 | 250 | `250_fn_materializar_tareas_v4.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
-| 251 | `251_tareas_horario_esquema.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
-| 252 | `252_fn_materializar_tareas_v5.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
-| 253 | `253_tareas_acciones_rpcs.sql` | ✅ aplicada | 2026-10-12 (prueba + producción) | en este commit |
-| 254 | `254_organigrama_puestos_2026_10.sql` | ⏳ pendiente | — | en este commit |
-| 255 | `255_cronograma_dotacion_recalculo.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba, test OK) | en este commit (test: `tests/test_cronograma_recalculo.sql`) |
-| 256 | `256_cajero_fiambrero_mi_panel.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba) | `5fbc967` (D8) |
-| 257 | `257_permiso_proveedores.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba) | `5fbc967` (D9; test: `tests/test_permiso_proveedores.sql`) |
-| 258 | `258_rls_proveedores_escritura.sql` | ✅ prueba · ⏳ producción | 2026-10-13 (prueba) | en este commit (test: `tests/test_rls_proveedores.sql`) |
+| 251 | `251_tareas_horario_esquema.sql` | ✅ aplicada | 2026-10-12 (prueba) · 2026-10-16 (producción; la fecha anterior de producción era un error) | `27ebbee` |
+| 252 | `252_fn_materializar_tareas_v5.sql` | ✅ aplicada | 2026-10-12 (prueba) · 2026-10-16 (producción; la fecha anterior de producción era un error) | `27ebbee` |
+| 253 | `253_tareas_acciones_rpcs.sql` | ✅ aplicada | 2026-10-12 (prueba) · 2026-10-16 (producción; la fecha anterior de producción era un error) | `27ebbee` (test: `tests/test_tareas_agenda.sql`) |
+| 254 | `254_organigrama_puestos_2026_10.sql` | ✅ producción · ⏳ prueba sin confirmar | 2026-10-16 (producción) | `cef332d` |
+| 255 | `255_cronograma_dotacion_recalculo.sql` | ✅ aplicada | 2026-10-13 (prueba, test OK) · 2026-10-16 (producción) | `c5192cb` (test: `tests/test_cronograma_recalculo.sql`) |
+| 256 | `256_cajero_fiambrero_mi_panel.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D8) |
+| 257 | `257_permiso_proveedores.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D9; test: `tests/test_permiso_proveedores.sql`) |
+| 258 | `258_rls_proveedores_escritura.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `2894830` (test: `tests/test_rls_proveedores.sql`) |
 
 ## Dos bases de Supabase (2026-09-17)
 
