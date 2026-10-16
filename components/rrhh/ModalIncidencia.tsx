@@ -39,6 +39,9 @@ export interface PrefillIncidencia {
   descripcion?: string
   turnoId?: number | null
   fecha?: string
+  /** Tarea a vincular (impedimento desde la agenda). */
+  tareaTurnoId?: string | null
+  tareaTitulo?: string
 }
 
 interface Props {
@@ -81,7 +84,7 @@ export function ModalIncidencia({ abierto, onCambioAbierto, empleadoIdFijo, pref
     setTipologiaId(tip ? String(tip.id) : SIN)
     setFecha(prefill?.fecha ?? hoyAr())
     setTurnoId(prefill?.turnoId != null ? String(prefill.turnoId) : SIN)
-    setTareaId(SIN)
+    setTareaId(prefill?.tareaTurnoId ?? SIN)
     setDescripcion(prefill?.descripcion ?? '')
     setGravedad(tip?.gravedad_default ?? 'leve')
     setGravedadTocada(false)
@@ -122,6 +125,9 @@ export function ModalIncidencia({ abierto, onCambioAbierto, empleadoIdFijo, pref
   }
   const itemsTarea: Record<string, string> = {
     [SIN]: 'Sin tarea vinculada',
+    ...(prefill?.tareaTurnoId && !tareasEmpleado.some((t) => t.id === prefill.tareaTurnoId)
+      ? { [prefill.tareaTurnoId]: prefill.tareaTitulo ?? 'Tarea vinculada' }
+      : {}),
     ...Object.fromEntries(tareasEmpleado.map((t) => [t.id, t.titulo])),
   }
   const itemsGravedad: Record<string, string> = {

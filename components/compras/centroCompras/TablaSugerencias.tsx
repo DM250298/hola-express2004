@@ -321,7 +321,7 @@ export function TablaSugerencias({ grupo, onVolver }: Props) {
     ])
 
     const opciones = {
-      titulo: 'Centro de Compras',
+      titulo: 'Reposición por cobertura',
       subtitulo: partes.join(' · '),
       archivo: `centro-compras-${grupo.proveedor_nombre}`,
       columnas,

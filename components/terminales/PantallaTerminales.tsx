@@ -32,11 +32,17 @@ import {
 import { useCobrosSinConciliar } from '@/lib/hooks/useCobrosTerminal'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import { cn } from '@/lib/utils'
+import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
 import type { TerminalRow } from '@/types/database'
 
-type TabTerminales = 'terminales' | 'conciliacion'
+const TABS = ['terminales', 'conciliacion']
 
-export function PantallaTerminales() {
+interface Props {
+  /** Pestaña inicial (viene de ?tab= en la URL). */
+  tabInicial?: string
+}
+
+export function PantallaTerminales({ tabInicial }: Props) {
   const { data: terminales, isLoading, isError } = useTerminales()
   const { data: cuentas } = useCuentas(false)
   const eliminar = useDeleteTerminal()
@@ -45,7 +51,7 @@ export function PantallaTerminales() {
   const [editar, setEditar] = useState<TerminalRow | null>(null)
   const [cobroAbierto, setCobroAbierto] = useState(false)
   const [terminalCobro, setTerminalCobro] = useState<TerminalRow | null>(null)
-  const [tab, setTab] = useState<TabTerminales>('terminales')
+  const [tab, setTab] = usePestanaUrl(TABS, 'terminales', tabInicial)
 
   // Badge de la tab de conciliación: cobros con plata que entró pero sin venta.
   const { data: cobros } = useCobrosSinConciliar()
@@ -78,10 +84,10 @@ export function PantallaTerminales() {
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-[#391511] text-2xl font-bold">
-            Terminales de cobro
+            Cobros con posnet
           </h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
-            Terminales Mercado Pago Point conectadas al sistema.
+            Terminales Mercado Pago Point conectadas al sistema y conciliación de sus cobros.
           </p>
         </div>
         {tab === 'terminales' && (

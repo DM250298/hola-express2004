@@ -52,7 +52,7 @@ export function PantallaAgenda() {
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-5">
       <header className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-[#391511] text-2xl font-bold">Mi día</h1>
+          <h1 className="text-[#391511] text-2xl font-bold">Mi agenda</h1>
           <p className="text-[#6f3a2a] text-sm mt-1">
             Todo lo que tenés para hacer hoy, lo que está vencido y lo que viene.
           </p>

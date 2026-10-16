@@ -13,6 +13,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAlertasDashboard } from '@/lib/hooks/useDashboard'
 import { useQuiebresActivos } from '@/lib/hooks/useQuiebres'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import { cn } from '@/lib/utils'
 
 export function PanelAlertas() {
@@ -20,6 +22,11 @@ export function PanelAlertas() {
   // Quiebres de stock (mig 172): `null` = la migración aún no corrió → el
   // tile no se muestra y el panel se comporta como antes.
   const { data: quiebres } = useQuiebresActivos()
+  // Cada tarjeta enlaza solo si el usuario puede abrir esa pantalla; si no, se
+  // muestra el número sin enlace (antes rebotaba a Inicio por el middleware).
+  const { data: usuario } = useUsuario()
+  const enlace = (permiso: string, href: string) =>
+    tienePermiso(usuario?.permisos, permiso) ? href : undefined
 
   if (isLoading) {
     return <Skeleton className="h-40 rounded-2xl bg-[#f9d2a2]/30" />
@@ -78,7 +85,7 @@ export function PanelAlertas() {
           )}
         >
           <ItemAlerta
-            href="/inventario"
+            href={enlace('inventario', '/inventario')}
             icono={Package}
             etiqueta="Productos bajo stock mínimo"
             cantidad={data.productos_bajo_stock}
@@ -86,7 +93,7 @@ export function PanelAlertas() {
           />
           {hayQuiebres && (
             <ItemAlerta
-              href="/inventario"
+              href={enlace('inventario', '/inventario')}
               icono={Timer}
               etiqueta="Quiebres de stock activos"
               cantidad={quiebresActivos}
@@ -94,14 +101,14 @@ export function PanelAlertas() {
             />
           )}
           <ItemAlerta
-            href="/vencimientos"
+            href={enlace('vencimientos', '/vencimientos?tab=proximos')}
             icono={Calendar}
             etiqueta="Lotes vencen en < 3 días"
             cantidad={data.lotes_por_vencer}
             color="#c43e2c"
           />
           <ItemAlerta
-            href="/finanzas"
+            href={enlace('finanzas', '/finanzas?tab=cuentas_pagar')}
             icono={Wallet}
             etiqueta="Cuentas vencidas"
             cantidad={data.cuentas_vencidas}
@@ -120,23 +127,24 @@ function ItemAlerta({
   cantidad,
   color,
 }: {
-  href: string
+  /** Sin href (no tiene permiso para esa pantalla) la tarjeta no enlaza. */
+  href?: string
   icono: React.ElementType
   etiqueta: string
   cantidad: number
   color: string
 }) {
   const cero = cantidad === 0
-  return (
-    <Link
-      href={href}
-      className={cn(
-        'group flex items-center gap-3 p-3 rounded-xl border bg-white transition-all',
-        cero
-          ? 'border-[#e4c9b0]/60 opacity-60'
-          : 'border-[#e4c9b0]/60 hover:border-[#f9b44c] hover:shadow-md'
-      )}
-    >
+  const clases = cn(
+    'group flex items-center gap-3 p-3 rounded-xl border bg-white transition-all',
+    cero
+      ? 'border-[#e4c9b0]/60 opacity-60'
+      : href
+        ? 'border-[#e4c9b0]/60 hover:border-[#f9b44c] hover:shadow-md'
+        : 'border-[#e4c9b0]/60'
+  )
+  const contenido = (
+    <>
       <div
         className="shrink-0 p-2 rounded-lg"
         style={{ backgroundColor: cero ? '#c8a58a22' : `${color}22` }}
@@ -159,9 +167,16 @@ function ItemAlerta({
           {etiqueta}
         </div>
       </div>
-      {!cero && (
+      {!cero && href && (
         <ChevronRight className="h-4 w-4 text-[#c8a58a] group-hover:translate-x-0.5 group-hover:text-[#391511] transition-all" />
       )}
+    </>
+  )
+  return href ? (
+    <Link href={href} className={clases}>
+      {contenido}
     </Link>
+  ) : (
+    <div className={clases}>{contenido}</div>
   )
 }

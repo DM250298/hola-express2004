@@ -51,7 +51,9 @@ function diffDias(desde: string, hasta: string): number {
 }
 
 export async function POST(request: Request) {
-  // 1. Auth + permiso operativo de RRHH (admin/encargado).
+  // 1. Auth + permiso 'rrhh' (el mismo que exige fn_importar_fichajes y el que
+  //    muestra el botón "Importar reloj"; antes se chequeaba por rol y un usuario
+  //    con el permiso pero otro rol recibía 403).
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -59,14 +61,10 @@ export async function POST(request: Request) {
   if (!user) {
     return NextResponse.json({ error: 'No autenticado.' }, { status: 401 })
   }
-  const { data: perfil } = await supabase
-    .from('usuarios')
-    .select('rol')
-    .eq('id', user.id)
-    .single<{ rol: string }>()
-  if (!perfil || !['admin', 'encargado'].includes(perfil.rol)) {
+  const { data: tienePermiso } = await supabase.rpc('fn_tiene_permiso', { p_clave: 'rrhh' })
+  if (!tienePermiso) {
     return NextResponse.json(
-      { error: 'Solo admin o encargado puede importar fichajes.' },
+      { error: 'Necesitás el permiso de Recursos Humanos (rrhh) para importar fichajes.' },
       { status: 403 }
     )
   }

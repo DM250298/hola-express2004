@@ -20,6 +20,8 @@ import { EstadoError } from '@/components/shared/EstadoError'
 import { cn } from '@/lib/utils'
 import { formatearFechaCortaISO, formatearFechaHora, formatearNumero } from '@/lib/utils/formato'
 import { hoyIso } from '@/lib/utils/periodos'
+import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import {
   useAlertas,
   useEvaluarAlertasAhora,
@@ -320,6 +322,11 @@ function TarjetaRegla({
   const primera = alertas[0]
   const colores = COLOR_SEVERIDAD[primera.severidad]
   const accion = ACCION_REGLA[primera.regla_codigo]
+  // "Revisar precios", "Cargar costos" y "Categorizar" abren Configuración ›
+  // Productos: sin ese permiso el link rebotaría a Inicio, así que se avisa
+  // quién lo resuelve (cada producto sigue abriendo su ficha en Stock).
+  const { data: usuario } = useUsuario()
+  const puedeIr = !accion?.permiso || tienePermiso(usuario?.permisos, accion.permiso)
   const ids = alertas.map((a) => a.id)
   const todas = ids.every((id) => seleccion.has(id))
   const grupos = agruparPor(alertas, (a) => a.grupo ?? '—')
@@ -353,7 +360,7 @@ function TarjetaRegla({
             {formatearNumero(alertas.length)}
           </span>
         </button>
-        {accion && (
+        {accion && puedeIr && (
           <Link
             href={accion.href}
             className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#9e6b15] hover:text-[#391511] hover:underline"
@@ -361,6 +368,14 @@ function TarjetaRegla({
             {accion.etiqueta}
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
+        )}
+        {accion && !puedeIr && (
+          <span
+            title={`${accion.etiqueta}: se hace en Configuración › Productos y precios. Podés crearle una tarea.`}
+            className="shrink-0 text-xs text-[#6f3a2a]"
+          >
+            {accion.loHace ?? 'Lo resuelve el administrador'}
+          </span>
         )}
         <p className="basis-full pl-6 text-xs text-[#6f3a2a]">
           {grupos.length > 1 && <>{resumenGrupos} — </>}
@@ -576,7 +591,7 @@ function VistaConTarea({ alertas }: { alertas: Alerta[] }) {
         </Link>{' '}
         y en el{' '}
         <Link href="/agenda" className="underline underline-offset-2 hover:text-[#391511]">
-          Mi día
+          Mi agenda
         </Link>{' '}
         de cada responsable.
       </p>

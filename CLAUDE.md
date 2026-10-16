@@ -60,7 +60,8 @@ requiere login, max-w-lg mobile-first).
 **Rutas autenticadas:** `/` (dashboard), `/pos`, `/ventas`, `/inventario`
 (con `/movimientos` y `/clasificacion-abc`), `/vencimientos`, `/compras`
 (unificado), `/etiquetas`, `/finanzas`, `/contabilidad`, `/rrhh`,
-`/clientes`, `/tableros`, `/proyectos`, `/agenda`, `/reportes`,
+`/clientes`, `/proyectos`, `/agenda`, `/reportes`, `/tablero`, `/alertas`,
+`/mapa`, `/produccion`,
 `/terminales`, `/configuracion` (productos, categorías, proveedores,
 usuarios).
 
@@ -122,7 +123,8 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
 - **Layout**: lee permisos de la DB y los pasa down como props.
 - **Sidebar**: filtra items por permiso. Soporta `permisosAlt` para items
   visibles con cualquiera de N permisos (ej: `/compras` se ve con
-  `compras`, `pedidos` o `recepcion`).
+  `compras`, `pedidos` o `recepcion`). Los datos del menú viven en
+  `lib/config/navegacion.ts` (ver "Menú por pilares").
 - **RLS real (migración 047+)**: las tablas sensibles dejaron de ser
   `using(true)`. Ahora están gateadas por permiso vía
   `fn_tiene_permiso(clave)` (que lee `usuarios.rol` + `roles.permisos`;
@@ -135,10 +137,43 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
   no se afectan. Desde la mig 218, `caja_turnos`, `ventas`, `items_venta` y
   `pagos_venta` son **solo SELECT** para authenticated: toda escritura pasa
   por RPC (`fn_abrir_turno`, `fn_cerrar_turno`, `fn_crear_venta`, …).
+- **Roles del mostrador y compras (oct-2026)**: cajero y fiambrero ven lo
+  propio de Personal con `mi_panel`, no `rrhh` (mig 256, D8). El permiso
+  `proveedores` (mig 257, D9) abre solo `/configuracion/proveedores` y el
+  catálogo `proveedor_producto` a quien compra sin `configuracion` (que
+  además abre usuarios y datos fiscales); todo rol con `configuracion` lo
+  tiene. La ficha `proveedores` la lee cualquier sesión y la escriben solo
+  `compras`, `pedidos`, `configuracion`, `proveedores` o `finanzas` (mig 258).
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
-asignarla a roles en la tabla `roles`.
+asignarla a roles en la tabla `roles` y, si va en el menú, sumarla en
+`lib/config/navegacion.ts` y en `FOTO_MENU_OCT_2026` del test.
+
+### Menú por pilares (oct-2026)
+
+`lib/config/navegacion.ts` tiene los dos menús como datos puros (íconos por
+nombre, sin imports con alias) y `Sidebar.tsx` solo los dibuja:
+- `MENU_SEIS_PILARES`: arriba sin título Inicio, Mi panel, Mis tareas, Mi pase
+  de turno y Mi agenda; después **Resultados** (Tablero del dueño, Reportes),
+  **Operaciones** (Turnos y equipo = `/rrhh`, Alertas, Producción, Tableros de
+  tareas), **Ventas** (Punto de venta, Historial de ventas, Clientes y fiado),
+  **Compras** (Compras + atajo a `/configuracion/proveedores`), **Stock**
+  (Stock, Conteo físico, Vencimientos, Mapa, Etiquetas) y **Finanzas**
+  (Finanzas y tesorería, Cobros con posnet = `/terminales`, Contabilidad); al
+  pie Modo móvil y Configuración.
+- `MENU_ANTERIOR`: el menú hasta oct-2026, intacto. `MENU_PILARES = false`
+  vuelve a él sin tocar nada más.
+- Las rutas y los permisos son los mismos en los dos (el único agregado es el
+  atajo a Proveedores, que ve quien tiene `configuracion` o el permiso
+  `proveedores`, mig 257).
+  `lib/config/navegacion.test.ts` (`npm test`) lo verifica contra una foto
+  del menú anterior y por rol.
+- `<Sidebar variante="hoja">` es el que va dentro del menú hamburguesa del
+  Header (la variante fija está oculta por debajo de `md`).
+- Las decisiones del dueño (2026-10-13) están en el plan
+  `pasted-content-id-ff5d-revis-hex-v1-zesty-token.md` y en la página
+  "Pilares de navegación HEX".
 
 ### Modo offline (solo POS)
 
@@ -203,9 +238,15 @@ ABM + historial de compras.
   tabla con acciones (ver detalle, etiqueta, ajustar). Detalle por producto
   con gráfico de evolución 30 días e historial paginado
 - **Control de stock** (`/inventario/control`): operaciones de control en
-  tabs — Conteo (asignar/contar/aprobar), Ajustes (formulario + historial,
-  gated con `inventario_ajustes`), Movimientos (historial global con
-  filtros y export CSV). `/inventario/movimientos` redirige acá
+  tabs — Ajustes (formulario + historial, gated con `inventario_ajustes`) y
+  Movimientos (historial global con filtros y export CSV).
+  `/inventario/movimientos` redirige acá. La pestaña Conteo (flujo viejo de
+  `conteos`/`conteos_items`: asignar/contar/aprobar) está escondida desde
+  oct-2026 (D7, `MOSTRAR_CONTEOS_ASIGNADOS = false` en
+  `lib/config/inventario.ts`), igual que "Conteos asignados" del celular y la
+  tarjeta "Conteos por aprobar": se cuenta con el Conteo físico por zonas
+  (`/inventario/conteo`). Las tablas quedan; el Conteo rápido del celular no
+  cambia
 - **Clasificación ABC** (`/inventario/clasificacion-abc`): análisis Pareto
   por ingresos
 - ABM de productos vive en `/configuracion/productos` — no es parte
@@ -295,7 +336,8 @@ Tabs:
   `getSaldoCajaFuerte` (referencia_tipo egreso/cuenta_a_pagar) para no
   disparar descuadre falso
 
-Sidebar: sección **"Finanzas y Tesorería"** agrupa Finanzas + Contabilidad.
+Sidebar: pilar **"Finanzas"** agrupa Finanzas y tesorería, Cobros con posnet
+(`/terminales`) y Contabilidad.
 
 #### Medios de pago y comisiones MP (cross-cutting POS ↔ Finanzas)
 
@@ -348,7 +390,8 @@ Las dos conciliaciones viven acá (movidas de Finanzas en 2026-07):
   cuenta contra el saldo del extracto
 
 ### 10. Personal (`/rrhh`) — hub único de RRHH
-Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
+Una sola entrada de sidebar ("Turnos y equipo", pilar Operaciones) con
+pestañas por `?tab=`:
 **Hoy** (`TableroRrhh`: `fn_dashboard_rrhh` + `fn_dashboard_disciplina`),
 **Equipo** (empleados, organigrama por `empleados.rol_operativo` /
 `reporta_a`, desempeño), **Cronograma** (grilla de turnos y fichajes),
@@ -394,10 +437,61 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
   dueño.** `alcance='empleados'/'todos'` conserva la regla v3 (franco/licencia
   se omite salvo pivote del patrón). `fn_materializar_tareas_turno` v4 (mig
   250) **sincroniza** en cada llamada (cron 06:00, apertura del tablero / Mis
-  tareas, botón "Actualizar según cronograma" en Tareas › Tablero): borra las
+  tareas, botón "Actualizar según cronograma" en Tareas › Agenda del día): borra las
   pendientes vírgenes de quien ya no corresponde, crea las que faltan y
   reconcilia participantes de las grupales; lo completado, en curso,
   rechazado o `tareas_turno.fijada` (responsable cambiado a mano) no se toca.
+- **Puestos reales (mig 254, oct-2026)**: los valores de `rol_operativo` no cambian,
+  solo las etiquetas (`ROLES_OPERATIVOS`): `responsable_general` = Encargada de
+  Sucursal (Sonia), `encargado` = Encargado/a de Turno (Rebeca), `cajero` (Camila,
+  Juan Ignacio, Fabricio), `fiambreria` = Fiambrero/Producción (Tomas, Agustin),
+  `pivote` = Pivot (Matias), `compras` (Fernanda). Todos reportan a Sonia salvo
+  Sonia y Fernanda, que reportan a Dirección (Rodrigo). La seed matchea por
+  nombre + apellido; no volver a sembrar por primer nombre.
+- **Cronograma: Planificación / Fichadas (mig 255, oct-2026)**: la pestaña
+  (`PantallaAsistencia.tsx`) tiene dos vistas sobre la misma grilla semanal
+  (`GrillaCronograma.tsx`, lógica pura en `cronogramaCalculos.ts`). **Planificación**
+  muestra solo `horarios_asignados` (turno con nombre y horas, franco, licencia,
+  "sin asignar", "Cubre a X" leído de `notas` con la convención de la 247) y el panel
+  de cobertura del día seleccionado contra `dotacion_requerida` (turno × día de
+  semana, null = todos; sin filas = "sin configurar", nunca se inventan mínimos).
+  **Fichadas** deriva el estado en cliente (`estadoFichada`): un día pasado sin
+  marcaciones es "Ausente" SOLO si la última importación del reloj
+  (`importaciones_fichajes` completada con `dias_recalculados > 0`) cubre esa fecha;
+  si no, "Revisar fichada". Futuro = "Programado". Editar una celda (Sheet
+  `PanelAsignacion`) escribe como manual (`patron_id null`, `usuario_id`) y después
+  `sincronizarPlan`: si el día ya pasó llama `fn_recalcular_asistencia_empleado`
+  (D y D+1; el cron solo cierra planificados y dejaba "ausente" un cambio a franco) y
+  si cae en [hoy−1, hoy+7] re-materializa las tareas (no bloqueante). "Copiar semana
+  anterior" previsualiza, no pisa por defecto y no copia notas "Cubre a…". Horas por
+  empleado = brutas planificadas (la noche cuenta en el día en que empieza). El route
+  de importar reloj gatea por permiso `rrhh` (antes por rol).
+- **Agenda por turno** (migs 251–253): Tareas ya no es un kanban por estado
+  sino una agenda cronológica por turno (`AgendaTurnos.tsx`, lógica pura en
+  `tareasAgenda.ts`). `tareas_recurrentes` y `tareas_turno` tienen `hora`
+  (NULL = "durante el turno"), `duracion_min`, `ventana_min`, `tipo_actividad`
+  (`puntual` | `continua` = banner sin completar | `bloque` = descanso/pase) y
+  `checklist`; la plantilla además `minutos_desde_inicio` (alternativa a la
+  hora fija: la materialización resuelve `hora_inicio` del turno + minutos).
+  **`tareas_turno.fecha` = día en que EMPIEZA el turno**: la agenda del día D
+  consulta `fecha in (D−1, D)` y muestra la cola de la noche de D−1 en la
+  franja 00:00–hora_fin. `fn_materializar_tareas_turno` v5 (mig 252) copia el
+  horario y, paso 2b, aplica los cambios de la rutina a las pendientes
+  vírgenes con `fecha ≥ vigencia_desde` ("Aplicar cambios desde" en el modal).
+  "Atrasada" es un estado derivado en cliente (`hora + ventana < ahora AR`),
+  el enum `estado` no cambia. Acciones por RPC (mig 253, misma regla de
+  permiso que `fn_completar_tarea`): `fn_iniciar_tarea` (registra
+  `iniciada_por/at`), `fn_omitir_tarea(id, motivo)` (→ cancelada, no cuenta en
+  cumplimiento), `fn_trasladar_tarea(id)` (nueva instancia en el turno
+  siguiente —día +1 si cruza medianoche— con `trasladada_de`, original
+  cancelada con `trasladada_a`, auditada) y `fn_reabrir_tarea` (solo gestión).
+  `fn_marcar_tareas_vencidas` v2 no vence la noche de ayer mientras su
+  `hora_fin` no pasó. Los horarios de turno se editan en Configurar rutina ›
+  Horarios de turno (`EditorTurnos.tsx`, `turnos_plantilla`, permiso `rrhh`);
+  `mi_panel` lee `turnos_plantilla` para la agenda del empleado. Las
+  incidencias siguen requiriendo `rrhh`: el empleado registra un impedimento
+  con "Omitir con motivo"; gestión abre `ModalIncidencia` prellenado con la
+  tarea.
   `fn_generar_cronograma(patron, desde, hasta,
   sobrescribir, aplicar)` es **parcial**: solo llena celdas vacías; con
   `sobrescribir` reemplaza solo filas con el mismo `horarios_asignados.patron_id`
@@ -407,7 +501,7 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.
 
-### 12. Proyectos y Agenda (`/proyectos`, `/tableros`, `/agenda`)
+### 12. Tableros de tareas y Mi agenda (`/proyectos`, `/agenda`)
 Kanban con subtareas, tareas recurrentes, "Mi día".
 
 ### 13. Terminales (`/terminales`)

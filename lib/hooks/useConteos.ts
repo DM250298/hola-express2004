@@ -14,10 +14,11 @@ import {
 
 export const CONTEOS_KEY = ['conteos'] as const
 
-export function useConteos() {
+export function useConteos(habilitado = true) {
   return useQuery({
     queryKey: CONTEOS_KEY,
     queryFn: getConteos,
+    enabled: habilitado,
     staleTime: 20 * 1000,
   })
 }

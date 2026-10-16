@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { PantallaDashboard } from '@/components/dashboard/PantallaDashboard'
 
 export const metadata = {
-  title: 'Dashboard — ¡Hola! Express',
+  title: 'Inicio — ¡Hola! Express',
 }
 
 export default async function PaginaDashboard() {

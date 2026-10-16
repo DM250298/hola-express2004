@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { ChevronLeft, Loader2 } from 'lucide-react'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
+import { MOSTRAR_CONTEOS_ASIGNADOS } from '@/lib/config/inventario'
 import { cn } from '@/lib/utils'
 import { ConteoRapidoMovil } from './ConteoRapidoMovil'
 import { ConteoFormalMovil } from './ConteoFormalMovil'
@@ -34,7 +35,7 @@ export function ConteoMovil() {
   const { data: usuario, isLoading } = useUsuario()
   // Conteo rápido (ajuste directo) → requiere `inventario_ajustes`.
   // Aprobar conteos formales → requiere `conteo_gestion`.
-  // La lista de conteos asignados se muestra siempre (para poder contarlos).
+  // La lista de conteos asignados (flujo viejo) solo con el flag de D7.
   const puedeRapido = tienePermiso(usuario?.permisos, 'inventario_ajustes')
   const puedeGestionar = tienePermiso(usuario?.permisos, 'conteo_gestion')
   const [modo, setModo] = useState<Modo>('rapido')
@@ -45,6 +46,22 @@ export function ConteoMovil() {
         <div className="flex justify-center py-10">
           <Loader2 className="h-6 w-6 animate-spin text-[#9e6b15]" />
         </div>
+      </Marco>
+    )
+  }
+
+  if (!MOSTRAR_CONTEOS_ASIGNADOS) {
+    return (
+      <Marco>
+        {puedeRapido ? (
+          <ConteoRapidoMovil usuarioId={usuario?.id ?? null} />
+        ) : (
+          <p className="rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 text-sm text-[#6f3a2a]">
+            Para ajustar el stock desde el celular necesitás el permiso de
+            ajustes de stock. Si te asignaron una zona del conteo físico, la
+            encontrás en el inicio del modo móvil.
+          </p>
+        )}
       </Marco>
     )
   }

@@ -21,6 +21,7 @@ import { useEtiquetasPendientes } from '@/lib/hooks/useEtiquetas'
 import { useQuiebresActivos } from '@/lib/hooks/useQuiebres'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
+import { MOSTRAR_CONTEOS_ASIGNADOS } from '@/lib/config/inventario'
 import type { EstadoStock } from '@/lib/queries/inventario'
 
 interface Props {
@@ -37,12 +38,14 @@ export function PanelPendientes({ estadoFiltro, onCambiarFiltro }: Props) {
   const { data: usuario } = useUsuario()
   const { data: alertas, isLoading } = useResumenAlertasStock()
   const { data: venc } = useResumenVencimientos()
-  const { data: conteos } = useConteos()
+  // Conteos asignados (flujo viejo): escondidos por D7, ni se consultan.
+  const { data: conteos } = useConteos(MOSTRAR_CONTEOS_ASIGNADOS)
   const { data: etiquetas } = useEtiquetasPendientes()
   const { data: quiebres } = useQuiebresActivos()
 
   const puedeVencimientos = tienePermiso(usuario?.permisos, 'vencimientos')
-  const puedeConteos = tienePermiso(usuario?.permisos, 'conteo_gestion')
+  const puedeConteos =
+    MOSTRAR_CONTEOS_ASIGNADOS && tienePermiso(usuario?.permisos, 'conteo_gestion')
   const puedeEtiquetas = tienePermiso(usuario?.permisos, 'etiquetas')
 
   const bajo = alertas?.bajo_stock ?? 0

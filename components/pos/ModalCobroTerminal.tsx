@@ -307,7 +307,7 @@ export function ModalCobroTerminal({
             <div className="text-center py-6 text-[#c43e2c] text-sm">
               No hay ninguna terminal vinculada al sistema.
               <br />
-              Configurala en <strong>Terminales de cobro</strong>.
+              Configurala en <strong>Finanzas › Cobros con posnet</strong>.
             </div>
           )}
 

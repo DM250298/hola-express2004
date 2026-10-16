@@ -4,10 +4,14 @@ import { PantallaFinanzas } from '@/components/finanzas/PantallaFinanzas'
 import { PERMISOS_POR_ROL_LEGACY } from '@/lib/permisos'
 
 export const metadata = {
-  title: 'Finanzas — ¡Hola! Express',
+  title: 'Finanzas y tesorería — ¡Hola! Express',
 }
 
-export default async function PaginaFinanzas() {
+export default async function PaginaFinanzas({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
   // Doble protección: solo entran los roles con permiso 'finanzas'.
   const supabase = await createServerClient()
   const {
@@ -36,5 +40,6 @@ export default async function PaginaFinanzas() {
     redirect('/')
   }
 
-  return <PantallaFinanzas />
+  const { tab } = await searchParams
+  return <PantallaFinanzas permisos={permisos} tabInicial={tab} />
 }

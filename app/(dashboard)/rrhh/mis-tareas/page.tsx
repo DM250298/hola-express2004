@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
 import { MisTareas } from '@/components/rrhh/MisTareas'
+import { TareasDeTableros } from '@/components/rrhh/TareasDeTableros'
 
 export const metadata = {
   title: 'Mis tareas — RRHH',
@@ -18,20 +19,30 @@ export default async function PaginaMisTareas() {
     .eq('usuario_id', userId)
     .maybeSingle<{ id: number; nombre: string }>()
 
+  // Debajo de las tareas del turno van las de tableros y alertas (las mismas
+  // de Mi agenda): dependen del usuario, no del legajo.
   if (!emp) {
     return (
-      <div className="p-6 max-w-lg mx-auto">
-        <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-8 text-center">
-          <p className="text-[#391511] font-semibold">
-            Tu usuario no está vinculado a un legajo
-          </p>
-          <p className="text-[#6f3a2a] text-sm mt-1">
-            Pedile al encargado que vincule tu cuenta para ver tus tareas.
-          </p>
+      <>
+        <div className="p-6 max-w-lg mx-auto">
+          <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-8 text-center">
+            <p className="text-[#391511] font-semibold">
+              Tu usuario no está vinculado a un legajo
+            </p>
+            <p className="text-[#6f3a2a] text-sm mt-1">
+              Pedile al encargado que vincule tu cuenta para ver tus tareas.
+            </p>
+          </div>
         </div>
-      </div>
+        <TareasDeTableros />
+      </>
     )
   }
 
-  return <MisTareas empleadoId={emp.id} nombre={emp.nombre} />
+  return (
+    <>
+      <MisTareas empleadoId={emp.id} nombre={emp.nombre} />
+      <TareasDeTableros />
+    </>
+  )
 }

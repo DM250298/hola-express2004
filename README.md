@@ -18,9 +18,17 @@ distintos niveles de acceso.
 
 ## Módulos
 
-POS (con modo offline) · Inventario · Vencimientos · Pedidos y Recepción ·
-Compras · Etiquetas de precio · Finanzas · Contabilidad · RR.HH. / Nóminas ·
-CRM (clientes) · Proyectos · Reportes · Terminales de cobro · Configuración.
+El menú se organiza en seis pilares:
+
+- **Resultados:** Tablero del dueño · Reportes
+- **Operaciones:** Turnos y equipo (personal, cronograma, tareas, pases, sueldos) · Alertas · Producción · Tableros de tareas
+- **Ventas:** Punto de venta (con modo offline) · Historial de ventas · Clientes y fiado
+- **Compras:** Reposición por cobertura, órdenes, recepción, facturas y costos · Proveedores
+- **Stock:** Stock · Conteo físico · Vencimientos · Mapa del local · Etiquetas de precio
+- **Finanzas:** Finanzas y tesorería · Cobros con posnet · Contabilidad
+
+Arriba quedan Inicio y las entradas personales (Mi panel, Mis tareas, Mi pase de
+turno, Mi agenda); al pie, Modo móvil y Configuración.
 
 ---
 

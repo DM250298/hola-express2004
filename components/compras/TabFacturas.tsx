@@ -2,31 +2,19 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import {
-  CheckCircle2,
-  ExternalLink,
-  FileText,
-  Package,
-  Trash2,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ArrowRight, CheckCircle2, Inbox, Package } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { ModalCompraFactura } from '@/components/compras/ModalCompraFactura'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { useCancelarPedido } from '@/lib/hooks/usePedidos'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { SkeletonTabla } from '@/components/shared/SkeletonTabla'
-import { MontoARS } from '@/components/shared/MontoARS'
-import { ModalEditarFactura } from '@/components/finanzas/ModalEditarFactura'
-import { formatearFechaCorta } from '@/lib/utils/formato'
 import { useCuentasSinFactura } from '@/lib/hooks/useFinanzas'
-import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
+import { cn } from '@/lib/utils'
+
+/**
+ * Pantalla responsable de cargar facturas de proveedores: Finanzas › Facturas
+ * de proveedores (D3, oct-2026). Allá están las pendientes, las "Compras del
+ * POS a controlar" y las cargadas por período.
+ */
+const HREF_FACTURAS_FINANZAS = '/finanzas?tab=comprobantes'
 
 /** Cuentas a pagar todavía sin factura cargada (provisorias de recepción). */
 function usarPendientesFactura() {
@@ -49,32 +37,27 @@ export function BadgePendientesFactura() {
   )
 }
 
+/**
+ * Compras › Facturas: la compra directa (sin orden) y un resumen de las
+ * facturas que faltan cargar, con enlace a Finanzas. La carga de facturas se
+ * hace solo en Finanzas (misma consulta `useCuentasSinFactura`: los dos
+ * contadores coinciden siempre).
+ */
 export function TabFacturas() {
   const { pendientes, isLoading, isError } = usarPendientesFactura()
   const { data: usuario } = useUsuario()
-  const cancelar = useCancelarPedido()
-  const [cuentaFactura, setCuentaFactura] =
-    useState<CuentaAPagarConProveedor | null>(null)
   const [modalCompra, setModalCompra] = useState(false)
 
-  function handleBorrar(pedidoId: number | null) {
-    if (pedidoId == null || !usuario || cancelar.isPending) return
-    const ok = window.confirm(
-      `¿Borrar la orden #${pedidoId} completa?\n\n` +
-        'Se revierte el stock que ingresó, se borran sus deudas y facturas, y la ' +
-        'orden queda cancelada (podés reactivarla). No se puede si tiene pagos.'
-    )
-    if (!ok) return
-    cancelar.mutate({ pedidoId, usuarioId: usuario.id })
-  }
+  const cantidad = pendientes.length
 
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <p className="text-[#6f3a2a] text-sm max-w-xl">
-          Al recibir mercadería se crea una <strong>deuda provisoria</strong> con
-          el monto estimado. Cargá acá la factura real del proveedor para cerrar
-          el circuito: se ajusta el monto a pagar y se actualizan costos y precios.
+          Para una compra que se paga en el acto y no tiene orden, usá{' '}
+          <strong>Compra directa</strong>. Las facturas de lo que llegó con
+          orden se cargan en <strong>Finanzas › Facturas de proveedores</strong>:
+          ahí se ajusta el monto a pagar y se actualizan costos y precios.
         </p>
         <Button
           onClick={() => setModalCompra(true)}
@@ -85,124 +68,54 @@ export function TabFacturas() {
         </Button>
       </div>
 
-      <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
-        {isLoading ? (
-          <div className="p-6">
-            <SkeletonTabla filas={5} columnas={4} />
-          </div>
-        ) : isError ? (
-          <div className="p-10 text-center text-[#c43e2c] text-sm">
-            No se pudieron cargar las cuentas a pagar.
-          </div>
-        ) : pendientes.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="inline-flex p-3 rounded-full bg-[#f9d2a2]/40 mb-3">
-              <CheckCircle2 className="h-6 w-6 text-[#6f3a2a]" />
-            </div>
-            <p className="text-[#391511] font-semibold">
-              Todas las recepciones tienen su factura
+      <div className="bg-white border border-[#e4c9b0]/60 rounded-2xl shadow-sm p-5 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          {isError ? (
+            <p className="text-[#c43e2c] text-sm">
+              No se pudieron contar las facturas pendientes.
             </p>
-            <p className="text-[#6f3a2a] text-sm mt-1">
-              Cuando recibas mercadería nueva, su factura pendiente va a aparecer
-              acá.
-            </p>
-          </div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="border-b-[#e4c9b0]/60 bg-[#fdfaf6] hover:bg-[#fdfaf6]">
-                <TableHead className="text-[#391511] font-semibold">
-                  Proveedor
-                </TableHead>
-                <TableHead className="text-[#391511] font-semibold">
-                  Pedido
-                </TableHead>
-                <TableHead className="text-[#391511] font-semibold">
-                  Factura N°
-                </TableHead>
-                <TableHead className="text-[#391511] font-semibold">
-                  Vence
-                </TableHead>
-                <TableHead className="text-right text-[#391511] font-semibold">
-                  Monto estimado
-                </TableHead>
-                <TableHead className="text-right w-56 text-[#391511] font-semibold">
-                  Acción
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pendientes.map((c) => (
-                <TableRow
-                  key={c.id}
-                  className="border-b-[#e4c9b0]/40 hover:bg-[#fdfaf6]"
-                >
-                  <TableCell className="font-medium text-[#391511]">
-                    {c.proveedor_nombre ?? (
-                      <span className="text-[#c8a58a] italic">—</span>
-                    )}
-                    {c.provisoria && (
-                      <span className="ml-2 text-[9px] uppercase tracking-wider text-[#9e6b15] bg-[#f9b44c]/20 rounded-full px-1.5 py-0.5">
-                        provisoria
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/pedidos/${c.pedido_id}`}
-                      className="inline-flex items-center gap-1 text-[#c43e2c] hover:underline font-mono text-xs"
-                    >
-                      #{c.pedido_id}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-[#6f3a2a] text-sm">
-                    {c.numero_factura ? (
-                      <span className="font-mono">{c.numero_factura}</span>
-                    ) : (
-                      <span className="text-[#c8a58a] italic">sin identificar</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-[#6f3a2a] text-sm tabular-nums">
-                    {formatearFechaCorta(c.fecha_vencimiento)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums font-semibold text-[#391511]">
-                    <MontoARS monto={c.monto} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => setCuentaFactura(c)}
-                        className="h-8 bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        Cargar factura
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleBorrar(c.pedido_id)}
-                        disabled={cancelar.isPending}
-                        title={`Borrar la orden #${c.pedido_id} completa`}
-                        className="h-8 border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
+          ) : (
+            <>
+              <div
+                className={cn(
+                  'inline-flex p-2.5 rounded-full',
+                  cantidad > 0 ? 'bg-[#c43e2c]/10' : 'bg-[#2f8f4e]/10'
+                )}
+              >
+                {cantidad > 0 ? (
+                  <Inbox className="h-5 w-5 text-[#c43e2c]" />
+                ) : (
+                  <CheckCircle2 className="h-5 w-5 text-[#2f8f4e]" />
+                )}
+              </div>
+              <div>
+                <p className="text-[#391511] font-semibold">
+                  {isLoading
+                    ? 'Contando facturas pendientes…'
+                    : cantidad === 0
+                      ? 'Todas las recepciones tienen su factura'
+                      : cantidad === 1
+                        ? '1 recepción espera su factura'
+                        : `${cantidad} recepciones esperan su factura`}
+                </p>
+                <p className="text-[#6f3a2a] text-xs mt-0.5">
+                  Se cargan en Finanzas › Facturas de proveedores.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+        <Link
+          href={HREF_FACTURAS_FINANZAS}
+          className={cn(
+            buttonVariants({ variant: 'outline' }),
+            'border-[#e4c9b0] text-[#391511] hover:bg-[#f9d2a2]/40 gap-1.5'
+          )}
+        >
+          Ir a Facturas de proveedores
+          <ArrowRight className="h-4 w-4" />
+        </Link>
       </div>
-
-      <ModalEditarFactura
-        abierto={cuentaFactura !== null}
-        onCambioAbierto={(v) => !v && setCuentaFactura(null)}
-        cuenta={cuentaFactura}
-      />
 
       {usuario && (
         <ModalCompraFactura

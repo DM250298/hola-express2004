@@ -35,6 +35,7 @@ export default async function PaginaPanelMovil() {
         <PanelEmpleado
           empleadoId={emp.id}
           nombre={[emp.nombre, emp.apellido].filter(Boolean).join(' ')}
+          enMovil
         />
       ) : (
         <div className="mx-auto mt-4 max-w-md px-4">

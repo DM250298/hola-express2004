@@ -1,6 +1,7 @@
 'use client'
 
 import { Fragment, useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   CheckCircle2,
   FileText,
@@ -313,9 +314,18 @@ export function TabComprobantes({ desde, hasta }: Props) {
                     <div className="font-semibold text-[#391511] truncate">
                       {c.proveedor_nombre ?? 'Sin proveedor'}
                     </div>
-                    <div className="text-xs text-[#6f3a2a] font-mono">
-                      Pedido #{c.pedido_id}
-                    </div>
+                    {c.pedido_id != null ? (
+                      // El detalle de la orden permite borrarla completa (lo
+                      // que antes se hacía desde Compras › Facturas, D3).
+                      <Link
+                        href={`/pedidos/${c.pedido_id}`}
+                        className="text-xs text-[#6f3a2a] font-mono hover:text-[#c43e2c] hover:underline"
+                      >
+                        Pedido #{c.pedido_id}
+                      </Link>
+                    ) : (
+                      <div className="text-xs text-[#6f3a2a]">Sin orden</div>
+                    )}
                     {c.estado === 'pagada' && (
                       <span className="mt-1 inline-block rounded-full bg-[#2f8f4e]/10 border border-[#2f8f4e]/30 px-2 py-0.5 text-[10px] font-semibold text-[#2f8f4e]">
                         Pagada · falta la factura

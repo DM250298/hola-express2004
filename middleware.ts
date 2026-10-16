@@ -42,14 +42,16 @@ const PERMISO_RUTA: Record<string, string[]> = {
   etiquetas: ['/etiquetas'],
   pedidos: ['/pedidos', '/compras', '/movil'],
   recepcion: ['/recepcion', '/compras', '/movil'],
+  // Proveedores (ficha y catálogo) para quien compra sin 'configuracion':
+  // abre solo esa pantalla, no el resto de Configuración (usuarios, fiscal).
+  proveedores: ['/configuracion/proveedores'],
   produccion: ['/produccion'],
   finanzas: ['/finanzas'],
   contabilidad: ['/contabilidad'],
   rrhh: ['/rrhh'],
-  // Gestión de tareas: es la pestaña "Tareas" del hub /rrhh. Ojo:
-  // cajero/fiambrero entran igual por el prefijo '/rrhh' de su permiso 'rrhh'
-  // — el enforcement real es RLS + gate de UI en PantallaTareas; esta entrada
-  // habilita a un rol futuro que tenga tareas_gestion sin rrhh.
+  // Gestión de tareas: es la pestaña "Tareas" del hub /rrhh. El enforcement
+  // real es RLS + gate de UI en PantallaTareas; esta entrada habilita a un rol
+  // que tenga tareas_gestion sin rrhh.
   tareas_gestion: ['/rrhh'],
   rrhh_sueldos: ['/rrhh'],
   // El panel y las tareas del empleado viven bajo /rrhh pero los habilita

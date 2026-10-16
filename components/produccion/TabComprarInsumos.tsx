@@ -181,7 +181,7 @@ export function TabComprarInsumos() {
                   {sinProveedor && (
                     <div className="flex items-center gap-2 text-xs text-[#6f3a2a] bg-[#f9b44c]/15 rounded-lg px-3 py-2">
                       <AlertTriangle className="h-3.5 w-3.5 text-[#f9b44c] shrink-0" />
-                      Asigná un proveedor a estos insumos (Configuración → Productos)
+                      Asigná un proveedor a estos insumos (Configuración › Productos y precios)
                       para poder armar la orden.
                     </div>
                   )}

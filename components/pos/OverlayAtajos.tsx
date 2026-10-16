@@ -12,11 +12,13 @@ import {
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
+  /** Con permiso pos_gasto, F10 registra un gasto de caja (igual que en PantallaPOS). */
+  puedeGasto?: boolean
 }
 
 interface GrupoAtajo {
   titulo: string
-  items: Array<{ teclas: string[]; descripcion: string }>
+  items: Array<{ teclas: string[]; descripcion: string; soloConGasto?: boolean }>
 }
 
 const GRUPOS: GrupoAtajo[] = [
@@ -41,6 +43,7 @@ const GRUPOS: GrupoAtajo[] = [
       { teclas: ['F5'], descripcion: 'Elegir cliente de la venta' },
       { teclas: ['F8'], descripcion: 'Vaciar carrito (orden activa)' },
       { teclas: ['F9'], descripcion: 'Cerrar turno' },
+      { teclas: ['F10'], descripcion: 'Registrar gasto de caja', soloConGasto: true },
     ],
   },
   {
@@ -83,7 +86,7 @@ const GRUPOS: GrupoAtajo[] = [
   },
 ]
 
-export function OverlayAtajos({ abierto, onCambioAbierto }: Props) {
+export function OverlayAtajos({ abierto, onCambioAbierto, puedeGasto = false }: Props) {
   return (
     <Dialog open={abierto} onOpenChange={onCambioAbierto}>
       <DialogContent className="sm:max-w-2xl p-0 gap-0 overflow-hidden max-h-[85vh] flex flex-col">
@@ -104,26 +107,28 @@ export function OverlayAtajos({ abierto, onCambioAbierto }: Props) {
                 {g.titulo}
               </h3>
               <ul className="space-y-1">
-                {g.items.map((item, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg hover:bg-[#fdfaf6]"
-                  >
-                    <span className="text-[#391511] text-sm">
-                      {item.descripcion}
-                    </span>
-                    <div className="flex gap-1 shrink-0">
-                      {item.teclas.map((t, j) => (
-                        <kbd
-                          key={j}
-                          className="px-2 py-0.5 bg-white border border-[#e4c9b0] rounded text-xs font-mono text-[#391511] shadow-sm"
-                        >
-                          {t}
-                        </kbd>
-                      ))}
-                    </div>
-                  </li>
-                ))}
+                {g.items
+                  .filter((item) => puedeGasto || !item.soloConGasto)
+                  .map((item, i) => (
+                    <li
+                      key={i}
+                      className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg hover:bg-[#fdfaf6]"
+                    >
+                      <span className="text-[#391511] text-sm">
+                        {item.descripcion}
+                      </span>
+                      <div className="flex gap-1 shrink-0">
+                        {item.teclas.map((t, j) => (
+                          <kbd
+                            key={j}
+                            className="px-2 py-0.5 bg-white border border-[#e4c9b0] rounded text-xs font-mono text-[#391511] shadow-sm"
+                          >
+                            {t}
+                          </kbd>
+                        ))}
+                      </div>
+                    </li>
+                  ))}
               </ul>
             </div>
           ))}

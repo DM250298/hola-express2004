@@ -2,7 +2,7 @@ import { PantallaPersonal } from '@/components/rrhh/PantallaPersonal'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
 
 export const metadata = {
-  title: 'Personal — ¡Hola! Express',
+  title: 'Turnos y equipo — ¡Hola! Express',
 }
 
 export default async function PaginaPersonal({

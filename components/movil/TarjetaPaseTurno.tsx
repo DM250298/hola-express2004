@@ -27,7 +27,7 @@ export function TarjetaPaseTurno({ empleadoId }: Props) {
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-lg font-bold text-[#391511]">Pase de turno</span>
+        <span className="block text-lg font-bold text-[#391511]">Mi pase de turno</span>
         <span className="block text-xs text-[#6f3a2a]">
           {porRecibir > 0
             ? `${porRecibir} pase${porRecibir === 1 ? '' : 's'} por recibir`

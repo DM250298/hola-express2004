@@ -3,7 +3,7 @@ import { ChevronLeft } from 'lucide-react'
 import { TablaProductos } from '@/components/configuracion/productos/TablaProductos'
 
 export const metadata = {
-  title: 'Productos — Configuración',
+  title: 'Productos y precios — Configuración',
 }
 
 export default function PaginaProductos() {
@@ -17,7 +17,7 @@ export default function PaginaProductos() {
           <ChevronLeft className="h-3.5 w-3.5" />
           Configuración
         </Link>
-        <h1 className="text-[#391511] text-2xl font-bold mt-1">Productos</h1>
+        <h1 className="text-[#391511] text-2xl font-bold mt-1">Productos y precios</h1>
       </div>
 
       <TablaProductos />

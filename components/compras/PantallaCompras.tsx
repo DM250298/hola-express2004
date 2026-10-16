@@ -31,7 +31,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { value: 'reposicion', etiqueta: 'Centro de Compras', icono: ShoppingBag, permiso: 'compras' },
+  { value: 'reposicion', etiqueta: 'Reposición por cobertura', icono: ShoppingBag, permiso: 'compras' },
   { value: 'ordenes', etiqueta: 'Órdenes', icono: ClipboardList, permiso: 'pedidos' },
   { value: 'recepcion', etiqueta: 'Recepción', icono: PackageCheck, permiso: 'recepcion' },
   { value: 'facturas', etiqueta: 'Facturas', icono: FileText, permiso: 'finanzas' },

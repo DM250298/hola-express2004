@@ -8,17 +8,36 @@ import {
   type EmpleadoKiosco,
 } from '@/lib/offline/empleadosKiosco'
 import { updateEmpleado } from '@/lib/queries/rrhh'
+import { materializarFecha } from '@/lib/queries/tareas'
 import type {
   AsistenciaDiariaRow,
   FichajeRow,
   HorarioAsignadoInsert,
   HorarioAsignadoRow,
+  ImportacionFichajesRow,
   Json,
   TipoFichaje,
   TurnoPlantillaRow,
 } from '@/types/database'
 
 const TZ_OFFSET = '-03:00' // Argentina (sin DST)
+
+/** Fecha de hoy (yyyy-MM-dd) en hora argentina. */
+function hoyAr(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+  }).format(new Date())
+}
+
+function sumarDias(iso: string, n: number): string {
+  return format(addDays(parseISO(iso), n), 'yyyy-MM-dd')
+}
+
+async function usuarioActualId(): Promise<string | null> {
+  const supabase = createClient()
+  const { data } = await supabase.auth.getUser()
+  return data.user?.id ?? null
+}
 
 // ─── Turnos ───────────────────────────────────────────────────────────────────
 
@@ -30,6 +49,22 @@ export async function getTurnos(): Promise<TurnoPlantillaRow[]> {
     .order('hora_inicio', { ascending: true })
   if (error) throw error
   return (data ?? []) as TurnoPlantillaRow[]
+}
+
+/** Horario de un turno (Configurar rutina › Horarios de turno; permiso rrhh por RLS). */
+export async function updateTurno(
+  id: number,
+  datos: { hora_inicio: string; hora_fin: string; activo: boolean }
+): Promise<TurnoPlantillaRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('turnos_plantilla')
+    .update(datos)
+    .eq('id', id)
+    .select()
+    .single<TurnoPlantillaRow>()
+  if (error) throw error
+  return data
 }
 
 // ─── Horarios asignados ───────────────────────────────────────────────────────
@@ -48,13 +83,21 @@ export async function getHorariosRango(
   return (data ?? []) as HorarioAsignadoRow[]
 }
 
+/**
+ * Alta/edición MANUAL de una celda. Marca la fila como manual (`patron_id: null`,
+ * `usuario_id` del que edita): así una regeneración con "sobrescribir" no la pisa.
+ */
 export async function upsertHorario(
   datos: HorarioAsignadoInsert
 ): Promise<HorarioAsignadoRow> {
   const supabase = createClient()
+  const usuarioId = await usuarioActualId()
   const { data, error } = await supabase
     .from('horarios_asignados')
-    .upsert(datos, { onConflict: 'empleado_id,fecha' })
+    .upsert(
+      { ...datos, patron_id: null, usuario_id: usuarioId },
+      { onConflict: 'empleado_id,fecha' }
+    )
     .select()
     .single<HorarioAsignadoRow>()
   if (error) throw error
@@ -67,26 +110,145 @@ export async function eliminarHorario(id: string): Promise<void> {
   if (error) throw error
 }
 
-/** Copia una semana de horarios a otra (clave para la rotación de 14 días). */
-export async function copiarSemana(
+/** Recalcula la asistencia de un empleado para D y D+1 (mig 255, permiso rrhh). */
+export async function recalcularAsistenciaEmpleado(
+  empleadoId: number,
+  fecha: string
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_recalcular_asistencia_empleado', {
+    p_empleado_id: empleadoId,
+    p_fecha: fecha,
+  })
+  if (error) throw error
+}
+
+/**
+ * Re-sincroniza las tareas del turno si la fecha cae en la ventana que acepta
+ * fn_materializar_tareas_turno ([hoy−1, hoy+7]). No bloquea: cerca de
+ * medianoche el "hoy" del navegador y el del servidor pueden diferir y la RPC
+ * rechaza la fecha, pero el plan ya quedó guardado. Devuelve null si no corrió.
+ */
+export async function materializarSiEnVentana(fecha: string): Promise<number | null> {
+  const hoy = hoyAr()
+  if (fecha < sumarDias(hoy, -1) || fecha > sumarDias(hoy, 7)) return null
+  try {
+    return await materializarFecha(fecha)
+  } catch {
+    return null
+  }
+}
+
+export interface ResultadoSincronizacionPlan {
+  /** Cambios que hizo fn_materializar_tareas_turno; null si no corrió. */
+  tareasCambiadas: number | null
+  /** true si se recalculó la asistencia (día pasado). */
+  asistenciaRecalculada: boolean
+}
+
+/**
+ * Después de tocar el plan de (empleado, fecha): si el día ya pasó, recalcula
+ * la asistencia (el cron solo cierra planificados: un cambio a franco quedaba
+ * "ausente"); después re-sincroniza las tareas del turno si corresponde.
+ */
+export async function sincronizarPlan(
+  empleadoId: number,
+  fecha: string
+): Promise<ResultadoSincronizacionPlan> {
+  let asistenciaRecalculada = false
+  if (fecha < hoyAr()) {
+    await recalcularAsistenciaEmpleado(empleadoId, fecha)
+    asistenciaRecalculada = true
+  }
+  const tareasCambiadas = await materializarSiEnVentana(fecha)
+  return { tareasCambiadas, asistenciaRecalculada }
+}
+
+export async function guardarHorarioYSincronizar(
+  datos: HorarioAsignadoInsert
+): Promise<{ horario: HorarioAsignadoRow } & ResultadoSincronizacionPlan> {
+  const horario = await upsertHorario(datos)
+  const sync = await sincronizarPlan(datos.empleado_id, datos.fecha)
+  return { horario, ...sync }
+}
+
+export async function eliminarHorarioYSincronizar(
+  horario: Pick<HorarioAsignadoRow, 'id' | 'empleado_id' | 'fecha'>
+): Promise<ResultadoSincronizacionPlan> {
+  await eliminarHorario(horario.id)
+  return sincronizarPlan(horario.empleado_id, horario.fecha)
+}
+
+// ─── Copiar semana (con previsualización) ────────────────────────────────────
+
+export interface FilaCopiaSemana {
+  empleado_id: number
+  fecha: string
+  turno_id: number | null
+  estado: HorarioAsignadoRow['estado']
+  notas: string | null
+  /** Fila que ya existe en la semana destino (se pisaría). */
+  existente?: HorarioAsignadoRow
+}
+
+export interface PreviewCopiaSemana {
+  desde: string
+  hacia: string
+  crear: FilaCopiaSemana[]
+  pisar: FilaCopiaSemana[]
+}
+
+/** Las notas de cobertura son de un día concreto: no tiene sentido copiarlas. */
+function notaCopiable(notas: string | null): string | null {
+  if (!notas) return null
+  if (/^Cubre (a|puesto) /i.test(notas)) return null
+  return notas
+}
+
+/** Lee origen y destino y separa lo que se crea de lo que pisaría una fila existente. */
+export async function previsualizarCopiaSemana(
   semanaDesde: string,
   semanaHacia: string
-): Promise<number> {
-  const supabase = createClient()
-  const finDesde = format(addDays(parseISO(semanaDesde), 6), 'yyyy-MM-dd')
-  const origen = await getHorariosRango(semanaDesde, finDesde)
+): Promise<PreviewCopiaSemana> {
+  const origen = await getHorariosRango(semanaDesde, sumarDias(semanaDesde, 6))
+  const destino = await getHorariosRango(semanaHacia, sumarDias(semanaHacia, 6))
   // differenceInCalendarDays da un entero exacto (inmune a DST), a diferencia de
   // dividir milisegundos, que da fraccional si la ventana cruza un cambio de hora.
-  const corrimiento = differenceInCalendarDays(
-    parseISO(semanaHacia),
-    parseISO(semanaDesde)
-  )
-  if (origen.length === 0) return 0
-  const nuevos: HorarioAsignadoInsert[] = origen.map((h) => ({
-    empleado_id: h.empleado_id,
-    turno_id: h.turno_id,
-    fecha: format(addDays(parseISO(h.fecha), corrimiento), 'yyyy-MM-dd'),
-    estado: h.estado,
+  const corrimiento = differenceInCalendarDays(parseISO(semanaHacia), parseISO(semanaDesde))
+  const existentes = new Map<string, HorarioAsignadoRow>()
+  for (const h of destino) existentes.set(`${h.empleado_id}|${h.fecha}`, h)
+
+  const crear: FilaCopiaSemana[] = []
+  const pisar: FilaCopiaSemana[] = []
+  for (const h of origen) {
+    const fecha = sumarDias(h.fecha, corrimiento)
+    const fila: FilaCopiaSemana = {
+      empleado_id: h.empleado_id,
+      fecha,
+      turno_id: h.turno_id,
+      estado: h.estado,
+      notas: notaCopiable(h.notas),
+    }
+    const ex = existentes.get(`${h.empleado_id}|${fecha}`)
+    if (ex) pisar.push({ ...fila, existente: ex })
+    else crear.push(fila)
+  }
+  return { desde: semanaDesde, hacia: semanaHacia, crear, pisar }
+}
+
+/** Escribe las filas elegidas como carga manual (`patron_id: null`). */
+export async function aplicarCopiaSemana(filas: FilaCopiaSemana[]): Promise<number> {
+  if (filas.length === 0) return 0
+  const supabase = createClient()
+  const usuarioId = await usuarioActualId()
+  const nuevos: HorarioAsignadoInsert[] = filas.map((f) => ({
+    empleado_id: f.empleado_id,
+    turno_id: f.turno_id,
+    fecha: f.fecha,
+    estado: f.estado,
+    notas: f.notas,
+    patron_id: null,
+    usuario_id: usuarioId,
   }))
   const { error } = await supabase
     .from('horarios_asignados')
@@ -246,13 +408,16 @@ export async function confirmarImportReloj(
   preview: PreviewReloj
 ): Promise<ResumenImportReloj> {
   const supabase = createClient()
+  const usuarioId = await usuarioActualId()
   const { data: imp, error: e1 } = await supabase
     .from('importaciones_fichajes')
     .insert({
+      usuario_id: usuarioId,
       archivo_nombre: preview.archivo_nombre,
       periodo_desde: preview.periodo_desde,
       periodo_hasta: preview.periodo_hasta,
       total_marcaciones: preview.marcaciones.length,
+      estado: 'pendiente',
     })
     .select('id')
     .single<{ id: string }>()
@@ -262,8 +427,34 @@ export async function confirmarImportReloj(
     p_import_id: imp.id,
     p_marcaciones: preview.marcaciones as unknown as Json,
   })
-  if (error) throw error
+  if (error) {
+    // Que no quede una importación "completada" sin fichajes (la vista Fichadas
+    // toma la última importación para distinguir ausencia de "falta importar").
+    await supabase
+      .from('importaciones_fichajes')
+      .update({ estado: 'error' })
+      .eq('id', imp.id)
+    throw error
+  }
   return data as unknown as ResumenImportReloj
+}
+
+/**
+ * Última importación del reloj que efectivamente procesó fichajes. Define
+ * hasta qué fecha una falta de marcaciones es "ausencia" y no "falta importar".
+ */
+export async function getUltimaImportacion(): Promise<ImportacionFichajesRow | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('importaciones_fichajes')
+    .select('*')
+    .eq('estado', 'completada')
+    .gt('dias_recalculados', 0)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle<ImportacionFichajesRow>()
+  if (error) throw error
+  return data ?? null
 }
 
 // ─── Kiosco (PIN + fichaje con fallback offline) ──────────────────────────────

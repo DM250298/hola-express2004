@@ -7,8 +7,18 @@ import { TabConciliacion } from './TabConciliacion'
 import { TabConciliacionMP } from './TabConciliacionMP'
 import { TabActivos } from './TabActivos'
 import { TabCierreAuditoria } from './TabCierreAuditoria'
+import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
 
-export function PantallaContabilidad() {
+const TABS = ['plan', 'diario', 'conciliacion_mp', 'conciliacion', 'activos', 'cierre']
+
+interface Props {
+  /** Pestaña inicial (viene de ?tab= en la URL). */
+  tabInicial?: string
+}
+
+export function PantallaContabilidad({ tabInicial }: Props) {
+  const [tab, setTab] = usePestanaUrl(TABS, 'plan', tabInicial)
+
   return (
     <div className="p-4 sm:p-6 space-y-5">
       <header>
@@ -19,7 +29,7 @@ export function PantallaContabilidad() {
         </p>
       </header>
 
-      <Tabs defaultValue="plan" className="space-y-4">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           <TabsTrigger
             value="plan"

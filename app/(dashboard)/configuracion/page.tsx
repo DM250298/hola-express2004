@@ -12,7 +12,7 @@ import {
 const SECCIONES = [
   {
     href: '/configuracion/productos',
-    titulo: 'Productos',
+    titulo: 'Productos y precios',
     descripcion:
       'Catálogo completo: precios, códigos, combos y productos inactivos.',
     icono: Package,

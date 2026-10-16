@@ -8,13 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -24,15 +17,15 @@ import {
 import {
   ESTADO_ASISTENCIA,
   NOMBRE_TURNO,
+  capitalizar,
   formatearMinutos,
   horaAr,
 } from './asistenciaConstantes'
+import { etiquetaHorasCorta } from './cronogramaCalculos'
 import {
   useAnularFichaje,
   useCorregirFichaje,
-  useEliminarHorario,
   useFichajesDia,
-  useUpsertHorario,
 } from '@/lib/hooks/useAsistencia'
 import { cn } from '@/lib/utils'
 import type {
@@ -47,33 +40,28 @@ interface Props {
   empleadoId: number
   fecha: string
   nombre: string
-  turnos: TurnoPlantillaRow[]
+  /** Turno planificado ese día (referencia; el plan se edita desde Planificación). */
+  turno?: TurnoPlantillaRow
   horario?: HorarioAsignadoRow
   asistencia?: AsistenciaDiariaRow
 }
 
-type EstadoPlan = 'planificado' | 'franco' | 'licencia'
-
-const ITEMS_PLAN: Record<EstadoPlan, string> = {
-  planificado: 'Trabaja (turno)',
-  franco: 'Franco',
-  licencia: 'Licencia',
-}
-
 const claseInput = 'border-[#e4c9b0] focus-visible:ring-[#f9b44c]'
 
+/**
+ * Detalle de FICHADAS de una celda: asistencia computada + marcaciones del
+ * día, con alta/anulación manual (motivo obligatorio). No edita el plan.
+ */
 export function ModalCeldaAsistencia({
   abierto,
   onCambioAbierto,
   empleadoId,
   fecha,
   nombre,
-  turnos,
+  turno,
   horario,
   asistencia,
 }: Props) {
-  const upsert = useUpsertHorario()
-  const borrar = useEliminarHorario()
   const corregir = useCorregirFichaje()
   const anular = useAnularFichaje()
   const { data: fichajes, isLoading: cargandoFichajes } = useFichajesDia(
@@ -81,40 +69,28 @@ export function ModalCeldaAsistencia({
     fecha
   )
 
-  const [estadoPlan, setEstadoPlan] = useState<EstadoPlan>('planificado')
-  const [turnoId, setTurnoId] = useState<string>('')
   const [nuevaHora, setNuevaHora] = useState('')
   const [nuevoMotivo, setNuevoMotivo] = useState('')
+  const [anulando, setAnulando] = useState<string | null>(null)
+  const [motivoAnulacion, setMotivoAnulacion] = useState('')
 
   useEffect(() => {
     if (abierto) {
-      const est = (horario?.estado ?? 'planificado') as EstadoPlan
-      setEstadoPlan(est === 'franco' || est === 'licencia' ? est : 'planificado')
-      setTurnoId(horario?.turno_id ? String(horario.turno_id) : '')
       setNuevaHora('')
       setNuevoMotivo('')
+      setAnulando(null)
+      setMotivoAnulacion('')
     }
   }, [abierto, horario])
 
-  const itemsTurno: Record<string, string> = Object.fromEntries(
-    turnos.map((t) => [
-      String(t.id),
-      `${NOMBRE_TURNO[t.nombre]} (${t.hora_inicio.slice(0, 5)}–${t.hora_fin.slice(0, 5)})`,
-    ])
-  )
-
-  const puedeGuardar =
-    estadoPlan !== 'planificado' || (!!turnoId && !upsert.isPending)
-
-  function guardarPlan() {
-    if (estadoPlan === 'planificado' && !turnoId) return
-    upsert.mutate({
-      empleado_id: empleadoId,
-      fecha,
-      estado: estadoPlan,
-      turno_id: estadoPlan === 'planificado' ? Number(turnoId) : null,
-    })
-  }
+  const planLabel =
+    horario?.estado === 'franco'
+      ? 'Franco'
+      : horario?.estado === 'licencia'
+        ? 'Licencia'
+        : turno
+          ? `${NOMBRE_TURNO[turno.nombre]} · ${etiquetaHorasCorta(turno)}`
+          : 'Sin turno asignado'
 
   function agregarMarcacion() {
     if (!nuevaHora || !nuevoMotivo.trim()) return
@@ -134,10 +110,17 @@ export function ModalCeldaAsistencia({
     )
   }
 
-  function anularMarcacion(id: string) {
-    const motivo = window.prompt('Motivo de la anulación (obligatorio):')
-    if (!motivo || !motivo.trim()) return
-    anular.mutate({ id, motivo: motivo.trim() })
+  function confirmarAnulacion() {
+    if (!anulando || !motivoAnulacion.trim()) return
+    anular.mutate(
+      { id: anulando, motivo: motivoAnulacion.trim() },
+      {
+        onSuccess: () => {
+          setAnulando(null)
+          setMotivoAnulacion('')
+        },
+      }
+    )
   }
 
   const estilo = asistencia ? ESTADO_ASISTENCIA[asistencia.estado] : null
@@ -147,73 +130,20 @@ export function ModalCeldaAsistencia({
       <DialogContent className="sm:max-w-lg p-0 gap-0 overflow-hidden">
         <DialogHeader className="px-6 py-5 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
           <DialogTitle className="text-[#391511] text-lg">{nombre}</DialogTitle>
-          <DialogDescription className="text-[#6f3a2a] capitalize">
-            {format(parseISO(fecha), "EEEE d 'de' MMMM yyyy", { locale: es })}
+          <DialogDescription className="text-[#6f3a2a]">
+            {capitalizar(format(parseISO(fecha), "EEEE d 'de' MMMM yyyy", { locale: es }))}
           </DialogDescription>
         </DialogHeader>
 
         <div className="px-6 py-5 space-y-5 max-h-[64vh] overflow-y-auto">
-          {/* Planificación */}
-          <section className="space-y-2.5">
-            <h4 className="text-[#391511] font-semibold text-sm">Planificación</h4>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-[#6f3a2a] text-xs">Estado del día</Label>
-                <Select
-                  items={ITEMS_PLAN}
-                  value={estadoPlan}
-                  onValueChange={(v) => v && setEstadoPlan(v as EstadoPlan)}
-                >
-                  <SelectTrigger className={`w-full ${claseInput}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(ITEMS_PLAN).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>
-                        {l}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {estadoPlan === 'planificado' && (
-                <div className="space-y-1.5">
-                  <Label className="text-[#6f3a2a] text-xs">Turno</Label>
-                  <Select items={itemsTurno} value={turnoId} onValueChange={(v) => setTurnoId(v ?? '')}>
-                    <SelectTrigger className={`w-full ${claseInput}`}>
-                      <SelectValue placeholder="Elegí turno" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(itemsTurno).map(([v, l]) => (
-                        <SelectItem key={v} value={v}>
-                          {l}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button
-                onClick={guardarPlan}
-                disabled={!puedeGuardar}
-                className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold disabled:opacity-50"
-              >
-                {upsert.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Guardar plan'}
-              </Button>
-              {horario && (
-                <Button
-                  variant="outline"
-                  onClick={() => borrar.mutate(horario.id)}
-                  disabled={borrar.isPending}
-                  className="border-[#e4c9b0] text-[#6f3a2a]"
-                >
-                  Quitar
-                </Button>
-              )}
-            </div>
+          {/* Plan (solo referencia) */}
+          <section className="flex items-center justify-between gap-2 text-sm">
+            <span className="text-[#6f3a2a]">Planificado</span>
+            <span className="font-semibold text-[#391511] tabular-nums">{planLabel}</span>
           </section>
+          <p className="text-[11px] text-[#c8a58a] -mt-3">
+            El plan se cambia desde la vista Planificación. Acá se corrigen las marcaciones.
+          </p>
 
           {/* Asistencia computada */}
           <section className="space-y-2 rounded-xl bg-[#fdfaf6] border border-[#e4c9b0]/50 p-3">
@@ -263,11 +193,14 @@ export function ModalCeldaAsistencia({
                   >
                     <span className="tabular-nums font-medium text-[#391511]">{horaAr(f.momento)}</span>
                     <span className="text-[#c8a58a] text-xs flex-1">{f.origen}{f.tipo === 'correccion' ? ' · anula' : ''}</span>
-                    {f.tipo !== 'correccion' && (
+                    {f.tipo !== 'correccion' && anulando !== f.id && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => anularMarcacion(f.id)}
+                        onClick={() => {
+                          setAnulando(f.id)
+                          setMotivoAnulacion('')
+                        }}
                         className="h-6 w-6 p-0 text-[#c8a58a] hover:text-[#c43e2c] hover:bg-[#c43e2c]/10"
                         aria-label="Anular"
                       >
@@ -277,6 +210,35 @@ export function ModalCeldaAsistencia({
                   </li>
                 ))}
               </ul>
+            )}
+            {anulando && (
+              <div className="flex items-end gap-2 rounded-lg bg-[#c43e2c]/5 p-2">
+                <div className="flex-1 space-y-1">
+                  <Label className="text-[#c43e2c] text-xs">Motivo de la anulación (obligatorio)</Label>
+                  <Input
+                    autoFocus
+                    value={motivoAnulacion}
+                    onChange={(e) => setMotivoAnulacion(e.target.value)}
+                    placeholder="Ej. marcación duplicada del reloj"
+                    className={claseInput}
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => setAnulando(null)}
+                  disabled={anular.isPending}
+                  className="h-9 border-[#e4c9b0] text-[#6f3a2a]"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={confirmarAnulacion}
+                  disabled={!motivoAnulacion.trim() || anular.isPending}
+                  className="h-9 bg-[#c43e2c] hover:bg-[#a83424] text-white font-semibold disabled:opacity-50"
+                >
+                  {anular.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Anular'}
+                </Button>
+              </div>
             )}
 
             {/* Agregar marcación manual */}
