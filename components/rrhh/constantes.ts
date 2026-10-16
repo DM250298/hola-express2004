@@ -33,12 +33,12 @@ export const TIPOS_CONTRATO: Record<TipoContrato, string> = {
 /** Etiquetas legibles de los roles operativos (cadena de mando, Manual §3). */
 export const ROLES_OPERATIVOS: Record<RolOperativo, string> = {
   direccion: 'Dirección',
-  responsable_general: 'Responsable Operativa General',
-  encargado: 'Encargado/a de turno',
-  pivote: 'Pivote / cobertura',
+  responsable_general: 'Encargada de Sucursal',
+  encargado: 'Encargado/a de Turno',
+  pivote: 'Pivot',
   compras: 'Compras',
   cajero: 'Cajero/a',
-  fiambreria: 'Fiambrería / producción',
+  fiambreria: 'Fiambrero/Producción',
   otro: 'Otro',
 }
 
@@ -56,7 +56,7 @@ export const DETALLE_ROL_OPERATIVO: Record<
   responsable_general: {
     nivel: 2,
     autoridad:
-      'Supervisar encargados, corregir, mediar, controlar checklists, exigir cumplimiento. Reporte semanal lunes AM.',
+      'Responsable de la sucursal: supervisa al encargado/a de turno y al equipo, corrige, media, controla checklists y exige cumplimiento. Reporte semanal lunes AM.',
     noPuede: 'Sueldos; expulsiones y sanciones graves; compras directas; cancelar tareas críticas.',
   },
   encargado: {
@@ -66,12 +66,12 @@ export const DETALLE_ROL_OPERATIVO: Record<
   },
   pivote: {
     nivel: 3,
-    autoridad: 'Cubrir francos de mañana y tarde según cronograma.',
+    autoridad: 'Cubre francos y ausencias según el cronograma; reporta a la Encargada de Sucursal.',
     noPuede: 'Cambiar procesos o prioridades.',
   },
   compras: {
     nivel: 3,
-    autoridad: 'Abastecimiento, proveedores y reclamos dentro de parámetros.',
+    autoridad: 'Abastecimiento, proveedores y reclamos dentro de parámetros. Reporta a Dirección.',
     noPuede: 'Compras extraordinarias sin Dirección.',
   },
   cajero: {

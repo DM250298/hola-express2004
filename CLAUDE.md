@@ -411,6 +411,13 @@ Una sola entrada de sidebar ("Personal") con pestañas por `?tab=`:
   pendientes vírgenes de quien ya no corresponde, crea las que faltan y
   reconcilia participantes de las grupales; lo completado, en curso,
   rechazado o `tareas_turno.fijada` (responsable cambiado a mano) no se toca.
+- **Puestos reales (mig 254, oct-2026)**: los valores de `rol_operativo` no cambian,
+  solo las etiquetas (`ROLES_OPERATIVOS`): `responsable_general` = Encargada de
+  Sucursal (Sonia), `encargado` = Encargado/a de Turno (Rebeca), `cajero` (Camila,
+  Juan Ignacio, Fabricio), `fiambreria` = Fiambrero/Producción (Tomas, Agustin),
+  `pivote` = Pivot (Matias), `compras` (Fernanda). Todos reportan a Sonia salvo
+  Sonia y Fernanda, que reportan a Dirección (Rodrigo). La seed matchea por
+  nombre + apellido; no volver a sembrar por primer nombre.
 - **Agenda por turno** (migs 251–253): Tareas ya no es un kanban por estado
   sino una agenda cronológica por turno (`AgendaTurnos.tsx`, lógica pura en
   `tareasAgenda.ts`). `tareas_recurrentes` y `tareas_turno` tienen `hora`

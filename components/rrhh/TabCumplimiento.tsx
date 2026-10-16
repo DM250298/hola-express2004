@@ -86,6 +86,31 @@ export function TabCumplimiento() {
     return m
   }, [empleados])
 
+  // Todos los activos, con cero si no tuvieron tareas en el período (la RPC
+  // solo devuelve a quienes tuvieron alguna individual o hicieron una grupal).
+  const porEmpleado = useMemo<CumplimientoEmpleado[]>(() => {
+    const filas = new Map<number, CumplimientoEmpleado>()
+    for (const f of data?.por_empleado ?? []) filas.set(f.empleado_id, f)
+    for (const e of empleados ?? []) {
+      if (!e.activo || filas.has(e.id)) continue
+      filas.set(e.id, {
+        empleado_id: e.id,
+        nombre: e.nombre,
+        apellido: e.apellido ?? '',
+        asignadas: 0,
+        completadas: 0,
+        vencidas: 0,
+        pendientes: 0,
+        rechazos: 0,
+        pct: null,
+      })
+    }
+    return [...filas.values()].sort((x, y) => {
+      if (y.asignadas !== x.asignadas) return y.asignadas - x.asignadas
+      return (nombrePorId.get(x.empleado_id) ?? '').localeCompare(nombrePorId.get(y.empleado_id) ?? '', 'es')
+    })
+  }, [data, empleados, nombrePorId])
+
   // Drill-down: instancias del rango (una sola query, se filtra en cliente
   // para el empleado; por plantilla/título filtra el server).
   const { data: detalleTareas } = useTareasRango(
@@ -173,7 +198,7 @@ export function TabCumplimiento() {
                 Las grupales le cuentan solo a quien las hizo; no penalizan al resto.
               </p>
             </div>
-            {(data?.por_empleado ?? []).length === 0 ? (
+            {porEmpleado.length === 0 ? (
               <p className="p-8 text-center text-[#c8a58a] text-sm">
                 Sin tareas en el período.
               </p>
@@ -191,7 +216,7 @@ export function TabCumplimiento() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#e4c9b0]/40">
-                    {(data?.por_empleado ?? []).map((e: CumplimientoEmpleado) => (
+                    {porEmpleado.map((e: CumplimientoEmpleado) => (
                       <Fragment key={e.empleado_id}>
                         <tr
                           onClick={() => {

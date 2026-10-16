@@ -114,7 +114,7 @@ export const ALCANCE_TAREA: Record<AlcanceTarea, { label: string; ayuda: string 
   puesto: {
     label: 'Por puesto (según cronograma)',
     ayuda:
-      'Cada día va a quien esté planificado con ese puesto en el turno. Si el puesto falta (franco, licencia), la cubre alguien del turno: pivote, encargado o responsable general. Nunca queda sin dueño.',
+      'Cada día va a quien esté planificado con ese puesto en el turno. Si el puesto falta (franco, licencia), la cubre alguien del turno: Pivot, Encargado/a de Turno o Encargada de Sucursal. Nunca queda sin dueño.',
   },
   empleados: {
     label: 'Personas fijas',
