@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **281**
+## Próximo número libre: **285**
 
 ---
 
@@ -380,6 +380,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 278 | `278_tareas_v2_lecturas.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_historial`, `fn_rutina_historial`, `fn_notas_proximo_turno`, `fn_mi_turno` |
 | 279 | `279_tareas_v2_rutina_guardar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_rutina_guardar` (hoy o desde mañana, versión vigente, minutos desde el inicio), `fn_rutina_resincronizar` |
 | 280 | `280_tareas_v2_rutina_quitar_pedidos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | quitar/reactivar (admin), pedidos de la encargada, `fn_pedido_resolver`, `fn_agenda_actualizar_hoy` |
+| 281 | `281_tareas_v2_fotos_evidencia.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; en producción no quedan reglas de editar/borrar que alcancen a `tareas-evidencia`) | fotos de evidencia: solo subir, nadie reemplaza ni borra |
+| 282 | `282_tareas_v2_rls_transicion.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | RLS nueva de agenda y rutina: privadas solo `tareas_admin`; escrituras directas de transición para la app vieja (se cierran en la 285) |
+| 283 | `283_tareas_v2_cumplimiento.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_cumplimiento_tareas` v3: sin canceladas, recordatorios, bloques ni privadas; `no_se_pudo` y `hechas_por_otro` aparte |
+| 284 | `284_tareas_v2_desempeno.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_calcular_evaluacion` v3: el puntaje de tareas cuenta solo puntuales no privadas |
 
 ## Dos bases de Supabase (2026-09-17)
 
