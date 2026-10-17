@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **260**
+## Próximo número libre: **269**
 
 ---
 
@@ -359,6 +359,15 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 257 | `257_permiso_proveedores.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D9; test: `tests/test_permiso_proveedores.sql`) |
 | 258 | `258_rls_proveedores_escritura.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `2894830` (test: `tests/test_rls_proveedores.sql`) |
 | 259 | `259_revocar_funciones_sueldo.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; en producción verificado con `scripts/tareas_v2_relevamiento.sql`: anon y authenticated sin EXECUTE) | en este commit (urgente: `fn_sueldo`/`fn_set_sueldo` eran ejecutables sin iniciar sesión) |
+| 260 | `260_seguridad_roles_usuarios.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; probada la pantalla de usuarios) | roles/usuarios: escritura solo con `usuarios_roles`, guardas anti-escalada, alta con `sin_acceso`, inactivos sin permisos |
+| 261 | `261_seguridad_registro_legajos.sql` | ✅ aplicada | 2026-10-16 (producción, verificado el índice único) · prueba el mismo día, después de desvincular la cuenta duplicada de Sonia | `seguridad_eventos` inmutable, una cuenta por legajo, vincular cuenta exige `usuarios_roles`, sin borrar legajos |
+| 262 | `262_tareas_estado_no_se_pudo.sql` | ✅ aplicada | 2026-10-16 (prueba + producción, pegada sola) | enum `estado_tarea_turno` + `no_se_pudo` |
+| 263 | `263_tareas_v2_esquema.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; verificado: 0 sin origen, 0 plantillas con hora) | tipos y columnas nuevas de rutina y agenda, backfills |
+| 264 | `264_tareas_v2_registro.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `tareas_eventos` y `tareas_pedidos`, inmutables |
+| 265 | `265_tareas_v2_permisos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; antes se desactivó a Agustina Fajardo en las dos) | `tareas_admin` al rol admin; seguro de administradores |
+| 266 | `266_tareas_v2_helpers.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | funciones de base: hoy, inicio/fin de turno, rango, actor, escritor del registro |
+| 267 | `267_tareas_v2_trigger_agenda.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; el chequeo inicial se cambió a búsqueda por nombre antes de correrla) | trigger de tareas_turno: origen, privada, horario absoluto, marcas de tocada a mano |
+| 268 | `268_tareas_v2_trigger_turnos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | al cambiar el horario de un turno, las tareas abiertas se corren y queda `turno_editado` |
 
 ## Dos bases de Supabase (2026-09-17)
 
