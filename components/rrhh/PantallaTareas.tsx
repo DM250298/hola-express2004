@@ -150,6 +150,8 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
             esGestor={!!esGestor}
             empleadoActualId={empleadoActualId}
             onAbrirTarea={(t) => setModalTarea({ tarea: t })}
+            esAdmin={esAdmin}
+            actorNombre={usuario?.nombre?.split(' ')[0] ?? null}
           />
         </TabsContent>
 

@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **289**
+## Próximo número libre: **293**
 
 ---
 
@@ -368,7 +368,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 266 | `266_tareas_v2_helpers.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | funciones de base: hoy, inicio/fin de turno, rango, actor, escritor del registro |
 | 267 | `267_tareas_v2_trigger_agenda.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; el chequeo inicial se cambió a búsqueda por nombre antes de correrla) | trigger de tareas_turno: origen, privada, horario absoluto, marcas de tocada a mano |
 | 268 | `268_tareas_v2_trigger_turnos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | al cambiar el horario de un turno, las tareas abiertas se corren y queda `turno_editado` |
-| 269 | `269_tareas_v2_a_quien_le_toca.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | versión vigente de la rutina por fecha; resolvers cerrados a la app; `fn_personas_turno` y `fn_a_quien_le_toca` para gestión |
+| 269 | `269_tareas_v2_a_quien_le_toca.sql` | ⚠️ no se aplicó (pegado recortado) | 2026-10-16 (prueba + producción) | versión vigente de la rutina por fecha; resolvers cerrados a la app; `fn_personas_turno` y `fn_a_quien_le_toca` para gestión — **reparada por la 290–292** |
 | 270 | `270_tareas_v2_sync_reasignar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | sincronización parte 1: preparar, limpiar y reasignar según el cronograma (francos y licencias), evento `reasignada` de HEX |
 | 271 | `271_tareas_v2_sincronizar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_tareas_sincronizar` + índice único por `empleado_rutina_id` |
 | 272 | `272_tareas_v2_materializar_v6.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; mañana 30 tareas, 0 duplicados en las dos) | `fn_materializar_tareas_turno` v6 (sin anon) y `fn_marcar_tareas_vencidas` v3 (fin real del turno, solo puntuales, solo el cron) |
@@ -388,6 +388,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 286 | `286_tareas_v2_anexo_a_tarde.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | tarde: 13 tareas (T01–T13); control y merienda a la encargada de turno, reposición grupal con el fiambrero |
 | 287 | `287_tareas_v2_anexo_a_noche.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; domingo 18: 16/13/15 del Anexo, 0 viejas, T1 en 0) | noche: 15 tareas (N01–N15) al vendedor de turno |
 | 288 | `288_tareas_v2_cierre.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | cierre de la Etapa 1: sin escrituras directas en agenda y rutina, horarios de turno solo `tareas_admin`, "No se pudo" habilitado ("Omitir" cierra como no_se_pudo/otro), `registro_completo` |
+| 289 | `289_tareas_v2_realtime.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | `tareas_turno` y participantes en Realtime (agenda en vivo, Etapa 2) |
+| 290 | `290_tareas_v2_reparar_269_plantillas.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | repara la 269 (1/3): `fn_plantillas_tareas_dia` con versión vigente, cerrada a la app |
+| 291 | `291_tareas_v2_reparar_269_asignados.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | repara la 269 (2/3): `fn_asignados_tareas_dia` con "cubierto", cerrada a la app |
+| 292 | `292_tareas_v2_reparar_269_lecturas.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; control `scripts/tareas_v2_control_funciones.sql` en 0 filas en producción) | repara la 269 (3/3): `fn_personas_turno` y `fn_a_quien_le_toca` |
 
 ## Dos bases de Supabase (2026-09-17)
 

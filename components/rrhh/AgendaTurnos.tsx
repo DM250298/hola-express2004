@@ -50,11 +50,14 @@ import {
   turnoEnMinuto,
   turnoPorTerminar,
 } from './tareasAgenda'
+import { CalendarioAgenda } from './CalendarioAgenda'
+import { rangoTurno } from './calendarioTurno'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useHorariosRango, useTurnos } from '@/lib/hooks/useAsistencia'
 import {
   useCompletarTarea,
   useIniciarTarea,
+  useRealtimeTareas,
   useTareasAgenda,
   useTrasladarTarea,
 } from '@/lib/hooks/useTareas'
@@ -69,12 +72,26 @@ interface Props {
   esGestor: boolean
   /** Legajo del usuario logueado (para Iniciar/Completar las propias). */
   empleadoActualId: number | null
+  /** Abre la ventana de la tarea (en el celular, y "Editar" en la PC). */
   onAbrirTarea: (t: TareaConParticipantes) => void
+  /** Administrador de tareas: ve privadas y "Para revisar". */
+  esAdmin?: boolean
+  /** Nombre de quien mira, para el aviso "marcada por X en nombre de Y". */
+  actorNombre?: string | null
 }
 
 const TICKS = ['00:00', '06:00', '12:00', '18:00', '24:00']
 
-export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }: Props) {
+export function AgendaTurnos({
+  fecha,
+  esGestor,
+  empleadoActualId,
+  onAbrirTarea,
+  esAdmin = false,
+  actorNombre = null,
+}: Props) {
+  // En vivo (mig 289): lo que marca cualquiera aparece sin recargar.
+  useRealtimeTareas()
   const hoy = hoyAr()
   const ayer = isoMasDias(fecha, -1)
   const [horaAhora, setHoraAhora] = useState(() => horaActualAr())
@@ -317,6 +334,25 @@ export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }
             </span>
           </div>
 
+          {/* ── PC: calendario del turno con panel lateral (Tareas v2, Etapa 2) ── */}
+          <div className="hidden md:block">
+            <CalendarioAgenda
+              lista={listaSel}
+              turno={turnoSel}
+              rango={rangoTurno(turnoSel, sel.origen)}
+              fechaTurno={fechaSel}
+              reloj={reloj}
+              nombres={nombrePorId}
+              esGestor={esGestor}
+              esAdmin={esAdmin}
+              empleadoActualId={empleadoActualId}
+              actorNombre={actorNombre}
+              onEditar={onAbrirTarea}
+            />
+          </div>
+
+          {/* ── Celular: foco y lista ── */}
+          <div className="md:hidden space-y-4">
           {/* ── Foco: ahora / atrasada / próxima ── */}
           {foco ? (
             <FocoTarea
@@ -344,6 +380,7 @@ export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }
               Todas las tareas de este turno están completas.
             </div>
           ) : null}
+          </div>
 
           {/* ── Avisos ── */}
           {(sinDueno.length > 0 || atrasadas.length > 0 || solapes.length > 0 || personas.length === 0) && (
@@ -379,6 +416,7 @@ export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }
             </ul>
           )}
 
+          <div className="md:hidden space-y-4">
           {/* ── Continuas ── */}
           {continuas.length > 0 && (
             <div className="flex items-start gap-2 text-xs text-[#6f3a2a] px-1">
@@ -444,6 +482,7 @@ export function AgendaTurnos({ fecha, esGestor, empleadoActualId, onAbrirTarea }
               </ul>
             )}
           </section>
+          </div>
 
           {/* ── Pendientes para entregar al turno siguiente ── */}
           {pendientesEntrega.length > 0 && (
