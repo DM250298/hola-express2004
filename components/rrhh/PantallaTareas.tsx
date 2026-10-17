@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AgendaTurnos } from './AgendaTurnos'
 import { ModalTarea } from './ModalTarea'
 import { ModalPlantilla } from './ModalPlantilla'
+import { NuevaTarea } from './NuevaTarea'
 import { NavegadorFecha } from './NavegadorFecha'
 import { TabCumplimiento } from './TabCumplimiento'
 import { TabRutina } from './TabRutina'
@@ -38,6 +39,8 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
   const [hoy] = useState(() => hoyAr())
   const [fecha, setFecha] = useState(hoy)
   const [modalTarea, setModalTarea] = useState<{ tarea: TareaConParticipantes | null } | null>(null)
+  // Alta (Etapa 3): una vez o rutina. Editar sigue en ModalTarea / ModalPlantilla.
+  const [nueva, setNueva] = useState<{ frecuencia: 'una_vez' | 'rutina'; turnoId: number | null } | null>(null)
   const [modalPlantilla, setModalPlantilla] = useState<{
     plantilla: PlantillaConAsignados | null
     turnoDefault?: number | null
@@ -108,7 +111,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
           </p>
         </div>
         <Button
-          onClick={() => setModalTarea({ tarea: null })}
+          onClick={() => setNueva({ frecuencia: 'una_vez', turnoId: null })}
           className="bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold gap-1.5"
         >
           <Plus className="h-4 w-4" />
@@ -158,7 +161,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
         {/* ── Rutina recurrente por turno ── */}
         <TabsContent value="rutina">
           <TabRutina
-            onNueva={(turnoDefault) => setModalPlantilla({ plantilla: null, turnoDefault })}
+            onNueva={(turnoDefault) => setNueva({ frecuencia: 'rutina', turnoId: turnoDefault })}
             onEditar={(p) => setModalPlantilla({ plantilla: p })}
             puedeEditarTurnos={esAdmin}
             esAdmin={esAdmin}
@@ -171,6 +174,16 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
         </TabsContent>
       </Tabs>
 
+      {nueva && (
+        <NuevaTarea
+          abierto={!!nueva}
+          onCambioAbierto={(v) => !v && setNueva(null)}
+          fechaDefault={fecha}
+          turnoDefault={nueva.turnoId}
+          frecuenciaInicial={nueva.frecuencia}
+          esAdmin={esAdmin}
+        />
+      )}
       {modalTarea && (
         <ModalTarea
           abierto={!!modalTarea}
