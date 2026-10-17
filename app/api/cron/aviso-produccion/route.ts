@@ -67,6 +67,7 @@ export async function GET(request: Request) {
     const { data: subs, error: eSub } = await supabase
       .from('push_subscriptions')
       .select('endpoint, p256dh, auth')
+      .contains('temas', ['produccion'])
     if (eSub) return NextResponse.json({ error: eSub.message }, { status: 500 })
 
     type FilaSub = { endpoint: string; p256dh: string; auth: string }

@@ -1,4 +1,4 @@
-  -- Control de Tareas v2 (migs 259–296): qué falta en esta base.
+  -- Control de Tareas v2 (migs 259–298): qué falta en esta base.
   -- Solo lectura. Correr en cada base; cada fila que devuelve es un problema
   -- y dice qué migración volver a correr. Sin filas = todo en su lugar.
   with esperadas(mig, fn) as (values
@@ -20,7 +20,7 @@
     (280,'fn_rutina_set_activa'),(282,'fn_rutina_privadas_ids'),(282,'fn_tareas_privadas_ids'),(283,'fn_cumplimiento_tareas'),
     (284,'fn_calcular_evaluacion'),(293,'fn_trg_tareas_avisos_guarda'),(294,'fn_tareas_avisar_atrasos'),
     (294,'fn_tareas_aviso_para'),(294,'fn_tareas_usuarios_con'),(295,'fn_tareas_resumen_semana'),
-    (296,'fn_tareas_guardar_resumen')
+    (296,'fn_tareas_guardar_resumen'),(298,'fn_tareas_push_pendiente')
   ),
   faltan as (
     select e.mig, 'falta la función ' || e.fn as problema
@@ -83,6 +83,13 @@
     union all
     select 296, 'falta activar pg_cron (Database → Extensions)'
     where not exists (select 1 from pg_extension where extname = 'pg_cron')
+    union all
+    select 297, 'falta la columna push_subscriptions.temas'
+    where not exists (select 1 from information_schema.columns where table_schema = 'public'
+                        and table_name = 'push_subscriptions' and column_name = 'temas')
+    union all
+    select 298, 'falta activar pg_net (Database → Extensions)'
+    where not exists (select 1 from pg_extension where extname = 'pg_net')
   )
   select mig, problema from faltan
   union all select mig, problema from versiones

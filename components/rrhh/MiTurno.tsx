@@ -15,6 +15,7 @@ import {
 } from './tareasAgenda'
 import { companerosTexto, minutosTarde, saludo, secciones } from './miTurnoLogica'
 import { TarjetaTareaMovil } from './TarjetaTareaMovil'
+import { BotonAvisosTareas } from './BotonAvisosTareas'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
 import {
   useCompanerosTurno,
@@ -107,6 +108,7 @@ export function MiTurno({ empleadoId, nombre }: Props) {
           {horaAhora}
           {conQuien && <span className="block">{conQuien}</span>}
         </p>
+        <BotonAvisosTareas className="h-auto w-full whitespace-normal py-2 text-left" />
         {total > 0 && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs font-semibold text-[#6f3a2a]">

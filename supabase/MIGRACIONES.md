@@ -396,6 +396,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 294 | `294_tareas_v2_avisar_atrasos.sql` | ✅ aplicada | 2026-10-17 (prueba, corrida 2 veces: la encargada también por puesto; producción) | `fn_tareas_avisar_atrasos()` (solo sistema): avisa a la encargada del turno, o a los admin si la tarea es de una encargada o privada; evento `aviso_atraso` |
 | 295 | `295_tareas_v2_resumen_semanal.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | `tareas_resumenes` (inmutable) + `fn_tareas_resumen_semana(lunes)` (solo admin) |
 | 296 | `296_tareas_v2_programar_cron.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; pg_cron activo en las dos; control en 0 y registro intocable bloqueado) | **requiere pg_cron activo.** `fn_tareas_guardar_resumen()` + procesos `hex-tareas-atrasos` (cada 5 min) y `hex-tareas-resumen` (lunes 08:00 AR) |
+| 297 | `297_tareas_v2_push_temas.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | Etapa 6 B: `push_subscriptions.temas` ('produccion', 'tareas'; las viejas quedan en producción) + `tareas_avisos_push` (un envío por aviso, solo service_role) |
+| 298 | `298_tareas_v2_cron_push.sql` | ✅ aplicada | 2026-10-17 (prueba sin secretos + producción con Vault y AVISOS_TAREAS_SECRET en Vercel; control en 0) | **requiere pg_net.** `fn_tareas_push_pendiente()` + proceso `hex-tareas-push` (minutos 1, 6, 11…): llama a `/api/cron/avisos-tareas` con la clave del Vault (`hex_app_url`, `hex_avisos_secret`); sin secretos (prueba) no hace nada |
 
 ## Dos bases de Supabase (2026-09-17)
 
