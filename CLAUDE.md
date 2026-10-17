@@ -518,6 +518,13 @@ pestañas por `?tab=`:
   `registroLogica.ts` / `avisosLogica.ts` (en Windows no puede haber dos
   archivos que difieran solo en mayúsculas: `RegistroCambios.tsx` ≠
   `registroCambios.ts`).
+- **Mi turno (Etapa 6)**: `MiTurno.tsx` reemplaza a "Mis tareas" en `/movil/tareas`
+  y `/rrhh/mis-tareas`. Secciones (lógica pura en `miTurnoLogica.ts`): atrasada
+  (tarjeta grande roja), ahora (tarjeta grande con Completar / No se pudo con los
+  4 motivos), en curso, más tarde, todo el turno (+ recordatorios que no se
+  marcan) y ya pasaron. Tilda pasos (`fn_tarea_checklist_paso`), deja nota para el
+  próximo turno al completar y muestra con quién está de turno (`fn_mi_turno`).
+  Cada uno ve solo lo suyo (`tareaEsDe`), también la encargada en el celular.
 
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.

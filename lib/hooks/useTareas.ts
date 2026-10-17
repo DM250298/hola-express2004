@@ -10,6 +10,7 @@ import {
   checklistPaso,
   getAQuienLeToca,
   getAvisosVivos,
+  getMiTurno,
   getCambiosSemana,
   getRegistroCambios,
   getResumenSemana,
@@ -650,4 +651,15 @@ export function useResolverPedidoConDeshacer() {
   )
 
   return { decidir, enEspera, procesando: resolver.isPending }
+}
+
+/** Compañeros de turno del empleado logueado (Mi turno, Etapa 6). */
+export function useCompanerosTurno(fecha: string, habilitado = true) {
+  return useQuery({
+    queryKey: ['tareas-mi-turno', fecha],
+    queryFn: () => getMiTurno(fecha),
+    enabled: habilitado,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
 }

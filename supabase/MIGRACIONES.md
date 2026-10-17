@@ -392,10 +392,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 290 | `290_tareas_v2_reparar_269_plantillas.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | repara la 269 (1/3): `fn_plantillas_tareas_dia` con versión vigente, cerrada a la app |
 | 291 | `291_tareas_v2_reparar_269_asignados.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | repara la 269 (2/3): `fn_asignados_tareas_dia` con "cubierto", cerrada a la app |
 | 292 | `292_tareas_v2_reparar_269_lecturas.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; control `scripts/tareas_v2_control_funciones.sql` en 0 filas en producción) | repara la 269 (3/3): `fn_personas_turno` y `fn_a_quien_le_toca` |
-| 293 | `293_tareas_v2_avisos.sql` | 🟡 en prueba | 2026-10-17 (prueba) | Etapa 5: `tareas_avisos` (un aviso por tarea atrasada; lo lee su destinatario y los admin; nadie lo escribe ni lo borra; en Realtime) |
-| 294 | `294_tareas_v2_avisar_atrasos.sql` | 🟡 en prueba | 2026-10-17 (prueba, corrida 2 veces: la encargada también por puesto) | `fn_tareas_avisar_atrasos()` (solo sistema): avisa a la encargada del turno, o a los admin si la tarea es de una encargada o privada; evento `aviso_atraso` |
-| 295 | `295_tareas_v2_resumen_semanal.sql` | 🟡 en prueba | 2026-10-17 (prueba) | `tareas_resumenes` (inmutable) + `fn_tareas_resumen_semana(lunes)` (solo admin) |
-| 296 | `296_tareas_v2_programar_cron.sql` | 🟡 en prueba | 2026-10-17 (prueba; aviso real a las 15:35) | **requiere pg_cron activo.** `fn_tareas_guardar_resumen()` + procesos `hex-tareas-atrasos` (cada 5 min) y `hex-tareas-resumen` (lunes 08:00 AR) |
+| 293 | `293_tareas_v2_avisos.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | Etapa 5: `tareas_avisos` (un aviso por tarea atrasada; lo lee su destinatario y los admin; nadie lo escribe ni lo borra; en Realtime) |
+| 294 | `294_tareas_v2_avisar_atrasos.sql` | ✅ aplicada | 2026-10-17 (prueba, corrida 2 veces: la encargada también por puesto; producción) | `fn_tareas_avisar_atrasos()` (solo sistema): avisa a la encargada del turno, o a los admin si la tarea es de una encargada o privada; evento `aviso_atraso` |
+| 295 | `295_tareas_v2_resumen_semanal.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | `tareas_resumenes` (inmutable) + `fn_tareas_resumen_semana(lunes)` (solo admin) |
+| 296 | `296_tareas_v2_programar_cron.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; pg_cron activo en las dos; control en 0 y registro intocable bloqueado) | **requiere pg_cron activo.** `fn_tareas_guardar_resumen()` + procesos `hex-tareas-atrasos` (cada 5 min) y `hex-tareas-resumen` (lunes 08:00 AR) |
 
 ## Dos bases de Supabase (2026-09-17)
 

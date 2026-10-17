@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
-import { MisTareas } from '@/components/rrhh/MisTareas'
+import { MiTurno } from '@/components/rrhh/MiTurno'
 import { TareasDeTableros } from '@/components/rrhh/TareasDeTableros'
 
 export const metadata = {
-  title: 'Mis tareas — RRHH',
+  title: 'Mi turno — RRHH',
 }
 
 export default async function PaginaMisTareas() {
@@ -41,7 +41,7 @@ export default async function PaginaMisTareas() {
 
   return (
     <>
-      <MisTareas empleadoId={emp.id} nombre={emp.nombre} />
+      <MiTurno empleadoId={emp.id} nombre={emp.nombre} />
       <TareasDeTableros />
     </>
   )

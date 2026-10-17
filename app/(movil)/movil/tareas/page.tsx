@@ -3,16 +3,16 @@ import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { createServerClient } from '@/lib/supabase/server'
 import { getPermisosUsuario } from '@/lib/permisosServidor'
-import { MisTareas } from '@/components/rrhh/MisTareas'
+import { MiTurno } from '@/components/rrhh/MiTurno'
 import { TareasDeTableros } from '@/components/rrhh/TareasDeTableros'
 
 export const metadata = {
-  title: 'Mis tareas — Móvil',
+  title: 'Mi turno — Móvil',
 }
 
 /**
- * Tareas del día del empleado desde el celular. Reusa el componente MisTareas
- * (ya mobile-first) dentro del shell (movil). Las tareas propias las filtra la
+ * Mi turno (Tareas v2, Etapa 6): las tareas del día del empleado desde el
+ * celular, dentro del shell (movil). Las tareas propias las filtra la
  * RLS; acá sólo se resuelve el legajo. El acceso a /movil lo controla el
  * middleware.
  */
@@ -39,7 +39,7 @@ export default async function PaginaTareasMovil() {
       </div>
 
       {emp ? (
-        <MisTareas empleadoId={emp.id} nombre={emp.nombre} />
+        <MiTurno empleadoId={emp.id} nombre={emp.nombre} />
       ) : (
         <div className="mx-auto mt-4 max-w-md px-4">
           <div className="rounded-2xl border border-[#e4c9b0]/60 bg-white p-8 text-center shadow-sm">
