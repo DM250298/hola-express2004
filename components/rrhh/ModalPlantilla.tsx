@@ -33,11 +33,12 @@ import { horaDeMinutos, minutosDeHora } from './tareasAgenda'
 import { NOMBRE_TURNO, hoyAr } from './asistenciaConstantes'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
-import { useCreatePlantilla, useUpdatePlantilla } from '@/lib/hooks/useTareas'
+import { useGuardarPlantilla } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
-import type { PlantillaConAsignados } from '@/lib/queries/tareas'
+import type { DatosRutina, PlantillaConAsignados } from '@/lib/queries/tareas'
 import type {
   AlcanceTarea,
+  AplicaDesde,
   ModoTarea,
   PrioridadTarea,
   RolOperativo,
@@ -51,6 +52,8 @@ interface Props {
   plantilla: PlantillaConAsignados | null
   /** Turno preseleccionado al crear (desde Configurar rutina). */
   turnoDefault?: number | null
+  /** Administrador de tareas: puede cambiar recurrencia y vigencia. */
+  esAdmin?: boolean
 }
 
 type ModoHora = 'fija' | 'desde_inicio' | 'sin_hora'
@@ -58,12 +61,19 @@ type ModoHora = 'fija' | 'desde_inicio' | 'sin_hora'
 const claseInput = 'border-[#e4c9b0] focus-visible:ring-[#f9b44c]'
 const ITEMS_PRIORIDAD: Record<string, string> = { baja: 'Baja', media: 'Media', alta: 'Alta' }
 
-export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefault }: Props) {
+export function ModalPlantilla({
+  abierto,
+  onCambioAbierto,
+  plantilla,
+  turnoDefault,
+  esAdmin = false,
+}: Props) {
   const editando = !!plantilla
   const { data: empleados } = useEmpleados()
   const { data: turnos } = useTurnos()
-  const crear = useCreatePlantilla()
-  const actualizar = useUpdatePlantilla()
+  const guardarRutina = useGuardarPlantilla()
+  // Desde cuándo rige: mañana por defecto (hoy sigue la versión de antes).
+  const [aplicar, setAplicar] = useState<AplicaDesde>('manana')
 
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
@@ -71,7 +81,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
   const [roles, setRoles] = useState<RolOperativo[]>([])
   const [asignados, setAsignados] = useState<number[]>([])
   const [modo, setModo] = useState<ModoTarea>('individual')
-  const [turnoId, setTurnoId] = useState('__ninguno__')
+  const [turnoId, setTurnoId] = useState('')
   const [tipoRecurrencia, setTipoRecurrencia] = useState<TipoRecurrenciaTarea>('dias_semana')
   const [dias, setDias] = useState<number[]>([])
   const [diaMes, setDiaMes] = useState('')
@@ -81,13 +91,11 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
   const [vigenciaHasta, setVigenciaHasta] = useState('')
   const [prioridad, setPrioridad] = useState<PrioridadTarea>('media')
   const [requiereEvidencia, setRequiereEvidencia] = useState(false)
-  const [activa, setActiva] = useState(true)
   // Horario (mig 251)
   const [modoHora, setModoHora] = useState<ModoHora>('sin_hora')
   const [hora, setHora] = useState('')
   const [minutosDesde, setMinutosDesde] = useState('')
   const [duracion, setDuracion] = useState('')
-  const [ventana, setVentana] = useState('')
   const [tipoActividad, setTipoActividad] = useState<TipoActividadTarea>('puntual')
   const [checklist, setChecklist] = useState('')
 
@@ -101,7 +109,6 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
         plantilla?.minutos_desde_inicio != null ? String(plantilla.minutos_desde_inicio) : ''
       )
       setDuracion(plantilla?.duracion_min ? String(plantilla.duracion_min) : '')
-      setVentana(plantilla?.ventana_min ? String(plantilla.ventana_min) : '')
       setTipoActividad(plantilla?.tipo_actividad ?? 'puntual')
       setChecklist((plantilla?.checklist ?? []).join('\n'))
       setTitulo(plantilla?.titulo ?? '')
@@ -118,19 +125,18 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
           ? String(plantilla.turno_id)
           : turnoDefault
             ? String(turnoDefault)
-            : '__ninguno__'
+            : ''
       )
       setTipoRecurrencia(plantilla?.tipo_recurrencia ?? 'dias_semana')
       setDias(plantilla?.dias_semana ?? (plantilla ? [] : [0, 1, 2, 3, 4, 5, 6]))
       setDiaMes(plantilla?.dia_mes ? String(plantilla.dia_mes) : '')
       setCadaN(plantilla?.cada_n_dias ? String(plantilla.cada_n_dias) : '')
       setFechaBase(plantilla?.fecha_base ?? hoyAr())
-      // Al editar, los cambios rigen desde hoy salvo que se elija otra fecha.
-      setVigenciaDesde(plantilla ? hoyAr() : '')
+      setVigenciaDesde(plantilla?.vigencia_desde ?? '')
+      setAplicar('manana')
       setVigenciaHasta(plantilla?.vigencia_hasta ?? '')
       setPrioridad(plantilla?.prioridad ?? 'media')
       setRequiereEvidencia(plantilla?.requiere_evidencia ?? false)
-      setActiva(plantilla?.activa ?? true)
     }
   }, [abierto, plantilla, turnoDefault])
 
@@ -138,13 +144,11 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
   const turnoSel = (turnos ?? []).find((t) => String(t.id) === turnoId) ?? null
   const minutosDesdeNum = Number(minutosDesde)
   const duracionNum = Number(duracion)
-  const ventanaNum = Number(ventana)
   const horaValida =
     modoHora === 'sin_hora' ||
     (modoHora === 'fija' && /^\d{2}:\d{2}$/.test(hora)) ||
     (modoHora === 'desde_inicio' && Number.isInteger(minutosDesdeNum) && minutosDesdeNum >= 0 && !!turnoSel)
   const duracionValida = duracion === '' || (Number.isInteger(duracionNum) && duracionNum > 0)
-  const ventanaValida = ventana === '' || (Number.isInteger(ventanaNum) && ventanaNum > 0)
   const horaPrevia =
     modoHora === 'desde_inicio' && turnoSel && Number.isInteger(minutosDesdeNum)
       ? horaDeMinutos(minutosDeHora(turnoSel.hora_inicio) + minutosDesdeNum)
@@ -157,10 +161,10 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
     id: e.id,
     nombre: e.activo ? nombreCompleto(e) : `${nombreCompleto(e)} (inactivo)`,
   }))
-  const itemsTurno: Record<string, string> = {
-    __ninguno__: 'Sin turno',
-    ...Object.fromEntries((turnos ?? []).map((t) => [String(t.id), NOMBRE_TURNO[t.nombre]])),
-  }
+  // Toda tarea de la rutina va en un turno activo (la base lo exige).
+  const itemsTurno: Record<string, string> = Object.fromEntries(
+    (turnos ?? []).filter((t) => t.activo).map((t) => [String(t.id), NOMBRE_TURNO[t.nombre]])
+  )
 
   const diaMesNum = Number(diaMes)
   const cadaNNum = Number(cadaN)
@@ -171,15 +175,15 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
         ? Number.isInteger(diaMesNum) && diaMesNum >= 1 && diaMesNum <= 31
         : Number.isInteger(cadaNNum) && cadaNNum >= 1 && !!fechaBase
 
-  const procesando = crear.isPending || actualizar.isPending
+  const procesando = guardarRutina.isPending
   const puedeGuardar =
     titulo.trim().length > 0 &&
+    !!turnoSel &&
     (alcance === 'todos' ||
       (alcance === 'puesto' ? roles.length > 0 : asignados.length > 0)) &&
     recurrenciaValida &&
     horaValida &&
     duracionValida &&
-    ventanaValida &&
     !procesando
 
   function toggleRol(r: RolOperativo) {
@@ -191,49 +195,51 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
   }
 
   function guardar() {
-    if (!puedeGuardar) return
-    const datos = {
+    if (!puedeGuardar || !turnoSel) return
+    const datos: DatosRutina = {
       titulo: titulo.trim(),
       descripcion: descripcion.trim() || null,
-      empleado_id: null, // deprecado (mig 158): manda alcance + la tabla puente
-      turno_id: turnoId === '__ninguno__' ? null : Number(turnoId),
+      turno_id: turnoSel.id,
       alcance,
       roles_puesto: alcance === 'puesto' ? roles : [],
       modo,
-      tipo_recurrencia: tipoRecurrencia,
-      dias_semana: tipoRecurrencia === 'dias_semana' ? [...dias].sort((a, b) => a - b) : [],
-      dia_mes: tipoRecurrencia === 'dia_mes' ? diaMesNum : null,
-      cada_n_dias: tipoRecurrencia === 'cada_n_dias' ? cadaNNum : null,
-      fecha_base: tipoRecurrencia === 'cada_n_dias' ? fechaBase : null,
-      vigencia_desde: vigenciaDesde || null,
-      vigencia_hasta: vigenciaHasta || null,
       prioridad,
       requiere_evidencia: requiereEvidencia,
-      activa,
-      hora: modoHora === 'fija' ? hora : null,
-      minutos_desde_inicio: modoHora === 'desde_inicio' ? minutosDesdeNum : null,
       duracion_min: duracion === '' ? null : duracionNum,
-      ventana_min: ventana === '' ? null : ventanaNum,
       tipo_actividad: tipoActividad,
       checklist: checklist
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean),
     }
+    // La base guarda siempre minutos desde el inicio del turno: la hora fija
+    // se manda como `hora` y se convierte allá.
+    if (modoHora === 'fija') datos.hora = hora
+    else if (modoHora === 'desde_inicio') datos.minutos_desde_inicio = minutosDesdeNum
+    else {
+      datos.hora = null
+      datos.minutos_desde_inicio = null
+    }
+    if (tipoRecurrencia === 'dias_semana') datos.dias_semana = [...dias].sort((a, b) => a - b)
+    // Recurrencia y vigencia: solo un administrador (la base lo controla).
+    if (esAdmin) {
+      Object.assign(datos, {
+        tipo_recurrencia: tipoRecurrencia,
+        dias_semana: tipoRecurrencia === 'dias_semana' ? [...dias].sort((a, b) => a - b) : [],
+        dia_mes: tipoRecurrencia === 'dia_mes' ? diaMesNum : null,
+        cada_n_dias: tipoRecurrencia === 'cada_n_dias' ? cadaNNum : null,
+        fecha_base: tipoRecurrencia === 'cada_n_dias' ? fechaBase : null,
+        vigencia_desde: vigenciaDesde || null,
+        vigencia_hasta: vigenciaHasta || null,
+      })
+    }
     // Con 'puesto' los asignados fijos se conservan: son el último recurso
     // cuando el cronograma del día está vacío (mig 249).
     const listaAsignados = alcance === 'todos' ? [] : asignados
-    if (editando && plantilla) {
-      actualizar.mutate(
-        { id: plantilla.id, datos, asignados: listaAsignados },
-        { onSuccess: () => onCambioAbierto(false) }
-      )
-    } else {
-      crear.mutate(
-        { datos, asignados: listaAsignados },
-        { onSuccess: () => onCambioAbierto(false) }
-      )
-    }
+    guardarRutina.mutate(
+      { id: plantilla?.id ?? null, datos, asignados: listaAsignados, aplicar },
+      { onSuccess: () => onCambioAbierto(false) }
+    )
   }
 
   return (
@@ -246,7 +252,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
           <DialogDescription className="text-[#6f3a2a]">
             Se genera sola según la frecuencia elegida, con su hora dentro del turno.
             {editando &&
-              ' Los cambios alcanzan a las pendientes desde "Aplicar cambios desde"; lo iniciado o completado no se toca.'}
+              ' Los cambios rigen desde mañana (o desde hoy, si lo elegís) y nunca pisan lo que alguien editó a mano.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -342,10 +348,6 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
               </div>
               {roles.length === 0 ? (
                 <p className="text-[11px] text-[#c43e2c]">Elegí al menos un puesto.</p>
-              ) : turnoId === '__ninguno__' ? (
-                <p className="text-[11px] text-[#a06b00]">
-                  Sin turno se busca el puesto en cualquier turno del día. Conviene elegir el turno más abajo.
-                </p>
               ) : null}
             </div>
           ) : (
@@ -409,7 +411,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
               items={TIPO_RECURRENCIA}
               value={tipoRecurrencia}
               onValueChange={(v) => v && setTipoRecurrencia(v as TipoRecurrenciaTarea)}
-              disabled={procesando}
+              disabled={procesando || !esAdmin}
             >
               <SelectTrigger className={`w-full ${claseInput}`}>
                 <SelectValue />
@@ -452,7 +454,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
                   value={diaMes}
                   onChange={(e) => setDiaMes(e.target.value)}
                   placeholder="Día del mes (1-31)"
-                  disabled={procesando}
+                  disabled={procesando || !esAdmin}
                   className={`${claseInput} tabular-nums`}
                 />
                 <p className="text-[11px] text-[#c8a58a]">
@@ -469,7 +471,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
                     value={cadaN}
                     onChange={(e) => setCadaN(e.target.value)}
                     placeholder="Cada cuántos días"
-                    disabled={procesando}
+                    disabled={procesando || !esAdmin}
                     className={`${claseInput} tabular-nums`}
                   />
                   <p className="text-[11px] text-[#c8a58a]">Ej: 15 = quincenal.</p>
@@ -479,7 +481,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
                     type="date"
                     value={fechaBase}
                     onChange={(e) => setFechaBase(e.target.value)}
-                    disabled={procesando}
+                    disabled={procesando || !esAdmin}
                     className={`${claseInput} tabular-nums`}
                   />
                   <p className="text-[11px] text-[#c8a58a]">Arranca desde esta fecha.</p>
@@ -492,13 +494,13 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-[#391511] font-medium text-sm">
-                {editando ? 'Aplicar cambios desde' : 'Vigente desde'}
+                Vigente desde
               </Label>
               <Input
                 type="date"
                 value={vigenciaDesde}
                 onChange={(e) => setVigenciaDesde(e.target.value)}
-                disabled={procesando}
+                disabled={procesando || !esAdmin}
                 className={`${claseInput} tabular-nums`}
               />
             </div>
@@ -508,23 +510,28 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
                 type="date"
                 value={vigenciaHasta}
                 onChange={(e) => setVigenciaHasta(e.target.value)}
-                disabled={procesando}
+                disabled={procesando || !esAdmin}
                 className={`${claseInput} tabular-nums`}
               />
             </div>
           </div>
+          {!esAdmin && (
+            <p className="text-[11px] text-[#c8a58a] -mt-2">
+              La repetición mensual o cada N días y la vigencia las cambia un administrador.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-[#391511] font-medium text-sm">Turno (opcional)</Label>
+              <Label className="text-[#391511] font-medium text-sm">Turno</Label>
               <Select
                 items={itemsTurno}
                 value={turnoId}
-                onValueChange={(v) => setTurnoId(v ?? '__ninguno__')}
+                onValueChange={(v) => setTurnoId(v ?? '')}
                 disabled={procesando}
               >
                 <SelectTrigger className={`w-full ${claseInput}`}>
-                  <SelectValue />
+                  <SelectValue placeholder="Elegí turno" />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(itemsTurno).map(([v, l]) => (
@@ -648,7 +655,7 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
                     </p>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3">
                   <div className="space-y-1">
                     <Label className="text-[#6f3a2a] text-xs">Duración estimada (min)</Label>
                     <Input
@@ -661,19 +668,9 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
                       className={`${claseInput} tabular-nums`}
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[#6f3a2a] text-xs">Ventana para completar (min)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={ventana}
-                      onChange={(e) => setVentana(e.target.value)}
-                      placeholder={duracion || '30'}
-                      disabled={procesando}
-                      className={`${claseInput} tabular-nums`}
-                    />
-                    <p className="text-[11px] text-[#c8a58a]">Pasada la ventana figura “Atrasada”.</p>
-                  </div>
+                  <p className="text-[11px] text-[#c8a58a]">
+                    Tiene que terminar dentro del turno. Pasado el horario figura “Atrasada”.
+                  </p>
                 </div>
               </>
             )}
@@ -699,12 +696,41 @@ export function ModalPlantilla({ abierto, onCambioAbierto, plantilla, turnoDefau
               disabled={procesando}
             />
           </div>
-          {editando && (
-            <div className="flex items-center justify-between rounded-xl border border-[#e4c9b0]/60 px-3 py-2.5">
-              <span className="text-[#391511] text-sm font-medium">Activa</span>
-              <Switch checked={activa} onCheckedChange={setActiva} disabled={procesando} />
-            </div>
+          {editando && plantilla && !plantilla.activa && (
+            <p className="rounded-xl border border-[#c43e2c]/30 bg-[#c43e2c]/5 px-3 py-2 text-xs text-[#c43e2c]">
+              Esta tarea está fuera de la rutina. Para volver a ponerla, usá “Volver a la rutina” en la lista.
+            </p>
           )}
+
+          {/* Desde cuándo rige */}
+          <div className="space-y-1.5">
+            <Label className="text-[#391511] font-medium text-sm">
+              {editando ? '¿Desde cuándo rigen los cambios?' : '¿Desde cuándo se hace?'}
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['manana', 'Desde mañana', 'La agenda de hoy no cambia.'],
+                  ['hoy', 'Desde hoy', 'Solo en lo que nadie empezó ni editó a mano.'],
+                ] as [AplicaDesde, string, string][]
+              ).map(([k, l, ayuda]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setAplicar(k)}
+                  disabled={procesando}
+                  aria-pressed={aplicar === k}
+                  className={cn(
+                    'rounded-xl border px-3 py-2 text-left transition-colors',
+                    aplicar === k ? 'border-[#f9b44c] bg-[#f9b44c]/15' : 'border-[#e4c9b0]/60 bg-[#fdfaf6]'
+                  )}
+                >
+                  <span className="block text-sm font-semibold text-[#391511]">{l}</span>
+                  <span className="block text-[11px] text-[#6f3a2a] mt-0.5">{ayuda}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">

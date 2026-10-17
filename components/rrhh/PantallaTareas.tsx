@@ -44,8 +44,10 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
   } | null>(null)
 
   const { data: usuario, isLoading: cargandoUsuario } = useUsuario()
-  const esGestor =
-    usuario?.rol === 'admin' || tienePermiso(usuario?.permisos, 'tareas_gestion')
+  // Administrador de tareas (tareas_admin): privadas, quitar de la rutina,
+  // horarios de turno. Encargada (tareas_gestion): el resto de la gestión.
+  const esAdmin = usuario?.rol === 'admin' || tienePermiso(usuario?.permisos, 'tareas_admin')
+  const esGestor = esAdmin || tienePermiso(usuario?.permisos, 'tareas_gestion')
   const puedeRrhh = usuario?.rol === 'admin' || tienePermiso(usuario?.permisos, 'rrhh')
 
   const { data: empleados } = useEmpleados()
@@ -156,7 +158,8 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
           <TabRutina
             onNueva={(turnoDefault) => setModalPlantilla({ plantilla: null, turnoDefault })}
             onEditar={(p) => setModalPlantilla({ plantilla: p })}
-            puedeEditarTurnos={!!puedeRrhh}
+            puedeEditarTurnos={esAdmin}
+            esAdmin={esAdmin}
           />
         </TabsContent>
 
@@ -174,6 +177,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
           fechaDefault={fecha}
           esGestor={!!esGestor}
           puedeIncidencia={!!puedeRrhh}
+          esAdmin={esAdmin}
         />
       )}
       {modalPlantilla && (
@@ -182,6 +186,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
           onCambioAbierto={(v) => !v && setModalPlantilla(null)}
           plantilla={modalPlantilla.plantilla}
           turnoDefault={modalPlantilla.turnoDefault}
+          esAdmin={esAdmin}
         />
       )}
     </div>

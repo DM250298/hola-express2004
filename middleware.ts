@@ -53,6 +53,8 @@ const PERMISO_RUTA: Record<string, string[]> = {
   // real es RLS + gate de UI en PantallaTareas; esta entrada habilita a un rol
   // que tenga tareas_gestion sin rrhh.
   tareas_gestion: ['/rrhh'],
+  // Administración de tareas (Tareas v2, mig 265): misma pestaña.
+  tareas_admin: ['/rrhh'],
   rrhh_sueldos: ['/rrhh'],
   // El panel y las tareas del empleado viven bajo /rrhh pero los habilita
   // 'mi_panel' (rol empleado), no 'rrhh'. Match por prefijo exacto o sub-ruta.
@@ -64,6 +66,8 @@ const PERMISO_RUTA: Record<string, string[]> = {
   tablero: ['/tablero'],
   alertas: ['/alertas'],
   configuracion: ['/configuracion'],
+  // Escribir roles y usuarios (mig 260); la pantalla vive en Configuración.
+  usuarios_roles: ['/configuracion/usuarios'],
 }
 
 export async function middleware(request: NextRequest) {

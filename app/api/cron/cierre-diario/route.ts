@@ -46,6 +46,7 @@ export async function GET(request: Request) {
   }
   const ayer = aFecha(arMs - 24 * 60 * 60 * 1000)
   const hoy = aFecha(arMs)
+  const manana = aFecha(arMs + 24 * 60 * 60 * 1000)
 
   try {
     const supabase = createAdminClient()
@@ -62,6 +63,15 @@ export async function GET(request: Request) {
       { p_fecha: hoy }
     )
     if (e2) errores.tareas = e2.message
+
+    // 2b. Agenda de mañana (Tareas v2): así la encargada la ve armada desde
+    // hoy. Si el cronograma de mañana todavía no está cargado, las tareas por
+    // puesto esperan; se completan al cargarlo o en la corrida de mañana.
+    const { data: materializadasManana, error: e2b } = await supabase.rpc(
+      'fn_materializar_tareas_turno',
+      { p_fecha: manana }
+    )
+    if (e2b) errores.tareas_manana = e2b.message
 
     const { data: vencidas, error: e3 } = await supabase.rpc(
       'fn_marcar_tareas_vencidas',
@@ -95,6 +105,7 @@ export async function GET(request: Request) {
         errores: hayErrores ? errores : null,
         cerrados: e1 ? null : (cerrados ?? 0),
         tareas_materializadas: e2 ? null : (materializadas ?? 0),
+        tareas_manana: e2b ? null : (materializadasManana ?? 0),
         tareas_vencidas: e3 ? null : (vencidas ?? 0),
         filas_snapshot: filasSnapshot,
         snapshot_error: snapshotError,

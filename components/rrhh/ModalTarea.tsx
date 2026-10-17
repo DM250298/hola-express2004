@@ -48,19 +48,19 @@ import {
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
 import {
+  useCancelarTarea,
   useCompletarTarea,
-  useCreateTareas,
-  useDeleteTarea,
+  useCrearTareaPuntual,
+  useEditarTarea,
   useIniciarTarea,
   useOmitirTarea,
   useReabrirTarea,
   useRechazarTarea,
   useTrasladarTarea,
-  useUpdateTarea,
 } from '@/lib/hooks/useTareas'
 import { NOMBRE_TURNO } from './asistenciaConstantes'
 import { cn } from '@/lib/utils'
-import type { TareaConParticipantes } from '@/lib/queries/tareas'
+import type { CambiosTarea, TareaConParticipantes } from '@/lib/queries/tareas'
 import type { ModoTarea, PrioridadTarea, TipoActividadTarea } from '@/types/database'
 
 interface Props {
@@ -72,6 +72,8 @@ interface Props {
   esGestor?: boolean
   /** Puede registrar incidencias (permiso rrhh): muestra "Registrar impedimento". */
   puedeIncidencia?: boolean
+  /** Administrador de tareas (tareas_admin): puede cancelar también las de la rutina. */
+  esAdmin?: boolean
 }
 
 const claseInput = 'border-[#e4c9b0] focus-visible:ring-[#f9b44c]'
@@ -88,19 +90,20 @@ export function ModalTarea({
   fechaDefault,
   esGestor = true,
   puedeIncidencia = false,
+  esAdmin = false,
 }: Props) {
   const editando = !!tarea
   const { data: empleados } = useEmpleados()
   const { data: turnos } = useTurnos()
-  const crear = useCreateTareas()
-  const actualizar = useUpdateTarea()
+  const crear = useCrearTareaPuntual()
+  const actualizar = useEditarTarea()
   const completar = useCompletarTarea()
   const rechazar = useRechazarTarea()
   const iniciar = useIniciarTarea()
   const reabrir = useReabrirTarea()
   const omitir = useOmitirTarea()
   const trasladar = useTrasladarTarea()
-  const borrar = useDeleteTarea()
+  const cancelar = useCancelarTarea()
 
   const [titulo, setTitulo] = useState('')
   const [descripcion, setDescripcion] = useState('')
@@ -119,7 +122,6 @@ export function ModalTarea({
   // Horario (mig 251)
   const [hora, setHora] = useState('')
   const [duracion, setDuracion] = useState('')
-  const [ventana, setVentana] = useState('')
   const [tipoActividad, setTipoActividad] = useState<TipoActividadTarea>('puntual')
   const [checklist, setChecklist] = useState('')
   // Acciones (mig 253)
@@ -131,7 +133,6 @@ export function ModalTarea({
     if (abierto) {
       setHora(tarea?.hora ? tarea.hora.slice(0, 5) : '')
       setDuracion(tarea?.duracion_min ? String(tarea.duracion_min) : '')
-      setVentana(tarea?.ventana_min ? String(tarea.ventana_min) : '')
       setTipoActividad(tarea?.tipo_actividad ?? 'puntual')
       setChecklist((tarea?.checklist ?? []).join('\n'))
       setMostrarOmision(false)
@@ -143,7 +144,7 @@ export function ModalTarea({
       setTodos(false)
       setModo(tarea?.modo ?? 'individual')
       setEmpleadoId(tarea?.empleado_id ? String(tarea.empleado_id) : '')
-      setTurnoId(tarea?.turno_id ? String(tarea.turno_id) : '__ninguno__')
+      setTurnoId(tarea?.turno_id ? String(tarea.turno_id) : tarea ? '__ninguno__' : '')
       setFecha(tarea?.fecha ?? fechaDefault)
       setPrioridad(tarea?.prioridad ?? 'media')
       setRequiereEvidencia(tarea?.requiere_evidencia ?? false)
@@ -166,9 +167,14 @@ export function ModalTarea({
       e.activo ? nombreCompleto(e) : `${nombreCompleto(e)} (inactivo)`,
     ])
   )
+  // Toda tarea nueva va en un turno (la base valida que el horario quede adentro).
   const itemsTurno: Record<string, string> = {
-    __ninguno__: 'Sin turno',
-    ...Object.fromEntries((turnos ?? []).map((t) => [String(t.id), NOMBRE_TURNO[t.nombre]])),
+    ...(editando && !tarea?.turno_id ? { __ninguno__: 'Sin turno' } : {}),
+    ...Object.fromEntries(
+      (turnos ?? [])
+        .filter((t) => t.activo || t.id === tarea?.turno_id)
+        .map((t) => [String(t.id), NOMBRE_TURNO[t.nombre]])
+    ),
   }
   const nombrePorId = new Map<number, string>(
     (empleados ?? []).map((e) => [e.id, nombreCompleto(e)])
@@ -177,59 +183,72 @@ export function ModalTarea({
   const esGrupal = editando ? tarea?.empleado_id === null : modo === 'grupal'
   const procesando = crear.isPending || actualizar.isPending
   const duracionNum = Number(duracion)
-  const ventanaNum = Number(ventana)
   const horarioValido =
     (hora === '' || /^\d{2}:\d{2}$/.test(hora)) &&
-    (duracion === '' || (Number.isInteger(duracionNum) && duracionNum > 0)) &&
-    (ventana === '' || (Number.isInteger(ventanaNum) && ventanaNum > 0))
-  const puedeGuardar =
-    titulo.trim().length > 0 &&
-    !procesando &&
-    horarioValido &&
-    (editando ? esGrupal || !!empleadoId : todos || seleccionados.length > 0)
+    (duracion === '' || (Number.isInteger(duracionNum) && duracionNum > 0))
   const completada = tarea?.estado === 'completada'
   const cancelada = tarea?.estado === 'cancelada'
   const noSePudo = tarea?.estado === 'no_se_pudo'
   const abierta = !!tarea && !completada && !cancelada && !noSePudo
+  // Solo se editan las abiertas; las nuevas necesitan turno.
+  const puedeGuardar =
+    titulo.trim().length > 0 &&
+    !procesando &&
+    horarioValido &&
+    (editando
+      ? abierta && (esGrupal || !!empleadoId)
+      : turnoId !== '' && turnoId !== '__ninguno__' && (todos || seleccionados.length > 0))
+  // Cancelar reemplaza a "Eliminar": las de la rutina solo un administrador.
+  const puedeCancelar = abierta && esGestor && (!tarea?.plantilla_id || esAdmin)
   const ocupado =
     iniciar.isPending || omitir.isPending || trasladar.isPending || reabrir.isPending
 
   function guardar() {
     if (!puedeGuardar) return
-    const base = {
-      titulo: titulo.trim(),
-      descripcion: descripcion.trim() || null,
-      turno_id: turnoId === '__ninguno__' ? null : Number(turnoId),
-      fecha,
-      prioridad,
-      requiere_evidencia: requiereEvidencia,
-      hora: hora || null,
-      duracion_min: duracion === '' ? null : duracionNum,
-      ventana_min: ventana === '' ? null : ventanaNum,
-      tipo_actividad: tipoActividad,
-      checklist: checklist
-        .split('\n')
-        .map((l) => l.trim())
-        .filter(Boolean),
-    }
+    const lista = checklist
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+    const duracionMin = duracion === '' ? null : duracionNum
     if (editando && tarea) {
-      // Cambiar a mano el responsable de una recurrente la "fija": la
-      // sincronización con el cronograma (mig 250) ya no la reasigna.
-      const fijar =
-        !esGrupal && !!tarea.plantilla_id && Number(empleadoId) !== tarea.empleado_id
+      // Solo viaja lo que cambió: la base lo registra con antes y después.
+      const cambios: CambiosTarea = {}
+      if (titulo.trim() !== tarea.titulo) cambios.titulo = titulo.trim()
+      if ((descripcion.trim() || null) !== tarea.descripcion) cambios.descripcion = descripcion.trim() || null
+      if ((hora || null) !== (tarea.hora ? tarea.hora.slice(0, 5) : null)) cambios.hora = hora || null
+      if (duracionMin !== tarea.duracion_min) cambios.duracion_min = duracionMin
+      if (prioridad !== tarea.prioridad) cambios.prioridad = prioridad
+      if (requiereEvidencia !== tarea.requiere_evidencia) cambios.requiere_evidencia = requiereEvidencia
+      if (tipoActividad !== tarea.tipo_actividad) cambios.tipo_actividad = tipoActividad
+      if (lista.join('\n') !== (tarea.checklist ?? []).join('\n')) cambios.checklist = lista
+      // Cambiar a mano el responsable la deja "asignada a mano": solo pasa a
+      // otro si esa persona tiene franco o licencia según el cronograma.
+      const nuevoResponsable =
+        !esGrupal && Number(empleadoId) !== tarea.empleado_id ? [Number(empleadoId)] : null
+      if (Object.keys(cambios).length === 0 && !nuevoResponsable) {
+        onCambioAbierto(false)
+        return
+      }
       actualizar.mutate(
-        {
-          id: tarea.id,
-          datos: esGrupal
-            ? base
-            : { ...base, empleado_id: Number(empleadoId), ...(fijar ? { fijada: true } : {}) },
-        },
+        { id: tarea.id, cambios, asignados: nuevoResponsable },
         { onSuccess: () => onCambioAbierto(false) }
       )
     } else {
-      const empleadosDestino = todos ? activos.map((e) => e.id) : seleccionados
       crear.mutate(
-        { datos: base, empleados: empleadosDestino, grupal: modo === 'grupal' },
+        {
+          fecha,
+          turnoId: Number(turnoId),
+          titulo: titulo.trim(),
+          descripcion: descripcion.trim() || null,
+          hora: hora || null,
+          duracionMin,
+          empleadoIds: todos ? activos.map((e) => e.id) : seleccionados,
+          modo,
+          prioridad,
+          requiereEvidencia,
+          checklist: lista,
+          tipoActividad,
+        },
         { onSuccess: () => onCambioAbierto(false) }
       )
     }
@@ -278,11 +297,11 @@ export function ModalTarea({
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
             {editando
-              ? tarea?.fijada
-                ? 'Reasignada a mano: "Actualizar según cronograma" no la toca.'
+              ? tarea?.asignacion_manual
+                ? 'Asignada a mano: solo pasa a otra persona si tiene franco o licencia según el cronograma.'
                 : tarea?.plantilla_id && !esGrupal
-                  ? 'Si cambiás el responsable, queda fijada y el cronograma ya no la reasigna.'
-                  : 'Asigná un responsable y, si hace falta, foto de evidencia.'
+                  ? 'Si cambiás el responsable, queda asignada a mano (con franco o licencia pasa a quien cubre).'
+                  : 'Los cambios quedan registrados con quién los hizo.'
               : 'Elegí a quién va y cómo se cumple.'}
           </DialogDescription>
         </DialogHeader>
@@ -406,7 +425,7 @@ export function ModalTarea({
                 type="date"
                 value={fecha}
                 onChange={(e) => setFecha(e.target.value)}
-                disabled={procesando}
+                disabled={procesando || editando}
                 className={`${claseInput} tabular-nums`}
               />
             </div>
@@ -415,11 +434,11 @@ export function ModalTarea({
               <Select
                 items={itemsTurno}
                 value={turnoId}
-                onValueChange={(v) => setTurnoId(v ?? '__ninguno__')}
-                disabled={procesando}
+                onValueChange={(v) => setTurnoId(v ?? '')}
+                disabled={procesando || editando}
               >
                 <SelectTrigger className={`w-full ${claseInput}`}>
-                  <SelectValue />
+                  <SelectValue placeholder="Elegí turno" />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(itemsTurno).map(([v, l]) => (
@@ -454,7 +473,7 @@ export function ModalTarea({
 
           {/* Horario dentro del turno (mig 251) */}
           <div className="rounded-xl border border-[#e4c9b0]/60 p-3 space-y-3">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-[#6f3a2a] text-xs">Hora</Label>
                 <Input
@@ -473,18 +492,6 @@ export function ModalTarea({
                   value={duracion}
                   onChange={(e) => setDuracion(e.target.value)}
                   placeholder="20"
-                  disabled={procesando}
-                  className={`${claseInput} tabular-nums`}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[#6f3a2a] text-xs">Ventana (min)</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  value={ventana}
-                  onChange={(e) => setVentana(e.target.value)}
-                  placeholder={duracion || '30'}
                   disabled={procesando}
                   className={`${claseInput} tabular-nums`}
                 />
@@ -510,8 +517,8 @@ export function ModalTarea({
               ))}
             </div>
             <p className="text-[11px] text-[#c8a58a]">
-              Sin hora va al final del turno como “durante el turno”. Pasada la ventana figura
-              “Atrasada”.
+              Sin hora vale para todo el turno. La hora y el fin tienen que quedar dentro del
+              turno; pasado el horario figura “Atrasada”.
             </p>
             <textarea
               value={checklist}
@@ -762,15 +769,17 @@ export function ModalTarea({
         </div>
 
         <div className="border-t border-[#e4c9b0]/60 bg-[#fdfaf6] px-6 py-4 flex gap-2">
-          {editando && tarea && (
+          {editando && tarea && puedeCancelar && (
             <Button
               variant="ghost"
               onClick={() => {
-                if (confirm('¿Eliminar esta tarea?'))
-                  borrar.mutate(tarea.id, { onSuccess: () => onCambioAbierto(false) })
+                if (confirm('¿Cancelar esta tarea? No se borra: queda registrada como cancelada.'))
+                  cancelar.mutate({ id: tarea.id }, { onSuccess: () => onCambioAbierto(false) })
               }}
+              disabled={cancelar.isPending}
               className="text-[#c43e2c] hover:bg-[#c43e2c]/10 px-3"
-              aria-label="Eliminar"
+              aria-label="Cancelar tarea"
+              title="Cancelar tarea"
             >
               <Trash2 className="h-4 w-4" />
             </Button>

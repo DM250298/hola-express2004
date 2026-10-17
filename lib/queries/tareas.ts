@@ -1,12 +1,17 @@
 import { createClient } from '@/lib/supabase/client'
 import { isoMasDias } from '@/lib/utils/periodos'
 import type {
-  EstadoTareaTurno,
+  AplicaDesde,
+  AreaTarea,
+  Json,
   ModoTarea,
-  TareaRecurrenteInsert,
+  PrioridadTarea,
+  RolOperativo,
+  TareaHistorialRow,
   TareaRecurrenteRow,
-  TareaTurnoInsert,
   TareaTurnoRow,
+  TipoActividadTarea,
+  TipoRecurrenciaTarea,
 } from '@/types/database'
 
 const BUCKET_EVIDENCIA = 'tareas-evidencia'
@@ -31,6 +36,10 @@ export type CumplimientoEmpleado = {
   vencidas: number
   pendientes: number
   rechazos: number
+  /** mig 283: cerradas como "no se pudo" (no cuentan en contra). */
+  no_se_pudo?: number
+  /** mig 283: completadas por alguien que no era el dueño. */
+  hechas_por_otro?: number
   pct: number | null
 }
 
@@ -52,13 +61,6 @@ export type CumplimientoTareas = {
   por_tarea: CumplimientoTarea[]
 }
 
-/** id del usuario logueado, para registrar quién asigna (usuario_id). */
-async function usuarioActualId(): Promise<string | null> {
-  const supabase = createClient()
-  const { data } = await supabase.auth.getSession()
-  return data.session?.user.id ?? null
-}
-
 // ─── Plantillas (recurrentes) ─────────────────────────────────────────────────
 
 export async function getPlantillas(): Promise<PlantillaConAsignados[]> {
@@ -71,66 +73,94 @@ export async function getPlantillas(): Promise<PlantillaConAsignados[]> {
   return (data ?? []) as PlantillaConAsignados[]
 }
 
-/** Sincroniza la tabla puente con la lista de asignados (delete + insert). */
-async function sincronizarAsignados(
-  plantillaId: string,
-  asignados: number[]
-): Promise<void> {
-  const supabase = createClient()
-  const { error: errorBorrar } = await supabase
-    .from('tareas_recurrentes_asignados')
-    .delete()
-    .eq('plantilla_id', plantillaId)
-  if (errorBorrar) throw errorBorrar
-  if (asignados.length === 0) return
-  const { error } = await supabase.from('tareas_recurrentes_asignados').insert(
-    asignados.map((empleadoId) => ({
-      plantilla_id: plantillaId,
-      empleado_id: empleadoId,
-    }))
-  )
-  if (error) throw error
+/**
+ * Campos de la rutina que guarda fn_rutina_guardar (mig 279). La hora se
+ * manda como `hora` (HH:mm) y la base la guarda como minutos desde el inicio
+ * del turno. Recurrencia, vigencia y privada solo las cambia un administrador.
+ */
+export type DatosRutina = {
+  titulo?: string
+  descripcion?: string | null
+  turno_id?: number
+  dias_semana?: number[]
+  prioridad?: PrioridadTarea
+  requiere_evidencia?: boolean
+  modo?: ModoTarea
+  alcance?: TareaRecurrenteRow['alcance']
+  roles_puesto?: RolOperativo[]
+  hora?: string | null
+  minutos_desde_inicio?: number | null
+  duracion_min?: number | null
+  tipo_actividad?: TipoActividadTarea
+  checklist?: string[]
+  area?: AreaTarea | null
+  avisar_atraso_min?: number | null
+  tipo_recurrencia?: TipoRecurrenciaTarea
+  dia_mes?: number | null
+  cada_n_dias?: number | null
+  fecha_base?: string | null
+  vigencia_desde?: string | null
+  vigencia_hasta?: string | null
+  privada?: boolean
 }
 
 /**
- * Crea una plantilla con sus asignados. Con alcance 'todos' la puente queda
- * vacía (la materialización resuelve empleados activos ese día).
+ * Crea (id null) o edita una tarea de la rutina. `aplicar` = desde cuándo
+ * rige ('manana' por defecto: hoy sigue la versión de antes). `asignados`
+ * null = no tocar los asignados fijos. Devuelve el id.
  */
-export async function createPlantilla(
-  datos: TareaRecurrenteInsert,
-  asignados: number[]
-): Promise<TareaRecurrenteRow> {
+export async function guardarPlantilla(
+  id: string | null,
+  datos: DatosRutina,
+  asignados: number[] | null,
+  aplicar: AplicaDesde
+): Promise<string> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('tareas_recurrentes')
-    .insert({ usuario_id: await usuarioActualId(), ...datos })
-    .select()
-    .single<TareaRecurrenteRow>()
+  const { data, error } = await supabase.rpc('fn_rutina_guardar', {
+    p_id: id,
+    p_datos: datos as Json,
+    p_aplicar: aplicar,
+    p_asignados: asignados,
+  })
   if (error) throw error
-  if (datos.alcance !== 'todos') await sincronizarAsignados(data.id, asignados)
-  return data
+  return data as string
 }
 
-export async function updatePlantilla(
+/**
+ * Quita una tarea de la rutina (nunca se borra). Un administrador la
+ * desactiva; si lo hace la encargada, la base lo convierte en un pedido y
+ * devuelve su número.
+ */
+export async function quitarPlantilla(
   id: string,
-  datos: Partial<TareaRecurrenteInsert>,
-  asignados: number[]
-): Promise<TareaRecurrenteRow> {
+  motivo: string | null,
+  aplicar: AplicaDesde = 'manana'
+): Promise<number | null> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('tareas_recurrentes')
-    .update(datos)
-    .eq('id', id)
-    .select()
-    .single<TareaRecurrenteRow>()
+  const { data, error } = await supabase.rpc('fn_rutina_quitar', {
+    p_id: id,
+    p_motivo: motivo,
+    p_aplicar: aplicar,
+  })
   if (error) throw error
-  await sincronizarAsignados(id, datos.alcance === 'todos' ? [] : asignados)
-  return data
+  return (data as number | null) ?? null
 }
 
-export async function deletePlantilla(id: string): Promise<void> {
+/** La encargada pide que se quite una tarea de la rutina (un pedido pendiente por tarea). */
+export async function pedirQuitarPlantilla(id: string, motivo: string): Promise<number> {
   const supabase = createClient()
-  const { error } = await supabase.from('tareas_recurrentes').delete().eq('id', id)
+  const { data, error } = await supabase.rpc('fn_rutina_pedir_quitar', {
+    p_id: id,
+    p_motivo: motivo,
+  })
+  if (error) throw error
+  return data as number
+}
+
+/** Vuelve a poner en la rutina una tarea quitada (solo administrador). */
+export async function reactivarPlantilla(id: string, aplicar: AplicaDesde = 'manana'): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_rutina_reactivar', { p_id: id, p_aplicar: aplicar })
   if (error) throw error
 }
 
@@ -199,102 +229,121 @@ export async function getTareasRango(
   return (data ?? []) as TareaConParticipantes[]
 }
 
-export async function createTarea(
-  datos: TareaTurnoInsert
-): Promise<TareaTurnoRow> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from('tareas_turno')
-    .insert({ usuario_id: await usuarioActualId(), ...datos })
-    .select()
-    .single<TareaTurnoRow>()
-  if (error) throw error
-  return data
+/** Datos de una tarea puntual nueva (fn_tarea_crear_puntual, mig 276). */
+export type NuevaTareaPuntual = {
+  fecha: string
+  turnoId: number
+  titulo: string
+  descripcion?: string | null
+  hora?: string | null
+  duracionMin?: number | null
+  /** Personas elegidas; si viene vacío se usa `rolesPuesto`. */
+  empleadoIds?: number[]
+  rolesPuesto?: RolOperativo[]
+  modo?: ModoTarea
+  prioridad?: PrioridadTarea
+  area?: AreaTarea | null
+  privada?: boolean
+  requiereEvidencia?: boolean
+  checklist?: string[]
+  tipoActividad?: TipoActividadTarea
 }
 
-/** Tarea única "cada uno": una instancia individual por empleado. */
-export async function createTareasIndividuales(
-  datos: Omit<TareaTurnoInsert, 'empleado_id'>,
-  empleados: number[]
-): Promise<void> {
+/**
+ * Crea una tarea puntual: "cada uno" = una por persona; "grupal" = una con
+ * participantes. Devuelve los ids creados.
+ */
+export async function crearTareaPuntual(t: NuevaTareaPuntual): Promise<string[]> {
   const supabase = createClient()
-  const usuarioId = await usuarioActualId()
-  const { error } = await supabase.from('tareas_turno').insert(
-    empleados.map((empleadoId) => ({
-      usuario_id: usuarioId,
-      ...datos,
-      empleado_id: empleadoId,
-      modo: 'individual' as ModoTarea,
-    }))
-  )
+  const { data, error } = await supabase.rpc('fn_tarea_crear_puntual', {
+    p_fecha: t.fecha,
+    p_turno_id: t.turnoId,
+    p_titulo: t.titulo,
+    p_descripcion: t.descripcion ?? null,
+    p_hora: t.hora ?? null,
+    p_duracion_min: t.duracionMin ?? null,
+    p_empleado_ids: t.empleadoIds && t.empleadoIds.length > 0 ? t.empleadoIds : null,
+    p_roles_puesto: t.rolesPuesto && t.rolesPuesto.length > 0 ? t.rolesPuesto : null,
+    p_modo: t.modo ?? 'individual',
+    p_prioridad: t.prioridad ?? 'media',
+    p_area: t.area ?? null,
+    p_privada: t.privada ?? false,
+    p_requiere_evidencia: t.requiereEvidencia ?? false,
+    p_checklist: t.checklist ?? [],
+    p_tipo_actividad: t.tipoActividad ?? 'puntual',
+  })
+  if (error) throw error
+  return (data as string[]) ?? []
+}
+
+/** Campos editables de una tarea abierta (fn_tarea_editar, mig 276). */
+export type CambiosTarea = Partial<
+  Pick<
+    TareaTurnoRow,
+    | 'titulo'
+    | 'descripcion'
+    | 'hora'
+    | 'duracion_min'
+    | 'prioridad'
+    | 'area'
+    | 'requiere_evidencia'
+    | 'checklist'
+    | 'avisar_atraso_min'
+    | 'tipo_actividad'
+    | 'notas'
+  >
+>
+
+/** Edita el contenido de una tarea abierta; queda "editada a mano" y en el registro. */
+export async function editarTarea(id: string, cambios: CambiosTarea): Promise<void> {
+  if (Object.keys(cambios).length === 0) return
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_tarea_editar', {
+    p_tarea_id: id,
+    p_cambios: cambios as Json,
+  })
   if (error) throw error
 }
 
-/** Tarea única grupal: UNA instancia (empleado_id null) + sus participantes. */
-export async function createTareaGrupal(
-  datos: Omit<TareaTurnoInsert, 'empleado_id'>,
-  participantes: number[]
-): Promise<void> {
+/** Cambia a quién le toca una tarea que nadie empezó (fn_agenda_mover, mig 277). */
+export async function reasignarTarea(id: string, asignados: number[]): Promise<void> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('tareas_turno')
-    .insert({
-      usuario_id: await usuarioActualId(),
-      ...datos,
-      empleado_id: null,
-      modo: 'grupal' as ModoTarea,
-    })
-    .select()
-    .single<TareaTurnoRow>()
+  const { error } = await supabase.rpc('fn_agenda_mover', {
+    p_tarea_id: id,
+    p_asignados: asignados,
+  })
   if (error) throw error
-  const { error: errorPart } = await supabase
-    .from('tareas_turno_participantes')
-    .insert(
-      participantes.map((empleadoId) => ({
-        tarea_id: data.id,
-        empleado_id: empleadoId,
-      }))
-    )
-  if (errorPart) throw errorPart
 }
 
-export async function updateTarea(
-  id: string,
-  datos: Partial<TareaTurnoInsert>
-): Promise<TareaTurnoRow> {
+/** Cancela una tarea (reemplaza a "Eliminar": nada se borra). */
+export async function cancelarTarea(id: string, motivo?: string | null): Promise<void> {
   const supabase = createClient()
-  const { data, error } = await supabase
-    .from('tareas_turno')
-    .update(datos)
-    .eq('id', id)
-    .select()
-    .single<TareaTurnoRow>()
+  const { error } = await supabase.rpc('fn_tarea_cancelar', {
+    p_tarea_id: id,
+    p_motivo: motivo ?? null,
+  })
   if (error) throw error
-  return data
 }
 
-export async function cambiarEstadoTarea(
-  id: string,
-  estado: EstadoTareaTurno
-): Promise<TareaTurnoRow> {
-  return updateTarea(id, { estado })
-}
-
-export async function deleteTarea(id: string): Promise<void> {
+/** Historial de cambios de una tarea (fn_tarea_historial, mig 278). */
+export async function getHistorialTarea(id: string): Promise<TareaHistorialRow[]> {
   const supabase = createClient()
-  const { error } = await supabase.from('tareas_turno').delete().eq('id', id)
+  const { data, error } = await supabase.rpc('fn_tarea_historial', { p_tarea_id: id })
   if (error) throw error
+  return (data ?? []) as TareaHistorialRow[]
 }
 
 /** Completa una tarea (valida evidencia y permiso server-side). */
 export async function completarTarea(
   id: string,
-  evidenciaUrl?: string | null
+  evidenciaUrl?: string | null,
+  nota?: string | null
 ): Promise<void> {
   const supabase = createClient()
   const { error } = await supabase.rpc('fn_completar_tarea', {
     p_tarea_id: id,
     p_evidencia_url: evidenciaUrl ?? null,
+    p_nota: nota ?? null,
   })
   if (error) throw error
 }
