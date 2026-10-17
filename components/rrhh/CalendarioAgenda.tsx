@@ -27,11 +27,13 @@ import {
   type VerPor,
 } from './calendarioTurno'
 import {
+  useAvisosTareas,
   useCambiosSemana,
   usePedidosPendientes,
   usePersonasTurno,
-  useResolverPedido,
+  useResolverPedidoConDeshacer,
 } from '@/lib/hooks/useTareas'
+import { textoAvisado } from './avisosLogica'
 import { cn } from '@/lib/utils'
 import type { RolOperativo, TurnoPlantillaRow } from '@/types/database'
 import type { TareaConParticipantes } from '@/lib/queries/tareas'
@@ -50,6 +52,8 @@ interface Props {
   empleadoActualId: number | null
   actorNombre: string | null
   onEditar: (t: TareaConParticipantes) => void
+  /** Lleva a Tareas › Registro de cambios (solo administradores). */
+  onVerRegistro?: () => void
 }
 
 /** Píxeles por minuto: un turno de 8 h mide ~770 px. */
@@ -73,6 +77,7 @@ export function CalendarioAgenda({
   empleadoActualId,
   actorNombre,
   onEditar,
+  onVerRegistro,
 }: Props) {
   const [verPor, setVerPor] = useState<VerPor>('area')
   const [filtro, setFiltro] = useState<FiltroTipo>('todas')
@@ -101,6 +106,9 @@ export function CalendarioAgenda({
   const avance = useMemo(() => avancePorPersona(lista, personas), [lista, personas])
   const juntas = useMemo(() => tareasJuntas(lista), [lista])
   const seleccion = lista.find((x) => x.tarea.id === seleccionId) ?? null
+  // A quién se avisó cada atraso (Etapa 5). La encargada no ve los avisos que van al admin.
+  const { data: avisos } = useAvisosTareas(esGestor)
+  const avisoDe = useMemo(() => new Map((avisos ?? []).map((a) => [a.tarea_turno_id, a])), [avisos])
 
   const alto = (rango.hasta - rango.desde) * PX
   const marcas = marcasHora(rango.desde, rango.hasta)
@@ -255,7 +263,7 @@ export function CalendarioAgenda({
 
       {/* Panel lateral */}
       <aside className="space-y-3 xl:sticky xl:top-20">
-        {esAdmin && <ParaRevisar />}
+        {esAdmin && <ParaRevisar onVerRegistro={onVerRegistro} />}
         {seleccion && (
           <DetalleTarea
             item={seleccion}
@@ -281,11 +289,17 @@ export function CalendarioAgenda({
           <Bloquecito titulo={`Atrasadas (${panel.atrasadas.length})`} tono="rojo">
             {panel.atrasadas.map((x) => {
               const min = minutosAtraso(x, reloj)
+              const aviso = avisoDe.get(x.tarea.id)
+              const avisado = aviso
+                ? ` · ${textoAvisado(aviso, horaAr)}`
+                : x.tarea.aviso_atraso_enviado_at
+                  ? ` · Avisado ${horaAr(x.tarea.aviso_atraso_enviado_at)}`
+                  : ''
               return (
                 <ItemPanel
                   key={x.tarea.id}
                   x={x}
-                  detalle={`${quienDe(x)}${min > 0 ? ` · ${min} min` : ''}`}
+                  detalle={`${quienDe(x)}${min > 0 ? ` · ${min} min` : ''}${avisado}`}
                   onElegir={setSeleccionId}
                   rojo
                 />
@@ -476,17 +490,18 @@ function BloqueTarea({
   )
 }
 
-function ParaRevisar() {
-  const { data: pedidos } = usePedidosPendientes()
+function ParaRevisar({ onVerRegistro }: { onVerRegistro?: () => void }) {
+  const { data: todos } = usePedidosPendientes()
   const { data: cambios } = useCambiosSemana()
-  const resolver = useResolverPedido()
-  const n = (pedidos ?? []).length
+  const { decidir, enEspera } = useResolverPedidoConDeshacer()
+  const pedidos = (todos ?? []).filter((p) => !enEspera.has(p.id))
+  const n = pedidos.length
   if (n === 0 && !cambios) return null
   return (
     <section className="rounded-2xl border border-[#f3d395] bg-[#fff6e5] p-3.5 space-y-2.5">
       <h3 className="text-[13px] font-extrabold text-[#4a3008]">Para revisar</h3>
       {n > 0 &&
-        (pedidos ?? []).map((p) => (
+        pedidos.map((p) => (
           <div key={p.id} className="rounded-xl bg-white border border-[#f3d395] p-2.5 space-y-2">
             <p className="text-[12.5px] text-[#391511]">
               <strong>{p.pedido_por_nombre ?? 'La encargada'}</strong> pidió quitar de la rutina “
@@ -496,11 +511,8 @@ function ParaRevisar() {
             <div className="flex gap-2">
               <Button
                 size="sm"
-                onClick={() => {
-                  if (confirm('¿Aprobar? La tarea sale de la rutina desde mañana (no se borra).'))
-                    resolver.mutate({ id: p.id, aprobar: true })
-                }}
-                disabled={resolver.isPending}
+                onClick={() => decidir(p.id, true)}
+                title="La tarea sale de la rutina desde mañana (no se borra). Tenés unos segundos para deshacer."
                 className="bg-[#391511] hover:bg-[#2a0f0c] text-white"
               >
                 Aprobar
@@ -508,8 +520,7 @@ function ParaRevisar() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => resolver.mutate({ id: p.id, aprobar: false })}
-                disabled={resolver.isPending}
+                onClick={() => decidir(p.id, false)}
                 className="border-[#e4c9b0]"
               >
                 Rechazar
@@ -520,7 +531,14 @@ function ParaRevisar() {
       {!!cambios && (
         <p className="text-[12.5px] text-[#4a3008]">
           Esta semana hubo {cambios} {cambios === 1 ? 'cambio' : 'cambios'} en tareas y rutina hechos por personas.
-          El registro completo llega en la Etapa 5.
+          {onVerRegistro && (
+            <>
+              {' '}
+              <button type="button" onClick={onVerRegistro} className="font-bold underline underline-offset-2">
+                Ver el registro
+              </button>
+            </>
+          )}
         </p>
       )}
     </section>

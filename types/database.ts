@@ -867,6 +867,33 @@ export type TareaPedidoRow = {
   nota_resolucion: string | null
 }
 
+/** Aviso de tarea atrasada (mig 293): lo crea el control de atrasos del sistema. */
+export type TareaAvisoRow = {
+  id: number
+  created_at: string
+  tarea_turno_id: string
+  fecha: string
+  turno_id: number | null
+  titulo: string
+  privada: boolean
+  duenos: number[]
+  duenos_nombres: string | null
+  para: 'encargada' | 'admin'
+  destinatarios: string[]
+  destinatarios_nombres: string | null
+  limite_at: string
+  minutos_atraso: number
+  resuelto_at: string | null
+  resolucion: 'hecha' | 'no_se_pudo' | 'cancelada' | 'sin_hacer' | 'otra' | null
+}
+
+/** Foto del resumen semanal de tareas (mig 295), guardada cada lunes 08:00. */
+export type TareaResumenRow = {
+  semana_desde: string
+  created_at: string
+  datos: Json
+}
+
 /** Fila de historial (fn_tarea_historial, mig 278). */
 export type TareaHistorialRow = {
   id: number
@@ -4673,6 +4700,18 @@ export interface Database {
         Update: never
         Relationships: []
       }
+      tareas_avisos: {
+        Row: TareaAvisoRow
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      tareas_resumenes: {
+        Row: TareaResumenRow
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       tareas_recurrentes_asignados: {
         Row: TareaRecurrenteAsignadoRow
         Insert: TareaRecurrenteAsignadoRow
@@ -5420,6 +5459,10 @@ export interface Database {
         Returns: undefined
       }
       // ── Tareas v2 (migs 269–284) ──
+      fn_tareas_resumen_semana: {
+        Args: { p_lunes: string }
+        Returns: Json
+      }
       fn_personas_turno: {
         Args: { p_fecha: string; p_turno_id: number }
         Returns: { empleado_id: number; nombre: string; rol_operativo: string; estado: string; notas: string | null }[]

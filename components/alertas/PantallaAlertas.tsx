@@ -22,6 +22,7 @@ import { formatearFechaCortaISO, formatearFechaHora, formatearNumero } from '@/l
 import { hoyIso } from '@/lib/utils/periodos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
+import { TareasAtrasadas } from '@/components/rrhh/AvisosTareas'
 import {
   useAlertas,
   useEvaluarAlertasAhora,
@@ -124,6 +125,8 @@ export function PantallaAlertas({ puedeEditarReglas }: { puedeEditarReglas: bool
           </Button>
         </div>
       </header>
+
+      <TareasAtrasadas />
 
       {isLoading ? (
         <div className="space-y-3">

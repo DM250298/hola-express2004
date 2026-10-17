@@ -498,6 +498,26 @@ pestañas por `?tab=`:
   `sobrescribir` reemplaza solo filas con el mismo `horarios_asignados.patron_id`
   (nunca lo manual). `aplicar=false` = previsualización. UI en Cronograma ›
   Patrones / Generar.
+- **Tareas v2 · avisos, registro y resumen (Etapa 5, migs 293–296)**: el
+  control de atrasos `fn_tareas_avisar_atrasos()` corre **en la base con
+  pg_cron** cada 5 min (Vercel Hobby solo deja crons diarios; la extensión se
+  activa a mano en cada proyecto). Avisa UNA vez por tarea (`tareas_avisos`,
+  índice único por tarea) a la encargada que el cronograma pone en el turno (si
+  no hay, a todas); si la tarea es de una encargada (por `rol_operativo`
+  encargado/responsable_general o por usuario con `tareas_gestion`) o es
+  privada, a los `tareas_admin`. No avisa recordatorios, bloques ni atrasos de más de 2 h.
+  El aviso se resuelve solo cuando la tarea se cierra. Tabla propia y no
+  `alertas` porque `fn_evaluar_alertas` da por resuelto todo lo que no detecta.
+  En la app: cartel en vivo en el layout (`AvisosTareasEnVivo`), sección arriba
+  de Alertas y "Avisado a…" en la agenda. Tareas › **Registro de cambios** (solo
+  admin) lee `tareas_eventos` directo (RLS `tareas_admin`), con el resumen de la
+  semana (`tareas_resumenes`, foto de los lunes 08:00; la semana en curso se
+  calcula con `fn_tareas_resumen_semana`) y los pedidos con deshacer (la decisión
+  se guarda a los 8 s). Prueba de que nadie edita ni borra el registro:
+  `supabase/scripts/tareas_v2_registro_intocable.sql`. Lógica pura en
+  `registroLogica.ts` / `avisosLogica.ts` (en Windows no puede haber dos
+  archivos que difieran solo en mayúsculas: `RegistroCambios.tsx` ≠
+  `registroCambios.ts`).
 
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.

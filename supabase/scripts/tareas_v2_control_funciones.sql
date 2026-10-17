@@ -1,4 +1,4 @@
-  -- Control de Tareas v2 (migs 259–289): qué falta en esta base.
+  -- Control de Tareas v2 (migs 259–296): qué falta en esta base.
   -- Solo lectura. Correr en cada base; cada fila que devuelve es un problema
   -- y dice qué migración volver a correr. Sin filas = todo en su lugar.
   with esperadas(mig, fn) as (values
@@ -18,7 +18,9 @@
     (279,'fn_rutina_guardar'),(279,'fn_rutina_resincronizar'),(279,'fn_rutina_version'),(280,'fn_agenda_actualizar_hoy'),
     (280,'fn_pedido_resolver'),(280,'fn_rutina_pedir_quitar'),(280,'fn_rutina_quitar'),(280,'fn_rutina_reactivar'),
     (280,'fn_rutina_set_activa'),(282,'fn_rutina_privadas_ids'),(282,'fn_tareas_privadas_ids'),(283,'fn_cumplimiento_tareas'),
-    (284,'fn_calcular_evaluacion')
+    (284,'fn_calcular_evaluacion'),(293,'fn_trg_tareas_avisos_guarda'),(294,'fn_tareas_avisar_atrasos'),
+    (294,'fn_tareas_aviso_para'),(294,'fn_tareas_usuarios_con'),(295,'fn_tareas_resumen_semana'),
+    (296,'fn_tareas_guardar_resumen')
   ),
   faltan as (
     select e.mig, 'falta la función ' || e.fn as problema
@@ -52,7 +54,14 @@
       (272, 'anon puede armar la agenda (fn_materializar_tareas_turno)',
             has_function_privilege('anon', 'public.fn_materializar_tareas_turno(date)', 'EXECUTE')),
       (288, 'la app todavía escribe directo en tareas_turno',
-            has_table_privilege('authenticated', 'public.tareas_turno', 'UPDATE'))
+            has_table_privilege('authenticated', 'public.tareas_turno', 'UPDATE')),
+      (293, 'la app puede escribir o borrar avisos (tareas_avisos)',
+            exists (select 1 from pg_class c where c.oid = to_regclass('public.tareas_avisos')
+                     and (has_table_privilege('authenticated', c.oid, 'DELETE')
+                          or has_table_privilege('authenticated', c.oid, 'UPDATE')))),
+      (294, 'la app puede correr el control de atrasos',
+            exists (select 1 from pg_proc p where p.proname = 'fn_tareas_avisar_atrasos'
+                     and has_function_privilege('authenticated', p.oid, 'EXECUTE')))
     ) x(mig, problema, mal)
     where x.mal
   ),
@@ -68,6 +77,12 @@
     union all
     select 289, 'tareas_turno no está en Realtime'
     where not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'tareas_turno')
+    union all
+    select 293, 'tareas_avisos no está en Realtime'
+    where not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'tareas_avisos')
+    union all
+    select 296, 'falta activar pg_cron (Database → Extensions)'
+    where not exists (select 1 from pg_extension where extname = 'pg_cron')
   )
   select mig, problema from faltan
   union all select mig, problema from versiones
