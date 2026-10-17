@@ -6,6 +6,7 @@ import { es } from 'date-fns/locale'
 import { Camera, Repeat, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EditorTurnos } from './EditorTurnos'
+import { CalendarioRutina } from './CalendarioRutina'
 import { ROLES_OPERATIVOS, nombreCompleto } from './constantes'
 import { NOMBRE_TURNO } from './asistenciaConstantes'
 import {
@@ -30,6 +31,8 @@ interface Props {
   puedeEditarTurnos: boolean
   /** Administrador de tareas: quita y vuelve a poner tareas de la rutina. */
   esAdmin: boolean
+  /** Encargada o administrador: edita la rutina (en el calendario, arrastrando). */
+  esGestor?: boolean
 }
 
 const SIN_TURNO = 0
@@ -52,7 +55,9 @@ function ordenPlantilla(p: PlantillaConAsignados, turno: TurnoPlantillaRow | nul
   return m
 }
 
-export function TabRutina({ onNueva, onEditar, puedeEditarTurnos, esAdmin }: Props) {
+export function TabRutina({ onNueva, onEditar, puedeEditarTurnos, esAdmin, esGestor = true }: Props) {
+  // Etapa 4: la rutina en calendario (PC). La lista queda como alternativa y en el celular.
+  const [vista, setVista] = useState<'calendario' | 'lista'>('calendario')
   const { data: plantillas } = usePlantillas()
   const { data: turnos } = useTurnos()
   const { data: empleados } = useEmpleados()
@@ -165,7 +170,50 @@ export function TabRutina({ onNueva, onEditar, puedeEditarTurnos, esAdmin }: Pro
         </Button>
       </div>
 
-      <section className="bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm">
+      {esGestor && !esAdmin && (
+        <p className="rounded-xl border border-[#f3d395] bg-[#fff6e5] px-3.5 py-2 text-[13px] text-[#4a3008]">
+          Estás viendo la rutina como encargada. Podés cambiar horarios, días y quién hace cada tarea, y cada cambio queda
+          en el registro que ven los administradores. Para quitar una tarea, se la pedís a ellos.
+        </p>
+      )}
+
+      {turnoSel && (
+        <div className="hidden md:flex items-center gap-2" role="group" aria-label="Cómo ver la rutina">
+          {(['calendario', 'lista'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              aria-pressed={vista === v}
+              onClick={() => setVista(v)}
+              className={cn(
+                'rounded-lg px-3 min-h-8 text-xs font-semibold border',
+                vista === v ? 'bg-[#f9b44c] border-[#f9b44c] text-[#391511]' : 'bg-white border-[#e4c9b0] text-[#6f3a2a]'
+              )}
+            >
+              {v === 'calendario' ? 'Calendario' : 'Lista'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {turnoSel && vista === 'calendario' && (
+        <div className="hidden md:block">
+          <CalendarioRutina
+            plantillas={lista}
+            turno={turnoSel}
+            esGestor={esGestor}
+            esAdmin={esAdmin}
+            nombres={nombrePorId}
+          />
+        </div>
+      )}
+
+      <section
+        className={cn(
+          'bg-white border border-[#e4c9b0]/60 rounded-2xl overflow-hidden shadow-sm',
+          turnoSel && vista === 'calendario' && 'md:hidden'
+        )}
+      >
         <header className="flex items-baseline justify-between gap-2 px-4 py-2.5 border-b border-[#e4c9b0]/40 flex-wrap">
           <h3 className="text-[#391511] text-sm font-bold">
             Rutina de {turnoSel ? NOMBRE_TURNO[turnoSel.nombre].toLowerCase() : 'tareas sin turno'}
