@@ -78,6 +78,8 @@ interface Props {
   esAdmin?: boolean
   /** Nombre de quien mira, para el aviso "marcada por X en nombre de Y". */
   actorNombre?: string | null
+  /** Lleva a la pestaña Registro de cambios (solo administradores). */
+  onVerRegistro?: () => void
 }
 
 const TICKS = ['00:00', '06:00', '12:00', '18:00', '24:00']
@@ -89,6 +91,7 @@ export function AgendaTurnos({
   onAbrirTarea,
   esAdmin = false,
   actorNombre = null,
+  onVerRegistro,
 }: Props) {
   // En vivo (mig 289): lo que marca cualquiera aparece sin recargar.
   useRealtimeTareas()
@@ -348,6 +351,7 @@ export function AgendaTurnos({
               empleadoActualId={empleadoActualId}
               actorNombre={actorNombre}
               onEditar={onAbrirTarea}
+              onVerRegistro={onVerRegistro}
             />
           </div>
 

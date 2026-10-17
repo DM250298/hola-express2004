@@ -5,6 +5,8 @@ import type {
   AreaTarea,
   Json,
   MotivoNoSePudo,
+  TareaAvisoRow,
+  TareaEventoRow,
   TareaPedidoRow,
   ModoTarea,
   PrioridadTarea,
@@ -566,4 +568,85 @@ export async function subirEvidencia(file: File): Promise<string> {
   if (error) throw error
   const { data } = supabase.storage.from(BUCKET_EVIDENCIA).getPublicUrl(path)
   return data.publicUrl
+}
+
+// ─── Etapa 5: avisos de atraso, registro de cambios y resumen semanal ───
+
+/**
+ * Avisos de atraso sin resolver que la sesión puede ver (los suyos; el
+ * administrador, todos). Los crea el control del sistema cada 5 minutos.
+ */
+export async function getAvisosVivos(): Promise<TareaAvisoRow[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('tareas_avisos')
+    .select('*')
+    .is('resuelto_at', null)
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw error
+  return (data ?? []) as TareaAvisoRow[]
+}
+
+export type FiltroRegistro = 'todo' | 'rutina' | 'agenda' | 'por_otro' | 'correcciones' | 'avisos'
+
+export type ConsultaRegistro = {
+  /** yyyy-MM-dd (día de La Rioja), incluido. */
+  desde: string
+  hasta: string
+  filtro: FiltroRegistro
+  empleadoId: number | null
+}
+
+export const PAGINA_REGISTRO = 100
+
+/**
+ * Registro de cambios (solo administradores: la tabla solo se deja leer
+ * con tareas_admin). Del más nuevo al más viejo, de a 100; `antesDe` = id
+ * del último evento de la página anterior.
+ */
+export async function getRegistroCambios(c: ConsultaRegistro, antesDe: number | null): Promise<TareaEventoRow[]> {
+  const supabase = createClient()
+  let q = supabase
+    .from('tareas_eventos')
+    .select('*')
+    .gte('created_at', `${c.desde}T00:00:00-03:00`)
+    .lt('created_at', `${isoMasDias(c.hasta, 1)}T00:00:00-03:00`)
+    .order('id', { ascending: false })
+    .limit(PAGINA_REGISTRO)
+  if (antesDe !== null) q = q.lt('id', antesDe)
+  if (c.filtro === 'todo') q = q.neq('tipo', 'checklist_paso')
+  else if (c.filtro === 'rutina') q = q.in('entidad', ['rutina', 'pedido'])
+  else if (c.filtro === 'agenda') q = q.eq('entidad', 'agenda').neq('tipo', 'checklist_paso')
+  else if (c.filtro === 'por_otro') q = q.not('en_nombre_de', 'eq', '{}')
+  else if (c.filtro === 'correcciones') q = q.in('tipo', ['hora_corregida', 'reabierta'])
+  else if (c.filtro === 'avisos') q = q.eq('tipo', 'aviso_atraso')
+  if (c.empleadoId !== null) {
+    const id = c.empleadoId
+    q = q.or(`actor_empleado_id.eq.${id},duenos.cs.{${id}},en_nombre_de.cs.{${id}}`)
+  }
+  const { data, error } = await q
+  if (error) throw error
+  return (data ?? []) as TareaEventoRow[]
+}
+
+export type ResumenSemana = {
+  datos: Json
+  /** true = la foto guardada el lunes; false = calculado ahora (semana en curso o sin foto). */
+  guardado: boolean
+}
+
+/** Resumen de la semana que empieza ese lunes (solo administradores). */
+export async function getResumenSemana(lunes: string): Promise<ResumenSemana> {
+  const supabase = createClient()
+  const { data: foto, error: e1 } = await supabase
+    .from('tareas_resumenes')
+    .select('datos')
+    .eq('semana_desde', lunes)
+    .maybeSingle()
+  if (e1) throw e1
+  if (foto) return { datos: (foto as { datos: Json }).datos, guardado: true }
+  const { data, error } = await supabase.rpc('fn_tareas_resumen_semana', { p_lunes: lunes })
+  if (error) throw error
+  return { datos: data as Json, guardado: false }
 }

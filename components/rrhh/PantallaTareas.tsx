@@ -10,6 +10,7 @@ import { ModalTarea } from './ModalTarea'
 import { ModalPlantilla } from './ModalPlantilla'
 import { NuevaTarea } from './NuevaTarea'
 import { NavegadorFecha } from './NavegadorFecha'
+import { RegistroCambios } from './RegistroCambios'
 import { TabCumplimiento } from './TabCumplimiento'
 import { TabRutina } from './TabRutina'
 import { hoyAr } from './asistenciaConstantes'
@@ -31,12 +32,13 @@ interface Props {
 }
 
 /**
- * Personal › Tareas. Tres vistas: la agenda cronológica del día por turno
- * (reemplaza al kanban por estado), la rutina recurrente por turno y el
- * cumplimiento histórico.
+ * Personal › Tareas. La agenda cronológica del día por turno, la rutina
+ * recurrente por turno, el cumplimiento histórico y, para los
+ * administradores, el registro de cambios.
  */
 export function PantallaTareas({ enHub = false }: Props = {}) {
   const [hoy] = useState(() => hoyAr())
+  const [tab, setTab] = useState('agenda')
   const [fecha, setFecha] = useState(hoy)
   const [modalTarea, setModalTarea] = useState<{ tarea: TareaConParticipantes | null } | null>(null)
   // Alta (Etapa 3): una vez o rutina. Editar sigue en ModalTarea / ModalPlantilla.
@@ -119,7 +121,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
         </Button>
       </header>
 
-      <Tabs defaultValue="agenda" className="space-y-4">
+      <Tabs value={tab} onValueChange={(v) => setTab(String(v))} className="space-y-4">
         <TabsList className="bg-white border border-[#e4c9b0]/60 p-1 h-auto flex-wrap">
           <TabsTrigger value="agenda" className={claseTab}>
             Agenda del día
@@ -130,6 +132,11 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
           <TabsTrigger value="cumplimiento" className={claseTab}>
             Cumplimiento
           </TabsTrigger>
+          {esAdmin && (
+            <TabsTrigger value="registro" className={claseTab}>
+              Registro de cambios
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Agenda cronológica por turno ── */}
@@ -155,6 +162,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
             onAbrirTarea={(t) => setModalTarea({ tarea: t })}
             esAdmin={esAdmin}
             actorNombre={usuario?.nombre?.split(' ')[0] ?? null}
+            onVerRegistro={esAdmin ? () => setTab('registro') : undefined}
           />
         </TabsContent>
 
@@ -173,6 +181,13 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
         <TabsContent value="cumplimiento">
           <TabCumplimiento />
         </TabsContent>
+
+        {/* ── Registro de cambios (Etapa 5, solo administradores) ── */}
+        {esAdmin && (
+          <TabsContent value="registro">
+            <RegistroCambios />
+          </TabsContent>
+        )}
       </Tabs>
 
       {nueva && (

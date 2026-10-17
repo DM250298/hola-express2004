@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -9,7 +9,12 @@ import {
   cancelarTarea,
   checklistPaso,
   getAQuienLeToca,
+  getAvisosVivos,
   getCambiosSemana,
+  getRegistroCambios,
+  getResumenSemana,
+  PAGINA_REGISTRO,
+  type ConsultaRegistro,
   getPedidosPendientes,
   getPersonasTurno,
   guardarNotaTarea,
@@ -44,6 +49,8 @@ export const PLANTILLAS_KEY = ['tareas-plantillas'] as const
 export const TAREAS_KEY = ['tareas-turno'] as const
 export const CUMPLIMIENTO_KEY = ['tareas-cumplimiento'] as const
 export const PEDIDOS_KEY = ['tareas-pedidos'] as const
+export const AVISOS_KEY = ['tareas-avisos'] as const
+export const REGISTRO_KEY = ['tareas-registro'] as const
 
 // ─── Plantillas ────────────────────────────────────────────────────────────────
 
@@ -504,8 +511,143 @@ export function useResolverPedido() {
       qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
       qc.invalidateQueries({ queryKey: PLANTILLAS_KEY })
       qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: REGISTRO_KEY })
       toast.success(vars.aprobar ? 'Aprobado: la tarea sale de la rutina desde mañana' : 'Pedido rechazado')
     },
     onError: (e: Error) => toast.error(e.message),
   })
+}
+
+// ─── Etapa 5: avisos de atraso, registro de cambios y resumen semanal ───
+
+/** Avisos de atraso sin resolver que la sesión puede ver. En vivo con useRealtimeAvisos. */
+export function useAvisosTareas(habilitado = true) {
+  return useQuery({
+    queryKey: AVISOS_KEY,
+    queryFn: getAvisosVivos,
+    enabled: habilitado,
+    staleTime: 30 * 1000,
+    refetchInterval: 2 * 60 * 1000,
+  })
+}
+
+/** Escucha los avisos nuevos (y los que se resuelven) en vivo. */
+export function useRealtimeAvisos(habilitado = true) {
+  const qc = useQueryClient()
+  useEffect(() => {
+    if (!habilitado) return
+    const supabase = createClient()
+    let canal: ReturnType<typeof supabase.channel> | null = null
+    let cancelado = false
+    // Igual que la agenda: el canal sale con la sesión, si no Realtime no deja ver nada.
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (cancelado) return
+      if (data.session) await supabase.realtime.setAuth(data.session.access_token)
+      canal = supabase
+        .channel('tareas-avisos')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_avisos' }, () => {
+          qc.invalidateQueries({ queryKey: AVISOS_KEY })
+          qc.invalidateQueries({ queryKey: TAREAS_KEY })
+        })
+        .subscribe((estado, err) => {
+          if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') {
+            console.warn('[avisos en vivo]', estado, err?.message ?? '')
+          }
+        })
+    })
+    return () => {
+      cancelado = true
+      if (canal) supabase.removeChannel(canal)
+    }
+  }, [qc, habilitado])
+}
+
+/** Registro de cambios de a 100 eventos (solo administradores). */
+export function useRegistroCambios(consulta: ConsultaRegistro, habilitado = true) {
+  return useInfiniteQuery({
+    queryKey: [...REGISTRO_KEY, consulta],
+    queryFn: ({ pageParam }) => getRegistroCambios(consulta, pageParam),
+    initialPageParam: null as number | null,
+    getNextPageParam: (ultima) =>
+      ultima.length < PAGINA_REGISTRO ? undefined : ultima[ultima.length - 1].id,
+    enabled: habilitado,
+    staleTime: 30 * 1000,
+  })
+}
+
+/** Resumen de la semana que empieza ese lunes (la foto guardada o calculado ahora). */
+export function useResumenSemana(lunes: string, habilitado = true) {
+  return useQuery({
+    queryKey: [...REGISTRO_KEY, 'resumen', lunes],
+    queryFn: () => getResumenSemana(lunes),
+    enabled: habilitado,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+const ESPERA_DESHACER_MS = 8000
+
+/**
+ * Aprobar o rechazar un pedido con "Deshacer": la decisión se guarda a los
+ * 8 segundos; mientras tanto el pedido se oculta y el cartel ofrece volver
+ * atrás. Si se sale de la pantalla antes, se guarda en ese momento.
+ */
+export function useResolverPedidoConDeshacer() {
+  const resolver = useResolverPedido()
+  const mutar = useRef(resolver.mutate)
+  const pendientes = useRef(new Map<number, { timer: ReturnType<typeof setTimeout>; aprobar: boolean }>())
+  const [enEspera, setEnEspera] = useState<ReadonlySet<number>>(new Set())
+
+  useEffect(() => {
+    mutar.current = resolver.mutate
+  }, [resolver.mutate])
+
+  useEffect(() => {
+    const mapa = pendientes.current
+    return () => {
+      for (const [id, p] of mapa) {
+        clearTimeout(p.timer)
+        mutar.current({ id, aprobar: p.aprobar })
+      }
+      mapa.clear()
+    }
+  }, [])
+
+  const sacar = useCallback((id: number) => {
+    setEnEspera((s) => {
+      const n = new Set(s)
+      n.delete(id)
+      return n
+    })
+  }, [])
+
+  const decidir = useCallback(
+    (id: number, aprobar: boolean) => {
+      if (pendientes.current.has(id)) return
+      setEnEspera((s) => new Set(s).add(id))
+      const timer = setTimeout(() => {
+        pendientes.current.delete(id)
+        mutar.current({ id, aprobar }, { onSettled: () => sacar(id) })
+      }, ESPERA_DESHACER_MS)
+      pendientes.current.set(id, { timer, aprobar })
+      toast(aprobar ? 'Pedido aprobado' : 'Pedido rechazado', {
+        description: 'Se guarda en unos segundos.',
+        duration: ESPERA_DESHACER_MS,
+        action: {
+          label: 'Deshacer',
+          onClick: () => {
+            const p = pendientes.current.get(id)
+            if (!p) return
+            clearTimeout(p.timer)
+            pendientes.current.delete(id)
+            sacar(id)
+            toast.info('Listo: no se guardó nada')
+          },
+        },
+      })
+    },
+    [sacar]
+  )
+
+  return { decidir, enEspera, procesando: resolver.isPending }
 }
