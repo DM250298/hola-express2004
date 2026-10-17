@@ -650,3 +650,22 @@ export async function getResumenSemana(lunes: string): Promise<ResumenSemana> {
   if (error) throw error
   return { datos: data as Json, guardado: false }
 }
+
+// ─── Etapa 6: Mi turno en el celular ───
+
+export type CompaneroTurnoRow = {
+  turno_id: number
+  turno: string
+  empleado_id: number
+  nombre: string
+  rol_operativo: string
+  soy_yo: boolean
+}
+
+/** Con quién trabaja el empleado logueado ese día (fn_mi_turno, mig 278). */
+export async function getMiTurno(fecha: string): Promise<CompaneroTurnoRow[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_mi_turno', { p_fecha: fecha })
+  if (error) throw error
+  return (data ?? []) as CompaneroTurnoRow[]
+}

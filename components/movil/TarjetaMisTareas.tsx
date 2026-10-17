@@ -3,18 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight, ListChecks } from 'lucide-react'
-import { useMaterializar, useTareasFecha } from '@/lib/hooks/useTareas'
+import { useMaterializar, useTareasAgenda } from '@/lib/hooks/useTareas'
+import { useTurnos } from '@/lib/hooks/useAsistencia'
 import { hoyAr } from '@/components/rrhh/asistenciaConstantes'
 import { tareaEsDe } from '@/components/rrhh/tareasConstantes'
+import { horaActualAr } from '@/components/rrhh/paseTurnoConstantes'
+import { cerradaSinHacer, contextoReloj, estadoDerivado } from '@/components/rrhh/tareasAgenda'
 
 interface Props {
   empleadoId: number
 }
 
 /**
- * Tarjeta del hub móvil que enlaza a "Mis tareas" y muestra un badge con las
- * tareas pendientes del día. Usa exactamente la misma lógica que la pantalla
- * `MisTareas` (materializa las recurrentes del día como fallback del cron y
+ * Tarjeta del hub móvil que enlaza a "Mi turno" y muestra un badge con las
+ * tareas pendientes del día (y cuántas están atrasadas). Usa la misma lógica
+ * que la pantalla `MiTurno` (materializa las recurrentes del día como fallback del cron y
  * cuenta las del empleado logueado), así el número del badge siempre coincide
  * con lo que se ve adentro y se actualiza al completar (invalidación de la
  * query). Es client porque el conteo real depende de esa materialización, que
@@ -22,7 +25,8 @@ interface Props {
  */
 export function TarjetaMisTareas({ empleadoId }: Props) {
   const [hoy] = useState(() => hoyAr())
-  const { data: tareas } = useTareasFecha(hoy)
+  const { data: tareas } = useTareasAgenda(hoy)
+  const { data: turnos } = useTurnos()
   const materializar = useMaterializar()
   const materializado = useRef(false)
 
@@ -33,18 +37,23 @@ export function TarjetaMisTareas({ empleadoId }: Props) {
     }
   }, [hoy, materializar])
 
-  const pendientes = useMemo(() => {
-    // RLS ya limita a las del empleado logueado; el filtro por id cubre el caso
-    // de un rol con permiso de RRHH que ve las de todos. tareaEsDe suma las
-    // grupales donde participa (empleado_id null).
-    const mias = (tareas ?? []).filter((t) => tareaEsDe(t, empleadoId))
-    return mias.filter(
+  const { pendientes, atrasadas } = useMemo(() => {
+    // Igual que Mi turno: las suyas de hoy y la noche de ayer si sigue abierta.
+    // Los recordatorios de todo el turno no se marcan, así que no cuentan.
+    const reloj = contextoReloj(hoy, hoy, horaActualAr())
+    const turnoDe = (id: number | null) => (turnos ?? []).find((t) => t.id === id) ?? null
+    const abiertas = (tareas ?? []).filter(
       (t) =>
-        t.estado === 'pendiente' ||
-        t.estado === 'en_curso' ||
-        t.estado === 'vencida'
-    ).length
-  }, [tareas, empleadoId])
+        tareaEsDe(t, empleadoId) &&
+        t.tipo_actividad !== 'continua' &&
+        (t.estado === 'pendiente' || t.estado === 'en_curso' || t.estado === 'vencida') &&
+        (t.fecha === hoy || (!!turnoDe(t.turno_id)?.cruza_medianoche && !cerradaSinHacer(t.estado)))
+    )
+    return {
+      pendientes: abiertas.length,
+      atrasadas: abiertas.filter((t) => estadoDerivado(t, turnoDe(t.turno_id), hoy, reloj).atrasada).length,
+    }
+  }, [tareas, turnos, empleadoId, hoy])
 
   return (
     <Link
@@ -60,8 +69,13 @@ export function TarjetaMisTareas({ empleadoId }: Props) {
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-lg font-bold text-[#391511]">Mis tareas</span>
+        <span className="block text-lg font-bold text-[#391511]">Mi turno</span>
         <span className="block text-xs text-[#6f3a2a]">
+          {atrasadas > 0 && (
+            <span className="font-bold text-[#a3271d]">
+              {atrasadas} atrasada{atrasadas === 1 ? '' : 's'} ·{' '}
+            </span>
+          )}
           {pendientes > 0
             ? `${pendientes} pendiente${pendientes === 1 ? '' : 's'} para hoy`
             : 'Tus tareas del día · marcá las que completás'}
