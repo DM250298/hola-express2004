@@ -4,6 +4,8 @@ import type {
   AplicaDesde,
   AreaTarea,
   Json,
+  MotivoNoSePudo,
+  TareaPedidoRow,
   ModoTarea,
   PrioridadTarea,
   RolOperativo,
@@ -407,6 +409,106 @@ export async function getCumplimiento(
   })
   if (error) throw error
   return (data ?? { por_empleado: [], por_tarea: [] }) as CumplimientoTareas
+}
+
+/** Cierra una tarea como "No se pudo" con su motivo (habilitado en la mig 288). */
+export async function noSePudoTarea(
+  id: string,
+  motivo: MotivoNoSePudo,
+  detalle?: string | null
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_tarea_no_se_pudo', {
+    p_tarea_id: id,
+    p_motivo: motivo,
+    p_detalle: detalle ?? null,
+  })
+  if (error) throw error
+}
+
+/** Tilda o destilda un paso del checklist (paso = índice desde 0). */
+export async function checklistPaso(id: string, paso: number, hecho: boolean): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_tarea_checklist_paso', {
+    p_tarea_id: id,
+    p_paso: paso,
+    p_hecho: hecho,
+  })
+  if (error) throw error
+}
+
+/** Guarda la nota para el próximo turno (vacía = borrarla). */
+export async function guardarNotaTarea(id: string, nota: string | null): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_tarea_nota', { p_tarea_id: id, p_nota: nota })
+  if (error) throw error
+}
+
+/** Quién trabaja en un turno ese día (para la vista por persona; gestión). */
+export async function getPersonasTurno(
+  fecha: string,
+  turnoId: number
+): Promise<{ empleado_id: number; nombre: string; rol_operativo: string }[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_personas_turno', {
+    p_fecha: fecha,
+    p_turno_id: turnoId,
+  })
+  if (error) throw error
+  return (data ?? []) as { empleado_id: number; nombre: string; rol_operativo: string }[]
+}
+
+/** Pedido de quitar con el título de la tarea de la rutina. */
+export type PedidoConTarea = TareaPedidoRow & {
+  tareas_recurrentes: { titulo: string; turno_id: number | null } | null
+  pedido_por_nombre: string | null
+}
+
+/** Pedidos pendientes (el administrador ve todos; la encargada, los suyos). */
+export async function getPedidosPendientes(): Promise<PedidoConTarea[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('tareas_pedidos')
+    .select('*, tareas_recurrentes(titulo, turno_id)')
+    .eq('estado', 'pendiente')
+    .order('created_at', { ascending: true })
+  if (error) throw error
+  const pedidos = (data ?? []) as unknown as Omit<PedidoConTarea, 'pedido_por_nombre'>[]
+  const ids = [...new Set(pedidos.map((p) => p.pedido_por).filter((x): x is string => !!x))]
+  let nombres = new Map<string, string>()
+  if (ids.length) {
+    const { data: us } = await supabase.from('usuarios').select('id, nombre').in('id', ids)
+    nombres = new Map((us ?? []).map((u: { id: string; nombre: string }) => [u.id, u.nombre]))
+  }
+  return pedidos.map((p) => ({ ...p, pedido_por_nombre: p.pedido_por ? nombres.get(p.pedido_por) ?? null : null }))
+}
+
+/** El administrador aprueba (= quitar desde mañana) o rechaza un pedido. */
+export async function resolverPedido(id: number, aprobar: boolean, nota?: string | null): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_pedido_resolver', {
+    p_pedido_id: id,
+    p_aprobar: aprobar,
+    p_nota: nota ?? null,
+  })
+  if (error) throw error
+}
+
+/**
+ * Cambios hechos por la encargada (o cualquiera que no sea el sistema) en los
+ * últimos 7 días, sin contar marcar tareas. Solo lo lee un administrador (RLS).
+ */
+export async function getCambiosSemana(): Promise<number> {
+  const supabase = createClient()
+  const desde = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { count, error } = await supabase
+    .from('tareas_eventos')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', desde)
+    .not('actor_usuario_id', 'is', null)
+    .in('tipo', ['creada', 'editada', 'cancelada', 'hora_corregida', 'reabierta', 'quitada', 'reactivada', 'agenda_actualizada'])
+  if (error) throw error
+  return count ?? 0
 }
 
 /** Materializa las tareas recurrentes de una fecha (fallback on-demand del cron). */

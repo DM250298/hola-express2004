@@ -1,9 +1,18 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { createClient } from '@/lib/supabase/client'
 import {
   cancelarTarea,
+  checklistPaso,
+  getCambiosSemana,
+  getPedidosPendientes,
+  getPersonasTurno,
+  guardarNotaTarea,
+  noSePudoTarea,
+  resolverPedido,
   completarTarea,
   crearTareaPuntual,
   editarTarea,
@@ -27,11 +36,12 @@ import {
   type DatosRutina,
   type NuevaTareaPuntual,
 } from '@/lib/queries/tareas'
-import type { AplicaDesde } from '@/types/database'
+import type { AplicaDesde, MotivoNoSePudo } from '@/types/database'
 
 export const PLANTILLAS_KEY = ['tareas-plantillas'] as const
 export const TAREAS_KEY = ['tareas-turno'] as const
 export const CUMPLIMIENTO_KEY = ['tareas-cumplimiento'] as const
+export const PEDIDOS_KEY = ['tareas-pedidos'] as const
 
 // ─── Plantillas ────────────────────────────────────────────────────────────────
 
@@ -345,5 +355,130 @@ export function useMaterializar() {
     onSuccess: (n) => {
       if (n > 0) qc.invalidateQueries({ queryKey: TAREAS_KEY })
     },
+  })
+}
+
+// ─── Etapa 2: agenda en calendario ────────────────────────────────────────────
+
+/**
+ * Agenda en vivo (mig 289): cualquier cambio en tareas_turno o sus
+ * participantes refresca la agenda. Realtime respeta las reglas de acceso,
+ * así que a cada uno le llegan solo los cambios de lo que puede ver.
+ */
+export function useRealtimeTareas() {
+  const qc = useQueryClient()
+  useEffect(() => {
+    const supabase = createClient()
+    const refrescar = () => qc.invalidateQueries({ queryKey: TAREAS_KEY })
+    let canal: ReturnType<typeof supabase.channel> | null = null
+    let cancelado = false
+    // El canal tiene que salir con la sesión del usuario: si se suscribe
+    // antes, Realtime lo trata como anónimo y las reglas de acceso no le
+    // dejan ver ninguna tarea (no llega ningún cambio).
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (cancelado) return
+      if (data.session) await supabase.realtime.setAuth(data.session.access_token)
+      canal = supabase
+        .channel('tareas-agenda')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno' }, refrescar)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno_participantes' }, refrescar)
+        .subscribe((estado, err) => {
+          // Sin conexión en vivo la agenda igual se refresca cada 60 s: avisar
+          // en la consola para poder diagnosticarlo.
+          if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') {
+            console.warn('[tareas en vivo]', estado, err?.message ?? '')
+          } else if (estado === 'SUBSCRIBED') {
+            console.info('[tareas en vivo] conectado')
+          }
+        })
+    })
+    return () => {
+      cancelado = true
+      if (canal) supabase.removeChannel(canal)
+    }
+  }, [qc])
+}
+
+/** Cierra como "No se pudo" con motivo y detalle. */
+export function useNoSePudo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, motivo, detalle }: { id: string; motivo: MotivoNoSePudo; detalle?: string | null }) =>
+      noSePudoTarea(id, motivo, detalle),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: CUMPLIMIENTO_KEY })
+      toast.success('Quedó como "No se pudo"')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Tilda un paso del checklist. */
+export function useChecklistPaso() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, paso, hecho }: { id: string; paso: number; hecho: boolean }) => checklistPaso(id, paso, hecho),
+    onSuccess: () => qc.invalidateQueries({ queryKey: TAREAS_KEY }),
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Guarda la nota para el próximo turno. */
+export function useNotaTarea() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, nota }: { id: string; nota: string | null }) => guardarNotaTarea(id, nota),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      toast.success('Nota guardada')
+    },
+    onError: (e: Error) => toast.error(e.message),
+  })
+}
+
+/** Quién trabaja un turno ese día (vista por persona). */
+export function usePersonasTurno(fecha: string, turnoId: number | null, habilitado = true) {
+  return useQuery({
+    queryKey: [...TAREAS_KEY, 'personas', fecha, turnoId],
+    queryFn: () => getPersonasTurno(fecha, turnoId as number),
+    enabled: habilitado && !!fecha && turnoId !== null,
+    staleTime: 60 * 1000,
+  })
+}
+
+/** Pedidos de quitar pendientes (para "Para revisar"). */
+export function usePedidosPendientes(habilitado = true) {
+  return useQuery({
+    queryKey: PEDIDOS_KEY,
+    queryFn: getPedidosPendientes,
+    enabled: habilitado,
+    staleTime: 30 * 1000,
+  })
+}
+
+/** Cambios de la semana hechos por personas (solo administrador). */
+export function useCambiosSemana(habilitado = true) {
+  return useQuery({
+    queryKey: [...PEDIDOS_KEY, 'cambios-semana'],
+    queryFn: getCambiosSemana,
+    enabled: habilitado,
+    staleTime: 60 * 1000,
+  })
+}
+
+/** El administrador aprueba o rechaza un pedido de quitar. */
+export function useResolverPedido() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, aprobar, nota }: { id: number; aprobar: boolean; nota?: string | null }) =>
+      resolverPedido(id, aprobar, nota),
+    onSuccess: (_r, vars) => {
+      qc.invalidateQueries({ queryKey: PEDIDOS_KEY })
+      qc.invalidateQueries({ queryKey: PLANTILLAS_KEY })
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      toast.success(vars.aprobar ? 'Aprobado: la tarea sale de la rutina desde mañana' : 'Pedido rechazado')
+    },
+    onError: (e: Error) => toast.error(e.message),
   })
 }
