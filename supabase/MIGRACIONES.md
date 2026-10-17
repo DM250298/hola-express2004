@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **269**
+## Próximo número libre: **273**
 
 ---
 
@@ -368,6 +368,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 266 | `266_tareas_v2_helpers.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | funciones de base: hoy, inicio/fin de turno, rango, actor, escritor del registro |
 | 267 | `267_tareas_v2_trigger_agenda.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; el chequeo inicial se cambió a búsqueda por nombre antes de correrla) | trigger de tareas_turno: origen, privada, horario absoluto, marcas de tocada a mano |
 | 268 | `268_tareas_v2_trigger_turnos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | al cambiar el horario de un turno, las tareas abiertas se corren y queda `turno_editado` |
+| 269 | `269_tareas_v2_a_quien_le_toca.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | versión vigente de la rutina por fecha; resolvers cerrados a la app; `fn_personas_turno` y `fn_a_quien_le_toca` para gestión |
+| 270 | `270_tareas_v2_sync_reasignar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | sincronización parte 1: preparar, limpiar y reasignar según el cronograma (francos y licencias), evento `reasignada` de HEX |
+| 271 | `271_tareas_v2_sincronizar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_tareas_sincronizar` + índice único por `empleado_rutina_id` |
+| 272 | `272_tareas_v2_materializar_v6.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; mañana 30 tareas, 0 duplicados en las dos) | `fn_materializar_tareas_turno` v6 (sin anon) y `fn_marcar_tareas_vencidas` v3 (fin real del turno, solo puntuales, solo el cron) |
 
 ## Dos bases de Supabase (2026-09-17)
 
