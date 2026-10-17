@@ -374,7 +374,15 @@ export function useRealtimeTareas() {
       .channel('tareas-agenda')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno' }, refrescar)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno_participantes' }, refrescar)
-      .subscribe()
+      .subscribe((estado, err) => {
+        // Sin conexión en vivo la agenda igual se refresca cada 60 s: avisar
+        // en la consola para poder diagnosticarlo.
+        if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') {
+          console.warn('[tareas en vivo]', estado, err?.message ?? '')
+        } else if (estado === 'SUBSCRIBED') {
+          console.info('[tareas en vivo] conectado')
+        }
+      })
     return () => {
       supabase.removeChannel(canal)
     }
