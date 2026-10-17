@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import {
+  actualizarAgendaHoy,
   cancelarTarea,
   checklistPaso,
   getAQuienLeToca,
@@ -445,6 +446,21 @@ export function usePersonasTurno(fecha: string, turnoId: number | null, habilita
     queryFn: () => getPersonasTurno(fecha, turnoId as number),
     enabled: habilitado && !!fecha && turnoId !== null,
     staleTime: 60 * 1000,
+  })
+}
+
+/** Lleva a la agenda de hoy un cambio de la rutina que regía desde mañana. */
+export function useActualizarAgendaHoy() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ turnoId, plantillaId }: { turnoId: number; plantillaId: string | null }) =>
+      actualizarAgendaHoy(turnoId, plantillaId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: TAREAS_KEY })
+      qc.invalidateQueries({ queryKey: PLANTILLAS_KEY })
+      toast.success('Listo: la agenda de hoy ya tiene este cambio')
+    },
+    onError: (e: Error) => toast.error(e.message),
   })
 }
 

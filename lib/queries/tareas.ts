@@ -461,6 +461,21 @@ export async function getPersonasTurno(
   return (data ?? []) as { empleado_id: number; nombre: string; rol_operativo: string }[]
 }
 
+/**
+ * "Actualizar también la agenda de hoy": adelanta a hoy los cambios "desde
+ * mañana" de una tarea de la rutina (solo en lo que nadie tocó). Devuelve
+ * cuántas tareas de hoy cambiaron.
+ */
+export async function actualizarAgendaHoy(turnoId: number, plantillaId: string | null): Promise<number> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_agenda_actualizar_hoy', {
+    p_turno_id: turnoId,
+    p_plantilla_id: plantillaId,
+  })
+  if (error) throw error
+  return (data as number) ?? 0
+}
+
 /** A quién le tocaría una tarea por puesto ese día (fn_a_quien_le_toca). */
 export async function getAQuienLeToca(
   fecha: string,

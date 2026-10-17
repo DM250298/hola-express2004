@@ -165,6 +165,7 @@ export function PantallaTareas({ enHub = false }: Props = {}) {
             onEditar={(p) => setModalPlantilla({ plantilla: p })}
             puedeEditarTurnos={esAdmin}
             esAdmin={esAdmin}
+            esGestor={!!esGestor}
           />
         </TabsContent>
 
