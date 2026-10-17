@@ -39,9 +39,11 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'rrhh_sueldos', etiqueta: 'RRHH · Sueldos y liquidaciones', grupo: 'Análisis' },
   { clave: 'rrhh_sanciones', etiqueta: 'RRHH · Sanciones formales (solo Dirección)', grupo: 'Análisis' },
   { clave: 'tareas_gestion', etiqueta: 'Tareas · Asignar y controlar cumplimiento', grupo: 'Análisis' },
+  { clave: 'tareas_admin', etiqueta: 'Tareas · Administrar (privadas, quitar de la rutina, horarios de turno)', grupo: 'Análisis' },
   { clave: 'mi_panel', etiqueta: 'Mi panel (empleado)', grupo: 'General' },
   { clave: 'terminales', etiqueta: 'Terminales de cobro', grupo: 'Sistema' },
   { clave: 'configuracion', etiqueta: 'Configuración del sistema', grupo: 'Sistema' },
+  { clave: 'usuarios_roles', etiqueta: 'Usuarios y roles: alta, permisos y vínculo con el legajo', grupo: 'Sistema' },
 ]
 
 export const TODOS_LOS_PERMISOS: string[] = PERMISOS.map((p) => p.clave)

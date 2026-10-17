@@ -6,7 +6,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { ClipboardList, ExternalLink } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
-import { ESTADO_TAREA, MODO_TAREA, PRIORIDAD_TAREA, tareaEsDe } from './tareasConstantes'
+import { MODO_TAREA, PRIORIDAD_TAREA, estiloEstado, tareaEsDe } from './tareasConstantes'
 import { hoyAr } from './asistenciaConstantes'
 import { useTareasFecha } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
@@ -77,10 +77,10 @@ export function TabTareasEmpleado({ empleadoId }: Props) {
               <span
                 className={cn(
                   'text-[10px] font-bold px-2 py-0.5 rounded-full',
-                  ESTADO_TAREA[t.estado].clase
+                  estiloEstado(t.estado).clase
                 )}
               >
-                {ESTADO_TAREA[t.estado].label}
+                {estiloEstado(t.estado).label}
               </span>
             </li>
           ))}

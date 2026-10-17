@@ -22,7 +22,8 @@ Corré esto **en producción** y guardá los resultados; los vas a necesitar par
 -- 1. Versión de Postgres (pg_dump tiene que ser IGUAL o MÁS NUEVO)
 select version();
 
--- 2. Códigos de rol reales (ojo: NO existe 'admin' en producción)
+-- 2. Códigos de rol reales (al 2026-10-16 el de administración ES 'admin':
+--    lo confirmó scripts/tareas_v2_relevamiento.sql; verificalo igual)
 select codigo, nombre from public.roles order by codigo;
 
 -- 3. Conteos de referencia, para comparar contra la copia
@@ -244,12 +245,12 @@ El trigger `on_auth_user_created` les crea sola la fila en `public.usuarios` con
 asignales el rol real:
 
 ```sql
--- Reemplazá 'administración' por el código EXACTO que devolvió la consulta
--- del principio. NO uses 'admin': ese rol no existe en producción, y el
--- atajo interno de fn_tiene_permiso solo aplica a 'admin' — si probás con
--- un admin inventado, los permisos andan en pruebas y fallan en producción.
+-- Usá el código EXACTO que devolvió la consulta del principio. Al 2026-10-16
+-- en producción es 'admin' (relevamiento de Tareas v2). Ojo: fn_tiene_permiso
+-- le da TODO a 'admin' sin mirar la tabla roles; para probar permisos finos
+-- usá roles de prueba con lista explícita, no 'admin'.
 
-update public.usuarios set rol = 'administración' where email = 'admin@pruebas.local';
+update public.usuarios set rol = 'admin'          where email = 'admin@pruebas.local';
 update public.usuarios set rol = 'encargado'      where email = 'encargado@pruebas.local';
 update public.usuarios set rol = 'cajero'         where email = 'cajero@pruebas.local';
 update public.usuarios set rol = 'fiambrero'      where email = 'fiambrero@pruebas.local';

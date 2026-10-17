@@ -630,10 +630,12 @@ export type ImportacionFichajesInsert = {
 // ─── tareas operativas (Sprint 3) ────────────────────────────────────────────
 
 export type PrioridadTarea = 'baja' | 'media' | 'alta'
+/** 'completada' se muestra "Hecha"; 'no_se_pudo' llega con Tareas v2 (mig 261). */
 export type EstadoTareaTurno =
   | 'pendiente'
   | 'en_curso'
   | 'completada'
+  | 'no_se_pudo'
   | 'vencida'
   | 'cancelada'
 export type ModoTarea = 'individual' | 'grupal'
@@ -641,6 +643,23 @@ export type TipoRecurrenciaTarea = 'dias_semana' | 'dia_mes' | 'cada_n_dias'
 export type AlcanceTarea = 'empleados' | 'todos' | 'puesto'
 /** mig 251: puntual (con hora), continua (todo el turno), bloque (descanso / pase). */
 export type TipoActividadTarea = 'puntual' | 'continua' | 'bloque'
+/** Tareas v2 (mig 263). */
+export type AreaTarea =
+  | 'atencion_caja'
+  | 'produccion_fiambreria'
+  | 'reposicion_limpieza'
+  | 'control_seguridad'
+export type OrigenTarea = 'rutina' | 'puntual'
+export type MotivoNoSePudo = 'falto_insumo' | 'no_alcanzo_tiempo' | 'se_rompio' | 'otro'
+export type EstadoPedidoTarea = 'pendiente' | 'aprobado' | 'rechazado'
+export type TipoEventoTarea =
+  | 'creada' | 'editada' | 'iniciada' | 'completada' | 'no_se_pudo' | 'reabierta'
+  | 'hora_corregida' | 'cancelada' | 'pedido_quitar' | 'pedido_aprobado' | 'pedido_rechazado'
+  | 'aviso_atraso' | 'trasladada' | 'rechazada' | 'quitada' | 'reactivada' | 'agenda_actualizada'
+  | 'turno_editado' | 'reasignada' | 'nota_editada' | 'checklist_paso' | 'pedido_deshecho'
+  | 'registro_completo'
+/** Desde cuándo rige un cambio de la rutina (mig 279). */
+export type AplicaDesde = 'hoy' | 'manana'
 
 export type TareaRecurrenteRow = {
   id: string
@@ -674,6 +693,16 @@ export type TareaRecurrenteRow = {
   checklist: string[]
   usuario_id: string | null
   created_at: string
+  /** Tareas v2 (mig 263). */
+  area: AreaTarea | null
+  privada: boolean
+  avisar_atraso_min: number | null
+  /** Cambio "desde mañana": hasta el día anterior rige version_anterior. */
+  cambios_desde: string | null
+  version_anterior: Json | null
+  codigo: string | null
+  updated_at: string
+  updated_by: string | null
 }
 
 export type TareaRecurrenteInsert = {
@@ -746,6 +775,29 @@ export type TareaTurnoRow = {
   trasladada_a: string | null
   usuario_id: string | null
   created_at: string
+  /** Tareas v2 (mig 263). */
+  origen: OrigenTarea
+  area: AreaTarea | null
+  privada: boolean
+  minutos_desde_inicio: number | null
+  inicio_at: string | null
+  fin_at: string | null
+  limite_at: string | null
+  todo_el_turno: boolean
+  motivo_no_se_pudo: MotivoNoSePudo | null
+  detalle_motivo: string | null
+  nota_proximo_turno: string | null
+  avisar_atraso_min: number | null
+  aviso_atraso_enviado_at: string | null
+  checklist_estado: boolean[]
+  contenido_tocado_at: string | null
+  asignacion_manual: boolean
+  empleado_rutina_id: number | null
+  roles_puesto: RolOperativo[] | null
+  iniciada_por_usuario: string | null
+  completada_por_usuario: string | null
+  iniciada_at_original: string | null
+  completada_at_original: string | null
 }
 
 export type TareaTurnoInsert = {
@@ -773,6 +825,59 @@ export type TareaTurnoInsert = {
 export type TareaTurnoParticipanteRow = {
   tarea_id: string
   empleado_id: number
+}
+
+/** Registro de cambios de tareas (mig 264): solo inserción, por funciones. */
+export type TareaEventoRow = {
+  id: number
+  created_at: string
+  transaccion: number
+  entidad: 'agenda' | 'rutina' | 'pedido' | 'turno' | 'sistema'
+  tipo: TipoEventoTarea
+  tarea_turno_id: string | null
+  tarea_recurrente_id: string | null
+  pedido_id: number | null
+  turno_id: number | null
+  fecha: string | null
+  titulo: string | null
+  privada: boolean
+  duenos: number[]
+  actor_usuario_id: string | null
+  actor_empleado_id: number | null
+  actor_nombre: string | null
+  en_nombre_de: number[]
+  antes: Json | null
+  despues: Json | null
+  motivo: string | null
+  origen: string | null
+}
+
+/** Pedido de la encargada para quitar una tarea de la rutina (mig 264). */
+export type TareaPedidoRow = {
+  id: number
+  created_at: string
+  tarea_recurrente_id: string
+  tipo: 'quitar'
+  motivo: string | null
+  pedido_por: string | null
+  pedido_por_empleado: number | null
+  estado: EstadoPedidoTarea
+  resuelto_por: string | null
+  resuelto_at: string | null
+  nota_resolucion: string | null
+}
+
+/** Fila de historial (fn_tarea_historial, mig 278). */
+export type TareaHistorialRow = {
+  id: number
+  created_at: string
+  tipo: TipoEventoTarea
+  actor_nombre: string | null
+  en_nombre_de: string | null
+  antes: Json | null
+  despues: Json | null
+  motivo: string | null
+  origen: string | null
 }
 
 // ─── novedades_empleado ──────────────────────────────────────────────────────
@@ -4556,6 +4661,18 @@ export interface Database {
         Update: Partial<TareaTurnoInsert>
         Relationships: []
       }
+      tareas_eventos: {
+        Row: TareaEventoRow
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      tareas_pedidos: {
+        Row: TareaPedidoRow
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       tareas_recurrentes_asignados: {
         Row: TareaRecurrenteAsignadoRow
         Insert: TareaRecurrenteAsignadoRow
@@ -5299,8 +5416,113 @@ export interface Database {
         Returns: number
       }
       fn_completar_tarea: {
-        Args: { p_tarea_id: string; p_evidencia_url?: string | null }
+        Args: { p_tarea_id: string; p_evidencia_url?: string | null; p_nota?: string | null }
         Returns: undefined
+      }
+      // ── Tareas v2 (migs 269–284) ──
+      fn_personas_turno: {
+        Args: { p_fecha: string; p_turno_id: number }
+        Returns: { empleado_id: number; nombre: string; rol_operativo: string; estado: string; notas: string | null }[]
+      }
+      fn_a_quien_le_toca: {
+        Args: { p_fecha: string; p_turno_id: number; p_puestos: string[] }
+        Returns: { empleado_id: number; nombre: string; notas: string | null }[]
+      }
+      fn_tarea_no_se_pudo: {
+        Args: { p_tarea_id: string; p_motivo: MotivoNoSePudo; p_detalle?: string | null }
+        Returns: undefined
+      }
+      fn_tarea_cancelar: {
+        Args: { p_tarea_id: string; p_motivo?: string | null }
+        Returns: undefined
+      }
+      fn_tarea_crear_puntual: {
+        Args: {
+          p_fecha: string
+          p_turno_id: number
+          p_titulo: string
+          p_descripcion?: string | null
+          p_hora?: string | null
+          p_duracion_min?: number | null
+          p_empleado_ids?: number[] | null
+          p_roles_puesto?: string[] | null
+          p_modo?: ModoTarea
+          p_prioridad?: PrioridadTarea
+          p_area?: AreaTarea | null
+          p_privada?: boolean
+          p_requiere_evidencia?: boolean
+          p_checklist?: string[]
+          p_tipo_actividad?: TipoActividadTarea
+          p_avisar_atraso_min?: number | null
+        }
+        Returns: string[]
+      }
+      fn_tarea_editar: {
+        Args: { p_tarea_id: string; p_cambios: Json }
+        Returns: undefined
+      }
+      fn_agenda_mover: {
+        Args: {
+          p_tarea_id: string
+          p_inicio_at?: string | null
+          p_fin_at?: string | null
+          p_sin_hora?: boolean
+          p_area?: AreaTarea | null
+          p_asignados?: number[] | null
+        }
+        Returns: undefined
+      }
+      fn_tarea_corregir_hora: {
+        Args: { p_tarea_id: string; p_campo: 'iniciada' | 'completada'; p_nueva: string }
+        Returns: undefined
+      }
+      fn_tarea_checklist_paso: {
+        Args: { p_tarea_id: string; p_paso: number; p_hecho: boolean }
+        Returns: undefined
+      }
+      fn_tarea_nota: {
+        Args: { p_tarea_id: string; p_nota: string | null }
+        Returns: undefined
+      }
+      fn_tarea_historial: {
+        Args: { p_tarea_id: string }
+        Returns: TareaHistorialRow[]
+      }
+      fn_rutina_historial: {
+        Args: { p_plantilla_id: string }
+        Returns: Omit<TareaHistorialRow, 'en_nombre_de'>[]
+      }
+      fn_notas_proximo_turno: {
+        Args: { p_fecha: string; p_turno_id: number }
+        Returns: { tarea_id: string; fecha: string; turno_id: number; titulo: string; nota: string; estado: string; quien: string | null }[]
+      }
+      fn_mi_turno: {
+        Args: { p_fecha: string }
+        Returns: { turno_id: number; turno: string; empleado_id: number; nombre: string; rol_operativo: string; soy_yo: boolean }[]
+      }
+      fn_rutina_guardar: {
+        Args: { p_id: string | null; p_datos: Json; p_aplicar?: AplicaDesde; p_asignados?: number[] | null }
+        Returns: string
+      }
+      fn_rutina_quitar: {
+        Args: { p_id: string; p_motivo?: string | null; p_aplicar?: AplicaDesde }
+        Returns: number | null
+      }
+      fn_rutina_reactivar: {
+        Args: { p_id: string; p_aplicar?: AplicaDesde }
+        Returns: undefined
+      }
+      fn_rutina_pedir_quitar: {
+        Args: { p_id: string; p_motivo: string }
+        Returns: number
+      }
+      fn_pedido_resolver: {
+        Args: { p_pedido_id: number; p_aprobar: boolean; p_nota?: string | null }
+        Returns: undefined
+      }
+      fn_agenda_actualizar_hoy: {
+        Args: { p_turno_id: number; p_plantilla_id?: string | null }
+        Returns: number
       }
       fn_rechazar_tarea: {
         Args: { p_tarea_id: string; p_motivo: string }

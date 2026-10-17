@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Camera, Repeat, Trash2 } from 'lucide-react'
+import { Camera, Repeat, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EditorTurnos } from './EditorTurnos'
 import { ROLES_OPERATIVOS, nombreCompleto } from './constantes'
@@ -18,7 +18,7 @@ import {
 import { etiquetaHorarioTurno, horaDeMinutos, minutosDeHora } from './tareasAgenda'
 import { useEmpleados } from '@/lib/hooks/useRrhh'
 import { useTurnos } from '@/lib/hooks/useAsistencia'
-import { useDeletePlantilla, usePlantillas } from '@/lib/hooks/useTareas'
+import { usePlantillas, useQuitarPlantilla, useReactivarPlantilla } from '@/lib/hooks/useTareas'
 import { cn } from '@/lib/utils'
 import type { PlantillaConAsignados } from '@/lib/queries/tareas'
 import type { TurnoPlantillaRow } from '@/types/database'
@@ -26,8 +26,10 @@ import type { TurnoPlantillaRow } from '@/types/database'
 interface Props {
   onNueva: (turnoId: number | null) => void
   onEditar: (p: PlantillaConAsignados) => void
-  /** Puede editar los horarios de turno (permiso rrhh). */
+  /** Puede editar los horarios de turno (administrador de tareas). */
   puedeEditarTurnos: boolean
+  /** Administrador de tareas: quita y vuelve a poner tareas de la rutina. */
+  esAdmin: boolean
 }
 
 const SIN_TURNO = 0
@@ -50,11 +52,30 @@ function ordenPlantilla(p: PlantillaConAsignados, turno: TurnoPlantillaRow | nul
   return m
 }
 
-export function TabRutina({ onNueva, onEditar, puedeEditarTurnos }: Props) {
+export function TabRutina({ onNueva, onEditar, puedeEditarTurnos, esAdmin }: Props) {
   const { data: plantillas } = usePlantillas()
   const { data: turnos } = useTurnos()
   const { data: empleados } = useEmpleados()
-  const borrar = useDeletePlantilla()
+  const quitar = useQuitarPlantilla()
+  const reactivar = useReactivarPlantilla()
+
+  // Nada se borra: el administrador la quita desde mañana; la encargada lo pide.
+  function onQuitar(p: PlantillaConAsignados) {
+    if (esAdmin) {
+      if (confirm(`¿Quitar "${p.titulo}" de la rutina desde mañana? No se borra: se puede volver a poner.`))
+        quitar.mutate({ id: p.id, motivo: null })
+      return
+    }
+    const motivo = prompt(
+      `¿Por qué hay que quitar "${p.titulo}" de la rutina? Le llega el pedido a un administrador.`
+    )
+    if (motivo === null) return
+    if (motivo.trim().length < 5) {
+      alert('Contá el motivo en al menos 5 letras.')
+      return
+    }
+    quitar.mutate({ id: p.id, motivo: motivo.trim() })
+  }
   const [turnoId, setTurnoId] = useState<number | null>(null)
 
   const nombrePorId = useMemo(() => {
@@ -190,7 +211,7 @@ export function TabRutina({ onNueva, onEditar, puedeEditarTurnos }: Props) {
                         {p.tipo_actividad === 'continua' && '∞ '}
                         {p.titulo}
                         {!p.activa && (
-                          <span className="ml-2 text-[10px] uppercase font-bold text-[#c43e2c]">pausada</span>
+                          <span className="ml-2 text-[10px] uppercase font-bold text-[#c43e2c]">fuera de la rutina</span>
                         )}
                       </span>
                       <span className="block text-[11px] text-[#6f3a2a] truncate">
@@ -223,18 +244,34 @@ export function TabRutina({ onNueva, onEditar, puedeEditarTurnos }: Props) {
                       >
                         {PRIORIDAD_TAREA[p.prioridad].label}
                       </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm(`¿Eliminar la recurrente "${p.titulo}"? Las tareas ya generadas no se borran.`))
-                            borrar.mutate(p.id)
-                        }}
-                        className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c] hover:bg-[#c43e2c]/10"
-                        aria-label={`Eliminar ${p.titulo}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {p.activa ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onQuitar(p)}
+                          disabled={quitar.isPending}
+                          className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#c43e2c] hover:bg-[#c43e2c]/10"
+                          aria-label={esAdmin ? `Quitar ${p.titulo} de la rutina` : `Pedir que se quite ${p.titulo}`}
+                          title={esAdmin ? 'Quitar de la rutina' : 'Pedir que se quite'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : esAdmin ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm(`¿Volver a poner "${p.titulo}" en la rutina desde mañana?`))
+                              reactivar.mutate({ id: p.id })
+                          }}
+                          disabled={reactivar.isPending}
+                          className="h-8 w-8 p-0 text-[#c8a58a] hover:text-[#2f7d4f] hover:bg-[#2f7d4f]/10"
+                          aria-label={`Volver a poner ${p.titulo} en la rutina`}
+                          title="Volver a la rutina"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 </li>

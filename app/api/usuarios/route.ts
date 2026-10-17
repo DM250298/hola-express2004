@@ -5,7 +5,8 @@ import { createServerClient } from '@/lib/supabase/server'
 type ServerClient = Awaited<ReturnType<typeof createServerClient>>
 
 /**
- * Verifica que quien llama esté logueado y sea admin.
+ * Verifica que quien llama esté logueado y tenga el permiso `usuarios_roles`
+ * (mig 260: el mismo que exige la base para escribir roles y usuarios).
  * Devuelve el `user` o, si no corresponde, una `NextResponse` ya armada.
  */
 async function exigirAdmin(
@@ -17,12 +18,8 @@ async function exigirAdmin(
   if (!user) {
     return { error: NextResponse.json({ error: 'No autenticado.' }, { status: 401 }) }
   }
-  const { data: perfil } = await supabase
-    .from('usuarios')
-    .select('rol')
-    .eq('id', user.id)
-    .single<{ rol: string }>()
-  if (perfil?.rol !== 'admin') {
+  const { data: puede } = await supabase.rpc('fn_tiene_permiso', { p_clave: 'usuarios_roles' })
+  if (puede !== true) {
     return {
       error: NextResponse.json(
         { error: 'Solo el administrador puede gestionar usuarios.' },

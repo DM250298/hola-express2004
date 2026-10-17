@@ -3,6 +3,7 @@ import { createServerClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/shared/Sidebar'
 import { Header } from '@/components/shared/Header'
 import { GuardianSesion } from '@/components/shared/GuardianSesion'
+import { AvisoVersion } from '@/components/shared/AvisoVersion'
 import { PERMISOS_POR_ROL_LEGACY } from '@/lib/permisos'
 import type { Rol } from '@/types/database'
 
@@ -46,6 +47,7 @@ export default async function LayoutDashboard({
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <Header nombre={nombre} rol={rol} permisos={permisos} />
+        <AvisoVersion />
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>

@@ -104,10 +104,28 @@ export function ModalEmpleado({
     }
   }, [abierto, empleado])
 
+  // Una cuenta de login va con un solo legajo (la base lo exige desde Tareas
+  // v2, mig 260): las que ya tiene otro legajo, también uno dado de baja, se
+  // muestran con a quién pertenecen pero no se pueden elegir. La cuenta
+  // actual de este legajo siempre se puede conservar.
+  const vinculadaA = new Map(
+    (empleados ?? [])
+      .filter((e) => e.usuario_id && e.id !== empleado?.id)
+      .map((e) => [e.usuario_id as string, e])
+  )
+  const tomada = (id: string) => vinculadaA.has(id) && id !== empleado?.usuario_id
   const itemsUsuario: Record<string, string> = {
     __ninguna__: 'Sin cuenta vinculada',
     ...Object.fromEntries(
-      (usuarios ?? []).map((u) => [u.id, `${u.nombre} (${u.email})`])
+      (usuarios ?? []).map((u) => {
+        const otro = vinculadaA.get(u.id)
+        const etiqueta = `${u.nombre} (${u.email})`
+        if (!otro || !tomada(u.id)) return [u.id, etiqueta]
+        return [
+          u.id,
+          `${etiqueta} · vinculada a ${nombreCompleto(otro)}${otro.activo ? '' : ' (dado de baja)'}`,
+        ]
+      })
     ),
   }
 
@@ -457,14 +475,15 @@ export function ModalEmpleado({
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(itemsUsuario).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>
+                    <SelectItem key={v} value={v} disabled={tomada(v)}>
                       {l}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-[#c8a58a] text-[11px]">
-                Para que el empleado vea “Mi panel”.
+                Para que el empleado vea “Mi panel”. Una cuenta va con un solo legajo: para
+                usarla acá, desvinculala primero del otro.
               </p>
             </div>
           </div>

@@ -1,0 +1,1098 @@
+tipo,nombre,definicion
+funcion,fn_asignados_tareas_dia(date),"CREATE OR REPLACE FUNCTION public.fn_asignados_tareas_dia(p_fecha date)
+ RETURNS TABLE(plantilla_id uuid, empleado_id integer, notas text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with plantillas_hoy as (
+    select * from public.fn_plantillas_tareas_dia(p_fecha)
+  ),
+  trabaja as (
+    select h.empleado_id, h.turno_id, e.rol_operativo
+    from public.horarios_asignados h
+    join public.empleados e on e.id = h.empleado_id and e.activo
+    where h.fecha = p_fecha and h.estado = 'planificado'
+  ),
+  descansa as (
+    select h.empleado_id,
+           (select p.pivote_empleado_id
+              from public.patrones_cronograma p
+              join public.horarios_asignados hp
+                on hp.empleado_id = p.pivote_empleado_id and hp.fecha = p_fecha
+               and hp.estado = 'planificado'
+             where p.id = h.patron_id and p.pivote_empleado_id <> h.empleado_id) as cubre_id,
+           e.nombre || coalesce(' ' || e.apellido, '') as nombre
+    from public.horarios_asignados h
+    join public.empleados e on e.id = h.empleado_id
+    where h.fecha = p_fecha and h.estado in ('franco', 'licencia')
+  ),
+  -- ── Alcance 'puesto' ──
+  puesto_rol as (
+    select p.id as plantilla_id, p.turno_id, unnest(p.roles_puesto) as rol
+    from plantillas_hoy p where p.alcance = 'puesto'
+  ),
+  directo as (
+    select pr.plantilla_id, pr.rol, t.empleado_id
+    from puesto_rol pr
+    join trabaja t on t.rol_operativo = pr.rol
+                  and (pr.turno_id is null or t.turno_id = pr.turno_id)
+  ),
+  faltante as (
+    select pr.plantilla_id, pr.turno_id, pr.rol
+    from puesto_rol pr
+    where not exists (select 1 from directo d
+                      where d.plantilla_id = pr.plantilla_id and d.rol = pr.rol)
+  ),
+  cubierto as (
+    select distinct on (f.plantilla_id, f.rol) f.plantilla_id, f.rol, t.empleado_id
+    from faltante f
+    join trabaja t on (f.turno_id is null or t.turno_id = f.turno_id)
+    order by f.plantilla_id, f.rol,
+      case t.rol_operativo when 'pivote' then 1 when 'encargado' then 2
+           when 'responsable_general' then 3 when 'cajero' then 4
+           when 'fiambreria' then 5 else 6 end,
+      t.empleado_id
+  ),
+  ausentes as (
+    select f.plantilla_id, f.rol,
+           string_agg(e.nombre || coalesce(' ' || e.apellido, ''), ', ' order by e.nombre) as nombres
+    from faltante f
+    join public.empleados e on e.activo and e.rol_operativo = f.rol
+    where not exists (select 1 from trabaja t where t.empleado_id = e.id)
+      -- del rol, los que hacen ese turno (planificados en él ±14 días)
+      and (f.turno_id is null or exists (
+            select 1 from public.horarios_asignados h
+            where h.empleado_id = e.id and h.turno_id = f.turno_id
+              and h.estado = 'planificado'
+              and h.fecha between p_fecha - 14 and p_fecha + 14))
+    group by f.plantilla_id, f.rol
+  ),
+  sin_turno as (
+    select f.plantilla_id, f.rol,
+      coalesce(
+        (select min(a.empleado_id) from public.tareas_recurrentes_asignados a
+           join public.empleados e on e.id = a.empleado_id and e.activo and e.rol_operativo = f.rol
+          where a.plantilla_id = f.plantilla_id
+            and not exists (select 1 from descansa d where d.empleado_id = a.empleado_id)),
+        (select min(a.empleado_id) from public.tareas_recurrentes_asignados a
+           join public.empleados e on e.id = a.empleado_id and e.activo
+          where a.plantilla_id = f.plantilla_id
+            and not exists (select 1 from descansa d where d.empleado_id = a.empleado_id)),
+        (select min(e.id) from public.empleados e
+          where e.activo and e.rol_operativo = f.rol
+            and not exists (select 1 from descansa d where d.empleado_id = e.id)),
+        (select min(e.id) from public.empleados e
+          where e.activo and e.rol_operativo = 'responsable_general'
+            and not exists (select 1 from descansa d where d.empleado_id = e.id))
+      ) as empleado_id
+    from faltante f
+    where not exists (select 1 from cubierto c
+                      where c.plantilla_id = f.plantilla_id and c.rol = f.rol)
+  ),
+  -- ── Alcance 'empleados' / 'todos' (regla v3, mig 244) ──
+  fijos_base as (
+    select p.id as plantilla_id, e.id as empleado_id
+    from plantillas_hoy p cross join public.empleados e
+    where p.alcance = 'todos' and e.activo
+    union
+    select p.id, a.empleado_id
+    from plantillas_hoy p
+    join public.tareas_recurrentes_asignados a on a.plantilla_id = p.id
+    join public.empleados e on e.id = a.empleado_id and e.activo
+    where p.alcance = 'empleados'
+    union
+    select p.id, p.empleado_id
+    from plantillas_hoy p
+    join public.empleados e on e.id = p.empleado_id and e.activo
+    where p.alcance = 'empleados' and p.empleado_id is not null
+      and not exists (select 1 from public.tareas_recurrentes_asignados a where a.plantilla_id = p.id)
+  ),
+  fijos as (
+    select a.plantilla_id,
+           coalesce(d.cubre_id, a.empleado_id) as empleado_id,
+           case when d.cubre_id is not null then 'Cubre a ' || d.nombre end as notas
+    from fijos_base a
+    left join descansa d on d.empleado_id = a.empleado_id
+    where d.empleado_id is null or d.cubre_id is not null
+  ),
+  todo as (
+    select d.plantilla_id, d.empleado_id, null::text as notas from directo d
+    union all
+    select c.plantilla_id, c.empleado_id,
+           coalesce('Cubre a ' || au.nombres,
+                    'Cubre puesto ' || case c.rol
+                      when 'direccion' then 'dirección'
+                      when 'responsable_general' then 'responsable general'
+                      when 'encargado' then 'encargado de turno'
+                      when 'pivote' then 'pivote'
+                      when 'compras' then 'compras'
+                      when 'cajero' then 'caja'
+                      when 'fiambreria' then 'fiambrería'
+                      else c.rol end)
+    from cubierto c
+    left join ausentes au on au.plantilla_id = c.plantilla_id and au.rol = c.rol
+    union all
+    select s.plantilla_id, s.empleado_id, 'Sin cronograma: asignación por defecto'
+    from sin_turno s where s.empleado_id is not null
+    union all
+    select f.plantilla_id, f.empleado_id, f.notas from fijos f
+  )
+  select distinct on (t.plantilla_id, t.empleado_id) t.plantilla_id, t.empleado_id, t.notas
+  from todo t
+  order by t.plantilla_id, t.empleado_id, t.notas nulls first;
+$function$
+"
+funcion,"fn_calcular_evaluacion(text,integer)","CREATE OR REPLACE FUNCTION public.fn_calcular_evaluacion(p_periodo text, p_empleado_id integer DEFAULT NULL::integer)
+ RETURNS TABLE(empleado_id integer, nombre text, apellido text, legajo text, puesto text, dias_esperados integer, dias_presente integer, tardanzas integer, ausencias integer, incompletos integer, tareas_asignadas integer, tareas_completadas integer, puntaje_asistencia numeric, puntaje_tareas numeric, puntaje_manual numeric, puntaje_total numeric, comentario text, evaluado_at timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_desde date;
+  v_hasta date;
+  v_es_propio boolean;
+  v_pen_tard  numeric := 10;
+  v_pen_aus   numeric := 34;
+  v_pen_inc   numeric := 15;
+  v_pon_asis  numeric := 40;
+  v_pon_tar   numeric := 40;
+  v_pon_man   numeric := 20;
+begin
+  if p_periodo !~ '^\d{4}-\d{2}$' then
+    raise exception 'Período inválido (se espera YYYY-MM): %', p_periodo;
+  end if;
+
+  -- Permiso: rrhh ve a todos; un empleado sólo SU propio legajo.
+  v_es_propio := p_empleado_id is not null and exists (
+    select 1 from public.empleados e
+    where e.id = p_empleado_id and e.usuario_id = auth.uid()
+  );
+  if not public.fn_tiene_permiso('rrhh') and not v_es_propio then
+    raise exception 'Sin permiso para ver evaluaciones de desempeño.';
+  end if;
+
+  v_desde := (p_periodo || '-01')::date;
+  v_hasta := (v_desde + interval '1 month' - interval '1 day')::date;
+
+  -- Parámetros (defaults defensivos si falta la clave).
+  select coalesce((valor #>> '{}')::numeric, v_pen_tard) into v_pen_tard from public.rrhh_config where clave = 'eval_penal_tardanza';
+  select coalesce((valor #>> '{}')::numeric, v_pen_aus)  into v_pen_aus  from public.rrhh_config where clave = 'eval_penal_ausencia';
+  select coalesce((valor #>> '{}')::numeric, v_pen_inc)  into v_pen_inc  from public.rrhh_config where clave = 'eval_penal_incompleto';
+  select coalesce((valor #>> '{}')::numeric, v_pon_asis) into v_pon_asis from public.rrhh_config where clave = 'eval_ponderacion_asistencia';
+  select coalesce((valor #>> '{}')::numeric, v_pon_tar)  into v_pon_tar  from public.rrhh_config where clave = 'eval_ponderacion_tareas';
+  select coalesce((valor #>> '{}')::numeric, v_pon_man)  into v_pon_man  from public.rrhh_config where clave = 'eval_ponderacion_manual';
+
+  return query
+  with emp as (
+    select e.id, e.nombre, e.apellido, e.legajo, e.puesto
+    from public.empleados e
+    where e.activo = true
+      and (p_empleado_id is null or e.id = p_empleado_id)
+  ),
+  asis as (
+    select ad.empleado_id,
+      count(*) filter (where ad.estado in ('presente','tardanza','ausente_injustificado','incompleto'))::int as dias_esperados,
+      count(*) filter (where ad.estado = 'presente')::int               as dias_presente,
+      count(*) filter (where ad.estado = 'tardanza')::int               as tardanzas,
+      count(*) filter (where ad.estado = 'ausente_injustificado')::int  as ausencias,
+      count(*) filter (where ad.estado = 'incompleto')::int             as incompletos
+    from public.asistencia_diaria ad
+    where ad.fecha between v_desde and v_hasta
+    group by ad.empleado_id
+  ),
+  tar as (
+    select x.empleado_id,
+      sum(x.asig)::int as asignadas,
+      sum(x.comp)::int as completadas
+    from (
+      -- individuales: como siempre
+      select tt.empleado_id, 1 as asig, (tt.estado = 'completada')::int as comp
+      from public.tareas_turno tt
+      where tt.fecha between v_desde and v_hasta
+        and tt.estado <> 'cancelada'
+        and tt.empleado_id is not null
+      union all
+      -- grupales completadas: 1/1 solo para quien la cerró
+      select tt.completada_por, 1, 1
+      from public.tareas_turno tt
+      where tt.fecha between v_desde and v_hasta
+        and tt.empleado_id is null
+        and tt.estado = 'completada'
+        and tt.completada_por is not null
+    ) x
+    group by x.empleado_id
+  ),
+  calc as (
+    select
+      emp.id as empleado_id, emp.nombre, emp.apellido, emp.legajo, emp.puesto,
+      coalesce(a.dias_esperados, 0)  as dias_esperados,
+      coalesce(a.dias_presente, 0)   as dias_presente,
+      coalesce(a.tardanzas, 0)       as tardanzas,
+      coalesce(a.ausencias, 0)       as ausencias,
+      coalesce(a.incompletos, 0)     as incompletos,
+      coalesce(t.asignadas, 0)       as tareas_asignadas,
+      coalesce(t.completadas, 0)     as tareas_completadas,
+      -- Asistencia: null si no tuvo días con turno; si no, 100 menos penales.
+      case when coalesce(a.dias_esperados, 0) = 0 then null
+           else greatest(0, least(100,
+                  100 - v_pen_tard * coalesce(a.tardanzas, 0)
+                      - v_pen_aus  * coalesce(a.ausencias, 0)
+                      - v_pen_inc  * coalesce(a.incompletos, 0)))
+      end as p_asis,
+      -- Tareas: null si no tenía tareas; si no, tasa de cumplimiento.
+      case when coalesce(t.asignadas, 0) = 0 then null
+           else round(coalesce(t.completadas, 0)::numeric / t.asignadas * 100, 2)
+      end as p_tar,
+      ev.puntaje_manual as p_man,
+      ev.comentario,
+      ev.updated_at as evaluado_at
+    from emp
+    left join asis a on a.empleado_id = emp.id
+    left join tar  t on t.empleado_id = emp.id
+    left join public.evaluacion_desempeno ev
+      on ev.empleado_id = emp.id and ev.periodo = p_periodo
+  )
+  select
+    calc.empleado_id, calc.nombre, calc.apellido, calc.legajo, calc.puesto,
+    calc.dias_esperados, calc.dias_presente, calc.tardanzas, calc.ausencias, calc.incompletos,
+    calc.tareas_asignadas, calc.tareas_completadas,
+    calc.p_asis, calc.p_tar, calc.p_man,
+    -- Total ponderado SÓLO sobre los componentes disponibles (peso del que
+    -- falta se redistribuye al normalizar por la suma de pesos presentes).
+    case
+      when calc.p_asis is null and calc.p_tar is null and calc.p_man is null then null
+      else round(
+        ( coalesce(calc.p_asis * v_pon_asis, 0)
+        + coalesce(calc.p_tar  * v_pon_tar,  0)
+        + coalesce(calc.p_man  * v_pon_man,  0) )
+        / nullif(
+            (case when calc.p_asis is not null then v_pon_asis else 0 end)
+          + (case when calc.p_tar  is not null then v_pon_tar  else 0 end)
+          + (case when calc.p_man  is not null then v_pon_man  else 0 end)
+        , 0)
+      , 2)
+    end as puntaje_total,
+    calc.comentario, calc.evaluado_at
+  from calc
+  order by calc.nombre, calc.apellido;
+end $function$
+"
+funcion,"fn_completar_tarea(uuid,text)","CREATE OR REPLACE FUNCTION public.fn_completar_tarea(p_tarea_id uuid, p_evidencia_url text DEFAULT NULL::text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_t record; v_emp integer;
+begin
+  select * into v_t from public.tareas_turno where id = p_tarea_id;
+  if v_t.id is null then raise exception 'Tarea inexistente.'; end if;
+  if v_t.estado not in ('pendiente', 'en_curso', 'vencida') then
+    raise exception 'La tarea no se puede completar en su estado actual (%).', v_t.estado;
+  end if;
+
+  select id into v_emp from public.empleados where usuario_id = auth.uid();
+
+  -- Permiso: gestión, el responsable (individual), o un participante (grupal).
+  if not public.fn_tiene_permiso('tareas_gestion') then
+    if v_t.empleado_id is not null then
+      if v_emp is null or v_emp <> v_t.empleado_id then
+        raise exception 'Sin permiso para completar esta tarea.';
+      end if;
+    else
+      if v_emp is null or not exists (
+        select 1 from public.tareas_turno_participantes p
+        where p.tarea_id = p_tarea_id and p.empleado_id = v_emp
+      ) then
+        raise exception 'Sin permiso para completar esta tarea.';
+      end if;
+    end if;
+  end if;
+
+  if v_t.requiere_evidencia then
+    if p_evidencia_url is null or btrim(p_evidencia_url) = '' then
+      raise exception 'Esta tarea requiere una foto de evidencia.';
+    end if;
+    if position('/storage/v1/object/public/tareas-evidencia/' in p_evidencia_url) = 0 then
+      raise exception 'La evidencia debe ser una foto subida al sistema.';
+    end if;
+  end if;
+
+  update public.tareas_turno set
+    estado = 'completada',
+    completada_por = v_emp,  -- quién la cerró (NULL si fue gestión sin legajo)
+    completada_at = now(),
+    evidencia_url = coalesce(p_evidencia_url, evidencia_url)
+  where id = p_tarea_id;
+end $function$
+"
+funcion,"fn_cumplimiento_tareas(date,date,integer)","CREATE OR REPLACE FUNCTION public.fn_cumplimiento_tareas(p_desde date, p_hasta date, p_empleado_id integer DEFAULT NULL::integer)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_result jsonb;
+begin
+  if not public.fn_tiene_permiso('tareas_gestion') then
+    raise exception 'Sin permiso para ver el cumplimiento de tareas.';
+  end if;
+  if p_hasta < p_desde then
+    raise exception 'Rango de fechas inválido.';
+  end if;
+  if p_hasta - p_desde > 366 then
+    raise exception 'El rango no puede superar un año.';
+  end if;
+
+  select jsonb_build_object(
+    'por_empleado', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'empleado_id', y.empleado_id, 'nombre', y.nombre, 'apellido', y.apellido,
+               'asignadas', y.asignadas, 'completadas', y.completadas,
+               'vencidas', y.vencidas, 'pendientes', y.pendientes,
+               'rechazos', y.rechazos,
+               'pct', case when y.asignadas = 0 then null
+                           else round(y.completadas::numeric / y.asignadas * 100, 1) end
+             ) order by y.nombre, y.apellido)
+      from (
+        select e.id as empleado_id, e.nombre, e.apellido,
+               count(*)::int as asignadas,
+               count(*) filter (where x.estado = 'completada')::int as completadas,
+               count(*) filter (where x.estado = 'vencida')::int    as vencidas,
+               count(*) filter (where x.estado in ('pendiente','en_curso'))::int as pendientes,
+               coalesce(sum(x.rechazos), 0)::int as rechazos
+        from (
+          -- individuales del rango (sin canceladas)
+          select tt.empleado_id, tt.estado::text as estado, tt.rechazos_count as rechazos
+          from public.tareas_turno tt
+          where tt.fecha between p_desde and p_hasta
+            and tt.estado <> 'cancelada' and tt.empleado_id is not null
+          union all
+          -- grupales completadas → 1/1 para quien la hizo
+          select tt.completada_por, 'completada', tt.rechazos_count
+          from public.tareas_turno tt
+          where tt.fecha between p_desde and p_hasta
+            and tt.empleado_id is null and tt.estado = 'completada'
+            and tt.completada_por is not null
+        ) x
+        join public.empleados e on e.id = x.empleado_id
+        where p_empleado_id is null or x.empleado_id = p_empleado_id
+        group by e.id, e.nombre, e.apellido
+      ) y
+    ), '[]'::jsonb),
+
+    'por_tarea', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'plantilla_id', z.plantilla_id, 'titulo', z.titulo, 'modo', z.modo,
+               'total', z.total, 'completadas', z.completadas,
+               'vencidas', z.vencidas, 'pendientes', z.pendientes,
+               'rechazos', z.rechazos,
+               'pct', case when z.total = 0 then null
+                           else round(z.completadas::numeric / z.total * 100, 1) end
+             ) order by z.titulo)
+      from (
+        select tt.plantilla_id, tt.titulo, tt.modo::text as modo,
+               count(*)::int as total,
+               count(*) filter (where tt.estado = 'completada')::int as completadas,
+               count(*) filter (where tt.estado = 'vencida')::int    as vencidas,
+               count(*) filter (where tt.estado in ('pendiente','en_curso'))::int as pendientes,
+               coalesce(sum(tt.rechazos_count), 0)::int as rechazos
+        from public.tareas_turno tt
+        where tt.fecha between p_desde and p_hasta
+          and tt.estado <> 'cancelada'
+          and (p_empleado_id is null
+               or tt.empleado_id = p_empleado_id
+               or tt.completada_por = p_empleado_id
+               or exists (select 1 from public.tareas_turno_participantes p
+                          where p.tarea_id = tt.id and p.empleado_id = p_empleado_id))
+        group by tt.plantilla_id, tt.titulo, tt.modo
+      ) z
+    ), '[]'::jsonb)
+  ) into v_result;
+
+  return v_result;
+end $function$
+"
+funcion,fn_dashboard_rrhh(),"CREATE OR REPLACE FUNCTION public.fn_dashboard_rrhh()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_tz text := 'America/Argentina/Buenos_Aires';
+  v_ahora timestamptz := now();
+  v_hoy date;
+  v_mes_desde date;
+  v_dias_doc int := 30;
+  v_racha int := 3;
+  v_result jsonb;
+begin
+  if not public.fn_tiene_permiso('rrhh') then
+    raise exception 'Sin permiso para ver el tablero de RRHH.';
+  end if;
+
+  v_hoy := (timezone(v_tz, v_ahora))::date;
+  v_mes_desde := date_trunc('month', v_hoy)::date;
+
+  select coalesce((valor #>> '{}')::int, v_dias_doc) into v_dias_doc from public.rrhh_config where clave = 'dashboard_dias_doc_por_vencer';
+  select coalesce((valor #>> '{}')::int, v_racha)    into v_racha    from public.rrhh_config where clave = 'dashboard_racha_tardanzas';
+
+  select jsonb_build_object(
+    'fecha', v_hoy,
+    'generado_at', v_ahora,
+
+    -- Trabajando ahora: paridad impar de fichajes válidos en las últimas 16h
+    -- (cubre un turno completo incl. noche, sin reiniciar a las 00:00). Bajo el
+    -- modelo de emparejamiento, paridad impar ⇒ el último fichaje es la entrada
+    -- del tramo abierto, así que `desde` = max(momento) es el inicio del tramo
+    -- actual. Se excluyen marcaciones anuladas y se colapsan los rebotes del
+    -- reloj a < 3 min (aprox. del anti-rebote de fn_recalcular_asistencia) para
+    -- que un doble-punch no invierta el estado presente/ausente.
+    'trabajando_ahora', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'empleado_id', t.empleado_id, 'nombre', t.nombre,
+               'apellido', t.apellido, 'desde', t.ultima
+             ) order by t.ultima)
+      from (
+        select p.empleado_id, p.nombre, p.apellido, max(p.momento) as ultima
+        from (
+          select e.id as empleado_id, e.nombre, e.apellido, f.momento,
+                 f.momento - lag(f.momento) over (
+                   partition by f.empleado_id order by f.momento
+                 ) as gap
+          from public.fichajes f
+          join public.empleados e on e.id = f.empleado_id and e.activo
+          where f.tipo in ('entrada','salida','marcacion')
+            and f.momento >  v_ahora - interval '16 hours'
+            and f.momento <= v_ahora
+            and not exists (
+              select 1 from public.fichajes c
+              where c.tipo = 'correccion' and c.fichaje_corregido_id = f.id
+            )
+        ) p
+        where p.gap is null or p.gap >= interval '3 minutes'
+        group by p.empleado_id, p.nombre, p.apellido
+        having count(*) % 2 = 1
+      ) t
+    ), '[]'::jsonb),
+
+    -- Ausentes ahora: turno EN CURSO (ya pasó inicio + tolerancia y todavía no
+    -- terminó) sin ningún fichaje válido desde el arranque de la jornada. Se
+    -- construye inicio/fin reales desde h.fecha (no v_hoy) para tratar el turno
+    -- noche que cruza medianoche, y se incluye el de AYER que sigue corriendo.
+    'ausentes_hoy', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'empleado_id', j.empleado_id, 'nombre', j.nombre, 'apellido', j.apellido,
+               'turno', j.turno, 'hora_inicio', j.hora_inicio
+             ) order by j.inicio_ts)
+      from (
+        select e.id as empleado_id, e.nombre, e.apellido,
+               tp.nombre as turno, tp.hora_inicio, tp.tolerancia_min,
+               (h.fecha + tp.hora_inicio) at time zone v_tz as inicio_ts,
+               (case when tp.cruza_medianoche
+                     then ((h.fecha + 1) + tp.hora_fin) at time zone v_tz
+                     else (h.fecha + tp.hora_fin) at time zone v_tz end) as fin_ts
+        from public.horarios_asignados h
+        join public.empleados e on e.id = h.empleado_id and e.activo
+        join public.turnos_plantilla tp on tp.id = h.turno_id
+        where h.turno_id is not null
+          and h.estado in ('planificado','cubierto')
+          -- la noche planificada AYER sigue en curso pasada la medianoche
+          and h.fecha in (v_hoy, v_hoy - 1)
+      ) j
+      where v_ahora > j.inicio_ts + make_interval(mins => j.tolerancia_min)
+        and v_ahora < j.fin_ts
+        and not exists (
+          select 1 from public.fichajes f
+          where f.empleado_id = j.empleado_id
+            and f.tipo in ('entrada','salida','marcacion')
+            and f.momento >= j.inicio_ts and f.momento <= v_ahora
+            and not exists (
+              select 1 from public.fichajes c
+              where c.tipo = 'correccion' and c.fichaje_corregido_id = f.id
+            )
+        )
+    ), '[]'::jsonb),
+
+    -- Tareas de hoy (instancias materializadas).
+    'tareas_hoy', (
+      select jsonb_build_object(
+        'total',       count(*),
+        'completadas', count(*) filter (where estado = 'completada'),
+        'pendientes',  count(*) filter (where estado in ('pendiente','en_curso'))
+      )
+      from public.tareas_turno where fecha = v_hoy
+    ),
+
+    -- Tareas vencidas de los últimos 14 días, agrupadas por responsable.
+    'tareas_vencidas', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'empleado_id', x.empleado_id, 'nombre', x.nombre,
+               'apellido', x.apellido, 'cantidad', x.cantidad
+             ) order by x.cantidad desc)
+      from (
+        select e.id as empleado_id, e.nombre, e.apellido, count(*) as cantidad
+        from public.tareas_turno tt
+        join public.empleados e on e.id = tt.empleado_id and e.activo
+        where tt.estado = 'vencida'
+          and tt.fecha >= v_hoy - 14
+        group by e.id, e.nombre, e.apellido
+      ) x
+    ), '[]'::jsonb),
+
+    -- Documentos por vencer (o ya vencidos): aptos médicos, certificados, etc.
+    -- Sólo el documento MÁS RECIENTE por (empleado, tipo): si se renovó el apto,
+    -- la fila vieja vencida no dispara la alerta. Se acota a vencidos de hasta
+    -- 60 días atrás para no arrastrar ruido perpetuo de legajos viejos.
+    'docs_por_vencer', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'empleado_id', ult.empleado_id, 'nombre', ult.nombre, 'apellido', ult.apellido,
+               'tipo', ult.tipo, 'fecha_vencimiento', ult.fecha_vencimiento,
+               'dias', (ult.fecha_vencimiento - v_hoy)
+             ) order by ult.fecha_vencimiento)
+      from (
+        select distinct on (d.empleado_id, d.tipo)
+               e.id as empleado_id, e.nombre, e.apellido, d.tipo, d.fecha_vencimiento
+        from public.empleado_documentos d
+        join public.empleados e on e.id = d.empleado_id and e.activo
+        where d.fecha_vencimiento is not null
+        order by d.empleado_id, d.tipo, d.fecha_vencimiento desc
+      ) ult
+      where ult.fecha_vencimiento <= v_hoy + v_dias_doc
+        and ult.fecha_vencimiento >= v_hoy - 60
+    ), '[]'::jsonb),
+
+    -- Racha de tardanzas del mes en curso (>= umbral configurable).
+    'rachas_tardanzas', coalesce((
+      select jsonb_agg(jsonb_build_object(
+               'empleado_id', x.empleado_id, 'nombre', x.nombre,
+               'apellido', x.apellido, 'tardanzas', x.tardanzas
+             ) order by x.tardanzas desc)
+      from (
+        select e.id as empleado_id, e.nombre, e.apellido, count(*) as tardanzas
+        from public.asistencia_diaria ad
+        join public.empleados e on e.id = ad.empleado_id and e.activo
+        where ad.estado = 'tardanza'
+          and ad.fecha between v_mes_desde and v_hoy
+        group by e.id, e.nombre, e.apellido
+        having count(*) >= v_racha
+      ) x
+    ), '[]'::jsonb)
+  ) into v_result;
+
+  return v_result;
+end $function$
+"
+funcion,fn_iniciar_tarea(uuid),"CREATE OR REPLACE FUNCTION public.fn_iniciar_tarea(p_tarea_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_emp integer; v_estado public.estado_tarea_turno;
+begin
+  v_emp := public.fn_tarea_puede_operar(p_tarea_id);
+  select estado into v_estado from public.tareas_turno where id = p_tarea_id;
+  if v_estado not in ('pendiente', 'vencida') then
+    raise exception 'La tarea no se puede iniciar en su estado actual (%).', v_estado;
+  end if;
+  update public.tareas_turno
+    set estado = 'en_curso', iniciada_por = v_emp, iniciada_at = now()
+    where id = p_tarea_id;
+end $function$
+"
+funcion,fn_marcar_tareas_vencidas(),"CREATE OR REPLACE FUNCTION public.fn_marcar_tareas_vencidas()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_n integer;
+  v_ahora timestamp := timezone('America/Argentina/Buenos_Aires', now());
+  v_hoy date := v_ahora::date;
+begin
+  update public.tareas_turno t
+    set estado = 'vencida'
+    from (select t2.id from public.tareas_turno t2
+          left join public.turnos_plantilla tp on tp.id = t2.turno_id
+          where t2.estado in ('pendiente', 'en_curso')
+            and (t2.fecha < v_hoy - 1
+                 or (t2.fecha = v_hoy - 1
+                     and not (coalesce(tp.cruza_medianoche, false)
+                              and v_ahora::time < tp.hora_fin)))) x
+    where t.id = x.id;
+  get diagnostics v_n = row_count;
+  return v_n;
+end $function$
+"
+funcion,fn_materializar_tareas_turno(date),"CREATE OR REPLACE FUNCTION public.fn_materializar_tareas_turno(p_fecha date)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_n integer := 0;
+  v_m integer;
+  v_hoy date := (timezone('America/Argentina/Buenos_Aires', now()))::date;
+begin
+  if auth.uid() is not null
+     and not (public.fn_tiene_permiso('tareas_gestion')
+              or public.fn_tiene_permiso('rrhh')
+              or public.fn_tiene_permiso('mi_panel')) then
+    raise exception 'Sin permiso.';
+  end if;
+  if p_fecha < v_hoy - 1 or p_fecha > v_hoy + 7 then
+    raise exception 'Fecha fuera de rango.';
+  end if;
+
+  -- Plantillas que caen hoy, con la hora ya resuelta contra el turno.
+  create temp table if not exists tmp_plantillas_hoy
+    (like public.tareas_recurrentes, hora_resuelta time) on commit drop;
+  truncate tmp_plantillas_hoy;
+  insert into tmp_plantillas_hoy
+  select p.*,
+         coalesce(
+           p.hora,
+           case when p.minutos_desde_inicio is not null and tp.hora_inicio is not null
+                then (tp.hora_inicio + make_interval(mins => p.minutos_desde_inicio))::time
+           end
+         ) as hora_resuelta
+  from public.fn_plantillas_tareas_dia(p_fecha) p
+  left join public.turnos_plantilla tp on tp.id = p.turno_id;
+
+  create temp table if not exists tmp_objetivo (
+    plantilla_id uuid, empleado_id integer, notas text, modo public.modo_tarea,
+    primary key (plantilla_id, empleado_id)
+  ) on commit drop;
+  truncate tmp_objetivo;
+  insert into tmp_objetivo (plantilla_id, empleado_id, notas, modo)
+  select o.plantilla_id, o.empleado_id, o.notas, p.modo
+  from public.fn_asignados_tareas_dia(p_fecha) o
+  join tmp_plantillas_hoy p on p.id = o.plantilla_id;
+
+  -- 1. Individuales que ya no corresponden (pendientes vírgenes, no fijadas).
+  delete from public.tareas_turno t
+  where t.fecha = p_fecha
+    and t.plantilla_id is not null and t.empleado_id is not null
+    and t.modo = 'individual' and t.estado = 'pendiente'
+    and t.rechazos_count = 0 and t.evidencia_url is null and not t.fijada
+    and t.iniciada_at is null
+    and exists (select 1 from tmp_plantillas_hoy p where p.id = t.plantilla_id and p.modo = 'individual')
+    and not exists (select 1 from tmp_objetivo o
+                    where o.plantilla_id = t.plantilla_id and o.empleado_id = t.empleado_id);
+  get diagnostics v_m = row_count;
+  v_n := v_n + v_m;
+
+  -- 2. Nota de cobertura de las que siguen (no cuenta como cambio).
+  update public.tareas_turno t
+  set notas = o.notas
+  from tmp_objetivo o
+  where t.fecha = p_fecha and t.plantilla_id = o.plantilla_id and t.empleado_id = o.empleado_id
+    and t.estado in ('pendiente', 'en_curso') and not t.fijada
+    and t.notas is distinct from o.notas;
+
+  -- 2b. La rutina editada alcanza a las pendientes vírgenes desde su vigencia
+  --     (no cuenta como cambio; lo iniciado/completado/fijado no se toca).
+  update public.tareas_turno t
+  set titulo = p.titulo,
+      descripcion = p.descripcion,
+      prioridad = p.prioridad,
+      requiere_evidencia = p.requiere_evidencia,
+      hora = p.hora_resuelta,
+      duracion_min = p.duracion_min,
+      ventana_min = p.ventana_min,
+      tipo_actividad = p.tipo_actividad,
+      checklist = p.checklist
+  from tmp_plantillas_hoy p
+  where t.fecha = p_fecha and t.plantilla_id = p.id
+    and t.estado = 'pendiente' and not t.fijada
+    and t.rechazos_count = 0 and t.evidencia_url is null and t.iniciada_at is null
+    and p_fecha >= coalesce(p.vigencia_desde, p_fecha)
+    and (t.titulo, t.descripcion, t.prioridad, t.requiere_evidencia, t.hora,
+         t.duracion_min, t.ventana_min, t.tipo_actividad, t.checklist)
+        is distinct from
+        (p.titulo, p.descripcion, p.prioridad, p.requiere_evidencia, p.hora_resuelta,
+         p.duracion_min, p.ventana_min, p.tipo_actividad, p.checklist);
+
+  -- 3. Individuales que faltan.
+  insert into public.tareas_turno (
+    plantilla_id, titulo, descripcion, empleado_id, turno_id, fecha,
+    prioridad, requiere_evidencia, estado, modo, usuario_id, notas,
+    hora, duracion_min, ventana_min, tipo_actividad, checklist
+  )
+  select p.id, p.titulo, p.descripcion, o.empleado_id, p.turno_id, p_fecha,
+         p.prioridad, p.requiere_evidencia, 'pendiente', 'individual', p.usuario_id, o.notas,
+         p.hora_resuelta, p.duracion_min, p.ventana_min, p.tipo_actividad, p.checklist
+  from tmp_objetivo o
+  join tmp_plantillas_hoy p on p.id = o.plantilla_id
+  where p.modo = 'individual'
+  on conflict (plantilla_id, fecha, empleado_id)
+    where plantilla_id is not null and empleado_id is not null do nothing;
+  get diagnostics v_m = row_count;
+  v_n := v_n + v_m;
+
+  -- 4. Grupales: UNA instancia por plantilla del día (empleado_id NULL).
+  insert into public.tareas_turno (
+    plantilla_id, titulo, descripcion, empleado_id, turno_id, fecha,
+    prioridad, requiere_evidencia, estado, modo, usuario_id,
+    hora, duracion_min, ventana_min, tipo_actividad, checklist
+  )
+  select p.id, p.titulo, p.descripcion, null, p.turno_id, p_fecha,
+         p.prioridad, p.requiere_evidencia, 'pendiente', 'grupal', p.usuario_id,
+         p.hora_resuelta, p.duracion_min, p.ventana_min, p.tipo_actividad, p.checklist
+  from tmp_plantillas_hoy p
+  where p.modo = 'grupal'
+  on conflict (plantilla_id, fecha)
+    where plantilla_id is not null and empleado_id is null do nothing;
+  get diagnostics v_m = row_count;
+  v_n := v_n + v_m;
+
+  -- 5. Participantes de las grupales abiertas: quitar los que no corresponden…
+  delete from public.tareas_turno_participantes pp
+  using public.tareas_turno t
+  where pp.tarea_id = t.id
+    and t.fecha = p_fecha and t.empleado_id is null and t.plantilla_id is not null
+    and t.estado in ('pendiente', 'en_curso') and not t.fijada
+    and exists (select 1 from tmp_plantillas_hoy p where p.id = t.plantilla_id)
+    and not exists (select 1 from tmp_objetivo o
+                    where o.plantilla_id = t.plantilla_id and o.empleado_id = pp.empleado_id);
+  get diagnostics v_m = row_count;
+  v_n := v_n + v_m;
+
+  -- …y sumar los que faltan.
+  insert into public.tareas_turno_participantes (tarea_id, empleado_id)
+  select t.id, o.empleado_id
+  from tmp_objetivo o
+  join public.tareas_turno t
+    on t.plantilla_id = o.plantilla_id and t.fecha = p_fecha and t.empleado_id is null
+  where o.modo = 'grupal' and t.estado in ('pendiente', 'en_curso') and not t.fijada
+  on conflict do nothing;
+  get diagnostics v_m = row_count;
+  v_n := v_n + v_m;
+
+  return v_n;
+end $function$
+"
+funcion,fn_mi_empleado_id(),"CREATE OR REPLACE FUNCTION public.fn_mi_empleado_id()
+ RETURNS integer
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select id from public.empleados
+  where usuario_id = auth.uid()
+  limit 1;
+$function$
+"
+funcion,fn_mi_rol(),"CREATE OR REPLACE FUNCTION public.fn_mi_rol()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select rol from public.usuarios where id = auth.uid()
+$function$
+"
+funcion,fn_mis_tareas_participadas(),"CREATE OR REPLACE FUNCTION public.fn_mis_tareas_participadas()
+ RETURNS SETOF uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select p.tarea_id
+  from public.tareas_turno_participantes p
+  join public.empleados e on e.id = p.empleado_id
+  where e.usuario_id = auth.uid();
+$function$
+"
+funcion,"fn_omitir_tarea(uuid,text)","CREATE OR REPLACE FUNCTION public.fn_omitir_tarea(p_tarea_id uuid, p_motivo text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_estado public.estado_tarea_turno;
+begin
+  perform public.fn_tarea_puede_operar(p_tarea_id);
+  if p_motivo is null or length(btrim(p_motivo)) < 5 then
+    raise exception 'Indicá el motivo para omitir la tarea (mínimo 5 caracteres).';
+  end if;
+  select estado into v_estado from public.tareas_turno where id = p_tarea_id;
+  if v_estado not in ('pendiente', 'en_curso', 'vencida') then
+    raise exception 'La tarea no se puede omitir en su estado actual (%).', v_estado;
+  end if;
+  update public.tareas_turno
+    set estado = 'cancelada', motivo_omision = btrim(p_motivo)
+    where id = p_tarea_id;
+end $function$
+"
+funcion,fn_plantillas_tareas_dia(date),"CREATE OR REPLACE FUNCTION public.fn_plantillas_tareas_dia(p_fecha date)
+ RETURNS SETOF tareas_recurrentes
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select r.*
+  from public.tareas_recurrentes r
+  where r.activa
+    and (r.vigencia_desde is null or p_fecha >= r.vigencia_desde)
+    and (r.vigencia_hasta is null or p_fecha <= r.vigencia_hasta)
+    and (
+      (r.tipo_recurrencia = 'dias_semana'
+         and extract(dow from p_fecha)::integer = any(r.dias_semana))
+      or (r.tipo_recurrencia = 'dia_mes' and r.dia_mes is not null and (
+            extract(day from p_fecha)::integer = r.dia_mes
+            or (p_fecha = (date_trunc('month', p_fecha) + interval '1 month - 1 day')::date
+                and r.dia_mes > extract(day from p_fecha)::integer)))
+      or (r.tipo_recurrencia = 'cada_n_dias' and r.cada_n_dias is not null and (
+            p_fecha >= coalesce(r.fecha_base, (timezone('America/Argentina/Buenos_Aires', r.created_at))::date)
+            and (p_fecha - coalesce(r.fecha_base, (timezone('America/Argentina/Buenos_Aires', r.created_at))::date))
+                % r.cada_n_dias = 0))
+    );
+$function$
+"
+funcion,fn_reabrir_tarea(uuid),"CREATE OR REPLACE FUNCTION public.fn_reabrir_tarea(p_tarea_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_t record;
+begin
+  if not public.fn_tiene_permiso('tareas_gestion') then
+    raise exception 'Solo gestión puede reabrir una tarea.';
+  end if;
+  select * into v_t from public.tareas_turno where id = p_tarea_id;
+  if v_t.id is null then raise exception 'Tarea inexistente.'; end if;
+  if v_t.estado not in ('completada', 'cancelada', 'vencida') then
+    raise exception 'La tarea ya está abierta (%).', v_t.estado;
+  end if;
+  if v_t.trasladada_a is not null then
+    raise exception 'La tarea fue trasladada al turno siguiente: operá sobre la nueva.';
+  end if;
+  update public.tareas_turno
+    set estado = 'pendiente', completada_por = null, completada_at = null,
+        evidencia_url = null, motivo_omision = null,
+        iniciada_por = null, iniciada_at = null
+    where id = p_tarea_id;
+end $function$
+"
+funcion,"fn_rechazar_tarea(uuid,text)","CREATE OR REPLACE FUNCTION public.fn_rechazar_tarea(p_tarea_id uuid, p_motivo text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_t record;
+begin
+  if not public.fn_tiene_permiso('tareas_gestion') then
+    raise exception 'Sin permiso para rechazar tareas.';
+  end if;
+  if p_motivo is null or btrim(p_motivo) = '' then
+    raise exception 'El motivo del rechazo es obligatorio.';
+  end if;
+
+  select * into v_t from public.tareas_turno where id = p_tarea_id;
+  if v_t.id is null then raise exception 'Tarea inexistente.'; end if;
+  if v_t.estado <> 'completada' then
+    raise exception 'Solo se puede rechazar una tarea completada (estado actual: %).', v_t.estado;
+  end if;
+
+  update public.tareas_turno set
+    estado = 'pendiente',
+    rechazada_por = auth.uid(),
+    rechazada_at = now(),
+    motivo_rechazo = btrim(p_motivo),
+    rechazos_count = rechazos_count + 1,
+    completada_por = null,
+    completada_at = null,
+    evidencia_url = null   -- la foto rechazada se descarta de la instancia
+  where id = p_tarea_id;
+end $function$
+"
+funcion,"fn_set_sueldo(integer,numeric)","CREATE OR REPLACE FUNCTION public.fn_set_sueldo(p_empleado_id integer, p_sueldo numeric)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.empleado_sueldo (empleado_id, sueldo_basico, updated_at)
+  values (p_empleado_id, coalesce(p_sueldo, 0), now())
+  on conflict (empleado_id)
+  do update set sueldo_basico = excluded.sueldo_basico, updated_at = now();
+end $function$
+"
+funcion,fn_sueldo(integer),"CREATE OR REPLACE FUNCTION public.fn_sueldo(p_empleado_id integer)
+ RETURNS numeric
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce(sueldo_basico, 0) from public.empleado_sueldo
+  where empleado_id = p_empleado_id
+$function$
+"
+funcion,fn_tarea_puede_operar(uuid),"CREATE OR REPLACE FUNCTION public.fn_tarea_puede_operar(p_tarea_id uuid)
+ RETURNS integer
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_t record; v_emp integer;
+begin
+  select id, empleado_id into v_t from public.tareas_turno where id = p_tarea_id;
+  if v_t.id is null then raise exception 'Tarea inexistente.'; end if;
+  select id into v_emp from public.empleados where usuario_id = auth.uid();
+  if public.fn_tiene_permiso('tareas_gestion') then return v_emp; end if;
+  if v_t.empleado_id is not null then
+    if v_emp is null or v_emp <> v_t.empleado_id then
+      raise exception 'Sin permiso para operar esta tarea.';
+    end if;
+  elsif v_emp is null or not exists (
+      select 1 from public.tareas_turno_participantes p
+      where p.tarea_id = p_tarea_id and p.empleado_id = v_emp) then
+    raise exception 'Sin permiso para operar esta tarea.';
+  end if;
+  return v_emp;
+end $function$
+"
+funcion,fn_tiene_permiso(text),"CREATE OR REPLACE FUNCTION public.fn_tiene_permiso(p_clave text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_rol text;
+  v_permisos text[];
+begin
+  select rol into v_rol from public.usuarios where id = auth.uid();
+  if v_rol is null then
+    return false;
+  end if;
+  if v_rol = 'admin' then
+    return true;
+  end if;
+  select permisos into v_permisos from public.roles where codigo = v_rol;
+  if v_permisos is null then
+    return false;
+  end if;
+  return p_clave = any(v_permisos);
+end;
+$function$
+"
+funcion,fn_trasladar_tarea(uuid),"CREATE OR REPLACE FUNCTION public.fn_trasladar_tarea(p_tarea_id uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_t record; v_emp integer; v_fecha date; v_nuevo uuid;
+  v_sig_id integer; v_nombre_sig text;
+begin
+  v_emp := public.fn_tarea_puede_operar(p_tarea_id);
+  select * into v_t from public.tareas_turno where id = p_tarea_id;
+  if v_t.estado not in ('pendiente', 'en_curso', 'vencida') then
+    raise exception 'La tarea no se puede trasladar en su estado actual (%).', v_t.estado;
+  end if;
+  if v_t.trasladada_a is not null then
+    raise exception 'La tarea ya fue trasladada.';
+  end if;
+
+  v_fecha := v_t.fecha;
+  if v_t.turno_id is not null then
+    with ordenados as (
+      select tp.id, tp.nombre, row_number() over (order by tp.hora_inicio) as n,
+             count(*) over () as total
+      from public.turnos_plantilla tp where tp.activo or tp.id = v_t.turno_id
+    ), actual as (
+      select n from ordenados where id = v_t.turno_id
+    )
+    select o.id, o.nombre::text into v_sig_id, v_nombre_sig
+    from ordenados o, actual a
+    where o.n = (a.n % o.total) + 1 and o.id <> v_t.turno_id;
+    if v_sig_id is null then
+      raise exception 'No hay un turno siguiente activo.';
+    end if;
+    if exists (select 1 from public.turnos_plantilla where id = v_t.turno_id and cruza_medianoche) then
+      v_fecha := v_t.fecha + 1;
+    end if;
+  end if;
+
+  insert into public.tareas_turno (
+    plantilla_id, titulo, descripcion, empleado_id, turno_id, fecha,
+    prioridad, requiere_evidencia, estado, modo, usuario_id, notas,
+    hora, duracion_min, ventana_min, tipo_actividad, checklist,
+    fijada, trasladada_de
+  ) values (
+    null, v_t.titulo, v_t.descripcion, v_t.empleado_id,
+    coalesce(v_sig_id, v_t.turno_id), v_fecha,
+    v_t.prioridad, v_t.requiere_evidencia, 'pendiente', v_t.modo, v_t.usuario_id,
+    'Trasladada desde el turno anterior (' || to_char(v_t.fecha, 'DD/MM') || ')',
+    null, v_t.duracion_min, v_t.ventana_min, v_t.tipo_actividad, v_t.checklist,
+    true, v_t.id
+  ) returning id into v_nuevo;
+
+  insert into public.tareas_turno_participantes (tarea_id, empleado_id)
+  select v_nuevo, empleado_id from public.tareas_turno_participantes
+  where tarea_id = v_t.id on conflict do nothing;
+
+  update public.tareas_turno
+    set estado = 'cancelada', trasladada_a = v_nuevo,
+        motivo_omision = coalesce(motivo_omision,
+          'Trasladada al turno ' || coalesce(v_nombre_sig, 'siguiente') ||
+          ' del ' || to_char(v_fecha, 'DD/MM'))
+    where id = v_t.id;
+
+  perform public.fn_auditar(auth.uid(), 'trasladar_tarea', 'tareas_turno', null,
+    jsonb_build_object('tarea_id', v_t.id, 'nueva_id', v_nuevo, 'fecha', v_fecha,
+                       'turno_id', coalesce(v_sig_id, v_t.turno_id), 'empleado_id', v_emp));
+  return v_nuevo;
+end $function$
+"
+funcion,handle_new_user(),"CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+begin
+  insert into public.usuarios (id, email, nombre, rol, activo)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'nombre', split_part(new.email, '@', 1)),
+    'cajero',
+    true
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$function$
+"
+policy,public.empleados · empleados_delete,create policy empleados_delete on public.empleados as PERMISSIVE for DELETE to authenticated using (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso));
+policy,public.empleados · empleados_insert,create policy empleados_insert on public.empleados as PERMISSIVE for INSERT to authenticated with check (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso));
+policy,public.empleados · empleados_select,create policy empleados_select on public.empleados as PERMISSIVE for SELECT to authenticated using ((( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR (usuario_id = auth.uid())));
+policy,public.empleados · empleados_update,create policy empleados_update on public.empleados as PERMISSIVE for UPDATE to authenticated using (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso)) with check (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso));
+policy,public.roles · todo,create policy todo on public.roles as PERMISSIVE for ALL to authenticated using (true) with check (true);
+policy,public.tareas_recurrentes · tareas_rec_rw,create policy tareas_rec_rw on public.tareas_recurrentes as PERMISSIVE for ALL to authenticated using (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso)) with check (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso));
+policy,public.tareas_recurrentes_asignados · tareas_rec_asig_rw,create policy tareas_rec_asig_rw on public.tareas_recurrentes_asignados as PERMISSIVE for ALL to authenticated using (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso)) with check (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso));
+policy,public.tareas_turno · tareas_turno_select,create policy tareas_turno_select on public.tareas_turno as PERMISSIVE for SELECT to authenticated using ((( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR (empleado_id = ( SELECT fn_mi_empleado_id() AS fn_mi_empleado_id)) OR (id IN ( SELECT fn_mis_tareas_participadas() AS fn_mis_tareas_participadas))));
+policy,public.tareas_turno · tareas_turno_write,create policy tareas_turno_write on public.tareas_turno as PERMISSIVE for ALL to authenticated using (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso)) with check (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso));
+policy,public.tareas_turno_participantes · tareas_turno_part_select,create policy tareas_turno_part_select on public.tareas_turno_participantes as PERMISSIVE for SELECT to authenticated using ((( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR (empleado_id = ( SELECT fn_mi_empleado_id() AS fn_mi_empleado_id)) OR (tarea_id IN ( SELECT fn_mis_tareas_participadas() AS fn_mis_tareas_participadas))));
+policy,public.tareas_turno_participantes · tareas_turno_part_write,create policy tareas_turno_part_write on public.tareas_turno_participantes as PERMISSIVE for ALL to authenticated using (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso)) with check (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso));
+policy,public.turnos_plantilla · turnos_plantilla_select,create policy turnos_plantilla_select on public.turnos_plantilla as PERMISSIVE for SELECT to authenticated using ((( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('mi_panel'::text) AS fn_tiene_permiso)));
+policy,public.turnos_plantilla · turnos_plantilla_write,create policy turnos_plantilla_write on public.turnos_plantilla as PERMISSIVE for ALL to authenticated using (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso)) with check (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso));
+policy,public.usuarios · authenticated todo,"create policy ""authenticated todo"" on public.usuarios as PERMISSIVE for ALL to authenticated using (true) with check (true);"
+policy,storage.objects · tareas_evid_borrar,create policy tareas_evid_borrar on storage.objects as PERMISSIVE for DELETE to authenticated using (((bucket_id = 'tareas-evidencia'::text) AND (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso))));
+policy,storage.objects · tareas_evid_editar,create policy tareas_evid_editar on storage.objects as PERMISSIVE for UPDATE to authenticated using (((bucket_id = 'tareas-evidencia'::text) AND (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR (owner = auth.uid())))) with check (((bucket_id = 'tareas-evidencia'::text) AND (( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR (owner = auth.uid()))));
+policy,storage.objects · tareas_evid_subir,"create policy tareas_evid_subir on storage.objects as PERMISSIVE for INSERT to authenticated with check (((bucket_id = 'tareas-evidencia'::text) AND (( SELECT fn_tiene_permiso('rrhh'::text) AS fn_tiene_permiso) OR ( SELECT fn_tiene_permiso('tareas_gestion'::text) AS fn_tiene_permiso) OR (EXISTS ( SELECT 1
+   FROM empleados e
+  WHERE (e.usuario_id = auth.uid()))))));"

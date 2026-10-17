@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **259**
+## Próximo número libre: **285**
 
 ---
 
@@ -358,6 +358,32 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 256 | `256_cajero_fiambrero_mi_panel.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D8) |
 | 257 | `257_permiso_proveedores.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `5fbc967` (D9; test: `tests/test_permiso_proveedores.sql`) |
 | 258 | `258_rls_proveedores_escritura.sql` | ✅ aplicada | 2026-10-13 (prueba) · 2026-10-16 (producción) | `2894830` (test: `tests/test_rls_proveedores.sql`) |
+| 259 | `259_revocar_funciones_sueldo.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; en producción verificado con `scripts/tareas_v2_relevamiento.sql`: anon y authenticated sin EXECUTE) | en este commit (urgente: `fn_sueldo`/`fn_set_sueldo` eran ejecutables sin iniciar sesión) |
+| 260 | `260_seguridad_roles_usuarios.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; probada la pantalla de usuarios) | roles/usuarios: escritura solo con `usuarios_roles`, guardas anti-escalada, alta con `sin_acceso`, inactivos sin permisos |
+| 261 | `261_seguridad_registro_legajos.sql` | ✅ aplicada | 2026-10-16 (producción, verificado el índice único) · prueba el mismo día, después de desvincular la cuenta duplicada de Sonia | `seguridad_eventos` inmutable, una cuenta por legajo, vincular cuenta exige `usuarios_roles`, sin borrar legajos |
+| 262 | `262_tareas_estado_no_se_pudo.sql` | ✅ aplicada | 2026-10-16 (prueba + producción, pegada sola) | enum `estado_tarea_turno` + `no_se_pudo` |
+| 263 | `263_tareas_v2_esquema.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; verificado: 0 sin origen, 0 plantillas con hora) | tipos y columnas nuevas de rutina y agenda, backfills |
+| 264 | `264_tareas_v2_registro.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `tareas_eventos` y `tareas_pedidos`, inmutables |
+| 265 | `265_tareas_v2_permisos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; antes se desactivó a Agustina Fajardo en las dos) | `tareas_admin` al rol admin; seguro de administradores |
+| 266 | `266_tareas_v2_helpers.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | funciones de base: hoy, inicio/fin de turno, rango, actor, escritor del registro |
+| 267 | `267_tareas_v2_trigger_agenda.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; el chequeo inicial se cambió a búsqueda por nombre antes de correrla) | trigger de tareas_turno: origen, privada, horario absoluto, marcas de tocada a mano |
+| 268 | `268_tareas_v2_trigger_turnos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | al cambiar el horario de un turno, las tareas abiertas se corren y queda `turno_editado` |
+| 269 | `269_tareas_v2_a_quien_le_toca.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | versión vigente de la rutina por fecha; resolvers cerrados a la app; `fn_personas_turno` y `fn_a_quien_le_toca` para gestión |
+| 270 | `270_tareas_v2_sync_reasignar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | sincronización parte 1: preparar, limpiar y reasignar según el cronograma (francos y licencias), evento `reasignada` de HEX |
+| 271 | `271_tareas_v2_sincronizar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_tareas_sincronizar` + índice único por `empleado_rutina_id` |
+| 272 | `272_tareas_v2_materializar_v6.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; mañana 30 tareas, 0 duplicados en las dos) | `fn_materializar_tareas_turno` v6 (sin anon) y `fn_marcar_tareas_vencidas` v3 (fin real del turno, solo puntuales, solo el cron) |
+| 273 | `273_tareas_v2_operar_completar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_puede_operar` v2 (privadas solo admin, empleado hasta 2 h después del turno), `fn_tarea_puede_gestionar`, `fn_completar_tarea` con nota (DROP + CREATE) |
+| 274 | `274_tareas_v2_acciones_estado.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | iniciar, omitir, reabrir y rechazar con evento; `fn_tarea_no_se_pudo` nueva, cerrada a la app hasta la 283 |
+| 275 | `275_tareas_v2_cancelar_trasladar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_cancelar` nueva; `fn_trasladar_tarea` v2 con evento en las dos tareas |
+| 276 | `276_tareas_v2_crear_editar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_crear_puntual` y `fn_tarea_editar` nuevas; validación de horario dentro del turno |
+| 277 | `277_tareas_v2_mover_corregir.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_agenda_mover`, `fn_tarea_corregir_hora`, `fn_tarea_checklist_paso`, `fn_tarea_nota` |
+| 278 | `278_tareas_v2_lecturas.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_historial`, `fn_rutina_historial`, `fn_notas_proximo_turno`, `fn_mi_turno` |
+| 279 | `279_tareas_v2_rutina_guardar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_rutina_guardar` (hoy o desde mañana, versión vigente, minutos desde el inicio), `fn_rutina_resincronizar` |
+| 280 | `280_tareas_v2_rutina_quitar_pedidos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | quitar/reactivar (admin), pedidos de la encargada, `fn_pedido_resolver`, `fn_agenda_actualizar_hoy` |
+| 281 | `281_tareas_v2_fotos_evidencia.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; en producción no quedan reglas de editar/borrar que alcancen a `tareas-evidencia`) | fotos de evidencia: solo subir, nadie reemplaza ni borra |
+| 282 | `282_tareas_v2_rls_transicion.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | RLS nueva de agenda y rutina: privadas solo `tareas_admin`; escrituras directas de transición para la app vieja (se cierran en la 285) |
+| 283 | `283_tareas_v2_cumplimiento.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_cumplimiento_tareas` v3: sin canceladas, recordatorios, bloques ni privadas; `no_se_pudo` y `hechas_por_otro` aparte |
+| 284 | `284_tareas_v2_desempeno.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_calcular_evaluacion` v3: el puntaje de tareas cuenta solo puntuales no privadas |
 
 ## Dos bases de Supabase (2026-09-17)
 

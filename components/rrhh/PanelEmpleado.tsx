@@ -104,7 +104,7 @@ export function PanelEmpleado({ empleadoId, nombre, enMovil = false }: Props) {
   const misTareas = useMemo(() => {
     // tareaEsDe incluye las grupales donde participa (empleado_id null).
     const lista = (tareasHoy ?? []).filter((t) => tareaEsDe(t, empleadoId))
-    const total = lista.filter((t) => t.estado !== 'cancelada').length
+    const total = lista.filter((t) => t.estado !== 'cancelada' && t.estado !== 'no_se_pudo').length
     const completadas = lista.filter((t) => t.estado === 'completada').length
     return { total, completadas }
   }, [tareasHoy, empleadoId])

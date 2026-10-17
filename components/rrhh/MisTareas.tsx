@@ -19,6 +19,7 @@ import {
 } from './tareasConstantes'
 import {
   type TareaAgenda,
+  cerradaSinHacer,
   contextoReloj,
   estaAbierta,
   estadoDerivado,
@@ -169,7 +170,11 @@ function TarjetaMiTarea({
         </div>
       ) : !abierta ? (
         <p className="text-xs text-[#6f3a2a]">
-          {d.estado === 'trasladada' ? 'Trasladada al turno siguiente.' : `Omitida: “${tarea.motivo_omision ?? ''}”`}
+          {d.estado === 'trasladada'
+            ? 'Trasladada al turno siguiente.'
+            : d.estado === 'no_se_pudo'
+              ? 'No se pudo hacer.'
+              : `Omitida: “${tarea.motivo_omision ?? ''}”`}
         </p>
       ) : (
         <div className="space-y-2.5">
@@ -266,7 +271,7 @@ export function MisTareas({ empleadoId, nombre }: Props) {
       if (!tareaEsDe(t, empleadoId)) return false
       if (t.fecha === hoy) return true
       const turno = turnoDe(t.turno_id)
-      return !!turno?.cruza_medianoche && t.estado !== 'completada' && t.estado !== 'cancelada'
+      return !!turno?.cruza_medianoche && t.estado !== 'completada' && !cerradaSinHacer(t.estado)
     })
     const items = ordenarCronologico(
       mias.map((t) => ({ tarea: t, derivado: estadoDerivado(t, turnoDe(t.turno_id), hoy, reloj) }))
@@ -275,7 +280,12 @@ export function MisTareas({ empleadoId, nombre }: Props) {
     const resto = items.filter((x) => x.tarea.tipo_actividad !== 'continua')
     const lista = resto.filter((x) => estaAbierta(x.derivado))
     const hechas = resto.filter((x) => x.derivado.estado === 'completada')
-    const cerradas = resto.filter((x) => x.derivado.estado === 'omitida' || x.derivado.estado === 'trasladada')
+    const cerradas = resto.filter(
+      (x) =>
+        x.derivado.estado === 'no_se_pudo' ||
+        x.derivado.estado === 'omitida' ||
+        x.derivado.estado === 'trasladada'
+    )
     const porEntregar = lista.filter((x) => {
       const turno = turnoDe(x.tarea.turno_id)
       return !!turno && turnoPorTerminar(turno, x.tarea.fecha === ayer ? 'ayer' : 'hoy', reloj) && !x.tarea.trasladada_a
@@ -385,7 +395,7 @@ export function MisTareas({ empleadoId, nombre }: Props) {
           {cerradas.length > 0 && (
             <div className="pt-2 space-y-3">
               <p className="text-[#c8a58a] text-xs font-semibold uppercase tracking-wide">
-                Omitidas / trasladadas ({cerradas.length})
+                Cerradas sin hacer ({cerradas.length})
               </p>
               {cerradas.map((x) => (
                 <TarjetaMiTarea key={x.tarea.id} item={x} empleadoId={empleadoId} />
