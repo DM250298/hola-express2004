@@ -370,21 +370,31 @@ export function useRealtimeTareas() {
   useEffect(() => {
     const supabase = createClient()
     const refrescar = () => qc.invalidateQueries({ queryKey: TAREAS_KEY })
-    const canal = supabase
-      .channel('tareas-agenda')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno' }, refrescar)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno_participantes' }, refrescar)
-      .subscribe((estado, err) => {
-        // Sin conexión en vivo la agenda igual se refresca cada 60 s: avisar
-        // en la consola para poder diagnosticarlo.
-        if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') {
-          console.warn('[tareas en vivo]', estado, err?.message ?? '')
-        } else if (estado === 'SUBSCRIBED') {
-          console.info('[tareas en vivo] conectado')
-        }
-      })
+    let canal: ReturnType<typeof supabase.channel> | null = null
+    let cancelado = false
+    // El canal tiene que salir con la sesión del usuario: si se suscribe
+    // antes, Realtime lo trata como anónimo y las reglas de acceso no le
+    // dejan ver ninguna tarea (no llega ningún cambio).
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (cancelado) return
+      if (data.session) await supabase.realtime.setAuth(data.session.access_token)
+      canal = supabase
+        .channel('tareas-agenda')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno' }, refrescar)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tareas_turno_participantes' }, refrescar)
+        .subscribe((estado, err) => {
+          // Sin conexión en vivo la agenda igual se refresca cada 60 s: avisar
+          // en la consola para poder diagnosticarlo.
+          if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') {
+            console.warn('[tareas en vivo]', estado, err?.message ?? '')
+          } else if (estado === 'SUBSCRIBED') {
+            console.info('[tareas en vivo] conectado')
+          }
+        })
+    })
     return () => {
-      supabase.removeChannel(canal)
+      cancelado = true
+      if (canal) supabase.removeChannel(canal)
     }
   }, [qc])
 }
