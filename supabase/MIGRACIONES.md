@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **279**
+## Próximo número libre: **281**
 
 ---
 
@@ -378,6 +378,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 276 | `276_tareas_v2_crear_editar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_crear_puntual` y `fn_tarea_editar` nuevas; validación de horario dentro del turno |
 | 277 | `277_tareas_v2_mover_corregir.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_agenda_mover`, `fn_tarea_corregir_hora`, `fn_tarea_checklist_paso`, `fn_tarea_nota` |
 | 278 | `278_tareas_v2_lecturas.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_historial`, `fn_rutina_historial`, `fn_notas_proximo_turno`, `fn_mi_turno` |
+| 279 | `279_tareas_v2_rutina_guardar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_rutina_guardar` (hoy o desde mañana, versión vigente, minutos desde el inicio), `fn_rutina_resincronizar` |
+| 280 | `280_tareas_v2_rutina_quitar_pedidos.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | quitar/reactivar (admin), pedidos de la encargada, `fn_pedido_resolver`, `fn_agenda_actualizar_hoy` |
 
 ## Dos bases de Supabase (2026-09-17)
 
