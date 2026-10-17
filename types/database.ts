@@ -2269,7 +2269,7 @@ export type PushSubscriptionRow = {
   temas: TemaPush[]
 }
 
-export type TemaPush = 'produccion' | 'tareas'
+export type TemaPush = 'produccion' | 'tareas' | 'mis_tareas' | 'inicio_tareas'
 
 /** Avisos de atraso ya mandados al celular (mig 297); solo el servidor. */
 export type TareaAvisoPushRow = {
@@ -4712,6 +4712,25 @@ export interface Database {
         Row: TareaPedidoRow
         Insert: never
         Update: never
+        Relationships: []
+      }
+      notificaciones_push: {
+        Row: {
+          id: number
+          created_at: string
+          tipo: 'tarea_urgente' | 'tarea_inicio'
+          tema: 'mis_tareas' | 'inicio_tareas'
+          usuario_id: string
+          tarea_turno_id: string
+          titulo: string
+          cuerpo: string
+          url: string
+          enviado_at: string | null
+          enviados: number | null
+          fallidos: number | null
+        }
+        Insert: never
+        Update: { enviado_at?: string | null; enviados?: number | null; fallidos?: number | null }
         Relationships: []
       }
       tareas_avisos_push: {

@@ -533,6 +533,15 @@ pestañas por `?tab=`:
   `hex_app_url` (en prueba no se carga: no manda nada). Un envío por aviso en
   `tareas_avisos_push`. Botón "Recibir avisos de atrasos" en Alertas y Mi turno
   (solo gestión/admin). iPhone: solo con HEX instalado en la pantalla de inicio.
+- **Urgentes y "ahora empieza" al celular (Etapa 7, migs 299–300)**: cola
+  `notificaciones_push` que llena `fn_notificaciones_generar()` cada minuto
+  (`hex-tareas-push` = `* * * * *`): **urgente** = tarea puntual de prioridad alta,
+  abierta, del turno en curso (no rutina ni privadas; una vez por persona, también al
+  nuevo dueño si se reasigna); **inicio** = con horario, pendiente, empezó hace < 10
+  min. Se manda según el tema del dispositivo: `mis_tareas` (urgentes) e
+  `inicio_tareas` (opcional, apagado de entrada). 30 de las 44 tareas de la rutina son
+  alta: por eso el inicio NO avisa por prioridad, solo a quien lo activa. UI:
+  `NotificacionesCelular` arriba de Mi turno; en Nueva tarea "Alta · avisa al celular".
 
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.
