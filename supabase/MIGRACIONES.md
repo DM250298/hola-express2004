@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **285**
+## Próximo número libre: **288**
 
 ---
 
@@ -384,6 +384,9 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 282 | `282_tareas_v2_rls_transicion.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | RLS nueva de agenda y rutina: privadas solo `tareas_admin`; escrituras directas de transición para la app vieja (se cierran en la 285) |
 | 283 | `283_tareas_v2_cumplimiento.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_cumplimiento_tareas` v3: sin canceladas, recordatorios, bloques ni privadas; `no_se_pudo` y `hechas_por_otro` aparte |
 | 284 | `284_tareas_v2_desempeno.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_calcular_evaluacion` v3: el puntaje de tareas cuenta solo puntuales no privadas |
+| 285 | `285_tareas_v2_anexo_a_manana.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | rutina del Anexo A, mañana: 16 tareas (M01–M16) desde mañana; las viejas del turno salen de la rutina |
+| 286 | `286_tareas_v2_anexo_a_tarde.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | tarde: 13 tareas (T01–T13); control y merienda a la encargada de turno, reposición grupal con el fiambrero |
+| 287 | `287_tareas_v2_anexo_a_noche.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; domingo 18: 16/13/15 del Anexo, 0 viejas, T1 en 0) | noche: 15 tareas (N01–N15) al vendedor de turno |
 
 ## Dos bases de Supabase (2026-09-17)
 
