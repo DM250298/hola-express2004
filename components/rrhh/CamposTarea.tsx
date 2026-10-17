@@ -41,6 +41,7 @@ function toggle<T>(lista: T[], v: T): T[] {
 export function CamposTarea({ f, set, esAdmin, turnos, empleados, quienes, buscando, ocultarPrivada = false }: Props) {
   const activosTurnos = turnos
   const activos = empleados
+  const urgente = f.frecuencia === 'una_vez' && !f.privada
   return (
     <>
       {/* Qué */}
@@ -253,7 +254,7 @@ export function CamposTarea({ f, set, esAdmin, turnos, empleados, quienes, busca
         </fieldset>
       )}
 
-      {/* Prioridad y extras */}
+      {/* Prioridad y extras. Una puntual de prioridad alta avisa al celular (Etapa 7). */}
       <fieldset className="space-y-2">
         <legend className="text-[#391511] font-semibold mb-1.5">Prioridad</legend>
         <div className="flex gap-1.5">
@@ -268,10 +269,15 @@ export function CamposTarea({ f, set, esAdmin, turnos, empleados, quienes, busca
                 f.prioridad === p ? PRIORIDAD_TAREA[p].clase + ' ring-2 ring-[#391511]' : 'bg-[#fdfaf6] border border-[#e4c9b0] text-[#6f3a2a]'
               )}
             >
-              {PRIORIDAD_TAREA[p].label}
+              {p === 'alta' && urgente ? 'Alta · avisa al celular' : PRIORIDAD_TAREA[p].label}
             </button>
           ))}
         </div>
+        {urgente && f.prioridad === 'alta' && (
+          <p className="text-xs text-[#6f3a2a]">
+            Es urgente: a quien la tenga que hacer le llega una notificación al celular (si activó los avisos en Mi turno).
+          </p>
+        )}
         {!(f.horario === 'todo_el_turno' && f.recordatorio) && (
           <>
             <label className="flex items-center justify-between gap-3 cursor-pointer">

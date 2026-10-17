@@ -1,4 +1,4 @@
-  -- Control de Tareas v2 (migs 259–298): qué falta en esta base.
+  -- Control de Tareas v2 (migs 259–300): qué falta en esta base.
   -- Solo lectura. Correr en cada base; cada fila que devuelve es un problema
   -- y dice qué migración volver a correr. Sin filas = todo en su lugar.
   with esperadas(mig, fn) as (values
@@ -20,7 +20,7 @@
     (280,'fn_rutina_set_activa'),(282,'fn_rutina_privadas_ids'),(282,'fn_tareas_privadas_ids'),(283,'fn_cumplimiento_tareas'),
     (284,'fn_calcular_evaluacion'),(293,'fn_trg_tareas_avisos_guarda'),(294,'fn_tareas_avisar_atrasos'),
     (294,'fn_tareas_aviso_para'),(294,'fn_tareas_usuarios_con'),(295,'fn_tareas_resumen_semana'),
-    (296,'fn_tareas_guardar_resumen'),(298,'fn_tareas_push_pendiente')
+    (296,'fn_tareas_guardar_resumen'),(298,'fn_tareas_push_pendiente'),(299,'fn_notificaciones_generar')
   ),
   faltan as (
     select e.mig, 'falta la función ' || e.fn as problema
@@ -40,7 +40,8 @@
       (275, 'fn_trasladar_tarea', 'fn_tarea_evento'),
       (283, 'fn_cumplimiento_tareas', 'no_se_pudo'),
       (284, 'fn_calcular_evaluacion', 'no_se_pudo'),
-      (288, 'fn_omitir_tarea', 'no_se_pudo')
+      (288, 'fn_omitir_tarea', 'no_se_pudo'),
+      (300, 'fn_tareas_push_pendiente', 'notificaciones_push')
     ) v(mig, fn, marca)
     where exists (select 1 from pg_proc p where p.proname = v.fn)
       and not exists (select 1 from pg_proc p where p.proname = v.fn and p.prosrc like '%' || v.marca || '%')

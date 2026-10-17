@@ -398,6 +398,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 296 | `296_tareas_v2_programar_cron.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; pg_cron activo en las dos; control en 0 y registro intocable bloqueado) | **requiere pg_cron activo.** `fn_tareas_guardar_resumen()` + procesos `hex-tareas-atrasos` (cada 5 min) y `hex-tareas-resumen` (lunes 08:00 AR) |
 | 297 | `297_tareas_v2_push_temas.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | Etapa 6 B: `push_subscriptions.temas` ('produccion', 'tareas'; las viejas quedan en producción) + `tareas_avisos_push` (un envío por aviso, solo service_role) |
 | 298 | `298_tareas_v2_cron_push.sql` | ✅ aplicada | 2026-10-17 (prueba sin secretos + producción con Vault y AVISOS_TAREAS_SECRET en Vercel; control en 0) | **requiere pg_net.** `fn_tareas_push_pendiente()` + proceso `hex-tareas-push` (minutos 1, 6, 11…): llama a `/api/cron/avisos-tareas` con la clave del Vault (`hex_app_url`, `hex_avisos_secret`); sin secretos (prueba) no hace nada |
+| 299 | `299_tareas_v2_notificaciones.sql` | ⏳ pendiente | — | Etapa 7: temas `mis_tareas` / `inicio_tareas`; cola `notificaciones_push` (uno por tipo, tarea y persona; solo el sistema) y `fn_notificaciones_generar()` (urgentes = puntual alta del turno en curso; inicio = con horario, empezó hace < 10 min) |
+| 300 | `300_tareas_v2_push_cada_minuto.sql` | ⏳ pendiente | — | `fn_tareas_push_pendiente` v2 (también mira la cola) y `hex-tareas-push` cada minuto: genera la cola y llama a la app |
 
 ## Dos bases de Supabase (2026-09-17)
 
