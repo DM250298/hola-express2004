@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **273**
+## Próximo número libre: **279**
 
 ---
 
@@ -372,6 +372,12 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 270 | `270_tareas_v2_sync_reasignar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | sincronización parte 1: preparar, limpiar y reasignar según el cronograma (francos y licencias), evento `reasignada` de HEX |
 | 271 | `271_tareas_v2_sincronizar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción) | `fn_tareas_sincronizar` + índice único por `empleado_rutina_id` |
 | 272 | `272_tareas_v2_materializar_v6.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; mañana 30 tareas, 0 duplicados en las dos) | `fn_materializar_tareas_turno` v6 (sin anon) y `fn_marcar_tareas_vencidas` v3 (fin real del turno, solo puntuales, solo el cron) |
+| 273 | `273_tareas_v2_operar_completar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_puede_operar` v2 (privadas solo admin, empleado hasta 2 h después del turno), `fn_tarea_puede_gestionar`, `fn_completar_tarea` con nota (DROP + CREATE) |
+| 274 | `274_tareas_v2_acciones_estado.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | iniciar, omitir, reabrir y rechazar con evento; `fn_tarea_no_se_pudo` nueva, cerrada a la app hasta la 283 |
+| 275 | `275_tareas_v2_cancelar_trasladar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_cancelar` nueva; `fn_trasladar_tarea` v2 con evento en las dos tareas |
+| 276 | `276_tareas_v2_crear_editar.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_crear_puntual` y `fn_tarea_editar` nuevas; validación de horario dentro del turno |
+| 277 | `277_tareas_v2_mover_corregir.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_agenda_mover`, `fn_tarea_corregir_hora`, `fn_tarea_checklist_paso`, `fn_tarea_nota` |
+| 278 | `278_tareas_v2_lecturas.sql` | ✅ aplicada | 2026-10-16 (prueba + producción; T1 en 0) | `fn_tarea_historial`, `fn_rutina_historial`, `fn_notas_proximo_turno`, `fn_mi_turno` |
 
 ## Dos bases de Supabase (2026-09-17)
 
