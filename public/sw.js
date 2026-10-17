@@ -213,8 +213,8 @@ async function staleWhileRevalidate(req) {
 }
 
 /*
- * Web Push — avisos de producción pendiente (resumen diario).
- * El payload llega como JSON { title, body, url } desde el cron del servidor.
+ * Web Push — avisos de producción pendiente (resumen diario) y de tareas
+ * atrasadas (Tareas v2). El payload llega como JSON { title, body, url, tag }.
  */
 self.addEventListener('push', (event) => {
   let datos = {}
@@ -226,12 +226,13 @@ self.addEventListener('push', (event) => {
   const title = datos.title || 'Hola Express'
   const body = datos.body || 'Tenés novedades en producción.'
   const url = datos.url || '/produccion'
+  const tag = datos.tag || 'produccion-pendiente'
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
       icon: '/icono.svg',
       badge: '/icono.svg',
-      tag: 'produccion-pendiente',
+      tag,
       renotify: true,
       data: { url },
     })

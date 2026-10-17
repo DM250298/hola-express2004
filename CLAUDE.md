@@ -525,6 +525,14 @@ pestañas por `?tab=`:
   marcan) y ya pasaron. Tilda pasos (`fn_tarea_checklist_paso`), deja nota para el
   próximo turno al completar y muestra con quién está de turno (`fn_mi_turno`).
   Cada uno ve solo lo suyo (`tareaEsDe`), también la encargada en el celular.
+- **Avisos de atraso al celular (Etapa 6 B, migs 297–298)**: `push_subscriptions.temas`
+  separa producción y tareas (`usePush(tema)`; `usePushProduccion` es un atajo). El
+  proceso `hex-tareas-push` (pg_cron + **pg_net**) llama a `/api/cron/avisos-tareas`
+  solo si hay avisos sin mandar, con `Authorization: Bearer` = secreto del Vault
+  `hex_avisos_secret` = env `AVISOS_TAREAS_SECRET` en Vercel; la URL sale del secreto
+  `hex_app_url` (en prueba no se carga: no manda nada). Un envío por aviso en
+  `tareas_avisos_push`. Botón "Recibir avisos de atrasos" en Alertas y Mi turno
+  (solo gestión/admin). iPhone: solo con HEX instalado en la pantalla de inicio.
 
 ### 11. Reportes (`/reportes`)
 Ventas, top productos, rotación, mermas, export PDF.

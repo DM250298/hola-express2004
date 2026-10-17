@@ -1,7 +1,7 @@
 import { sendNotification, setVapidDetails } from 'web-push'
 
 /**
- * Envío de Web Push desde el servidor (cron de avisos de producción).
+ * Envío de Web Push desde el servidor (avisos de producción y de tareas atrasadas).
  *
  * ⚠️ SOLO servidor: importa `web-push` (Node) y usa VAPID_PRIVATE_KEY, que es
  * secreta. Nunca importar desde un componente cliente.
@@ -36,6 +36,8 @@ export interface PayloadPush {
   title: string
   body: string
   url: string
+  /** Notificaciones con el mismo tag se reemplazan (default: producción). */
+  tag?: string
 }
 
 export type ResultadoEnvio =

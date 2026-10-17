@@ -23,6 +23,7 @@ import { hoyIso } from '@/lib/utils/periodos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { TareasAtrasadas } from '@/components/rrhh/AvisosTareas'
+import { BotonAvisosTareas } from '@/components/rrhh/BotonAvisosTareas'
 import {
   useAlertas,
   useEvaluarAlertasAhora,
@@ -113,7 +114,8 @@ export function PantallaAlertas({ puedeEditarReglas }: { puedeEditarReglas: bool
             desaparece.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <BotonAvisosTareas />
           {resumen?.ultima_evaluacion && (
             <span className="text-xs text-[#6f3a2a]">
               Revisado {hace(resumen.ultima_evaluacion)}
