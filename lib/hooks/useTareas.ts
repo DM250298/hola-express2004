@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   cancelarTarea,
   checklistPaso,
+  getAQuienLeToca,
   getCambiosSemana,
   getPedidosPendientes,
   getPersonasTurno,
@@ -443,6 +444,16 @@ export function usePersonasTurno(fecha: string, turnoId: number | null, habilita
     queryKey: [...TAREAS_KEY, 'personas', fecha, turnoId],
     queryFn: () => getPersonasTurno(fecha, turnoId as number),
     enabled: habilitado && !!fecha && turnoId !== null,
+    staleTime: 60 * 1000,
+  })
+}
+
+/** A quién le toca una tarea por puesto ese día (Nueva tarea). */
+export function useAQuienLeToca(fecha: string, turnoId: number | null, puestos: string[]) {
+  return useQuery({
+    queryKey: [...TAREAS_KEY, 'le-toca', fecha, turnoId, [...puestos].sort().join(',')],
+    queryFn: () => getAQuienLeToca(fecha, turnoId as number, puestos),
+    enabled: !!fecha && turnoId !== null && puestos.length > 0,
     staleTime: 60 * 1000,
   })
 }

@@ -249,6 +249,8 @@ export type NuevaTareaPuntual = {
   requiereEvidencia?: boolean
   checklist?: string[]
   tipoActividad?: TipoActividadTarea
+  /** Avisar si se atrasa más de N minutos (null = sin aviso). */
+  avisarAtrasoMin?: number | null
 }
 
 /**
@@ -273,6 +275,7 @@ export async function crearTareaPuntual(t: NuevaTareaPuntual): Promise<string[]>
     p_requiere_evidencia: t.requiereEvidencia ?? false,
     p_checklist: t.checklist ?? [],
     p_tipo_actividad: t.tipoActividad ?? 'puntual',
+    p_avisar_atraso_min: t.avisarAtrasoMin ?? null,
   })
   if (error) throw error
   return (data as string[]) ?? []
@@ -456,6 +459,22 @@ export async function getPersonasTurno(
   })
   if (error) throw error
   return (data ?? []) as { empleado_id: number; nombre: string; rol_operativo: string }[]
+}
+
+/** A quién le tocaría una tarea por puesto ese día (fn_a_quien_le_toca). */
+export async function getAQuienLeToca(
+  fecha: string,
+  turnoId: number,
+  puestos: string[]
+): Promise<{ empleado_id: number; nombre: string; notas: string | null }[]> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_a_quien_le_toca', {
+    p_fecha: fecha,
+    p_turno_id: turnoId,
+    p_puestos: puestos,
+  })
+  if (error) throw error
+  return (data ?? []) as { empleado_id: number; nombre: string; notas: string | null }[]
 }
 
 /** Pedido de quitar con el título de la tarea de la rutina. */
