@@ -400,6 +400,8 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 298 | `298_tareas_v2_cron_push.sql` | ✅ aplicada | 2026-10-17 (prueba sin secretos + producción con Vault y AVISOS_TAREAS_SECRET en Vercel; control en 0) | **requiere pg_net.** `fn_tareas_push_pendiente()` + proceso `hex-tareas-push` (minutos 1, 6, 11…): llama a `/api/cron/avisos-tareas` con la clave del Vault (`hex_app_url`, `hex_avisos_secret`); sin secretos (prueba) no hace nada |
 | 299 | `299_tareas_v2_notificaciones.sql` | ✅ aplicada | 2026-10-17 (prueba + producción) | Etapa 7: temas `mis_tareas` / `inicio_tareas`; cola `notificaciones_push` (uno por tipo, tarea y persona; solo el sistema) y `fn_notificaciones_generar()` (urgentes = puntual alta del turno en curso; inicio = con horario, empezó hace < 10 min) |
 | 300 | `300_tareas_v2_push_cada_minuto.sql` | ✅ aplicada | 2026-10-17 (prueba + producción; control en 0) | `fn_tareas_push_pendiente` v2 (también mira la cola) y `hex-tareas-push` cada minuto: genera la cola y llama a la app |
+| 301 | `301_rutina_lote_guardar.sql` | ✅ aplicada | 2026-10-18 (prueba + producción) | `fn_rutina_lote_guardar` (interna): valida y crea/actualiza la rutina por `codigo`, desactiva códigos pedidos desde la vigencia; registro con origen `carga_rutina` |
+| 302 | `302_rutina_cargar_lote.sql` | ✅ aplicada | 2026-10-18 (prueba + producción) | `fn_rutina_cargar_lote` (solo service_role, la usa `scripts/cargar-rutina-3-turnos.ts`): carga en una transacción, arma el día de la vigencia, simula la semana; modo prueba deshace todo. Usada para cargar las 51 tareas de `docs/rutina-3-turnos.json` (rigen desde el 19/10) |
 
 ## Dos bases de Supabase (2026-09-17)
 
