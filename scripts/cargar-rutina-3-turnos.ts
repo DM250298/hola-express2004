@@ -10,7 +10,7 @@
 // ║    node scripts/cargar-rutina-3-turnos.ts --dry-run     (no escribe)   ║
 // ║    node scripts/cargar-rutina-3-turnos.ts --aplicar --proyecto <ref>   ║
 // ║  Opciones: --env <archivo> (por defecto .env.local = base de prueba),  ║
-// ║  --vigencia AAAA-MM-DD (por defecto 2026-10-19), --desactivar M01,…    ║
+// ║  --vigencia AAAA-MM-DD (por defecto 2026-10-20), --desactivar M01,…    ║
 // ║  y, con --validar, --guardar-lote <archivo> (el lote ya convertido).   ║
 // ║  Las claves salen del archivo de entorno o de las variables            ║
 // ║  NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY. Nunca del repo.  ║
@@ -79,7 +79,7 @@ if (!modo) {
   console.error('Elegí un modo: --validar (sin base), --dry-run (no escribe) o --aplicar --proyecto <ref>.')
   process.exit(1)
 }
-const vigencia = valor('--vigencia') ?? '2026-10-19'
+const vigencia = valor('--vigencia') ?? '2026-10-20'
 const desactivar = (valor('--desactivar') ?? '').split(',').map((s) => s.trim()).filter(Boolean)
 
 function cargarEnv(ruta: string): Record<string, string> {
