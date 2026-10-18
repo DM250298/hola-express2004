@@ -2,8 +2,9 @@
 -- ║  BORRADO DE LOS DATOS DE PRUEBA: tareas, asistencia, incidencias    ║
 -- ║  y sanciones (pedido de Damián, 2026-10-18).                        ║
 -- ║                                                                     ║
--- ║  ⚠️  NO SE PUEDE DESHACER. Antes: respaldo del día en Supabase      ║
--- ║  (Database → Backups) y correr tareas_v2_borrar_todo_vista_previa.  ║
+-- ║  ⚠️  Antes: correr tareas_v2_borrar_todo_vista_previa. Antes de     ║
+-- ║  borrar copia las 16 tablas al esquema respaldo_borrado_prueba      ║
+-- ║  (se puede recuperar sin restaurar la base entera).                 ║
 -- ║                                                                     ║
 -- ║  Borra SOLO estas 16 tablas:                                        ║
 -- ║   · tareas: agenda, participantes, rutina, asignados de la rutina,  ║
@@ -44,6 +45,23 @@ begin
   if v is not null then
     raise exception 'Se frena: hay tablas de otra área que apuntan a estas (%). No se borró nada.', v;
   end if;
+end $$;
+
+-- 1b. Respaldo propio de las 16 tablas, dentro de la base, en el esquema
+--     respaldo_borrado_prueba (la API no lo expone; nadie de la app lo ve). Sirve
+--     para recuperar algo SIN restaurar la base entera (que pisaría ventas y stock).
+--     Si ya existía de una corrida anterior, se frena para no pisarlo.
+do $$
+declare r record;
+begin
+  if exists (select 1 from pg_namespace where nspname = 'respaldo_borrado_prueba') then
+    raise exception 'Ya existe el respaldo respaldo_borrado_prueba (de una corrida anterior). No se borró nada.';
+  end if;
+  create schema respaldo_borrado_prueba;
+  revoke all on schema respaldo_borrado_prueba from public, anon, authenticated;
+  for r in select tabla from _borrar loop
+    execute format('create table respaldo_borrado_prueba.%I as table public.%I', r.tabla, r.tabla);
+  end loop;
 end $$;
 
 -- 2. Se saca el blindaje del registro (vuelve en el paso 4).
@@ -93,5 +111,7 @@ end $$;
 
 commit;
 
--- Lo que se borró (si ves esta tabla, quedó todo hecho):
+-- Lo que se borró (si ves esta tabla, quedó todo hecho). El respaldo queda en el
+-- esquema respaldo_borrado_prueba; cuando estés seguro, se borra con:
+--   drop schema respaldo_borrado_prueba cascade;
 select tabla, filas from _borrado order by orden;
