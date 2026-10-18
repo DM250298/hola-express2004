@@ -70,9 +70,8 @@
     select 271, 'falta el índice único por empleado_rutina_id'
     where to_regclass('public.tareas_turno_plantilla_fecha_rutina_uq') is null
     union all
-    select 287, 'faltan tareas del Anexo A (tienen que ser 44)'
-    where (select count(*) from public.tareas_recurrentes where codigo is not null) <> 44
-    union all
+    -- (Desde el borrado de los datos de prueba del 2026-10-18 la rutina se carga de a una:
+    --  ya no se controla que estén las 44 del Anexo A.)
     select 288, 'falta el evento registro_completo'
     where not exists (select 1 from public.tareas_eventos where tipo = 'registro_completo')
     union all

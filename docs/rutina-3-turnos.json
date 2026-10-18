@@ -1,0 +1,2241 @@
+{
+  "version": "2026-10-18",
+  "origen": "Carga de tareas HEX.xlsx, hojas Rutina y Pasos",
+  "total_tareas": 51,
+  "convencion_dias": "1 = lunes … 7 = domingo (isodow de PostgreSQL). La noche pertenece al día en que arranca: la noche del lunes empieza el lunes a las 23:00.",
+  "turnos": {
+    "Mañana": {
+      "inicio": "07:00",
+      "fin": "15:00",
+      "inicio_min": 420
+    },
+    "Tarde": {
+      "inicio": "15:00",
+      "fin": "23:00",
+      "inicio_min": 900
+    },
+    "Noche": {
+      "inicio": "23:00",
+      "fin": "07:00",
+      "inicio_min": 1380
+    }
+  },
+  "puestos_a_mapear": {
+    "Encargada de Sucursal": "Existe en HEX (Encargada de sucursal). Sonia, turno mañana.",
+    "Cajero/a": "Existe en HEX.",
+    "Fiambrero/Producción": "Existe en HEX.",
+    "Encargada de turno": "A confirmar: el puesto que tiene Rebeca en el cronograma de la tarde.",
+    "Vendedor de turno": "A confirmar: el puesto del vendedor de la noche (está solo), o todos los del turno."
+  },
+  "no_se_carga": {
+    "Gestión (96 a 135)": "Falta dividirla y asignar responsables.",
+    "Normas (1, 3, 59, 63-65, 67-69, 71, 72-79, 81-85)": "No se tildan; entran como pasos de la auditoría T151.",
+    "Funciones HEX (2, 60-62, 66, 70)": "Las registra HEX o un botón, no son tareas.",
+    "Pasos sueltos (45-58, 80)": "Ya están como pasos de los traspasos, cierres y tandas.",
+    "Incidencias (136 a 145)": "Son protocolos, no tareas de rutina.",
+    "Distribución (146 a 150)": "En pausa.",
+    "44": "Quedó unida a la 43."
+  },
+  "esperado_en_la_agenda": {
+    "Lun": {
+      "Mañana": 15,
+      "Tarde": 14,
+      "Noche": 15
+    },
+    "Mar": {
+      "Mañana": 14,
+      "Tarde": 14,
+      "Noche": 14
+    },
+    "Mié": {
+      "Mañana": 15,
+      "Tarde": 14,
+      "Noche": 14
+    },
+    "Jue": {
+      "Mañana": 15,
+      "Tarde": 14,
+      "Noche": 14
+    },
+    "Vie": {
+      "Mañana": 14,
+      "Tarde": 14,
+      "Noche": 14
+    },
+    "Sáb": {
+      "Mañana": 14,
+      "Tarde": 14,
+      "Noche": 14
+    },
+    "Dom": {
+      "Mañana": 13,
+      "Tarde": 14,
+      "Noche": 14
+    }
+  },
+  "tareas": [
+    {
+      "codigo": "T004",
+      "numero_listado": 4,
+      "turno": "Mañana",
+      "titulo": "Traspaso con el turno noche: caja, novedades y pedidos pendientes",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Fichar el ingreso en el reloj (tolerancia de 10 minutos; si el reloj falla, anotar la hora y avisar)\n2. Presentación personal: uniforme limpio, pelo recogido, sin anillos ni pulseras en fiambrería\n3. Leer el cuaderno de novedades: pendientes, faltantes, encargos y fallas\n4. Recibir la caja: contar el fondo con quien sale, firmar los dos y abrir el turno en HEX\n5. Verificar los medios de cobro: Posnet, QR, internet, impresora y balanza\n6. Recorrida del local: heladeras en temperatura, luces, baño, piso y góndolas sin huecos\n7. Revisar que todas las cámaras graben",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "07:00",
+      "hora_fin": "07:15",
+      "inicio_offset_min": 0,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Fichar el ingreso en el reloj (tolerancia de 10 minutos; si el reloj falla, anotar la hora y avisar)",
+          "se_marca": "sola_reloj",
+          "viene_del_numero": 45
+        },
+        {
+          "orden": 2,
+          "texto": "Presentación personal: uniforme limpio, pelo recogido, sin anillos ni pulseras en fiambrería",
+          "se_marca": "a_mano",
+          "viene_del_numero": 46
+        },
+        {
+          "orden": 3,
+          "texto": "Leer el cuaderno de novedades: pendientes, faltantes, encargos y fallas",
+          "se_marca": "a_mano",
+          "viene_del_numero": 47
+        },
+        {
+          "orden": 4,
+          "texto": "Recibir la caja: contar el fondo con quien sale, firmar los dos y abrir el turno en HEX",
+          "se_marca": "sola_caja_hex",
+          "viene_del_numero": 48
+        },
+        {
+          "orden": 5,
+          "texto": "Verificar los medios de cobro: Posnet, QR, internet, impresora y balanza",
+          "se_marca": "a_mano",
+          "viene_del_numero": 49
+        },
+        {
+          "orden": 6,
+          "texto": "Recorrida del local: heladeras en temperatura, luces, baño, piso y góndolas sin huecos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 50
+        },
+        {
+          "orden": 7,
+          "texto": "Revisar que todas las cámaras graben",
+          "se_marca": "a_mano",
+          "viene_del_numero": 51
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T005",
+      "numero_listado": 5,
+      "turno": "Mañana",
+      "titulo": "Exhibir el pan, las facturas y las medialunas de las 06:30",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Producción y fiambrería",
+      "puesto": "Fiambrero/Producción",
+      "puestos": [
+        "Fiambrero/Producción"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "07:05",
+      "hora_fin": "07:15",
+      "inicio_offset_min": 5,
+      "duracion_min": 10,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T006",
+      "numero_listado": 6,
+      "turno": "Mañana",
+      "titulo": "Controlar los productos para la elaboración de los próximos días",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "07:30",
+      "hora_fin": "07:45",
+      "inicio_offset_min": 30,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T007",
+      "numero_listado": 7,
+      "turno": "Mañana",
+      "titulo": "Preparar el área de caja: exhibidor, combos, golosinas y precios",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Atención y caja",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "07:30",
+      "hora_fin": "09:30",
+      "inicio_offset_min": 30,
+      "duracion_min": 120,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "atencion_caja",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T008",
+      "numero_listado": 8,
+      "turno": "Mañana",
+      "titulo": "1.ª tanda de producción: milanesas y sándwiches",
+      "detalle": "Hasta el stock mínimo de cada producto, con la receta impresa.",
+      "descripcion_con_pasos": "Hasta el stock mínimo de cada producto, con la receta impresa.\n\nPasos:\n1. Controlar los insumos críticos antes de producir\n2. Contar lo que quedó y producir solo hasta el mínimo de cada producto\n3. Rotular cada unidad con fecha de elaboración y vencimiento\n4. Registrar en HEX lo producido: unidades, insumos y hecho contra el plan",
+      "area": "Producción y fiambrería",
+      "puesto": "Fiambrero/Producción",
+      "puestos": [
+        "Fiambrero/Producción"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "07:30",
+      "hora_fin": "10:30",
+      "inicio_offset_min": 30,
+      "duracion_min": 180,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Controlar los insumos críticos antes de producir",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 2,
+          "texto": "Contar lo que quedó y producir solo hasta el mínimo de cada producto",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 3,
+          "texto": "Rotular cada unidad con fecha de elaboración y vencimiento",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 4,
+          "texto": "Registrar en HEX lo producido: unidades, insumos y hecho contra el plan",
+          "se_marca": "sola_produccion_hex",
+          "viene_del_numero": 80
+        }
+      ],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T009",
+      "numero_listado": 9,
+      "turno": "Mañana",
+      "titulo": "Reposición y control de góndolas, etiquetas de precio",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "08:00",
+      "hora_fin": "10:30",
+      "inicio_offset_min": 60,
+      "duracion_min": 150,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T010",
+      "numero_listado": 10,
+      "turno": "Mañana",
+      "titulo": "Recepción de proveedores: remito, vencimientos y carga en HEX",
+      "detalle": "Controlar el remito contra el pedido, rechazar lo roto o vencido, cargar el ingreso con lote y vencimiento y guardar lo nuevo atrás.",
+      "descripcion_con_pasos": "Controlar el remito contra el pedido, rechazar lo roto o vencido, cargar el ingreso con lote y vencimiento y guardar lo nuevo atrás.",
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "08:00",
+      "hora_fin": "15:00",
+      "inicio_offset_min": 60,
+      "duracion_min": 420,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "de lunes a sábado"
+    },
+    {
+      "codigo": "T011",
+      "numero_listado": 11,
+      "turno": "Mañana",
+      "titulo": "Control de temperaturas (1 de 3)",
+      "detalle": "Heladeras de 0 a 5 °C y freezers a −18 °C o menos. Si alguna está fuera de rango, ver la incidencia 139.",
+      "descripcion_con_pasos": "Heladeras de 0 a 5 °C y freezers a −18 °C o menos. Si alguna está fuera de rango, ver la incidencia 139.",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "08:15",
+      "hora_fin": "08:30",
+      "inicio_offset_min": 75,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": true,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T012",
+      "numero_listado": 12,
+      "turno": "Mañana",
+      "titulo": "Vencimientos: lo vencido afuera y lo que vence en 30 días a oferta o combo",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "10:30",
+      "hora_fin": "11:30",
+      "inicio_offset_min": 210,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T013",
+      "numero_listado": 13,
+      "turno": "Mañana",
+      "titulo": "Verificar el sugerido de compras de HEX contra lo físico",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "11:30",
+      "hora_fin": "11:45",
+      "inicio_offset_min": 270,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T014",
+      "numero_listado": 14,
+      "turno": "Mañana",
+      "titulo": "Limpieza de fiambrería y cocina",
+      "detalle": "Máquina de cortar desarmada y lavada, mesadas desinfectadas, film y fecha en todo lo abierto.",
+      "descripcion_con_pasos": "Máquina de cortar desarmada y lavada, mesadas desinfectadas, film y fecha en todo lo abierto.",
+      "area": "Producción y fiambrería",
+      "puesto": "Fiambrero/Producción",
+      "puestos": [
+        "Fiambrero/Producción"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "14:00",
+      "hora_fin": "14:40",
+      "inicio_offset_min": 420,
+      "duracion_min": 40,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": true,
+      "pasos": [],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T015",
+      "numero_listado": 15,
+      "turno": "Mañana",
+      "titulo": "Reponer bebidas frías para la tarde",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "14:30",
+      "hora_fin": "14:45",
+      "inicio_offset_min": 450,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T016",
+      "numero_listado": 16,
+      "turno": "Mañana",
+      "titulo": "Cierre de turno: arqueo ciego, novedades y entrega",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Reponer góndolas y heladeras para el turno que entra\n2. Limpiar el sector: mostrador, caja, fiambrería, bachas y tachos\n3. Cierre de caja: arqueo ciego y cierre de Posnet y QR contra HEX; las diferencias, por escrito\n4. Rendir Rapipago y lo cobrado por el cadete\n5. Entregar la caja: contar el fondo con quien entra y firmar los dos\n6. Escribir las novedades: faltantes, roturas, mermas, reclamos, encargos y pendientes\n7. Fichar la salida, después de entregar",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "14:40",
+      "hora_fin": "15:00",
+      "inicio_offset_min": 460,
+      "duracion_min": 20,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Reponer góndolas y heladeras para el turno que entra",
+          "se_marca": "a_mano",
+          "viene_del_numero": 52
+        },
+        {
+          "orden": 2,
+          "texto": "Limpiar el sector: mostrador, caja, fiambrería, bachas y tachos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 53
+        },
+        {
+          "orden": 3,
+          "texto": "Cierre de caja: arqueo ciego y cierre de Posnet y QR contra HEX; las diferencias, por escrito",
+          "se_marca": "sola_caja_hex",
+          "viene_del_numero": 54
+        },
+        {
+          "orden": 4,
+          "texto": "Rendir Rapipago y lo cobrado por el cadete",
+          "se_marca": "a_mano",
+          "viene_del_numero": 55
+        },
+        {
+          "orden": 5,
+          "texto": "Entregar la caja: contar el fondo con quien entra y firmar los dos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 56
+        },
+        {
+          "orden": 6,
+          "texto": "Escribir las novedades: faltantes, roturas, mermas, reclamos, encargos y pendientes",
+          "se_marca": "a_mano",
+          "viene_del_numero": 57
+        },
+        {
+          "orden": 7,
+          "texto": "Fichar la salida, después de entregar",
+          "se_marca": "sola_reloj",
+          "viene_del_numero": 58
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T086",
+      "numero_listado": 86,
+      "turno": "Mañana",
+      "titulo": "Limpieza profunda de una heladera por día",
+      "detalle": "Lunes heladera 1, martes heladera 2, miércoles heladera 3, jueves freezer, viernes vitrina de fiambrería.",
+      "descripcion_con_pasos": "Lunes heladera 1, martes heladera 2, miércoles heladera 3, jueves freezer, viernes vitrina de fiambrería.",
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": true,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "de lunes a viernes"
+    },
+    {
+      "codigo": "T088",
+      "numero_listado": 88,
+      "turno": "Mañana",
+      "titulo": "Conteo cíclico de inventario de un sector",
+      "detalle": "El sector lo asigna HEX y el conteo se carga en Conteo físico.",
+      "descripcion_con_pasos": "El sector lo asigna HEX y el conteo se carga en Conteo físico.",
+      "area": "Control y seguridad",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        3
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "miércoles"
+    },
+    {
+      "codigo": "T090",
+      "numero_listado": 90,
+      "turno": "Mañana",
+      "titulo": "Reporte de lo que vence en los próximos 30 días",
+      "detalle": "Sacarlo de HEX y pasar todo a oferta o combo. Si a 10 días no se vendió, bajar más el precio.",
+      "descripcion_con_pasos": "Sacarlo de HEX y pasar todo a oferta o combo. Si a 10 días no se vendió, bajar más el precio.",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        4
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "jueves"
+    },
+    {
+      "codigo": "T091",
+      "numero_listado": 91,
+      "turno": "Mañana",
+      "titulo": "Refuerzo de stock para el fin de semana",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        6
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "sábado"
+    },
+    {
+      "codigo": "T093",
+      "numero_listado": 93,
+      "turno": "Mañana",
+      "titulo": "Orden general de depósito",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "domingo"
+    },
+    {
+      "codigo": "T151",
+      "numero_listado": 151,
+      "turno": "Mañana",
+      "titulo": "Auditoría de normas",
+      "detalle": "Recorrer las normas del local con el checklist y anotar las que no se cumplen.",
+      "descripcion_con_pasos": "Recorrer las normas del local con el checklist y anotar las que no se cumplen.\n\nPasos:\n1. Atención y ventas a clientes: saludar, ofrecer el combo o la oferta del día y no dejar la caja sola\n2. Venta de fiambre y sándwiches: la fiambrería atendida todo el turno\n3. Cobrar bien: todo por HEX, escanear cada producto, ticket en cada venta y vuelto contado en voz alta\n4. Rapipago: cobrar con factura o código válido, dar el comprobante y separar el efectivo en el arqueo\n5. Reposición continua: ningún producto top con hueco más de 30 minutos\n6. Orden y limpieza al paso: mostrador, zona de caja y vidrios de las heladeras\n7. Reponer con FEFO: lo que vence primero, adelante\n8. Seguridad: no contar plata a la vista, depósito cerrado y mochilas fuera del mostrador\n9. Venta responsable: nada de alcohol ni tabaco a menores y respetar el horario legal del alcohol\n10. Música y ambiente acordes\n11. Controlar los billetes grandes con marcador o luz UV\n12. Tener cambio suficiente: pedir monedas y billetes chicos antes de quedarse sin\n13. Anulaciones y devoluciones solo con autorización de la encargada y con el motivo en HEX\n14. Fiado o cuenta corriente solo a clientes autorizados por escrito\n15. Tener reserva de rollos de ticket, bolsas y lapiceras\n16. Higiene: manos lavadas al entrar al sector, cofia o pelo recogido, guantes o pinza\n17. Fiambre y queso abiertos: filmados, rotulados con la fecha y descartados según la tabla de vida útil\n18. Pesar exacto y etiquetar con el precio de la balanza\n19. Registrar toda merma en HEX con el motivo: vencidos, roturas, puntas y producción no vendida\n20. Armar los combos de fiambrería del plan comercial vigente\n21. Heladeras sin sobrecargar y con las puertas cerradas\n22. Baño: limpiarlo una vez por turno y reponer papel y jabón\n23. Productos de limpieza separados de los alimentos y rotulados",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de Sucursal",
+      "puestos": [
+        "Encargada de Sucursal"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        1
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Atención y ventas a clientes: saludar, ofrecer el combo o la oferta del día y no dejar la caja sola",
+          "se_marca": "a_mano",
+          "viene_del_numero": 1
+        },
+        {
+          "orden": 2,
+          "texto": "Venta de fiambre y sándwiches: la fiambrería atendida todo el turno",
+          "se_marca": "a_mano",
+          "viene_del_numero": 3
+        },
+        {
+          "orden": 3,
+          "texto": "Cobrar bien: todo por HEX, escanear cada producto, ticket en cada venta y vuelto contado en voz alta",
+          "se_marca": "a_mano",
+          "viene_del_numero": 59
+        },
+        {
+          "orden": 4,
+          "texto": "Rapipago: cobrar con factura o código válido, dar el comprobante y separar el efectivo en el arqueo",
+          "se_marca": "a_mano",
+          "viene_del_numero": 63
+        },
+        {
+          "orden": 5,
+          "texto": "Reposición continua: ningún producto top con hueco más de 30 minutos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 64
+        },
+        {
+          "orden": 6,
+          "texto": "Orden y limpieza al paso: mostrador, zona de caja y vidrios de las heladeras",
+          "se_marca": "a_mano",
+          "viene_del_numero": 65
+        },
+        {
+          "orden": 7,
+          "texto": "Reponer con FEFO: lo que vence primero, adelante",
+          "se_marca": "a_mano",
+          "viene_del_numero": 67
+        },
+        {
+          "orden": 8,
+          "texto": "Seguridad: no contar plata a la vista, depósito cerrado y mochilas fuera del mostrador",
+          "se_marca": "a_mano",
+          "viene_del_numero": 68
+        },
+        {
+          "orden": 9,
+          "texto": "Venta responsable: nada de alcohol ni tabaco a menores y respetar el horario legal del alcohol",
+          "se_marca": "a_mano",
+          "viene_del_numero": 69
+        },
+        {
+          "orden": 10,
+          "texto": "Música y ambiente acordes",
+          "se_marca": "a_mano",
+          "viene_del_numero": 71
+        },
+        {
+          "orden": 11,
+          "texto": "Controlar los billetes grandes con marcador o luz UV",
+          "se_marca": "a_mano",
+          "viene_del_numero": 72
+        },
+        {
+          "orden": 12,
+          "texto": "Tener cambio suficiente: pedir monedas y billetes chicos antes de quedarse sin",
+          "se_marca": "a_mano",
+          "viene_del_numero": 73
+        },
+        {
+          "orden": 13,
+          "texto": "Anulaciones y devoluciones solo con autorización de la encargada y con el motivo en HEX",
+          "se_marca": "a_mano",
+          "viene_del_numero": 74
+        },
+        {
+          "orden": 14,
+          "texto": "Fiado o cuenta corriente solo a clientes autorizados por escrito",
+          "se_marca": "a_mano",
+          "viene_del_numero": 75
+        },
+        {
+          "orden": 15,
+          "texto": "Tener reserva de rollos de ticket, bolsas y lapiceras",
+          "se_marca": "a_mano",
+          "viene_del_numero": 76
+        },
+        {
+          "orden": 16,
+          "texto": "Higiene: manos lavadas al entrar al sector, cofia o pelo recogido, guantes o pinza",
+          "se_marca": "a_mano",
+          "viene_del_numero": 77
+        },
+        {
+          "orden": 17,
+          "texto": "Fiambre y queso abiertos: filmados, rotulados con la fecha y descartados según la tabla de vida útil",
+          "se_marca": "a_mano",
+          "viene_del_numero": 78
+        },
+        {
+          "orden": 18,
+          "texto": "Pesar exacto y etiquetar con el precio de la balanza",
+          "se_marca": "a_mano",
+          "viene_del_numero": 79
+        },
+        {
+          "orden": 19,
+          "texto": "Registrar toda merma en HEX con el motivo: vencidos, roturas, puntas y producción no vendida",
+          "se_marca": "a_mano",
+          "viene_del_numero": 81
+        },
+        {
+          "orden": 20,
+          "texto": "Armar los combos de fiambrería del plan comercial vigente",
+          "se_marca": "a_mano",
+          "viene_del_numero": 82
+        },
+        {
+          "orden": 21,
+          "texto": "Heladeras sin sobrecargar y con las puertas cerradas",
+          "se_marca": "a_mano",
+          "viene_del_numero": 83
+        },
+        {
+          "orden": 22,
+          "texto": "Baño: limpiarlo una vez por turno y reponer papel y jabón",
+          "se_marca": "a_mano",
+          "viene_del_numero": 84
+        },
+        {
+          "orden": 23,
+          "texto": "Productos de limpieza separados de los alimentos y rotulados",
+          "se_marca": "a_mano",
+          "viene_del_numero": 85
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "lunes"
+    },
+    {
+      "codigo": "T017",
+      "numero_listado": 17,
+      "turno": "Tarde",
+      "titulo": "Traspaso con la mañana: caja, producción hecha y pendiente",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Fichar el ingreso en el reloj (tolerancia de 10 minutos; si el reloj falla, anotar la hora y avisar)\n2. Presentación personal: uniforme limpio, pelo recogido, sin anillos ni pulseras en fiambrería\n3. Leer el cuaderno de novedades: pendientes, faltantes, encargos y fallas\n4. Recibir la caja: contar el fondo con quien sale, firmar los dos y abrir el turno en HEX\n5. Verificar los medios de cobro: Posnet, QR, internet, impresora y balanza\n6. Recorrida del local: heladeras en temperatura, luces, baño, piso y góndolas sin huecos\n7. Revisar que todas las cámaras graben",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de turno",
+      "puestos": [
+        "Encargada de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "15:00",
+      "hora_fin": "15:15",
+      "inicio_offset_min": 0,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Fichar el ingreso en el reloj (tolerancia de 10 minutos; si el reloj falla, anotar la hora y avisar)",
+          "se_marca": "sola_reloj",
+          "viene_del_numero": 45
+        },
+        {
+          "orden": 2,
+          "texto": "Presentación personal: uniforme limpio, pelo recogido, sin anillos ni pulseras en fiambrería",
+          "se_marca": "a_mano",
+          "viene_del_numero": 46
+        },
+        {
+          "orden": 3,
+          "texto": "Leer el cuaderno de novedades: pendientes, faltantes, encargos y fallas",
+          "se_marca": "a_mano",
+          "viene_del_numero": 47
+        },
+        {
+          "orden": 4,
+          "texto": "Recibir la caja: contar el fondo con quien sale, firmar los dos y abrir el turno en HEX",
+          "se_marca": "sola_caja_hex",
+          "viene_del_numero": 48
+        },
+        {
+          "orden": 5,
+          "texto": "Verificar los medios de cobro: Posnet, QR, internet, impresora y balanza",
+          "se_marca": "a_mano",
+          "viene_del_numero": 49
+        },
+        {
+          "orden": 6,
+          "texto": "Recorrida del local: heladeras en temperatura, luces, baño, piso y góndolas sin huecos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 50
+        },
+        {
+          "orden": 7,
+          "texto": "Revisar que todas las cámaras graben",
+          "se_marca": "a_mano",
+          "viene_del_numero": 51
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T018",
+      "numero_listado": 18,
+      "turno": "Tarde",
+      "titulo": "2.ª tanda de sándwiches y milanesas hasta el mínimo",
+      "detalle": "Para cubrir la noche y la mañana.",
+      "descripcion_con_pasos": "Para cubrir la noche y la mañana.\n\nPasos:\n1. Controlar los insumos críticos antes de producir\n2. Contar lo que quedó y producir solo hasta el mínimo de cada producto\n3. Rotular cada unidad con fecha de elaboración y vencimiento\n4. Registrar en HEX lo producido: unidades, insumos y hecho contra el plan",
+      "area": "Producción y fiambrería",
+      "puesto": "Fiambrero/Producción",
+      "puestos": [
+        "Fiambrero/Producción"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "15:20",
+      "hora_fin": "17:30",
+      "inicio_offset_min": 20,
+      "duracion_min": 130,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Controlar los insumos críticos antes de producir",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 2,
+          "texto": "Contar lo que quedó y producir solo hasta el mínimo de cada producto",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 3,
+          "texto": "Rotular cada unidad con fecha de elaboración y vencimiento",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 4,
+          "texto": "Registrar en HEX lo producido: unidades, insumos y hecho contra el plan",
+          "se_marca": "sola_produccion_hex",
+          "viene_del_numero": 80
+        }
+      ],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T019",
+      "numero_listado": 19,
+      "turno": "Tarde",
+      "titulo": "Medialunas, 2.ª tanda",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Hornear solo hasta el mínimo de medialunas\n2. Registrar en HEX lo producido",
+      "area": "Producción y fiambrería",
+      "puesto": "Fiambrero/Producción",
+      "puestos": [
+        "Fiambrero/Producción"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "16:00",
+      "hora_fin": "16:15",
+      "inicio_offset_min": 60,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Hornear solo hasta el mínimo de medialunas",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 2,
+          "texto": "Registrar en HEX lo producido",
+          "se_marca": "sola_produccion_hex",
+          "viene_del_numero": 80
+        }
+      ],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T020",
+      "numero_listado": 20,
+      "turno": "Tarde",
+      "titulo": "Control de temperaturas (2 de 3)",
+      "detalle": "Heladeras de 0 a 5 °C y freezers a −18 °C o menos. Si alguna está fuera de rango, ver la incidencia 139.",
+      "descripcion_con_pasos": "Heladeras de 0 a 5 °C y freezers a −18 °C o menos. Si alguna está fuera de rango, ver la incidencia 139.",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de turno",
+      "puestos": [
+        "Encargada de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "16:00",
+      "hora_fin": "16:15",
+      "inicio_offset_min": 60,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": true,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T021",
+      "numero_listado": 21,
+      "turno": "Tarde",
+      "titulo": "Merienda: combo merienda y mate",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Atención y caja",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "16:00",
+      "hora_fin": "18:00",
+      "inicio_offset_min": 60,
+      "duracion_min": 120,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "atencion_caja",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T022",
+      "numero_listado": 22,
+      "turno": "Tarde",
+      "titulo": "Reposición fuerte de bebidas e hielo",
+      "detalle": "Todo a frío antes del pico de la noche.",
+      "descripcion_con_pasos": "Todo a frío antes del pico de la noche.",
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "16:30",
+      "hora_fin": "17:30",
+      "inicio_offset_min": 90,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T023",
+      "numero_listado": 23,
+      "turno": "Tarde",
+      "titulo": "Snacks y golosinas en las góndolas de salida y la caja",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "17:00",
+      "hora_fin": "18:00",
+      "inicio_offset_min": 120,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T024",
+      "numero_listado": 24,
+      "turno": "Tarde",
+      "titulo": "Vereda, frente y cartelera",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "20:00",
+      "hora_fin": "20:15",
+      "inicio_offset_min": 300,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T025",
+      "numero_listado": 25,
+      "turno": "Tarde",
+      "titulo": "Vencimientos de fríos y abiertos",
+      "detalle": "Retirar lo vencido; lo que vence en 30 días, a oferta o combo; descartar los abiertos que pasaron su vida útil.",
+      "descripcion_con_pasos": "Retirar lo vencido; lo que vence en 30 días, a oferta o combo; descartar los abiertos que pasaron su vida útil.",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de turno",
+      "puestos": [
+        "Encargada de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "21:00",
+      "hora_fin": "21:15",
+      "inicio_offset_min": 360,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T026",
+      "numero_listado": 26,
+      "turno": "Tarde",
+      "titulo": "Cierre de fiambrería: máquina, mesadas y rotulado",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Producción y fiambrería",
+      "puesto": "Fiambrero/Producción",
+      "puestos": [
+        "Fiambrero/Producción"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "21:30",
+      "hora_fin": "22:30",
+      "inicio_offset_min": 390,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": true,
+      "pasos": [],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T027",
+      "numero_listado": 27,
+      "turno": "Tarde",
+      "titulo": "Supervisión de la encargada: producción, mermas y faltantes",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Control y seguridad",
+      "puesto": "Encargada de turno",
+      "puestos": [
+        "Encargada de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "22:00",
+      "hora_fin": "22:15",
+      "inicio_offset_min": 420,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T028",
+      "numero_listado": 28,
+      "turno": "Tarde",
+      "titulo": "Basura y cartón",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a + Fiambrero/Producción",
+      "puestos": [
+        "Cajero/a",
+        "Fiambrero/Producción"
+      ],
+      "modo": "grupal",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "22:30",
+      "hora_fin": "22:45",
+      "inicio_offset_min": 450,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T029",
+      "numero_listado": 29,
+      "turno": "Tarde",
+      "titulo": "Cierre: arqueo, rendición de Rapipago y del cadete",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Reponer góndolas y heladeras para el turno que entra\n2. Limpiar el sector: mostrador, caja, fiambrería, bachas y tachos\n3. Cierre de caja: arqueo ciego y cierre de Posnet y QR contra HEX; las diferencias, por escrito\n4. Rendir Rapipago y lo cobrado por el cadete\n5. Entregar la caja: contar el fondo con quien entra y firmar los dos\n6. Escribir las novedades: faltantes, roturas, mermas, reclamos, encargos y pendientes\n7. Fichar la salida, después de entregar",
+      "area": "Control y seguridad",
+      "puesto": "Encargada de turno",
+      "puestos": [
+        "Encargada de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "22:40",
+      "hora_fin": "23:00",
+      "inicio_offset_min": 460,
+      "duracion_min": 20,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Reponer góndolas y heladeras para el turno que entra",
+          "se_marca": "a_mano",
+          "viene_del_numero": 52
+        },
+        {
+          "orden": 2,
+          "texto": "Limpiar el sector: mostrador, caja, fiambrería, bachas y tachos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 53
+        },
+        {
+          "orden": 3,
+          "texto": "Cierre de caja: arqueo ciego y cierre de Posnet y QR contra HEX; las diferencias, por escrito",
+          "se_marca": "sola_caja_hex",
+          "viene_del_numero": 54
+        },
+        {
+          "orden": 4,
+          "texto": "Rendir Rapipago y lo cobrado por el cadete",
+          "se_marca": "a_mano",
+          "viene_del_numero": 55
+        },
+        {
+          "orden": 5,
+          "texto": "Entregar la caja: contar el fondo con quien entra y firmar los dos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 56
+        },
+        {
+          "orden": 6,
+          "texto": "Escribir las novedades: faltantes, roturas, mermas, reclamos, encargos y pendientes",
+          "se_marca": "a_mano",
+          "viene_del_numero": 57
+        },
+        {
+          "orden": 7,
+          "texto": "Fichar la salida, después de entregar",
+          "se_marca": "sola_reloj",
+          "viene_del_numero": 58
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T087",
+      "numero_listado": 87,
+      "turno": "Tarde",
+      "titulo": "Revisar los precios de góndola contra HEX",
+      "detalle": "Lunes almacén, martes bebidas, miércoles lácteos y fríos, viernes golosinas y snacks. Si el cartel no coincide, corregirlo e imprimir la etiqueta nueva.",
+      "descripcion_con_pasos": "Lunes almacén, martes bebidas, miércoles lácteos y fríos, viernes golosinas y snacks. Si el cartel no coincide, corregirlo e imprimir la etiqueta nueva.",
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "lunes, martes, miércoles y viernes"
+    },
+    {
+      "codigo": "T089",
+      "numero_listado": 89,
+      "turno": "Tarde",
+      "titulo": "Cambiar la cartelería de ofertas y combos para el fin de semana",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Atención y caja",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        4
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "atencion_caja",
+      "dias_texto": "jueves"
+    },
+    {
+      "codigo": "T092",
+      "numero_listado": 92,
+      "turno": "Tarde",
+      "titulo": "Limpieza de vidrios y vidriera",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "baja",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        6
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "sábado"
+    },
+    {
+      "codigo": "T094",
+      "numero_listado": 94,
+      "turno": "Tarde",
+      "titulo": "Limpieza de rejillas y burletes de las heladeras",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Cajero/a",
+      "puestos": [
+        "Cajero/a"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "domingo"
+    },
+    {
+      "codigo": "T030",
+      "numero_listado": 30,
+      "turno": "Noche",
+      "titulo": "Traspaso con la tarde: caja chica y pedidos en curso",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Fichar el ingreso en el reloj (tolerancia de 10 minutos; si el reloj falla, anotar la hora y avisar)\n2. Presentación personal: uniforme limpio, pelo recogido, sin anillos ni pulseras en fiambrería\n3. Leer el cuaderno de novedades: pendientes, faltantes, encargos y fallas\n4. Recibir la caja: contar el fondo con quien sale, firmar los dos y abrir el turno en HEX\n5. Verificar los medios de cobro: Posnet, QR, internet, impresora y balanza\n6. Recorrida del local: heladeras en temperatura, luces, baño, piso y góndolas sin huecos\n7. Revisar que todas las cámaras graben",
+      "area": "Control y seguridad",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "23:00",
+      "hora_fin": "23:15",
+      "inicio_offset_min": 0,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Fichar el ingreso en el reloj (tolerancia de 10 minutos; si el reloj falla, anotar la hora y avisar)",
+          "se_marca": "sola_reloj",
+          "viene_del_numero": 45
+        },
+        {
+          "orden": 2,
+          "texto": "Presentación personal: uniforme limpio, pelo recogido, sin anillos ni pulseras en fiambrería",
+          "se_marca": "a_mano",
+          "viene_del_numero": 46
+        },
+        {
+          "orden": 3,
+          "texto": "Leer el cuaderno de novedades: pendientes, faltantes, encargos y fallas",
+          "se_marca": "a_mano",
+          "viene_del_numero": 47
+        },
+        {
+          "orden": 4,
+          "texto": "Recibir la caja: contar el fondo con quien sale, firmar los dos y abrir el turno en HEX",
+          "se_marca": "sola_caja_hex",
+          "viene_del_numero": 48
+        },
+        {
+          "orden": 5,
+          "texto": "Verificar los medios de cobro: Posnet, QR, internet, impresora y balanza",
+          "se_marca": "a_mano",
+          "viene_del_numero": 49
+        },
+        {
+          "orden": 6,
+          "texto": "Recorrida del local: heladeras en temperatura, luces, baño, piso y góndolas sin huecos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 50
+        },
+        {
+          "orden": 7,
+          "texto": "Revisar que todas las cámaras graben",
+          "se_marca": "a_mano",
+          "viene_del_numero": 51
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T031",
+      "numero_listado": 31,
+      "turno": "Noche",
+      "titulo": "Atención con el local abierto, WhatsApp y delivery",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Atención y caja",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "23:00",
+      "hora_fin": "00:00",
+      "inicio_offset_min": 0,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "atencion_caja",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T032",
+      "numero_listado": 32,
+      "turno": "Noche",
+      "titulo": "Reposición rápida antes de pasar a reja",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "23:15",
+      "hora_fin": "00:00",
+      "inicio_offset_min": 15,
+      "duracion_min": 45,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T033",
+      "numero_listado": 33,
+      "turno": "Noche",
+      "titulo": "Pasar a atención por reja",
+      "detalle": "Desde las 00:00 no se abre la reja ni la puerta, tampoco para el cadete.",
+      "descripcion_con_pasos": "Desde las 00:00 no se abre la reja ni la puerta, tampoco para el cadete.",
+      "area": "Control y seguridad",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "00:00",
+      "hora_fin": "00:15",
+      "inicio_offset_min": 60,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T034",
+      "numero_listado": 34,
+      "turno": "Noche",
+      "titulo": "Delivery por reja; a la 01:00 se corta la toma de pedidos",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Atención y caja",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "00:00",
+      "hora_fin": "01:00",
+      "inicio_offset_min": 60,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "atencion_caja",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T035",
+      "numero_listado": 35,
+      "turno": "Noche",
+      "titulo": "Cierre del delivery y rendición final del cadete",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Control y seguridad",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "01:00",
+      "hora_fin": "01:15",
+      "inicio_offset_min": 120,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T036",
+      "numero_listado": 36,
+      "turno": "Noche",
+      "titulo": "Reposición profunda y frenteo de todo el local",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "01:00",
+      "hora_fin": "02:30",
+      "inicio_offset_min": 120,
+      "duracion_min": 90,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T037",
+      "numero_listado": 37,
+      "turno": "Noche",
+      "titulo": "Control de temperaturas (3 de 3)",
+      "detalle": "Heladeras de 0 a 5 °C y freezers a −18 °C o menos. Si alguna está fuera de rango, ver la incidencia 139.",
+      "descripcion_con_pasos": "Heladeras de 0 a 5 °C y freezers a −18 °C o menos. Si alguna está fuera de rango, ver la incidencia 139.",
+      "area": "Control y seguridad",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "02:00",
+      "hora_fin": "02:15",
+      "inicio_offset_min": 180,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": true,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T038",
+      "numero_listado": 38,
+      "turno": "Noche",
+      "titulo": "Limpieza a fondo: pisos, baño y depósito",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "02:30",
+      "hora_fin": "04:00",
+      "inicio_offset_min": 210,
+      "duracion_min": 90,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T039",
+      "numero_listado": 39,
+      "turno": "Noche",
+      "titulo": "Orden de depósito y cartón atado",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "media",
+      "sin_hora_fija": false,
+      "hora_inicio": "04:00",
+      "hora_fin": "04:45",
+      "inicio_offset_min": 300,
+      "duracion_min": 45,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T040",
+      "numero_listado": 40,
+      "turno": "Noche",
+      "titulo": "Vencimientos del sector de la noche",
+      "detalle": "Un sector por noche: lunes almacén seco, martes bebidas, miércoles lácteos y fríos, jueves fiambrería y comidas listas, viernes golosinas y snacks, sábado limpieza y perfumería, domingo cigarrillos, kiosco y varios.",
+      "descripcion_con_pasos": "Un sector por noche: lunes almacén seco, martes bebidas, miércoles lácteos y fríos, jueves fiambrería y comidas listas, viernes golosinas y snacks, sábado limpieza y perfumería, domingo cigarrillos, kiosco y varios.",
+      "area": "Control y seguridad",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "04:45",
+      "hora_fin": "05:45",
+      "inicio_offset_min": 345,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T041",
+      "numero_listado": 41,
+      "turno": "Noche",
+      "titulo": "Puesta a punto de fiambrería: dejar todo listo para vender",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Producción y fiambrería",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "05:30",
+      "hora_fin": "06:30",
+      "inicio_offset_min": 390,
+      "duracion_min": 60,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T042",
+      "numero_listado": 42,
+      "turno": "Noche",
+      "titulo": "Medialunas, 1.ª tanda",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Hornear solo hasta el mínimo de medialunas\n2. Registrar en HEX lo producido",
+      "area": "Producción y fiambrería",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "06:30",
+      "hora_fin": "06:45",
+      "inicio_offset_min": 450,
+      "duracion_min": 15,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Hornear solo hasta el mínimo de medialunas",
+          "se_marca": "a_mano",
+          "viene_del_numero": null
+        },
+        {
+          "orden": 2,
+          "texto": "Registrar en HEX lo producido",
+          "se_marca": "sola_produccion_hex",
+          "viene_del_numero": 80
+        }
+      ],
+      "area_clave": "produccion_fiambreria",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T043",
+      "numero_listado": 43,
+      "turno": "Noche",
+      "titulo": "Cierre de turno: arqueo, novedades y entrega de la fiambrería",
+      "detalle": null,
+      "descripcion_con_pasos": "Pasos:\n1. Reponer góndolas y heladeras para el turno que entra\n2. Limpiar el sector: mostrador, caja, fiambrería, bachas y tachos\n3. Cierre de caja: arqueo ciego y cierre de Posnet y QR contra HEX; las diferencias, por escrito\n4. Rendir Rapipago y lo cobrado por el cadete\n5. Entregar la caja: contar el fondo con quien entra y firmar los dos\n6. Escribir las novedades: faltantes, roturas, mermas, reclamos, encargos y pendientes\n7. Entregar la fiambrería lista al turno mañana\n8. Fichar la salida, después de entregar",
+      "area": "Control y seguridad",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": false,
+      "hora_inicio": "06:40",
+      "hora_fin": "07:00",
+      "inicio_offset_min": 460,
+      "duracion_min": 20,
+      "dias_semana": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "aviso_atraso_min": 15,
+      "pide_foto": false,
+      "pasos": [
+        {
+          "orden": 1,
+          "texto": "Reponer góndolas y heladeras para el turno que entra",
+          "se_marca": "a_mano",
+          "viene_del_numero": 52
+        },
+        {
+          "orden": 2,
+          "texto": "Limpiar el sector: mostrador, caja, fiambrería, bachas y tachos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 53
+        },
+        {
+          "orden": 3,
+          "texto": "Cierre de caja: arqueo ciego y cierre de Posnet y QR contra HEX; las diferencias, por escrito",
+          "se_marca": "sola_caja_hex",
+          "viene_del_numero": 54
+        },
+        {
+          "orden": 4,
+          "texto": "Rendir Rapipago y lo cobrado por el cadete",
+          "se_marca": "a_mano",
+          "viene_del_numero": 55
+        },
+        {
+          "orden": 5,
+          "texto": "Entregar la caja: contar el fondo con quien entra y firmar los dos",
+          "se_marca": "a_mano",
+          "viene_del_numero": 56
+        },
+        {
+          "orden": 6,
+          "texto": "Escribir las novedades: faltantes, roturas, mermas, reclamos, encargos y pendientes",
+          "se_marca": "a_mano",
+          "viene_del_numero": 57
+        },
+        {
+          "orden": 7,
+          "texto": "Entregar la fiambrería lista al turno mañana",
+          "se_marca": "a_mano",
+          "viene_del_numero": 44
+        },
+        {
+          "orden": 8,
+          "texto": "Fichar la salida, después de entregar",
+          "se_marca": "sola_reloj",
+          "viene_del_numero": 58
+        }
+      ],
+      "area_clave": "control_seguridad",
+      "dias_texto": "todos los días"
+    },
+    {
+      "codigo": "T095",
+      "numero_listado": 95,
+      "turno": "Noche",
+      "titulo": "Revisar trampas y cebos contra plagas",
+      "detalle": null,
+      "descripcion_con_pasos": null,
+      "area": "Reposición, depósito y limpieza",
+      "puesto": "Vendedor de turno",
+      "puestos": [
+        "Vendedor de turno"
+      ],
+      "modo": "cada_uno",
+      "prioridad": "alta",
+      "sin_hora_fija": true,
+      "hora_inicio": null,
+      "hora_fin": null,
+      "inicio_offset_min": null,
+      "duracion_min": null,
+      "dias_semana": [
+        1
+      ],
+      "aviso_atraso_min": null,
+      "pide_foto": false,
+      "pasos": [],
+      "area_clave": "reposicion_limpieza",
+      "dias_texto": "lunes"
+    }
+  ]
+}
