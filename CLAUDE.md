@@ -275,6 +275,9 @@ diferencias, sin datos fiscales, pagada sin factura). Cuatro tarjetas que
 filtran, búsqueda, proveedor, período (acota solo las pagadas), panel de
 detalle (`DrawerFactura`: pasos, importes, recibido vs. facturado, pago,
 renglones, fotos, y el cuerpo de la deuda reusado de `DrawerCuentaPagar`).
+Backfill: la 303 dio por validado el histórico y la 304 lo revirtió para
+las deudas abiertas (en "A validar" sale todo lo recibido que Finanzas no
+revisó; pagadas, directas controladas y validadas a mano quedan).
 Validar = `fn_validar_factura_compra` (guarda `validada`,
 `diferencia_recepcion`, `renglones_diferentes`; editar la factura la vuelve a
 "a validar" porque `fn_guardar_factura_compra` la reinserta). Finanzas ›
