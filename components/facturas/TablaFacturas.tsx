@@ -132,7 +132,9 @@ export function TablaFacturas({
                       <>
                         <div className="text-[#391511]">Orden #{f.pedido_id}</div>
                         {f.cuenta?.provisoria && !f.factura && (
-                          <div className="text-[11px] text-[#6f3a2a]">recibida, a la espera del papel</div>
+                          <div className="text-[11px] text-[#6f3a2a]">
+                            recibida {formatearFechaCortaISO(f.fecha_comprobante)} · a la espera del papel
+                          </div>
                         )}
                       </>
                     ) : (

@@ -219,6 +219,8 @@ export interface CuentaAPagarConProveedor {
   provisoria: boolean
   numero_factura: string | null
   nota: string | null
+  /** Cuándo se registró la deuda (la recepción, en las provisorias). */
+  created_at: string
   proveedor_nombre: string | null
   /** Plan de cuotas (mig 148), con estado derivado por FIFO. [] si no hay plan. */
   cuotas: CuotaConEstado[]
@@ -339,7 +341,7 @@ export type FiltroEstadoCuentas = EstadoCuentaDerivado | 'abiertas' | null
 export const LIMITE_CUENTAS_PAGADAS = 500
 
 const SELECT_CUENTAS =
-  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, proveedores(nombre), pagos_cuenta(sobrante), cuotas_cuenta_pagar(id, numero, monto, fecha_vencimiento)'
+  'id, pedido_id, proveedor_id, monto, monto_pagado, fecha_vencimiento, fecha_pago, estado, tiene_factura, provisoria, numero_factura, nota, created_at, proveedores(nombre), pagos_cuenta(sobrante), cuotas_cuenta_pagar(id, numero, monto, fecha_vencimiento)'
 
 type FilaCuentaCruda = {
   id: number
@@ -354,6 +356,7 @@ type FilaCuentaCruda = {
   provisoria: boolean
   numero_factura: string | null
   nota: string | null
+  created_at: string
   proveedores: { nombre: string } | null
   pagos_cuenta: { sobrante: number | null }[] | null
   cuotas_cuenta_pagar: CuotaCruda[] | null
@@ -394,6 +397,7 @@ function mapearCuenta(f: FilaCuentaCruda): CuentaAPagarConProveedor {
     provisoria: f.provisoria,
     numero_factura: f.numero_factura,
     nota: f.nota,
+    created_at: f.created_at,
     proveedor_nombre: f.proveedores?.nombre ?? null,
     cuotas,
     proxima_cuota: cuotas.find((c) => c.pagado < c.monto - 0.009) ?? null,

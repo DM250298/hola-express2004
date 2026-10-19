@@ -70,8 +70,22 @@ export interface FilaPortal {
   fecha_pago: string | null
   /** Pedido de origen; null = compra directa. */
   pedido_id: number | null
-  /** Para ordenar y para el período de las pagadas: fecha_pago o emisión. */
+  /** Para el período de las pagadas: fecha_pago o emisión. */
   fecha_referencia: string
+  /**
+   * Fecha del comprobante (yyyy-MM-dd): la emisión de la factura o, si
+   * todavía no hay factura, el día en que se registró la deuda (la recepción).
+   */
+  fecha_comprobante: string
+}
+
+/** Cómo se ordena la lista. */
+export type OrdenPortal = 'fecha_asc' | 'fecha_desc' | 'vencimiento'
+
+export const ETIQUETA_ORDEN: Record<OrdenPortal, string> = {
+  fecha_asc: 'Fecha · más viejo primero',
+  fecha_desc: 'Fecha · más nuevo primero',
+  vencimiento: 'Urgencia · vencidas primero',
 }
 
 export interface FiltrosPortal {
@@ -194,6 +208,7 @@ export function armarFilasPortal(
       fecha_pago: c.fecha_pago,
       pedido_id: c.pedido_id ?? f?.pedido_id ?? null,
       fecha_referencia: (c.fecha_pago ?? f?.fecha ?? c.fecha_vencimiento).slice(0, 10),
+      fecha_comprobante: (f?.fecha ?? c.created_at ?? c.fecha_vencimiento).slice(0, 10),
     })
   }
   for (const f of sinCuenta) {
@@ -216,13 +231,29 @@ export function armarFilasPortal(
       fecha_pago: f.fecha,
       pedido_id: f.pedido_id,
       fecha_referencia: f.fecha.slice(0, 10),
+      fecha_comprobante: f.fecha.slice(0, 10),
     })
   }
   return filas.sort(ordenPortal)
 }
 
+/** Copia ordenada según `orden` (la lista cronológica es la que pidió el dueño). */
+export function ordenarFilas(
+  filas: readonly FilaPortal[],
+  orden: OrdenPortal
+): FilaPortal[] {
+  const copia = [...filas]
+  if (orden === 'vencimiento') return copia.sort(ordenPortal)
+  const signo = orden === 'fecha_asc' ? 1 : -1
+  return copia.sort(
+    (a, b) =>
+      signo * a.fecha_comprobante.localeCompare(b.fecha_comprobante) ||
+      a.clave.localeCompare(b.clave)
+  )
+}
+
 /**
- * Orden del portal: primero lo que requiere acción (vencidas, luego por
+ * Orden por urgencia: primero lo que requiere acción (vencidas, luego por
  * vencimiento más próximo), las pagadas al final de la más reciente a la más
  * vieja.
  */
