@@ -46,7 +46,10 @@ const PERMISO_RUTA: Record<string, string[]> = {
   // abre solo esa pantalla, no el resto de Configuración (usuarios, fiscal).
   proveedores: ['/configuracion/proveedores'],
   produccion: ['/produccion'],
-  finanzas: ['/finanzas'],
+  // El portal de facturas vive bajo /compras pero lo gatea 'finanzas' (RLS
+  // de cuentas_a_pagar y facturas_compra): así entra quien tiene finanzas sin
+  // los permisos de abastecimiento.
+  finanzas: ['/finanzas', '/compras/facturas'],
   contabilidad: ['/contabilidad'],
   rrhh: ['/rrhh'],
   // Gestión de tareas: es la pestaña "Tareas" del hub /rrhh. El enforcement

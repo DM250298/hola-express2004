@@ -62,6 +62,9 @@ const FOTO_MENU_OCT_2026: Foto[] = [
  */
 const AGREGADOS: Foto[] = [
   { href: '/configuracion/proveedores', permiso: 'configuracion', permisosAlt: ['proveedores'] },
+  // Portal único de facturas (oct-2026): lo ve quien tiene finanzas, igual que
+  // las dos pestañas de Finanzas que reemplaza.
+  { href: '/compras/facturas', permiso: 'finanzas' },
 ]
 
 /**
@@ -170,6 +173,7 @@ test('cada juego de permisos ve lo mismo antes y después (más Proveedores con 
     if (permisos.includes('configuracion') || permisos.includes('proveedores')) {
       esperado.push('/configuracion/proveedores')
     }
+    if (permisos.includes('finanzas')) esperado.push('/compras/facturas')
     if (permisos.some((p) => abrenMovil.includes(p))) esperado.push('/movil')
     assert.deepEqual(despues, esperado.sort(), `juego "${nombre}"`)
   }
@@ -211,6 +215,8 @@ test('ítem activo: gana el más específico', () => {
 
   assert.deepEqual(activos('/'), ['/'])
   assert.deepEqual(activos('/configuracion/proveedores'), ['/configuracion/proveedores'])
+  assert.deepEqual(activos('/compras/facturas'), ['/compras/facturas'])
+  assert.deepEqual(activos('/compras'), ['/compras'])
   assert.deepEqual(activos('/configuracion/productos'), ['/configuracion'])
   assert.deepEqual(activos('/inventario/conteo/zona/5'), ['/inventario/conteo'])
   assert.deepEqual(activos('/inventario/control'), ['/inventario'])
@@ -223,6 +229,7 @@ test('migas de pan: pilar e ítem activo del menú por pilares', () => {
   const miga = (ruta: string) => migaDe(ruta, MENU_SEIS_PILARES)
   assert.deepEqual(miga('/vencimientos'), { pilar: 'Stock', etiqueta: 'Vencimientos' })
   assert.deepEqual(miga('/configuracion/proveedores'), { pilar: 'Compras', etiqueta: 'Proveedores' })
+  assert.deepEqual(miga('/compras/facturas'), { pilar: 'Compras', etiqueta: 'Facturas de proveedores' })
   assert.deepEqual(miga('/rrhh/empleados/3'), { pilar: 'Operaciones', etiqueta: 'Turnos y equipo' })
   assert.deepEqual(miga('/terminales'), { pilar: 'Finanzas', etiqueta: 'Cobros con posnet' })
   // Pilar con el mismo nombre que su ítem: se muestra una sola vez.

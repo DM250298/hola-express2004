@@ -45,6 +45,7 @@ export type IconoNav =
   | 'ChefHat'
   | 'Tag'
   | 'ShoppingBag'
+  | 'FileText'
   | 'Truck'
   | 'DollarSign'
   | 'Calculator'
@@ -310,6 +311,16 @@ export const MENU_SEIS_PILARES: MenuNav = {
           // El cajero recibe mercadería (permiso 'recepcion'); el encargado
           // arma órdenes ('pedidos'). Cualquiera de los tres ve el módulo.
           permisosAlt: ['pedidos', 'recepcion'],
+        },
+        {
+          // Portal único de facturas (oct-2026): lo que falta facturar,
+          // validar y pagar. Reemplaza a Finanzas › Facturas de proveedores
+          // y Finanzas › Cuentas a pagar, que redirigen acá.
+          href: '/compras/facturas',
+          etiqueta: 'Facturas de proveedores',
+          icono: 'FileText',
+          permiso: 'finanzas',
+          nota: 'Validar y pagar',
         },
         {
           // Atajo: la pantalla sigue en Configuración. La abre 'configuracion'
