@@ -16,6 +16,7 @@ import {
   filtrarFilas,
   marcasDe,
   nroComprobante,
+  ordenarFilas,
   resumirPortal,
 } from './portal.ts'
 import type { CuentaAPagarConProveedor } from '../queries/finanzas.ts'
@@ -38,6 +39,7 @@ function cuenta(p: Partial<CuentaAPagarConProveedor> = {}): CuentaAPagarConProve
     provisoria: true,
     numero_factura: null,
     nota: null,
+    created_at: '2026-10-12T15:00:00Z',
     proveedor_nombre: 'ARCOR',
     cuotas: [],
     proxima_cuota: null,
@@ -187,6 +189,22 @@ test('armarFilasPortal: una fila por deuda más las directas sin deuda, ordenada
   // El total de una deuda sin factura es el estimado de la recepción.
   assert.equal(filas.find((f) => f.clave === 'c-1')!.total, 471500)
   assert.equal(filas.find((f) => f.clave === 'c-2')!.total, 270776.72)
+})
+
+test('ordenar por fecha del comprobante: emisión, o recepción si no hay factura', () => {
+  const filas = escenario()
+  // c-1 no tiene factura → usa la recepción (12/10); el resto la emisión (15/10),
+  // salvo la directa (17/10). Empates por clave.
+  assert.deepEqual(
+    ordenarFilas(filas, 'fecha_asc').map((f) => f.clave),
+    ['c-1', 'c-2', 'c-3', 'c-4', 'c-5', 'c-6', 'f-70']
+  )
+  assert.deepEqual(
+    ordenarFilas(filas, 'fecha_desc').map((f) => f.clave),
+    ['f-70', 'c-2', 'c-3', 'c-4', 'c-5', 'c-6', 'c-1']
+  )
+  assert.deepEqual(ordenarFilas(filas, 'vencimiento').map((f) => f.clave), filas.map((f) => f.clave))
+  assert.equal(filas.find((f) => f.clave === 'c-1')!.fecha_comprobante, '2026-10-12')
 })
 
 test('filtrar: estado, proveedor, texto y período (que solo acota las pagadas)', () => {

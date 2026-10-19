@@ -29,11 +29,14 @@ import {
 import {
   ESTADOS_FACTURA,
   ETIQUETA_ESTADO,
+  ETIQUETA_ORDEN,
   armarFilasPortal,
   filtrarFilas,
+  ordenarFilas,
   resumirPortal,
   type EstadoFactura,
   type FilaPortal,
+  type OrdenPortal,
 } from '@/lib/facturas/portal'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
 import type { ComprobanteCargado } from '@/lib/queries/facturasCompra'
@@ -85,6 +88,8 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
   const [texto, setTexto] = useState('')
   const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS_PROV)
   const [periodo, setPeriodo] = useState<PeriodoPortal>('mes_actual')
+  // Por fecha del comprobante, de la más vieja a la más nueva (pedido del dueño).
+  const [orden, setOrden] = useState<OrdenPortal>('fecha_asc')
 
   const [filaDetalle, setFilaDetalle] = useState<FilaPortal | null>(null)
   const [cuentaEditar, setCuentaEditar] = useState<CuentaAPagarConProveedor | null>(null)
@@ -115,8 +120,8 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
     [filas, rango, proveedorId]
   )
   const filasVisibles = useMemo(
-    () => filtrarFilas(filas, { estado, texto, proveedorId, ...rango }),
-    [filas, estado, texto, proveedorId, rango]
+    () => ordenarFilas(filtrarFilas(filas, { estado, texto, proveedorId, ...rango }), orden),
+    [filas, estado, texto, proveedorId, rango, orden]
   )
 
   // Proveedores presentes en la lista (para el selector).
@@ -349,6 +354,25 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
             </SelectTrigger>
             <SelectContent>
               {Object.entries(ITEMS_PERIODO).map(([valor, etiqueta]) => (
+                <SelectItem key={valor} value={valor}>
+                  {etiqueta}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            items={ETIQUETA_ORDEN}
+            value={orden}
+            onValueChange={(v) => setOrden((v ?? 'fecha_asc') as OrdenPortal)}
+          >
+            <SelectTrigger
+              className="w-[215px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white"
+              title="Fecha = emisión del comprobante; si todavía no hay factura, la fecha de la recepción"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(ETIQUETA_ORDEN).map(([valor, etiqueta]) => (
                 <SelectItem key={valor} value={valor}>
                   {etiqueta}
                 </SelectItem>
