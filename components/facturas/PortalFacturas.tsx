@@ -88,8 +88,8 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
   const [texto, setTexto] = useState('')
   const [proveedorFiltro, setProveedorFiltro] = useState<string>(TODOS_PROV)
   const [periodo, setPeriodo] = useState<PeriodoPortal>('mes_actual')
-  // Por fecha del comprobante, de la más vieja a la más nueva (pedido del dueño).
-  const [orden, setOrden] = useState<OrdenPortal>('fecha_asc')
+  // Por fecha del comprobante, de la más nueva a la más vieja (pedido del dueño).
+  const [orden, setOrden] = useState<OrdenPortal>('fecha_desc')
 
   const [filaDetalle, setFilaDetalle] = useState<FilaPortal | null>(null)
   const [cuentaEditar, setCuentaEditar] = useState<CuentaAPagarConProveedor | null>(null)
@@ -363,7 +363,7 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
           <Select
             items={ETIQUETA_ORDEN}
             value={orden}
-            onValueChange={(v) => setOrden((v ?? 'fecha_asc') as OrdenPortal)}
+            onValueChange={(v) => setOrden((v ?? 'fecha_desc') as OrdenPortal)}
           >
             <SelectTrigger
               className="w-[215px] border-[#e4c9b0] focus:ring-[#f9b44c] bg-white"
