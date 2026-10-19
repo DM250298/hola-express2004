@@ -108,7 +108,7 @@ export function PanelAlertas() {
             color="#c43e2c"
           />
           <ItemAlerta
-            href={enlace('finanzas', '/finanzas?tab=cuentas_pagar')}
+            href={enlace('finanzas', '/compras/facturas?estado=vencida')}
             icono={Wallet}
             etiqueta="Cuentas vencidas"
             cantidad={data.cuentas_vencidas}

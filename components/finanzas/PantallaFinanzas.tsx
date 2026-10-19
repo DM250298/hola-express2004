@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowUpRight, Calendar } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -16,9 +17,7 @@ import { cn } from '@/lib/utils'
 import { usePestanaUrl } from '@/lib/hooks/usePestanaUrl'
 import { TabTableroDirectivo } from './TabTableroDirectivo'
 import { TabFlujoProyectado } from './TabFlujoProyectado'
-import { TabComprobantes } from './TabComprobantes'
 import { TabImpuestos } from './TabImpuestos'
-import { TabCuentasAPagar } from './TabCuentasAPagar'
 import { TabEgresos } from './TabEgresos'
 import { TabCuentas } from './TabCuentas'
 import { TabMovimientos } from './TabMovimientos'
@@ -30,6 +29,8 @@ import {
   rangoPredefinido,
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
+
+const HREF_PORTAL_FACTURAS = '/compras/facturas'
 
 interface EnlaceGrupo {
   href: string
@@ -60,13 +61,25 @@ const GRUPOS: {
   {
     titulo: 'Lo que debo e impuestos',
     tabs: [
-      { value: 'cuentas_pagar', label: 'Cuentas a pagar' },
-      { value: 'comprobantes', label: 'Facturas de proveedores' },
       { value: 'impuestos', label: 'Impuestos' },
       { value: 'flujo', label: 'Flujo proyectado' },
     ],
+    // Las facturas y las cuentas a pagar viven en el portal único de
+    // Compras › Facturas de proveedores (oct-2026); desde acá se enlazan.
     // D2: los sueldos se liquidan en Operaciones; desde acá solo se enlazan.
     enlaces: [
+      {
+        href: HREF_PORTAL_FACTURAS,
+        label: 'Facturas de proveedores',
+        donde: 'Compras › Facturas de proveedores',
+        permiso: 'finanzas',
+      },
+      {
+        href: `${HREF_PORTAL_FACTURAS}?estado=a_pagar`,
+        label: 'Cuentas a pagar',
+        donde: 'Compras › Facturas de proveedores',
+        permiso: 'finanzas',
+      },
       {
         href: '/rrhh?tab=sueldos',
         label: 'Sueldos',
@@ -78,6 +91,16 @@ const GRUPOS: {
 ]
 
 const TABS_VALIDAS = GRUPOS.flatMap((g) => g.tabs.map((t) => t.value))
+
+/**
+ * Pestañas que se mudaron al portal de facturas: un enlace viejo
+ * (`?tab=comprobantes`, `?tab=cuentas_pagar`) o una tarjeta del Tablero que
+ * pida esa pestaña redirige allá con el filtro equivalente.
+ */
+const REDIRECCION_PORTAL: Record<string, string> = {
+  comprobantes: HREF_PORTAL_FACTURAS,
+  cuentas_pagar: `${HREF_PORTAL_FACTURAS}?estado=a_pagar`,
+}
 
 interface Props {
   /** Permisos del usuario (los resuelve el server en page.tsx). */
@@ -112,6 +135,13 @@ export function PantallaFinanzas({ permisos, tabInicial }: Props) {
   const [hastaPersonalizado, setHastaPersonalizado] =
     useState<string>(isoLocalAHoy())
   const [tab, setTab] = usePestanaUrl(TABS_VALIDAS, 'tablero', tabInicial)
+  const router = useRouter()
+
+  // ?tab=comprobantes / ?tab=cuentas_pagar → portal de facturas.
+  useEffect(() => {
+    const destino = tabInicial ? REDIRECCION_PORTAL[tabInicial] : undefined
+    if (destino) router.replace(destino)
+  }, [tabInicial, router])
   // Cuenta por la que se filtran los Movimientos al llegar desde una card.
   const [cuentaMovs, setCuentaMovs] = useState<number | null>(null)
 
@@ -124,6 +154,11 @@ export function PantallaFinanzas({ permisos, tabInicial }: Props) {
 
   // Navegación normal por la barra: sin filtro de cuenta pre-aplicado.
   function irATab(value: string) {
+    const destino = REDIRECCION_PORTAL[value]
+    if (destino) {
+      router.push(destino)
+      return
+    }
     setCuentaMovs(null)
     setTab(value)
   }
@@ -252,10 +287,6 @@ export function PantallaFinanzas({ permisos, tabInicial }: Props) {
           />
         )}
         {tab === 'flujo' && <TabFlujoProyectado />}
-        {tab === 'comprobantes' && (
-          <TabComprobantes desde={rango.desde} hasta={rango.hasta} />
-        )}
-        {tab === 'cuentas_pagar' && <TabCuentasAPagar />}
         {tab === 'impuestos' && (
           <TabImpuestos desde={rango.desde} hasta={rango.hasta} />
         )}

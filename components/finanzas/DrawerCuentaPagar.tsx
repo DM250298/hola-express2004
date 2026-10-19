@@ -46,12 +46,64 @@ interface Props {
   onPagar: (cuenta: CuentaAPagarConProveedor) => void
 }
 
+/**
+ * Drawer de una cuenta a pagar: cabecera + `CuerpoCuentaPagar`. El cuerpo
+ * (saldos, edición, plan de cuotas, historial de pagos y botón de pago) está
+ * separado para que el portal de facturas lo reuse dentro de su propio panel.
+ */
 export function DrawerCuentaPagar({
   cuenta,
   abierto,
   onCambioAbierto,
   onPagar,
 }: Props) {
+  if (!cuenta) return null
+  return (
+    <Sheet open={abierto} onOpenChange={onCambioAbierto}>
+      <SheetContent className="sm:max-w-md overflow-y-auto p-0">
+        <SheetHeader className="px-5 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
+          <SheetTitle className="text-[#391511] flex items-center justify-between gap-2">
+            <span>{cuenta.proveedor_nombre ?? 'Proveedor'}</span>
+            <BadgeEstadoCuenta estado={cuenta.estado} />
+          </SheetTitle>
+          <SheetDescription className="text-[#6f3a2a]">
+            {cuenta.pedido_id != null ? (
+              <Link
+                href={`/pedidos/${cuenta.pedido_id}`}
+                className="inline-flex items-center gap-1 text-[#c43e2c] hover:underline font-mono text-xs"
+              >
+                Pedido #{cuenta.pedido_id}
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            ) : (
+              <span className="font-mono text-xs">
+                Compra directa · sin orden
+              </span>
+            )}
+          </SheetDescription>
+        </SheetHeader>
+        <CuerpoCuentaPagar cuenta={cuenta} abierto={abierto} onPagar={onPagar} />
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+interface PropsCuerpo {
+  cuenta: CuentaAPagarConProveedor
+  /** Si el contenedor está abierto (gatea la carga del historial de pagos). */
+  abierto: boolean
+  onPagar: (cuenta: CuentaAPagarConProveedor) => void
+  /** Oculta las tres tarjetas de saldo (el portal ya las muestra arriba). */
+  sinSaldos?: boolean
+}
+
+/** Cuerpo del drawer: saldos, edición, plan de cuotas, historial y pago. */
+export function CuerpoCuentaPagar({
+  cuenta,
+  abierto,
+  onPagar,
+  sinSaldos,
+}: PropsCuerpo) {
   const editar = useEditarCuentaAPagar()
   const { data: pagos, isLoading: cargandoPagos } = usePagosCuenta(
     abierto ? (cuenta?.id ?? null) : null
@@ -78,9 +130,7 @@ export function DrawerCuentaPagar({
       setNota(cuenta.nota ?? '')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abierto, cuenta?.id])
-
-  if (!cuenta) return null
+  }, [abierto, cuenta.id])
 
   const pagada = cuenta.estado === 'pagada'
   // Con plan de cuotas, vencimiento y monto NO se editan directo: el
@@ -94,7 +144,7 @@ export function DrawerCuentaPagar({
     vencCambia || (nota ?? '') !== (cuenta.nota ?? '') || montoCambia
 
   function handleGuardar() {
-    if (!cuenta || editar.isPending || !hayCambios) return
+    if (editar.isPending || !hayCambios) return
     editar.mutate({
       cuenta_id: cuenta.id,
       ...(vencCambia ? { fecha_vencimiento: vencimiento } : {}),
@@ -106,32 +156,10 @@ export function DrawerCuentaPagar({
   }
 
   return (
-    <Sheet open={abierto} onOpenChange={onCambioAbierto}>
-      <SheetContent className="sm:max-w-md overflow-y-auto p-0">
-        <SheetHeader className="px-5 py-4 border-b border-[#e4c9b0]/60 bg-[#fdfaf6]">
-          <SheetTitle className="text-[#391511] flex items-center justify-between gap-2">
-            <span>{cuenta.proveedor_nombre ?? 'Proveedor'}</span>
-            <BadgeEstadoCuenta estado={cuenta.estado} />
-          </SheetTitle>
-          <SheetDescription className="text-[#6f3a2a]">
-            {cuenta.pedido_id != null ? (
-              <Link
-                href={`/pedidos/${cuenta.pedido_id}`}
-                className="inline-flex items-center gap-1 text-[#c43e2c] hover:underline font-mono text-xs"
-              >
-                Pedido #{cuenta.pedido_id}
-                <ExternalLink className="h-3 w-3" />
-              </Link>
-            ) : (
-              <span className="font-mono text-xs">
-                Compra directa · sin orden
-              </span>
-            )}
-          </SheetDescription>
-        </SheetHeader>
-
+    <>
         <div className="px-5 py-4 space-y-5">
           {/* Saldos */}
+          {!sinSaldos && (
           <div className="grid grid-cols-3 gap-2 text-center">
             <Saldo etiqueta="Total" monto={cuenta.monto} color="#391511" />
             <Saldo
@@ -145,6 +173,7 @@ export function DrawerCuentaPagar({
               color="#c43e2c"
             />
           </div>
+          )}
 
           {/* Factura asociada */}
           <div className="flex items-center gap-2 text-sm">
@@ -379,7 +408,6 @@ export function DrawerCuentaPagar({
             </Button>
           )}
         </div>
-      </SheetContent>
 
       {/* Editor del plan de cuotas (Dialog, portalea fuera del Sheet). */}
       <ModalCuotasCuenta
@@ -387,7 +415,7 @@ export function DrawerCuentaPagar({
         abierto={modalCuotas}
         onCambioAbierto={setModalCuotas}
       />
-    </Sheet>
+    </>
   )
 }
 

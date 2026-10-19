@@ -205,6 +205,13 @@ export interface ComprobanteCargado {
   es_directa: boolean
   /** Compra directa ya revisada por el administrativo. */
   controlada: boolean
+  /** Validada por administración: pasa de "A validar" a "A pagar" (mig 303). */
+  validada: boolean
+  validada_at: string | null
+  /** Neto facturado − neto recibido, calculado al validar (null sin orden o sin validar). */
+  diferencia_recepcion: number | null
+  /** Renglones con cantidad facturada ≠ recibida, incluidos los extras. */
+  renglones_diferentes: number | null
   cuit_proveedor: string | null
   /** Quién cargó la factura (el vendedor, en las compras del POS). */
   usuario_nombre: string | null
@@ -221,7 +228,7 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
   const { data, error } = await supabase
     .from('facturas_compra')
     .select(
-      'id, cuenta_id, pedido_id, proveedor_id, fecha, created_at, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, cuit_proveedor, usuarios(nombre)'
+      'id, cuenta_id, pedido_id, proveedor_id, fecha, created_at, tipo_comprobante, punto_venta, numero_comprobante, cae, neto, iva_total, total, es_directa, controlada, validada, validada_at, diferencia_recepcion, renglones_diferentes, cuit_proveedor, usuarios(nombre)'
     )
     // Por fecha de CARGA, no de emisión: la emisión es un `date` sin hora, así
     // que dentro del mismo día el orden quedaba al azar y una factura vieja
@@ -250,9 +257,32 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
     total: Number(f.total),
     es_directa: !!f.es_directa,
     controlada: !!f.controlada,
+    validada: !!f.validada,
+    validada_at: f.validada_at ?? null,
+    diferencia_recepcion:
+      f.diferencia_recepcion == null ? null : Number(f.diferencia_recepcion),
+    renglones_diferentes:
+      f.renglones_diferentes == null ? null : Number(f.renglones_diferentes),
     cuit_proveedor: f.cuit_proveedor,
     usuario_nombre: f.usuarios?.nombre ?? null,
   }))
+}
+
+/**
+ * Marca una factura como validada (o la reabre con `validar=false`): paso
+ * "A validar" → "A pagar" del portal. El RPC guarda el cruce recibido vs.
+ * facturado y audita (mig 303).
+ */
+export async function validarFacturaCompra(
+  facturaId: number,
+  validar = true
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_validar_factura_compra', {
+    p_factura_id: facturaId,
+    p_validar: validar,
+  })
+  if (error) throw error
 }
 
 export interface ItemCompraDetalle {

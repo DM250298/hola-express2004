@@ -265,6 +265,23 @@ Hub con 4 tabs según permisos:
   para excesos, alerta de variación de costo (absorbe `/recepcion` legacy)
 - **Costos**: monitor de variación de costos + umbral configurable
 
+**Facturas de proveedores (portal único, oct-2026, mig 303):** la pestaña
+Facturas de Compras y la ruta `/compras/facturas` (entrada del menú, pilar
+Compras, permiso `finanzas`) muestran `PortalFacturas` (`components/facturas/`):
+una fila por deuda o factura con un estado explícito derivado en cliente
+(`lib/facturas/portal.ts`, con test): `sin_factura` → `a_validar` →
+`a_pagar` / `vencida` → `pagada`, más marcas (parcial, cuotas, con
+diferencias, sin datos fiscales, pagada sin factura). Cuatro tarjetas que
+filtran, búsqueda, proveedor, período (acota solo las pagadas), panel de
+detalle (`DrawerFactura`: pasos, importes, recibido vs. facturado, pago,
+renglones, fotos, y el cuerpo de la deuda reusado de `DrawerCuentaPagar`).
+Validar = `fn_validar_factura_compra` (guarda `validada`,
+`diferencia_recepcion`, `renglones_diferentes`; editar la factura la vuelve a
+"a validar" porque `fn_guardar_factura_compra` la reinserta). Finanzas ›
+Facturas de proveedores y Finanzas › Cuentas a pagar **redirigen** al portal
+(`?tab=` viejo → `/compras/facturas?estado=…`); `TabComprobantes` y
+`TabCuentasAPagar` quedan en el repo sin montarse hasta limpiar.
+
 **Three-way match (Opción B):** la recepción crea una cuenta a pagar
 **provisoria** (`provisoria=true`, `tiene_factura=false`). Al cargar la
 factura, se ajusta al monto real y se cierra el match. Si nunca se carga
@@ -325,8 +342,8 @@ Tabs:
   `DrawerCuenta`. La config de medios de pago vive al final de esta tab
   (`ConfiguracionCobros`) — ver "Medios de pago y comisiones MP" abajo
 - **Movimientos**: filtros por cuenta/tipo/categoría
-- **Cuentas a pagar**: deudas a proveedores con `provisoria` /
-  `tiene_factura`
+- **Cuentas a pagar / Facturas de proveedores**: desde oct-2026 son enlaces
+  al portal único `/compras/facturas` (ver Compras)
 - **Egresos**: gastos categorizados. El egreso de Finanzas **debita una
   cuenta de pago** elegida (`fn_crear_egreso` v2, mig 120): baja
   `cuentas.saldo_actual` + `movimientos_cuenta` + Haber por tipo; guard de

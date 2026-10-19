@@ -3380,6 +3380,14 @@ export type FacturaCompraRow = {
   egreso_id: number | null
   /** Compra directa ya revisada por el administrativo. */
   controlada: boolean
+  /** Factura validada por administración (paso "A validar" → "A pagar", mig 303). */
+  validada: boolean
+  validada_por: string | null
+  validada_at: string | null
+  /** Neto facturado − neto recibido al validar; NULL sin orden o sin validar (mig 303). */
+  diferencia_recepcion: number | null
+  /** Renglones con cantidad facturada ≠ recibida (incluye extras); NULL sin orden o sin validar. */
+  renglones_diferentes: number | null
   created_at: string
   updated_at: string
 }
@@ -3408,6 +3416,11 @@ export type FacturaCompraInsert = {
   es_directa?: boolean
   egreso_id?: number | null
   controlada?: boolean
+  validada?: boolean
+  validada_por?: string | null
+  validada_at?: string | null
+  diferencia_recepcion?: number | null
+  renglones_diferentes?: number | null
   created_at?: string
   updated_at?: string
 }
@@ -6347,6 +6360,10 @@ export interface Database {
           p_factura_id: number
           p_usuario_id: string
         }
+        Returns: undefined
+      }
+      fn_validar_factura_compra: {
+        Args: { p_factura_id: number; p_validar?: boolean }
         Returns: undefined
       }
       fn_controlar_compra_directa: {

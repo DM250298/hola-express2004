@@ -9,6 +9,7 @@ import {
   getFacturaCompra,
   getItemsFacturaCompra,
   guardarFacturaCompra,
+  validarFacturaCompra,
   type GuardarFacturaPayload,
 } from '@/lib/queries/facturasCompra'
 import { anularCompraDirecta } from '@/lib/queries/comprasDirectas'
@@ -66,6 +67,29 @@ export function useControlarCompraDirecta() {
       toast.success('Compra actualizada')
     },
     onError: (e: Error) => toast.error(`No se pudo controlar: ${e.message}`),
+  })
+}
+
+/**
+ * Valida (o reabre) una factura: paso "A validar" → "A pagar" del portal
+ * (mig 303). El toast va acá, no en el componente.
+ */
+export function useValidarFactura() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ facturaId, validar = true }: { facturaId: number; validar?: boolean }) =>
+      validarFacturaCompra(facturaId, validar),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['comprobantes-cargados'] })
+      qc.invalidateQueries({ queryKey: ['cuentas-a-pagar'] })
+      qc.invalidateQueries({ queryKey: ['factura-compra'] })
+      toast.success(
+        vars.validar === false
+          ? 'Factura reabierta: vuelve a "A validar"'
+          : 'Factura validada · pasa a "A pagar"'
+      )
+    },
+    onError: (e: Error) => toast.error(`No se pudo validar: ${e.message}`),
   })
 }
 
