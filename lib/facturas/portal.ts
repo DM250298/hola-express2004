@@ -83,8 +83,8 @@ export interface FilaPortal {
 export type OrdenPortal = 'fecha_asc' | 'fecha_desc' | 'vencimiento'
 
 export const ETIQUETA_ORDEN: Record<OrdenPortal, string> = {
-  fecha_asc: 'Fecha · más viejo primero',
   fecha_desc: 'Fecha · más nuevo primero',
+  fecha_asc: 'Fecha · más viejo primero',
   vencimiento: 'Urgencia · vencidas primero',
 }
 
