@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -15,19 +15,25 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAbrirSesionConteo } from '@/lib/hooks/useConteoFisico'
-import { aTareasNuevas, type TareaBorrador } from '@/lib/conteo/tareas'
+import {
+  aTareasNuevas,
+  type TareaBorrador,
+  type TareaInicial,
+} from '@/lib/conteo/tareas'
 import { ConstructorTareas } from './ConstructorTareas'
 
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
+  /** Tarea prellenada (desde "Avance por clase ABC"). null = formulario vacío. */
+  inicial?: TareaInicial | null
 }
 
 /**
  * Sesión nueva: nombre → tareas (por área, proveedor, clase ABC, categoría,
  * marca, alertas o combinadas) con quién cuenta cada una → confirmar y abrir.
  */
-export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
+export function WizardNuevaSesion({ abierto, onCambioAbierto, inicial = null }: Props) {
   const [nombre, setNombre] = useState('')
   const [umbral, setUmbral] = useState('5000')
   const [notas, setNotas] = useState('')
@@ -35,6 +41,14 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
   const [tareasValidas, setTareasValidas] = useState(false)
 
   const abrir = useAbrirSesionConteo()
+
+  // Abierto desde la tarjeta de avance: se propone el nombre de la sesión
+  // sin pisar lo que el encargado ya haya tipeado.
+  useEffect(() => {
+    if (!abierto || !inicial?.nombre) return
+    const sugerido = `Conteo cíclico · ${inicial.nombre}`
+    setNombre((previo) => (previo.trim() === '' ? sugerido : previo))
+  }, [abierto, inicial])
 
   function confirmar() {
     const nombreLimpio = nombre.trim()
@@ -105,6 +119,7 @@ export function WizardNuevaSesion({ abierto, onCambioAbierto }: Props) {
                 borradores={tareas}
                 onCambio={setTareas}
                 onValidez={setTareasValidas}
+                inicial={inicial}
               />
             )}
           </div>

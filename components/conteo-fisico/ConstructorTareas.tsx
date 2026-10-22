@@ -32,6 +32,8 @@ import { useUsuariosActivos } from '@/lib/hooks/useConteos'
 import { useVistaPreviaTareas } from '@/lib/hooks/useConteoFisico'
 import { heredado, rutaUbicacion } from '@/lib/queries/ubicaciones'
 import type { TareaNueva } from '@/lib/queries/conteoFisico'
+import { DIAS_SIN_CONTAR_DEFAULT } from '@/lib/config/inventario'
+import { fragmentosResumenParcial, parsearEntero } from '@/lib/conteo/ciclo'
 import {
   AYUDA_TIPO_TAREA,
   CLASES_CONTEO,
@@ -39,6 +41,7 @@ import {
   REGLAS_ALERTA_STOCK,
   aTareasNuevas,
   criteriosVacios,
+  etiquetaParcial,
   etiquetasCriterios,
   limpiarCriterios,
   nombreSugerido,
@@ -46,6 +49,7 @@ import {
   tipoDeCriterios,
   type NombresCriterios,
   type TareaBorrador,
+  type TareaInicial,
 } from '@/lib/conteo/tareas'
 import type {
   ClaseConteo,
@@ -86,6 +90,26 @@ interface Props {
    * productos le tocan a cada una y ninguna quedó vacía.
    */
   onValidez: (valido: boolean) => void
+  /**
+   * Tarea prellenada (desde "Avance por clase ABC"): criterios, tope y
+   * ventana. Como el componente se monta recién con el diálogo abierto, el
+   * valor se toma una sola vez, al montar.
+   */
+  inicial?: TareaInicial | null
+}
+
+/** Qué botones de criterio enciende un criterio ya armado. */
+function activosDe(c: CriteriosConteo | undefined): Set<Criterio> {
+  const s = new Set<Criterio>()
+  if (!c) return s
+  if (c.ubicacion_ids?.length) s.add('area')
+  if (c.proveedor_ids?.length) s.add('proveedor')
+  if (c.clases_abc?.length) s.add('clase')
+  if (c.categoria_ids?.length) s.add('categoria')
+  if (c.marca_ids?.length) s.add('marca')
+  if (c.reglas_alerta?.length) s.add('alerta')
+  if (c.sin_ubicar) s.add('sin_ubicar')
+  return s
 }
 
 /** Devuelve el valor recién cuando dejó de cambiar por `ms`. */
@@ -106,9 +130,12 @@ function plural(n: number, uno: string, varios: string): string {
 function ResumenTarea({
   resultado,
   personas,
+  dias,
 }: {
   resultado: ConteoTareaResultado | undefined
   personas: number
+  /** Ventana de la tarea, para explicar los salteados. null = sin ventana. */
+  dias: number | null
 }) {
   if (!resultado) {
     return <p className="text-xs text-[#c8a58a]">Calculando…</p>
@@ -124,16 +151,20 @@ function ResumenTarea({
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         {resultado.en_criterio === 0
           ? 'Ningún producto cumple este criterio.'
-          : `Sus ${plural(resultado.en_criterio, 'producto ya es', 'productos ya son')} de otra tarea: quitala o cambiá el criterio.`}
+          : resultado.ya_contados > 0
+            ? `Sus ${plural(resultado.en_criterio, 'producto ya se contó', 'productos ya se contaron')} en los últimos ${dias ?? '…'} días o son de otra tarea: cambiá la ventana o el criterio.`
+            : `Sus ${plural(resultado.en_criterio, 'producto ya es', 'productos ya son')} de otra tarea: quitala o cambiá el criterio.`}
       </p>
     )
   }
+  const fragmentos = fragmentosResumenParcial(resultado, dias)
   return (
     <div className="space-y-0.5 text-xs text-[#6f3a2a]">
       <p>
         <strong className="text-[#391511]">
           {plural(resultado.productos, 'producto', 'productos')}
         </strong>
+        {fragmentos.map((f) => ` · ${f}`).join('')}
         {resultado.partes > 1 &&
           ` · en ${resultado.partes} partes: ${resultado.por_parte.join(' · ')}`}
         {resultado.ya_asignados > 0 &&
@@ -165,24 +196,41 @@ function ResumenTarea({
  * filtran a la vez), se elige quién cuenta y la tarea pasa a la lista. Las
  * cantidades las calcula la base con las reglas reales de la creación.
  */
-export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
+export function ConstructorTareas({
+  borradores,
+  onCambio,
+  onValidez,
+  inicial = null,
+}: Props) {
   const { data: arbol } = useArbolUbicaciones()
   const { data: proveedores } = useProveedores()
   const { data: categorias } = useCategorias()
   const { data: marcas } = useMarcas()
   const { data: usuarios } = useUsuariosActivos()
 
-  // Formulario de la tarea nueva.
-  const [activos, setActivos] = useState<Set<Criterio>>(new Set())
-  const [areas, setAreas] = useState<number[]>([])
+  // Formulario de la tarea nueva (prellenado si viene `inicial`).
+  const [activos, setActivos] = useState<Set<Criterio>>(() =>
+    activosDe(inicial?.criterios)
+  )
+  const [areas, setAreas] = useState<number[]>(inicial?.criterios.ubicacion_ids ?? [])
   const [unaPorArea, setUnaPorArea] = useState(true)
-  const [provs, setProvs] = useState<number[]>([])
-  const [cats, setCats] = useState<number[]>([])
-  const [marcasSel, setMarcasSel] = useState<number[]>([])
-  const [clases, setClases] = useState<ClaseConteo[]>([])
-  const [reglas, setReglas] = useState<string[]>([])
+  const [provs, setProvs] = useState<number[]>(inicial?.criterios.proveedor_ids ?? [])
+  const [cats, setCats] = useState<number[]>(inicial?.criterios.categoria_ids ?? [])
+  const [marcasSel, setMarcasSel] = useState<number[]>(inicial?.criterios.marca_ids ?? [])
+  const [clases, setClases] = useState<ClaseConteo[]>(inicial?.criterios.clases_abc ?? [])
+  const [reglas, setReglas] = useState<string[]>(inicial?.criterios.reglas_alerta ?? [])
   const [personas, setPersonas] = useState<string[]>([])
-  const [nombre, setNombre] = useState('')
+  const [nombre, setNombre] = useState(inicial?.nombre ?? '')
+
+  // Conteo parcial (migs 306 a 309). La ventana arranca apagada salvo que
+  // venga prellenada: un "Inventario anual" no tiene que saltear nada.
+  const [cantidadTxt, setCantidadTxt] = useState(
+    inicial?.cantidad_max != null ? String(inicial.cantidad_max) : ''
+  )
+  const [ventana, setVentana] = useState(inicial?.sin_contar_dias != null)
+  const [diasTxt, setDiasTxt] = useState(
+    String(inicial?.sin_contar_dias ?? DIAS_SIN_CONTAR_DEFAULT)
+  )
 
   // Zona libre (sin lista).
   const [libreAbierta, setLibreAbierta] = useState(false)
@@ -254,6 +302,18 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
     [activos, areas]
   )
   const separadas = unaPorArea && areasActivas.length > 1
+  const tipoFormulario = tipoDeCriterios(
+    limpiarCriterios({ ...base, ubicacion_ids: areasActivas })
+  )
+  // El conteo parcial es de UNA tarea con lista: con "una tarea por cada
+  // área" se oculta ("contá 50" por tres áreas sería 150) y en zona libre
+  // no hay lista que recortar.
+  const parcialAplicable = tipoFormulario !== 'libre' && !separadas
+  const cantidadMax = parcialAplicable ? parsearEntero(cantidadTxt) : null
+  const sinContarDias =
+    parcialAplicable && ventana
+      ? (parsearEntero(diasTxt) ?? DIAS_SIN_CONTAR_DEFAULT)
+      : null
 
   // Las tareas que saldrían del formulario tal como está.
   const delFormulario: TareaBorrador[] = useMemo(() => {
@@ -280,10 +340,23 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
               : nombreSugerido(criterios, nombres),
           responsables: responsablesDe(ids),
           criterios,
+          cantidad_max: cantidadMax,
+          sin_contar_dias: sinContarDias,
         }
       })
       .filter((t) => !criteriosVacios(t.criterios))
-  }, [areasActivas, separadas, base, nombre, nombres, personas, arbol, nombrePersona])
+  }, [
+    areasActivas,
+    separadas,
+    base,
+    nombre,
+    nombres,
+    personas,
+    arbol,
+    nombrePersona,
+    cantidadMax,
+    sinContarDias,
+  ])
 
   // Una sola consulta para todo: lo armado primero, el formulario después.
   // Así el formulario ya sabe qué le dejaron las tareas de arriba.
@@ -335,6 +408,9 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
     setReglas([])
     setPersonas([])
     setNombre('')
+    setCantidadTxt('')
+    setVentana(false)
+    setDiasTxt(String(DIAS_SIN_CONTAR_DEFAULT))
   }
 
   function agregarDelFormulario() {
@@ -356,6 +432,8 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
         nombre: limpio,
         responsables: librePersona,
         criterios: null,
+        cantidad_max: null,
+        sin_contar_dias: null,
       },
     ])
     setLibreNombre('')
@@ -380,9 +458,6 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
     const r = resultadoDe(borradores.length + i)
     return !!r && r.productos === 0
   })
-  const tipoFormulario = tipoDeCriterios(
-    limpiarCriterios({ ...base, ubicacion_ids: areasActivas })
-  )
 
   const fechaAbc = vista.data?.fecha_abc ?? null
   const diasAbc = fechaAbc
@@ -449,6 +524,11 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
                           {e}
                         </span>
                       ))}
+                      {etiquetaParcial(b) && (
+                        <span className="rounded-md bg-[#f9b44c]/35 px-1.5 py-0.5 text-[11px] font-medium text-[#a3641c]">
+                          {etiquetaParcial(b)}
+                        </span>
+                      )}
                       <span className="text-[11px] text-[#6f3a2a]">
                         ·{' '}
                         {b.responsables.length === 0
@@ -462,6 +542,7 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
                       <ResumenTarea
                         resultado={resultadoDe(i)}
                         personas={b.responsables.length}
+                        dias={b.sin_contar_dias}
                       />
                     )}
                   </div>
@@ -709,6 +790,56 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
                 </p>
               </div>
 
+              {parcialAplicable && (
+                <div className="space-y-2 rounded-xl border border-dashed border-[#e4c9b0] bg-white p-2.5">
+                  <p className="text-xs font-semibold text-[#391511]">
+                    Conteo parcial (opcional)
+                  </p>
+                  <label className="flex cursor-pointer flex-wrap items-center gap-2 text-xs text-[#6f3a2a]">
+                    <Switch checked={ventana} onCheckedChange={setVentana} size="sm" />
+                    Saltear lo contado en los últimos
+                    <Input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={diasTxt}
+                      onChange={(e) => setDiasTxt(e.target.value)}
+                      disabled={!ventana}
+                      aria-label="Ventana en días"
+                      className="h-7 w-16 border-[#e4c9b0] bg-white text-center"
+                    />
+                    días
+                  </label>
+                  <label className="flex flex-wrap items-center gap-2 text-xs text-[#6f3a2a]">
+                    Cantidad a contar
+                    <Input
+                      type="number"
+                      min="1"
+                      inputMode="numeric"
+                      value={cantidadTxt}
+                      onChange={(e) => {
+                        setCantidadTxt(e.target.value)
+                        // Con tope y sin ventana, cada sesión tomaría los
+                        // mismos primeros N: la ventana se prende sola.
+                        if (parsearEntero(e.target.value) !== null) setVentana(true)
+                      }}
+                      placeholder="Todos"
+                      aria-label="Cantidad a contar"
+                      className="h-7 w-20 border-[#e4c9b0] bg-white"
+                    />
+                    <span className="text-[11px]">
+                      los primeros del recorrido
+                      {tipoFormulario === 'area' ? ' del área' : ' del mapa'}
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-[#6f3a2a]">
+                    Con la ventana, cada sesión sigue por donde dejó la anterior
+                    hasta completar el criterio. Con varias personas, la cantidad
+                    es de la tarea, no de cada una.
+                  </p>
+                </div>
+              )}
+
               {!separadas && (
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-[#391511]">Nombre</p>
@@ -748,6 +879,7 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
                     <ResumenTarea
                       resultado={resultadoDe(borradores.length + i)}
                       personas={t.responsables.length}
+                      dias={sinContarDias}
                     />
                   </div>
                 ))}

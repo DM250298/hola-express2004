@@ -12,7 +12,11 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useAgregarTareasConteo } from '@/lib/hooks/useConteoFisico'
-import { aTareasNuevas, type TareaBorrador } from '@/lib/conteo/tareas'
+import {
+  aTareasNuevas,
+  type TareaBorrador,
+  type TareaInicial,
+} from '@/lib/conteo/tareas'
 import { ConstructorTareas } from './ConstructorTareas'
 
 interface Props {
@@ -20,6 +24,8 @@ interface Props {
   sesionNombre: string
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
+  /** Tarea prellenada (desde "Avance por clase ABC"). null = formulario vacío. */
+  inicial?: TareaInicial | null
 }
 
 /**
@@ -31,6 +37,7 @@ export function DialogoAgregarTareas({
   sesionNombre,
   abierto,
   onCambioAbierto,
+  inicial = null,
 }: Props) {
   const [tareas, setTareas] = useState<TareaBorrador[]>([])
   const [validas, setValidas] = useState(false)
@@ -68,6 +75,7 @@ export function DialogoAgregarTareas({
             borradores={tareas}
             onCambio={setTareas}
             onValidez={setValidas}
+            inicial={inicial}
           />
         )}
 

@@ -39,7 +39,9 @@ import {
 import {
   AYUDA_TIPO_TAREA,
   ETIQUETA_TIPO_TAREA,
+  etiquetaParcial,
   tipoDeZona,
+  type TareaInicial,
 } from '@/lib/conteo/tareas'
 import type {
   ConteoAvanceRow,
@@ -51,6 +53,7 @@ import { WizardNuevaSesion } from './WizardNuevaSesion'
 import { DialogoAgregarTareas } from './DialogoAgregarTareas'
 import { DialogoReasignarTarea } from './DialogoReasignarTarea'
 import { AvisoCobertura } from './AvisoCobertura'
+import { AvanceCiclo } from './AvanceCiclo'
 
 const ESTILO_ESTADO_ZONA: Record<EstadoConteoZona, string> = {
   pendiente: 'bg-[#e4c9b0]/40 text-[#6f3a2a]',
@@ -125,6 +128,14 @@ function FilaZona({
             <UserRound className="h-3 w-3" />
             {nombreResponsable ?? 'Sin responsable — la toma quien la inicia'}
             <span>· {ETIQUETA_TIPO_TAREA[tipo]}</span>
+            {(zona.cantidad_max != null || zona.sin_contar_dias != null) && (
+              <span
+                title={etiquetaParcial(zona) ?? undefined}
+                className="rounded-md bg-[#f9b44c]/20 px-1 py-0.5 text-[10px] font-semibold text-[#a3641c]"
+              >
+                Parcial
+              </span>
+            )}
           </p>
           {enLista > 0 ? (
             <div className="mt-1.5 flex items-center gap-2">
@@ -191,6 +202,8 @@ export function PantallaConteoFisico() {
   const [reasignando, setReasignando] = useState<ConteoZonaRow | null>(null)
   const [quitando, setQuitando] = useState<ConteoZonaRow | null>(null)
   const [confirmarRevision, setConfirmarRevision] = useState(false)
+  // Tarea prellenada desde "Avance por clase ABC" para el wizard o el diálogo.
+  const [inicialTarea, setInicialTarea] = useState<TareaInicial | null>(null)
 
   const { data: usuario } = useUsuario()
   const esGestor = tienePermiso(usuario?.permisos, 'conteo_cierre')
@@ -235,6 +248,13 @@ export function PantallaConteoFisico() {
     pasar.mutate(sesionActiva.id, {
       onSuccess: () => setConfirmarRevision(false),
     })
+  }
+
+  /** Desde la tarjeta de avance: sesión nueva si no hay, o sumar a la abierta. */
+  function mandarAContar(inicial: TareaInicial) {
+    setInicialTarea(inicial)
+    if (!sesionActiva) setWizardAbierto(true)
+    else if (sesionActiva.estado === 'abierta') setAgregarAbierto(true)
   }
 
   if (cargandoActiva) {
@@ -431,6 +451,10 @@ export function PantallaConteoFisico() {
         </div>
       )}
 
+      {esGestor && (
+        <AvanceCiclo sesionActiva={sesionActiva ?? null} onMandarAContar={mandarAContar} />
+      )}
+
       {esGestor && (sesiones ?? []).filter((s) => s.estado === 'cerrada').length > 0 && (
         <div className="space-y-2">
           <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-[#6f3a2a]">
@@ -458,7 +482,11 @@ export function PantallaConteoFisico() {
 
       <WizardNuevaSesion
         abierto={wizardAbierto}
-        onCambioAbierto={setWizardAbierto}
+        onCambioAbierto={(v) => {
+          setWizardAbierto(v)
+          if (!v) setInicialTarea(null)
+        }}
+        inicial={inicialTarea}
       />
 
       {sesionActiva && (
@@ -466,7 +494,11 @@ export function PantallaConteoFisico() {
           sesionId={sesionActiva.id}
           sesionNombre={sesionActiva.nombre}
           abierto={agregarAbierto}
-          onCambioAbierto={setAgregarAbierto}
+          onCambioAbierto={(v) => {
+            setAgregarAbierto(v)
+            if (!v) setInicialTarea(null)
+          }}
+          inicial={inicialTarea}
         />
       )}
 
