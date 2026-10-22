@@ -92,7 +92,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **293**
+## Próximo número libre: **310**
 
 ---
 
@@ -405,6 +405,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 303 | `303_facturas_validacion.sql` | ✅ aplicada | 2026-10-18 (prueba + producción; test con rollback OK) | Portal de facturas: `facturas_compra.validada/validada_por/validada_at/diferencia_recepcion/renglones_diferentes` (backfill: lo cargado queda validado; directas copian `controlada`), `fn_validar_factura_compra(id, validar)` (finanzas o compras; guarda el cruce recibido vs. facturado y audita) y `fn_controlar_compra_directa` reemitida (controlar = validar). Probada en PGlite con `supabase/tests/test_facturas_validacion.sql` |
 | 304 | `304_facturas_validacion_historico.sql` | ✅ aplicada | 2026-10-18 (prueba + producción) | Reabre la validación de las facturas con orden que la 303 dio por validadas (backfill, `validada_por` null) y cuya deuda sigue abierta: en "A validar" salen todas las que pasaron por recepción y Finanzas no revisó. Pagadas, directas y validadas a mano no se tocan |
 | 305 | `305_facturas_validacion_revertir_304.sql` | ⏳ pendiente | — | Deshace la 304 a pedido del dueño: las facturas con orden sin validar y sin `validada_por` vuelven a validadas (a "A pagar" / "Vencida"). Queda el criterio de la 303: solo lo nuevo pasa por "A validar" |
+| 306 | `306_conteo_parcial_esquema.sql` | ⏳ pendiente | — | Conteo parcial y cíclico (1/4): `conteo_zonas.cantidad_max` / `sin_contar_dias` + helpers internos `fn_conteo_ultimos()` (último conteo en sesión cerrada, por `ts_cierre`), `fn_conteo_responsables`, `fn_conteo_repartir` (texto de la 224 sacado afuera para acortarla) |
+| 307 | `307_conteo_armar_lista.sql` | ⏳ pendiente | — | `fn_conteo_armar_lista` (interna): candidatos → saca lo contado en sesión cerrada hace menos de N días → se queda con los primeros N del recorrido; devuelve `en_criterio`, `libres`, `ya_contados`, `pendientes`, `limitado` |
+| 308 | `308_conteo_crear_tareas_v2.sql` | ⏳ pendiente | — | `fn_conteo_crear_tareas` v2 (misma firma): lee `sin_contar_dias` y `cantidad_max` del JSON de cada tarea, los guarda en la zona y suma `ya_contados`/`pendientes`/`limitado` a la salida. La 225 no cambia. Probada en PGlite con `tests/test_conteo_parcial.sql` + regresión `test_conteo_tareas_rapido.sql` |
+| 309 | `309_conteo_pendientes.sql` | ⏳ pendiente | — | `fn_conteo_pendientes(criterios, días)` (conteo_cierre): alcance + último conteo cerrado + `contado_en_ventana` / `en_tarea_abierta`, para la tarjeta "Avance por clase ABC" y la lista de qué falta contar |
 
 ## Dos bases de Supabase (2026-09-17)
 

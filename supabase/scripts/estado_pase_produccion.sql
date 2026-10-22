@@ -109,7 +109,35 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and not has_function_privilege('authenticated', 'public.fn_set_sueldo(integer,numeric)', 'EXECUTE'),
     null
   union all
-  select 15, 'T1', 'Sin funciones duplicadas',
+  select 15, '306', 'Conteo parcial: columnas y helpers internos',
+    exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'conteo_zonas'
+               and column_name in ('cantidad_max', 'sin_contar_dias')
+             having count(*) = 2)
+    and to_regprocedure('public.fn_conteo_ultimos()') is not null
+    and to_regprocedure('public.fn_conteo_repartir(text[],integer)') is not null
+    and not has_function_privilege('authenticated', 'public.fn_conteo_ultimos()', 'EXECUTE'),
+    null
+  union all
+  select 16, '307', 'Conteo parcial: fn_conteo_armar_lista (interna)',
+    to_regprocedure('public.fn_conteo_armar_lista(integer,jsonb,text,integer,integer)') is not null
+    and not has_function_privilege('authenticated',
+      'public.fn_conteo_armar_lista(integer,jsonb,text,integer,integer)', 'EXECUTE'),
+    null
+  union all
+  -- Si el pegado se cortó después del CREATE, falta el REVOKE final.
+  select 17, '308', 'Conteo parcial: fn_conteo_crear_tareas v2 (interna)',
+    exists (select 1 from fn where proname = 'fn_conteo_crear_tareas'
+                                and prosrc like '%fn_conteo_armar_lista%')
+    and not has_function_privilege('authenticated',
+      'public.fn_conteo_crear_tareas(integer,jsonb,boolean)', 'EXECUTE'),
+    null
+  union all
+  select 18, '309', 'Conteo parcial: fn_conteo_pendientes',
+    to_regprocedure('public.fn_conteo_pendientes(jsonb,integer)') is not null,
+    null
+  union all
+  select 19, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)
