@@ -12,3 +12,12 @@
  * El Conteo rápido del celular (ajuste directo) no depende de este flag.
  */
 export const MOSTRAR_CONTEOS_ASIGNADOS = false
+
+/**
+ * Conteo parcial y cíclico (migs 306 a 309). Una tarea puede saltear lo
+ * contado en una sesión cerrada hace menos de N días y quedarse con los
+ * primeros N productos del recorrido. Estos son los valores que propone la
+ * pantalla; el encargado los cambia en cada tarea.
+ */
+export const DIAS_SIN_CONTAR_DEFAULT = 30
+export const CANTIDAD_PARCIAL_SUGERIDA = 50

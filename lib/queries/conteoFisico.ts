@@ -5,6 +5,7 @@ import type {
   ConteoCoberturaRow,
   ConteoDetalleRow,
   ConteoDiferenciaRow,
+  ConteoPendienteRow,
   ConteoSesionRow,
   ConteoTareaResultado,
   ConteoVistaPrevia,
@@ -218,6 +219,16 @@ export interface TareaNueva {
    * cerrarla, lo contado se ubica ahí. Las tareas por área se anclan solas.
    */
   ubicacion_id?: number | null
+  /**
+   * Conteo parcial (migs 306 a 309): tope de productos; se toman los primeros
+   * del recorrido. null = toda la lista.
+   */
+  cantidad_max?: number | null
+  /**
+   * Conteo cíclico: saltea lo contado en una sesión cerrada hace menos de N
+   * días, así cada sesión sigue por donde dejó la anterior. null = no saltea.
+   */
+  sin_contar_dias?: number | null
 }
 
 export interface AbrirSesionPayload {
@@ -230,6 +241,7 @@ export interface AbrirSesionPayload {
 /**
  * `responsable_user_id` viaja además de `responsables` para que una base sin
  * las migraciones 222+ (que solo conoce el campo único) siga asignando bien.
+ * `cantidad_max` y `sin_contar_dias` los ignora una base sin la 308.
  */
 function aPayloadZonas(zonas: TareaNueva[]): Json {
   return zonas.map((z, i) => ({
@@ -238,8 +250,25 @@ function aPayloadZonas(zonas: TareaNueva[]): Json {
     responsable_user_id: z.responsables[0] ?? null,
     criterios: z.criterios,
     ubicacion_id: z.ubicacion_id ?? null,
+    cantidad_max: z.cantidad_max ?? null,
+    sin_contar_dias: z.sin_contar_dias ?? null,
     orden: i,
   })) as unknown as Json
+}
+
+/**
+ * Una base sin la mig 308 no manda los campos del conteo parcial: se
+ * completan con "sin ventana ni tope" para que el tipo no tenga opcionales.
+ */
+function normalizarResultado(
+  t: Partial<ConteoTareaResultado> & Omit<ConteoTareaResultado, 'ya_contados' | 'pendientes' | 'limitado'>
+): ConteoTareaResultado {
+  return {
+    ...t,
+    ya_contados: t.ya_contados ?? 0,
+    pendientes: t.pendientes ?? t.productos,
+    limitado: t.limitado ?? false,
+  }
 }
 
 export async function abrirSesionConteo(
@@ -286,7 +315,8 @@ export async function previsualizarTareas(
     if (faltaMigracion(error)) return null
     throw new Error(error.message)
   }
-  return data as unknown as ConteoVistaPrevia
+  const vista = data as unknown as ConteoVistaPrevia
+  return { ...vista, tareas: (vista.tareas ?? []).map(normalizarResultado) }
 }
 
 export async function agregarTareasConteo(payload: {
@@ -299,7 +329,31 @@ export async function agregarTareasConteo(payload: {
     p_zonas: aPayloadZonas(payload.zonas),
   })
   if (error) throw error
-  return (data ?? []) as unknown as ConteoTareaResultado[]
+  return ((data ?? []) as unknown as ConteoTareaResultado[]).map(normalizarResultado)
+}
+
+/**
+ * Qué falta contar de un criterio (migs 306 a 309): cada producto con su
+ * último conteo cerrado, si está hecho en la ventana y si ya está en una
+ * tarea de la sesión viva. En orden de recorrido. `null` = migración 309
+ * pendiente. Solo gestores (la función exige el permiso).
+ */
+export async function getPendientesConteo(
+  criterios: CriteriosConteo,
+  dias: number
+): Promise<ConteoPendienteRow[] | null> {
+  const supabase = createClient()
+  try {
+    return await traerTodo<ConteoPendienteRow>(() =>
+      supabase.rpc('fn_conteo_pendientes', {
+        p_criterios: criterios as unknown as Json,
+        p_dias: dias,
+      })
+    )
+  } catch (e) {
+    if (faltaMigracion(e as { code?: string })) return null
+    throw e
+  }
 }
 
 export async function reasignarTareaConteo(payload: {

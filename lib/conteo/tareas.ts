@@ -21,6 +21,35 @@ export interface TareaBorrador {
   responsables: string[]
   /** null = zona libre (sin lista). */
   criterios: CriteriosConteo | null
+  /** Conteo parcial: tope de productos (los primeros del recorrido). null = todos. */
+  cantidad_max: number | null
+  /** Conteo cíclico: saltea lo contado hace menos de N días. null = no saltea. */
+  sin_contar_dias: number | null
+}
+
+/**
+ * Con qué se abre el armado de tareas cuando viene prellenado desde la
+ * tarjeta "Avance por clase ABC" ("Mandar a contar 50 de la clase A").
+ */
+export interface TareaInicial {
+  criterios: CriteriosConteo
+  cantidad_max?: number | null
+  sin_contar_dias?: number | null
+  /** Nombre sugerido para la tarea y, si se abre una sesión nueva, para la sesión. */
+  nombre?: string
+}
+
+/** Etiqueta corta de un conteo parcial, o null si la tarea es completa. */
+export function etiquetaParcial(t: {
+  cantidad_max: number | null
+  sin_contar_dias: number | null
+}): string | null {
+  const partes: string[] = []
+  if (t.cantidad_max != null) partes.push(`los primeros ${t.cantidad_max}`)
+  if (t.sin_contar_dias != null) {
+    partes.push(`solo pendientes (${t.sin_contar_dias} días)`)
+  }
+  return partes.length ? partes.join(' · ') : null
 }
 
 export const CLASES_CONTEO: { clave: ClaseConteo; etiqueta: string; ayuda: string }[] = [
@@ -152,13 +181,17 @@ export function nombreSugerido(
 }
 
 export function aTareasNuevas(borradores: TareaBorrador[]): TareaNueva[] {
-  return borradores.map((b) => ({
-    nombre: b.nombre.trim(),
-    responsables: b.responsables,
-    criterios: criteriosVacios(b.criterios)
-      ? null
-      : limpiarCriterios(b.criterios ?? {}),
-  }))
+  return borradores.map((b) => {
+    const libre = criteriosVacios(b.criterios)
+    return {
+      nombre: b.nombre.trim(),
+      responsables: b.responsables,
+      criterios: libre ? null : limpiarCriterios(b.criterios ?? {}),
+      // Una zona libre no tiene lista: ni tope ni ventana.
+      cantidad_max: libre ? null : (b.cantidad_max ?? null),
+      sin_contar_dias: libre ? null : (b.sin_contar_dias ?? null),
+    }
+  })
 }
 
 let contador = 0

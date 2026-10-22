@@ -3785,6 +3785,10 @@ export type ConteoZonaRow = {
   tipo: TipoConteoZona
   /** Mig 222. NULL = zona libre: sin lista, se escanea lo que haya. */
   criterios: CriteriosConteo | null
+  /** Conteo parcial (mig 306): tope de productos de la tarea. NULL = toda la lista. */
+  cantidad_max: number | null
+  /** Conteo cíclico (mig 306): salteó lo contado hace menos de N días. NULL = no. */
+  sin_contar_dias: number | null
   created_at: string
 }
 
@@ -3801,6 +3805,8 @@ export type ConteoZonaInsert = {
   ubicacion_id?: number | null
   tipo?: TipoConteoZona
   criterios?: CriteriosConteo | null
+  cantidad_max?: number | null
+  sin_contar_dias?: number | null
   created_at?: string
 }
 
@@ -3815,6 +3821,8 @@ export type ConteoZonaUpdate = {
   ubicacion_id?: number | null
   tipo?: TipoConteoZona
   criterios?: CriteriosConteo | null
+  cantidad_max?: number | null
+  sin_contar_dias?: number | null
 }
 
 /** Lista de productos de una tarea de conteo, en orden de recorrido (mig 222). */
@@ -3870,6 +3878,15 @@ export type ConteoTareaResultado = {
   productos: number
   /** Los que ya son de otra tarea de la sesión. */
   ya_asignados: number
+  /**
+   * Conteo cíclico (mig 308): los que se saltearon por estar contados en una
+   * sesión cerrada dentro de la ventana. 0 si la tarea no lleva ventana.
+   */
+  ya_contados: number
+  /** Los que quedaban por contar antes del tope (`productos` ≤ `pendientes`). */
+  pendientes: number
+  /** true = el tope dejó afuera parte de los pendientes. */
+  limitado: boolean
   /** De los que quedan, cuántos viven también fuera del área de la tarea. */
   con_otros_lugares: number
   /** En cuántas tareas se reparte (una por persona). 0 = quedó sin productos. */
@@ -3882,6 +3899,24 @@ export type ConteoVistaPrevia = {
   tareas: ConteoTareaResultado[]
   /** Día del snapshot del que sale la clase ABC. NULL = todavía no hay. */
   fecha_abc: string | null
+}
+
+/**
+ * Fila de fn_conteo_pendientes (mig 309): un producto del criterio con su
+ * último conteo cerrado. `contado_en_ventana` = hecho en este ciclo;
+ * `en_tarea_abierta` = está en una tarea de la sesión viva.
+ */
+export type ConteoPendienteRow = {
+  producto_id: number
+  nombre: string
+  codigo_barras: string | null
+  clase_abc: ClaseConteo
+  donde: string | null
+  orden: number
+  ultimo_ts: string | null
+  ultima_sesion: string | null
+  contado_en_ventana: boolean
+  en_tarea_abierta: boolean
 }
 
 /** Fila de fn_conteo_avance (mig 227). */
@@ -6252,6 +6287,10 @@ export interface Database {
       fn_conteo_cobertura: {
         Args: { p_sesion_id: number }
         Returns: ConteoCoberturaRow[]
+      }
+      fn_conteo_pendientes: {
+        Args: { p_criterios: Json; p_dias?: number }
+        Returns: ConteoPendienteRow[]
       }
       fn_aprobar_conteo: {
         Args: {

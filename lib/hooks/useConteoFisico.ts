@@ -13,6 +13,7 @@ import {
   getDiferenciasConteo,
   getItemsPorZona,
   getListaTarea,
+  getPendientesConteo,
   getSesionConteo,
   getSesionConteoActiva,
   getSesionesConteo,
@@ -31,9 +32,11 @@ import {
   type SolicitarReconteoPayload,
   type TareaNueva,
 } from '@/lib/queries/conteoFisico'
+import type { CriteriosConteo } from '@/types/database'
 
 export const CONTEO_SESIONES_KEY = ['conteo-sesiones'] as const
 export const CONTEO_SESION_ACTIVA_KEY = ['conteo-sesion-activa'] as const
+export const CONTEO_PENDIENTES_KEY = ['conteo-pendientes'] as const
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
@@ -184,11 +187,32 @@ export function useVistaPreviaTareas(zonas: TareaNueva[], habilitado = true) {
   })
 }
 
+/**
+ * Qué falta contar de un criterio en una ventana de días (conteo cíclico,
+ * migs 306 a 309). `data === null` = migración 309 pendiente. Solo gestores.
+ * Conserva el resultado anterior mientras cambia la ventana.
+ */
+export function usePendientesCiclo(
+  criterios: CriteriosConteo,
+  dias: number,
+  habilitado = true
+) {
+  return useQuery({
+    queryKey: [...CONTEO_PENDIENTES_KEY, criterios, dias],
+    queryFn: () => getPendientesConteo(criterios, dias),
+    enabled: habilitado && dias > 0,
+    staleTime: 60 * 1000,
+    placeholderData: (previo) => previo,
+    retry: false,
+  })
+}
+
 // ─── Mutations ───────────────────────────────────────────────────────────────
 
 function invalidarSesiones(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: CONTEO_SESIONES_KEY })
   qc.invalidateQueries({ queryKey: CONTEO_SESION_ACTIVA_KEY })
+  qc.invalidateQueries({ queryKey: CONTEO_PENDIENTES_KEY })
   qc.invalidateQueries({ queryKey: ['conteo-sesion'] })
   qc.invalidateQueries({ queryKey: ['conteo-zonas'] })
   qc.invalidateQueries({ queryKey: ['conteo-zona'] })

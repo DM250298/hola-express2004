@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "node --test lib/pricing/motor.test.ts lib/compras/cobertura.test.ts lib/utils/fechaCorta.test.ts lib/recepcion/borrador.test.ts lib/config/navegacion.test.ts lib/facturas/portal.test.ts components/rrhh/tareasAgenda.test.ts components/rrhh/calendarioTurno.test.ts components/rrhh/nuevaTareaLogica.test.ts components/rrhh/rutinaCalendario.test.ts components/rrhh/registroLogica.test.ts components/rrhh/miTurnoLogica.test.ts"
+    "test": "node --test lib/pricing/motor.test.ts lib/compras/cobertura.test.ts lib/utils/fechaCorta.test.ts lib/recepcion/borrador.test.ts lib/config/navegacion.test.ts lib/facturas/portal.test.ts lib/conteo/ciclo.test.ts components/rrhh/tareasAgenda.test.ts components/rrhh/calendarioTurno.test.ts components/rrhh/nuevaTareaLogica.test.ts components/rrhh/rutinaCalendario.test.ts components/rrhh/registroLogica.test.ts components/rrhh/miTurnoLogica.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
