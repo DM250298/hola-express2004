@@ -33,14 +33,23 @@ interface Props {
   /** Query string del período, para que el drill-down abra el mismo rango. */
   paramsPeriodo: string
   puedeVerCostos: boolean
+  /** Solo el responsable inscripto discrimina IVA; mono/exento venden "completo". */
+  discriminaIva?: boolean
 }
 
 /**
  * Tabla pivotante del tablero: el negocio agrupado por la dimensión que
  * elijas (fn_metricas_agrupadas, mig 180). Cada fila abre el tab Análisis
- * de Stock filtrado por ese valor.
+ * de Stock filtrado por ese valor. Desde la mig 315 el margen es neto de
+ * IVA y de devoluciones; ventas y participación siguen con IVA incluido.
  */
-export function TablaDimensiones({ desde, hasta, paramsPeriodo, puedeVerCostos }: Props) {
+export function TablaDimensiones({
+  desde,
+  hasta,
+  paramsPeriodo,
+  puedeVerCostos,
+  discriminaIva = true,
+}: Props) {
   const [dimension, setDimension] = useState<DimensionTablero>('categoria')
   const [verTodas, setVerTodas] = useState(false)
   const { data, isLoading, isError, refetch } = useMetricasAgrupadas(
@@ -106,7 +115,7 @@ export function TablaDimensiones({ desde, hasta, paramsPeriodo, puedeVerCostos }
                   <th className="px-2 py-2 font-semibold">Ventas</th>
                   {puedeVerCostos && (
                     <>
-                      <th className="px-2 py-2 text-right font-semibold">Margen</th>
+                      <th className="px-2 py-2 text-right font-semibold">Margen neto</th>
                       <th className="px-2 py-2 text-right font-semibold">Stock $</th>
                       <th className="px-2 py-2 text-right font-semibold">Días inv.</th>
                     </>
@@ -211,7 +220,14 @@ export function TablaDimensiones({ desde, hasta, paramsPeriodo, puedeVerCostos }
           )}
           <p className="border-t border-[#e4c9b0]/60 px-4 py-2 text-[11px] text-[#c8a58a]">
             Productos = con ventas / total activos. Días inv. = stock a costo ÷ costo de lo
-            vendido por día. {puedeVerCostos && '* margen parcialmente estimado con costo actual.'}
+            vendido por día.{' '}
+            {puedeVerCostos && (
+              <>
+                Margen = ventas netas {discriminaIva ? 'de IVA y de devoluciones' : 'de devoluciones'}{' '}
+                − costo de lo vendido. Ventas y participación siguen con IVA incluido. * margen
+                parcialmente estimado con costo actual.
+              </>
+            )}
           </p>
         </>
       )}

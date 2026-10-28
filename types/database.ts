@@ -1869,6 +1869,8 @@ export type ItemVentaRow = {
   subtotal: number
   /** Lista APLICADA a este ítem (mig 153): captura el fallback a minorista. */
   lista_precio: ListaPrecio
+  /** Alícuota de IVA del producto al vender (mig 311). NULL en ventas viejas. */
+  iva_venta: number | null
 }
 
 export type ItemVentaInsert = {
@@ -1879,6 +1881,7 @@ export type ItemVentaInsert = {
   precio_unitario: number
   subtotal: number
   lista_precio?: ListaPrecio
+  iva_venta?: number | null
 }
 
 export type ItemVentaUpdate = {
@@ -4259,11 +4262,16 @@ export type ResumenSkuRow = {
   venta_perdida_pesos: number
   precio_venta: number
   costo_actual: number | null
+  /** Netos de IVA y de devoluciones desde la mig 314 (margen_pct sobre ingresos_netos). */
   costo_ventas: number | null
   margen_pesos: number | null
   margen_pct: number | null
   stock_valorizado: number | null
   costo_estimado: boolean
+  /** Mig 314. `null` = la migración todavía no corrió (sin gate de costos). */
+  ingresos_netos: number | null
+  iva_ventas: number | null
+  devoluciones: number | null
 }
 
 /** Fila de fn_metricas_agrupadas (mig 180): el negocio por una dimensión. */
@@ -4274,6 +4282,7 @@ export type MetricaAgrupadaRow = {
   skus_sin_movimiento: number
   ingresos: number
   participacion_ingresos: number | null
+  /** Netos de IVA y de devoluciones desde la mig 315 (margen_pct sobre ingresos_netos). */
   costo_ventas: number | null
   margen_pesos: number | null
   margen_pct: number | null
@@ -4283,6 +4292,10 @@ export type MetricaAgrupadaRow = {
   quiebres: number
   venta_perdida_pesos: number
   costo_estimado: boolean
+  /** Mig 315. `null` = la migración todavía no corrió (sin gate de costos). */
+  ingresos_netos: number | null
+  iva_ventas: number | null
+  devoluciones: number | null
 }
 
 /** Fila de fn_mapa_nodo_skus (mig 194): el último escalón del drill-down. */
@@ -4296,6 +4309,7 @@ export type MapaSkuRow = {
   stock_actual: number
   unidades_vendidas: number
   ingresos: number
+  /** Netos de IVA y de devoluciones desde la mig 319. */
   margen_pesos: number | null
   margen_pct: number | null
   stock_valorizado: number | null
@@ -4305,6 +4319,8 @@ export type MapaSkuRow = {
   quiebres_periodo: number
   alertas_criticas: number
   alertas_atencion: number
+  /** Mig 319. `null` = la migración todavía no corrió. */
+  ingresos_netos: number | null
 }
 
 // ─── Alertas (Fase F, migs 183-189) ──────────────────────────────────────────
@@ -6569,6 +6585,11 @@ export interface Database {
       fn_mapa_nodo_skus: {
         Args: { p_ubicacion_id: number; p_desde: string; p_hasta: string }
         Returns: MapaSkuRow[]
+      }
+      /** Régimen del comercio según config_fiscal (mig 311): responsable_inscripto | monotributista | exento. */
+      fn_regimen_iva: {
+        Args: Record<string, never>
+        Returns: string
       }
       /** Conteo por ubicación (mig 207). p_ubicacion_id null = solo cerrar. */
       fn_guardar_conteo_ubicacion: {

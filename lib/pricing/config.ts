@@ -13,6 +13,7 @@
 import type { ConfigFiscalRow, MedioPagoRow } from '@/types/database'
 import type { ConfigPricing, RegimenFiscal } from './tipos'
 import { seleccionarPeorTasa } from './motor'
+import { regimenDesdeCondicionIva } from './regimen'
 
 /**
  * ¿Es un medio de Mercado Pago? (los que cobran comisión y mapean a la API de
@@ -47,11 +48,13 @@ export function derivarTasaMpPeorCaso(
   return seleccionarPeorTasa(tasasSinIva)
 }
 
-/** Mapea la condición de IVA de config_fiscal al régimen del motor. */
+/**
+ * Mapea la condición de IVA de config_fiscal al régimen del motor.
+ * Delega en `regimenDesdeCondicionIva` (monotributo / monotributista /
+ * exento → monotributista; el resto, responsable inscripto).
+ */
 export function regimenDesdeConfig(condicionIva: string): RegimenFiscal {
-  return condicionIva === 'monotributista'
-    ? 'monotributista'
-    : 'responsable_inscripto'
+  return regimenDesdeCondicionIva(condicionIva)
 }
 
 /**

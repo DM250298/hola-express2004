@@ -145,6 +145,12 @@ export function TabAnalisisSku({
     () => (data ?? []).some((f) => f.margen_pesos != null),
     [data]
   )
+  // Mig 314: ingresos_netos viene para todos (sin gate de costos); si está
+  // en null, la migración no corrió y el margen sigue con IVA incluido.
+  const hayNeto = useMemo(
+    () => (data ?? []).some((f) => f.ingresos_netos != null),
+    [data]
+  )
 
   const filtrados = useMemo(() => {
     let lista = data ?? []
@@ -220,10 +226,11 @@ export function TabAnalisisSku({
       { titulo: 'Stock', wch: 8, align: 'right' as const },
       { titulo: 'Vendido', wch: 9, align: 'right' as const },
       { titulo: 'Ingresos', wch: 12, align: 'right' as const },
+      ...(hayNeto ? [{ titulo: 'Ventas netas', wch: 12, align: 'right' as const }] : []),
       ...(hayCostos
         ? [
-            { titulo: 'Margen $', wch: 12, align: 'right' as const },
-            { titulo: 'Margen %', wch: 9, align: 'right' as const },
+            { titulo: 'Margen neto $', wch: 13, align: 'right' as const },
+            { titulo: 'Margen neto %', wch: 10, align: 'right' as const },
           ]
         : []),
       { titulo: 'Cobertura (d)', wch: 11, align: 'right' as const },
@@ -238,6 +245,7 @@ export function TabAnalisisSku({
       f.stock_actual,
       f.unidades_vendidas,
       f.ingresos,
+      ...(hayNeto ? [f.ingresos_netos ?? ''] : []),
       ...(hayCostos ? [f.margen_pesos ?? '', f.margen_pct ?? ''] : []),
       f.dias_cobertura ?? '',
       f.quiebres_periodo,
@@ -254,7 +262,12 @@ export function TabAnalisisSku({
       kpis: [
         { etiqueta: 'Ingresos', valor: `$ ${formatearNumero(Math.round(kpis.ingresos))}` },
         ...(kpis.margen != null
-          ? [{ etiqueta: 'Margen', valor: `$ ${formatearNumero(Math.round(kpis.margen))}` }]
+          ? [
+              {
+                etiqueta: hayNeto ? 'Margen neto' : 'Margen',
+                valor: `$ ${formatearNumero(Math.round(kpis.margen))}`,
+              },
+            ]
           : []),
         { etiqueta: 'SKUs con venta', valor: formatearNumero(kpis.skusConVenta) },
         { etiqueta: 'Quiebres', valor: formatearNumero(kpis.quiebres) },
@@ -331,15 +344,17 @@ export function TabAnalisisSku({
         </KpiChico>
         {kpis.margen != null && (
           <KpiChico
-            etiqueta="Margen comercial"
+            etiqueta={hayNeto ? 'Margen neto de IVA' : 'Margen comercial'}
             extra={
-              kpis.hayEstimados ? (
-                <AyudaContextual titulo="Parcialmente estimado">
-                  Algunas ventas del período no tienen costo congelado
-                  (anteriores a la migración del costo por ítem, o productos
-                  sin costo cargado): para esas se usa el costo actual.
-                </AyudaContextual>
-              ) : undefined
+              <AyudaContextual
+                titulo={hayNeto ? 'Qué es el margen neto de IVA' : 'Qué es el margen comercial'}
+              >
+                {hayNeto
+                  ? 'Ventas sin el IVA (que no es tuyo: se lo pasás a AFIP) y sin las devoluciones, menos el costo de la mercadería vendida (costo sin IVA). El IVA se descuenta producto por producto con la alícuota de cada uno (21 %, 10,5 %, exento), sin importar cómo se cobró. No descuenta Ingresos Brutos, comisiones de tarjeta ni gastos del local: no es la ganancia final.'
+                  : 'Ingresos menos el costo de la mercadería vendida. Falta correr la migración 314: el margen está calculado con IVA incluido.'}
+                {kpis.hayEstimados &&
+                  ' Algunas ventas del período no tienen costo congelado (anteriores a la migración del costo por ítem, o productos sin costo cargado): para esas se usa el costo actual (parcialmente estimado).'}
+              </AyudaContextual>
             }
           >
             <span className={kpis.margen >= 0 ? 'text-[#2f7d4f]' : 'text-[#c43e2c]'}>
@@ -462,7 +477,9 @@ export function TabAnalisisSku({
               <th className="px-2 py-2.5 font-semibold text-right">Vendido</th>
               <th className="px-2 py-2.5 font-semibold text-right">Ingresos</th>
               {hayCostos && (
-                <th className="px-2 py-2.5 font-semibold text-right">Margen</th>
+                <th className="px-2 py-2.5 font-semibold text-right">
+                  {hayNeto ? 'Margen neto' : 'Margen'}
+                </th>
               )}
               <th className="px-2 py-2.5 font-semibold text-right">Cobert.</th>
               <th className="px-2 py-2.5 font-semibold text-right">Últ. venta</th>

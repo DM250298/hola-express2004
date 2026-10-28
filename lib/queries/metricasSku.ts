@@ -36,11 +36,16 @@ export interface ResumenSku {
   precio_venta: number
   /** NULL sin permiso 'costos'. */
   costo_actual: number | null
+  /** Netos de IVA y de devoluciones desde la mig 314 (margen_pct sobre ingresos_netos). */
   costo_ventas: number | null
   margen_pesos: number | null
   margen_pct: number | null
   stock_valorizado: number | null
   costo_estimado: boolean
+  /** Mig 314, sin gate de costos. `null` = la migración todavía no corrió. */
+  ingresos_netos: number | null
+  iva_ventas: number | null
+  devoluciones: number | null
 }
 
 export async function getResumenSkus(

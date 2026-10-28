@@ -49,6 +49,7 @@ function condicionIvaLabel(c?: string | null): string {
   const map: Record<string, string> = {
     responsable_inscripto: 'Responsable Inscripto',
     monotributo: 'Monotributo',
+    monotributista: 'Monotributista',
     exento: 'Exento',
   }
   return map[c] ?? c

@@ -140,7 +140,7 @@ export function PanelNodoMapa({
       <div className="grid grid-cols-2 gap-px border-b border-[#e4c9b0]/60 bg-[#e4c9b0]/40">
         <Dato etiqueta="Ventas" valor={formatearMontoEntero(nodo.ingresos)} />
         <Dato
-          etiqueta="Margen"
+          etiqueta="Margen neto"
           valor={
             puedeVerCostos && nodo.margen != null
               ? `${formatearMontoEntero(nodo.margen)}${
@@ -261,7 +261,8 @@ export function PanelNodoMapa({
                     </div>
                     {puedeVerCostos && s.margen_pct != null && (
                       <div className="text-[11px] text-[#6f3a2a]">
-                        {formatoUnDecimal.format(s.margen_pct)}% margen
+                        {formatoUnDecimal.format(s.margen_pct)}%{' '}
+                        {s.ingresos_netos != null ? 'margen neto' : 'margen'}
                       </div>
                     )}
                     {onAsignar && (
