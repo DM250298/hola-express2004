@@ -165,7 +165,14 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and has_function_privilege('authenticated', 'public.fn_mapa_semaforo(date,date)', 'EXECUTE'),
     null
   union all
-  select 25, 'T1', 'Sin funciones duplicadas',
+  -- ── Finanzas › Tablero con el margen neto (321). ──
+  select 25, '321', 'fn_resultado_periodo (Finanzas › Tablero, mismo margen neto que /tablero)',
+    exists (select 1 from fn where proname = 'fn_resultado_periodo' and prosrc like '%ventas_netas%')
+    and has_function_privilege('authenticated', 'public.fn_resultado_periodo(date,date)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.fn_resultado_periodo(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 26, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

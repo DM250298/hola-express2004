@@ -419,6 +419,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 318 | `318_fn_tablero_gerencial_v3.sql` | ⏳ pendiente | — | (8/10) `margen` + `ingresos_netos`, `iva`, `devoluciones`, `anterior_ingresos_netos`, `regimen`, `version 3`; margen y margen_pct netos; serie con `ingresos_netos`/`devoluciones`. Ventas (hoy/ayer/semana/mes/período) siguen siendo lo cobrado con IVA |
 | 319 | `319_fn_mapa_nodo_skus_v2.sql` | ⏳ pendiente | — | (9/10) margen neto en el drill-down del mapa; nueva `ingresos_netos`. Probadas las diez en PGlite (`supabase/tests/test_margen_neto_iva.sql` es el mismo caso con rollback para la base real) |
 | 320 | `320_fn_mapa_semaforo_v2.sql` | ⏳ pendiente | — | (10/10) el % de margen por nodo del mapa se calcula sobre `ingresos_netos` (con la 314 el $ ya era neto y el % dividía por bruto); cada nodo trae `ingresos_netos` |
+| 321 | `321_fn_resultado_periodo.sql` | ⏳ pendiente | — | Finanzas › Tablero con el mismo margen neto que `/tablero`: `fn_resultado_periodo(p_desde, p_hasta)` (jsonb, definer, permiso `finanzas`) suma `fn_ventas_diarias` v2: `ventas_brutas` (con IVA), `tickets`, `ventas_netas` (neto de IVA y devoluciones), `iva`, `devoluciones`, `cmv` (congelado, neto de devoluciones), `estimado` y `dias[]`. `getResumenFinanciero` la usa y, si falta, cae al cálculo viejo con `neto: false` (la UI avisa). Probada en PGlite; `tests/test_resultado_periodo.sql` para la base real (rollback). **Requiere 311–313.** Próximo número libre: 322 |
 
 ## Dos bases de Supabase (2026-09-17)
 
