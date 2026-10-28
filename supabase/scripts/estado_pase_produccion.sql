@@ -109,7 +109,63 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and not has_function_privilege('authenticated', 'public.fn_set_sueldo(integer,numeric)', 'EXECUTE'),
     null
   union all
-  select 15, 'T1', 'Sin funciones duplicadas',
+  -- ── Margen neto de IVA (311–319). Cada fila mira el cuerpo de la función Y el
+  --    grant/revoke final: si el pegado se cortó, falta alguno de los dos. ──
+  select 15, '311', 'IVA congelado en items_venta + fn_regimen_iva + trigger',
+    exists (select 1 from information_schema.columns where table_schema = 'public'
+             and table_name = 'items_venta' and column_name = 'iva_venta')
+    and to_regprocedure('public.fn_regimen_iva()') is not null
+    and exists (select 1 from pg_trigger where tgname = 'trg_items_venta_iva')
+    and not exists (select 1 from public.config_fiscal where condicion_iva = 'monotributo'),
+    'Ítems sin alícuota: ' || (select count(*) from public.items_venta where iva_venta is null)
+  union all
+  select 16, '312', 'Helpers fn_items_vendidos_neto / fn_items_devueltos_neto (internos)',
+    to_regprocedure('public.fn_items_vendidos_neto(date,date,integer[])') is not null
+    and to_regprocedure('public.fn_items_devueltos_neto(date,date,integer[])') is not null
+    and not has_function_privilege('authenticated', 'public.fn_items_devueltos_neto(date,date,integer[])', 'EXECUTE'),
+    null
+  union all
+  select 17, '313', 'fn_ventas_diarias v2 (ingresos_netos, interna)',
+    exists (select 1 from fn where proname = 'fn_ventas_diarias' and prosrc like '%ingresos_netos%')
+    and not has_function_privilege('authenticated', 'public.fn_ventas_diarias(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 18, '314', 'fn_resumen_skus v3 (margen neto + iva_ventas)',
+    exists (select 1 from fn where proname = 'fn_resumen_skus' and prosrc like '%iva_ventas%')
+    and has_function_privilege('authenticated', 'public.fn_resumen_skus(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 19, '315', 'fn_metricas_agrupadas v2',
+    exists (select 1 from fn where proname = 'fn_metricas_agrupadas' and prosrc like '%iva_ventas%')
+    and has_function_privilege('authenticated', 'public.fn_metricas_agrupadas(text,date,date)', 'EXECUTE'),
+    null
+  union all
+  select 20, '316', 'fn_tablero_skus v2 (interna)',
+    exists (select 1 from fn where proname = 'fn_tablero_skus' and prosrc like '%ingresos_netos%')
+    and not has_function_privilege('authenticated', 'public.fn_tablero_skus(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 21, '317', 'fn_tablero_estado (interna)',
+    to_regprocedure('public.fn_tablero_estado(date,date)') is not null
+    and not has_function_privilege('authenticated', 'public.fn_tablero_estado(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 22, '318', 'fn_tablero_gerencial v3 (margen neto)',
+    exists (select 1 from fn where proname = 'fn_tablero_gerencial' and prosrc like '%anterior_ingresos_netos%')
+    and has_function_privilege('authenticated', 'public.fn_tablero_gerencial(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 23, '319', 'fn_mapa_nodo_skus v2 (margen neto)',
+    exists (select 1 from fn where proname = 'fn_mapa_nodo_skus' and prosrc like '%ingresos_netos%')
+    and has_function_privilege('authenticated', 'public.fn_mapa_nodo_skus(integer,date,date)', 'EXECUTE'),
+    null
+  union all
+  select 24, '320', 'fn_mapa_semaforo v2 (% sobre ventas netas)',
+    exists (select 1 from fn where proname = 'fn_mapa_semaforo' and prosrc like '%ingresos_netos%')
+    and has_function_privilege('authenticated', 'public.fn_mapa_semaforo(date,date)', 'EXECUTE'),
+    null
+  union all
+  select 25, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)
