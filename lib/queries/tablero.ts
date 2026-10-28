@@ -1,12 +1,21 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
+import { normalizarTablero } from '@/lib/tablero/normalizar'
 
 /**
  * Tablero del dueño (Fase D): fn_tablero_gerencial (mig 181) trae todo el
  * tablero en un viaje; fn_metricas_agrupadas (mig 180) alimenta la tabla
  * por dimensión. Costos y márgenes vienen NULL sin el permiso 'costos'.
  * `null` como resultado = migración pendiente (PGRST202).
+ *
+ * Desde la mig 318 (v3) el margen es NETO: ventas sin IVA y sin
+ * devoluciones menos el costo de lo vendido. Las claves nuevas
+ * (`ingresos_netos`, `iva`, `devoluciones`, `regimen`, …) vienen `null`
+ * cuando la 318 todavía no corrió; `normalizarTablero` lo garantiza.
  */
+
+/** Régimen de IVA del comercio (fn_regimen_iva, mig 311). Solo el RI discrimina IVA. */
+export type RegimenIva = 'responsable_inscripto' | 'monotributista' | 'exento'
 
 export type DimensionTablero =
   | 'categoria'
@@ -45,7 +54,11 @@ export interface PuntoSerieTablero {
   ventas: number
   tickets: number
   ingresos: number
+  /** Neto de IVA y devoluciones desde la mig 318. */
   margen: number | null
+  /** Mig 318. `null` = migración pendiente. */
+  ingresos_netos: number | null
+  devoluciones: number | null
 }
 
 export interface SkuTopTablero {
@@ -57,6 +70,8 @@ export interface SkuTopTablero {
   margen_pesos: number | null
   margen_pct: number | null
   participacion: number | null
+  /** Mig 318. `null` = migración pendiente. */
+  ingresos_netos: number | null
 }
 
 export interface GondolaTablero {
@@ -64,10 +79,13 @@ export interface GondolaTablero {
   skus: number
   ingresos: number
   margen: number | null
+  /** Sobre ingresos netos desde la mig 318. */
   margen_pct: number | null
   stock_valorizado: number | null
   quiebres: number
   sin_movimiento: number
+  /** Mig 318. `null` = migración pendiente. */
+  ingresos_netos: number | null
 }
 
 export interface TableroGerencial {
@@ -96,13 +114,23 @@ export interface TableroGerencial {
     periodo_anterior: number
   }
   margen: {
+    /** Bruto: lo cobrado, IVA incluido y sin restar devoluciones. */
     ingresos: number
     costo: number | null
+    /** Netos de IVA y devoluciones desde la mig 318 (margen_pct = margen / ingresos_netos). */
     margen: number | null
     margen_pct: number | null
     anterior_margen: number | null
     anterior_margen_pct: number | null
     estimado: boolean
+    /** Mig 318. `null` = la 318 todavía no corrió (margen con IVA incluido). */
+    ingresos_netos: number | null
+    iva: number | null
+    /** Bruto devuelto en el período. */
+    devoluciones: number | null
+    anterior_ingresos_netos: number | null
+    /** Sin la 318 se asume responsable inscripto. */
+    regimen: RegimenIva
   }
   serie: PuntoSerieTablero[]
   inventario: {
@@ -142,6 +170,7 @@ export interface MetricaAgrupada {
   skus_sin_movimiento: number
   ingresos: number
   participacion_ingresos: number | null
+  /** Netos de IVA y devoluciones desde la mig 315 (margen_pct sobre ingresos_netos). */
   costo_ventas: number | null
   margen_pesos: number | null
   margen_pct: number | null
@@ -151,6 +180,10 @@ export interface MetricaAgrupada {
   quiebres: number
   venta_perdida_pesos: number
   costo_estimado: boolean
+  /** Mig 315. `null` = migración pendiente (sin gate de costos). */
+  ingresos_netos: number | null
+  iva_ventas: number | null
+  devoluciones: number | null
 }
 
 export async function getTableroGerencial(
@@ -166,7 +199,7 @@ export async function getTableroGerencial(
     if (error.code === 'PGRST202') return null
     throw new Error(error.message)
   }
-  return data as unknown as TableroGerencial
+  return normalizarTablero(data)
 }
 
 export async function getMetricasAgrupadas(

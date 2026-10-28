@@ -19,9 +19,11 @@ npm run build    # build de producción (corre TypeScript check)
 npm run start    # sirve el build
 ```
 
-No hay test runner ni linter configurados. Los errores de TypeScript salen
-en `npm run build`. **Siempre correr `npm run build` antes de cada commit
-grande** — es la única red de seguridad.
+No hay linter. Los errores de TypeScript salen en `npm run build`.
+`npm test` corre con `node --test` una **lista explícita** de archivos en
+`package.json` (lógica pura: imports relativos con extensión `.ts`, sin alias
+`@/`); un test nuevo hay que sumarlo a esa lista. **Siempre correr
+`npm run build` antes de cada commit grande** — es la red de seguridad.
 
 ---
 
@@ -607,6 +609,20 @@ de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
   un cajero el embed viene null → costo 0. Las escrituras (`createProducto`,
   `updateProducto`, importación) hacen upsert en `costos_producto`, no en
   productos. En los RPCs se usa `fn_costo()` / `fn_set_costo()`.
+- **Margen comercial = NETO de IVA y de devoluciones (migs 311–320)**: el
+  precio de venta lleva IVA y el costo guardado no, así que todo margen que
+  se muestre (Tablero del dueño, `TablaDimensiones`, Inventario › Análisis,
+  mapa) sale de `fn_items_vendidos_neto` / `fn_items_devueltos_neto` (mig
+  312, la ÚNICA fórmula): `neto = subtotal / (1 + items_venta.iva_venta/100)`
+  por ítem (alícuota congelada por `trg_items_venta_iva`, mig 311), menos las
+  devoluciones del día (`devoluciones.created_at`), menos el costo congelado.
+  Con `fn_regimen_iva()` ≠ responsable inscripto no se descuenta IVA y el
+  costo va con `iva_compra`. `ingresos` sigue siendo el bruto cobrado (lo
+  usan ABC, participación y las tarjetas de ventas); los netos van en
+  `ingresos_netos` / `iva_ventas` / `devoluciones`. No volver a dividir por
+  1,21 a mano ni usar `ventas.base_gravada` para el margen (eso es solo lo
+  facturado). `config_fiscal.condicion_iva` válido: `responsable_inscripto`,
+  `monotributista`, `exento` (nunca `monotributo`).
 - **Posición de caja ("cuánta plata hay")**: usar SIEMPRE `getPosicionCaja()`
   de `lib/queries/posicionCaja.ts` (la consumen Tablero, Cuentas y Flujo
   proyectado). Desde el **candado** (mig 118) la cuenta "Caja Efectivo" es la
@@ -741,7 +757,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 113, ~320 archivos fuente, deploy en Vercel:
+Migraciones numeradas hasta la 320 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

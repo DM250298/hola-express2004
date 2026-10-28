@@ -31,6 +31,8 @@ interface PuntoGrafico {
 /**
  * Hasta 35 días se grafica por día; más largo, por tramos de 7 días
  * (el margen % del tramo se recalcula sobre la suma, no se promedia).
+ * Desde la mig 318 el margen del punto es neto: el denominador son los
+ * ingresos netos; sin la 318 (ingresos_netos null) se usa el bruto, como antes.
  */
 function agrupar(serie: PuntoSerieTablero[]): PuntoGrafico[] {
   const semanal = serie.length > 35
@@ -39,7 +41,7 @@ function agrupar(serie: PuntoSerieTablero[]): PuntoGrafico[] {
   for (let i = 0; i < serie.length; i += tamano) {
     const tramo = serie.slice(i, i + tamano)
     const ventas = tramo.reduce((s, p) => s + p.ventas, 0)
-    const ingresos = tramo.reduce((s, p) => s + p.ingresos, 0)
+    const ingresos = tramo.reduce((s, p) => s + (p.ingresos_netos ?? p.ingresos), 0)
     const hayMargen = tramo.some((p) => p.margen != null)
     const margen = tramo.reduce((s, p) => s + (p.margen ?? 0), 0)
     puntos.push({
@@ -62,12 +64,17 @@ function ejeMonto(v: number): string {
 export function GraficoVentasMargen({
   serie,
   puedeVerCostos,
+  discriminaIva = true,
 }: {
   serie: PuntoSerieTablero[]
   puedeVerCostos: boolean
+  /** Solo el responsable inscripto discrimina IVA; mono/exento no rotulan "neto de IVA". */
+  discriminaIva?: boolean
 }) {
   const datos = agrupar(serie)
   const semanal = datos[0]?.semanal ?? false
+  // Algún punto con ingresos_netos = la mig 318 corrió y el margen es neto.
+  const netoDeIva = discriminaIva && serie.some((p) => p.ingresos_netos != null)
 
   if (datos.every((p) => p.ventas === 0)) {
     return (
@@ -113,7 +120,7 @@ export function GraficoVentasMargen({
               width={40}
             />
           )}
-          <Tooltip content={<TooltipVentasMargen />} />
+          <Tooltip content={<TooltipVentasMargen netoDeIva={netoDeIva} />} />
           <Legend
             verticalAlign="top"
             height={28}
@@ -130,7 +137,7 @@ export function GraficoVentasMargen({
           {puedeVerCostos && (
             <Line
               yAxisId="pct"
-              name="Margen %"
+              name={netoDeIva ? 'Margen % (neto de IVA)' : 'Margen %'}
               dataKey="margenPct"
               type="monotone"
               stroke="#2f7d4f"
@@ -149,9 +156,10 @@ interface PropsTooltip {
   active?: boolean
   label?: string
   payload?: Array<{ payload?: PuntoGrafico }>
+  netoDeIva?: boolean
 }
 
-function TooltipVentasMargen({ active, payload, label }: PropsTooltip) {
+function TooltipVentasMargen({ active, payload, label, netoDeIva }: PropsTooltip) {
   if (!active || !payload || payload.length === 0) return null
   const punto = payload[0]?.payload
   if (!punto) return null
@@ -169,7 +177,7 @@ function TooltipVentasMargen({ active, payload, label }: PropsTooltip) {
       {punto.margenPct != null && (
         <div className="tabular-nums text-[#6f3a2a]">
           <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-[#2f7d4f]" />
-          Margen:{' '}
+          {netoDeIva ? 'Margen (neto de IVA):' : 'Margen:'}{' '}
           <span className="font-bold text-[#391511]">
             {formatoUnDecimal.format(punto.margenPct)}%
           </span>

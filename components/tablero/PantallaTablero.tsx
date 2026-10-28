@@ -242,6 +242,13 @@ function CuerpoTablero({
   const v = datos.ventas
   const m = datos.margen
   const costos = datos.puede_ver_costos
+  // Mig 318: el margen viene neto de IVA y de devoluciones. Sin la 318,
+  // ingresos_netos llega null y el margen sigue calculado con IVA incluido.
+  const netoDisponible = m.ingresos_netos != null
+  // Solo el responsable inscripto discrimina IVA: para mono/exento la venta
+  // va completa y el "neto" es apenas neto de devoluciones.
+  const discriminaIva = m.regimen === 'responsable_inscripto'
+  const margenNetoIva = netoDisponible && discriminaIva
   const alertas = useResumenAlertas({ habilitado: puedeVerAlertas })
   // Solo si el evaluador corrió bien hace poco: si nunca corrió o viene
   // fallando, una lista vacía diría "todo en orden" sin serlo.
@@ -260,6 +267,17 @@ function CuerpoTablero({
   const snapshotAtrasado =
     datos.ultimo_snapshot == null || datos.ultimo_snapshot < isoMasDias(datos.hoy, -1)
   const anterior = etiquetaRangoFechas(datos.periodo.anterior_desde, datos.periodo.anterior_hasta)
+
+  const detalleMargen = (() => {
+    if (!netoDisponible) return costos && m.estimado ? '* parcialmente estimado' : undefined
+    const partes = [`Ventas netas ${formatearMontoEntero(m.ingresos_netos ?? 0)}`]
+    if (discriminaIva && m.iva != null) partes.push(`IVA ${formatearMontoEntero(m.iva)}`)
+    if (m.devoluciones != null && m.devoluciones > 0) {
+      partes.push(`devoluciones ${formatearMontoEntero(m.devoluciones)}`)
+    }
+    if (costos && m.estimado) partes.push('* parcialmente estimado')
+    return partes.join(' · ')
+  })()
 
   return (
     <>
@@ -319,6 +337,12 @@ function CuerpoTablero({
         <CardKPI
           icono={Receipt}
           etiqueta={`Ventas · ${etiquetaRangoFechas(datos.periodo.desde, datos.periodo.hasta)}`}
+          ayuda={
+            <AyudaContextual titulo="Qué cuenta como venta">
+              Lo cobrado en caja en el período, IVA incluido, sin restar devoluciones. El
+              margen de al lado sí descuenta IVA y devoluciones.
+            </AyudaContextual>
+          }
           valor={formatearMontoEntero(v.periodo)}
           detalle={`${conCantidad(v.periodo_tickets, 'ticket', 'tickets')} · ticket promedio ${formatearMontoEntero(v.ticket_promedio)}`}
           pie={
@@ -331,12 +355,13 @@ function CuerpoTablero({
         />
         <CardKPI
           icono={CircleDollarSign}
-          etiqueta="Margen comercial"
+          etiqueta={margenNetoIva ? 'Margen comercial neto de IVA' : 'Margen comercial'}
           destacado
           ayuda={
             <AyudaContextual titulo="Qué es el margen comercial">
-              Lo que vendiste menos lo que te costó la mercadería vendida. No descuenta
-              gastos del local (alquiler, sueldos, servicios): no es la ganancia final.
+              {discriminaIva
+                ? 'Lo que vendiste sin el IVA (que no es tuyo: se lo pasás a AFIP) y sin las devoluciones, menos lo que te costó la mercadería vendida (costo sin IVA). El IVA se descuenta producto por producto con la alícuota de cada uno (21 %, 10,5 %, exento), sin importar cómo se cobró, así que puede dar más que el IVA de la pestaña Impuestos (que solo cuenta lo cobrado con medios que facturan). No descuenta Ingresos Brutos, comisiones de tarjeta ni gastos del local: no es la ganancia final.'
+                : 'Lo que vendiste (como no discriminás IVA, va completo) y sin las devoluciones, menos lo que te costó la mercadería vendida con el IVA de compra incluido. No descuenta Ingresos Brutos, comisiones ni gastos del local: no es la ganancia final.'}
               {m.estimado &&
                 ' Parte del período usa el costo actual, porque esas ventas son anteriores al registro del costo en cada venta.'}
             </AyudaContextual>
@@ -356,15 +381,23 @@ function CuerpoTablero({
               <span className="text-base text-[#c8a58a]">Sin permiso para ver costos</span>
             )
           }
-          detalle={costos && m.estimado ? '* parcialmente estimado' : undefined}
+          detalle={detalleMargen}
           pie={
             costos ? (
-              <Variacion
-                modo="puntos"
-                actual={m.margen_pct}
-                anterior={m.anterior_margen_pct}
-                texto={`vs ${anterior}`}
-              />
+              <div className="space-y-1">
+                <Variacion
+                  modo="puntos"
+                  actual={m.margen_pct}
+                  anterior={m.anterior_margen_pct}
+                  texto={`vs ${anterior}`}
+                />
+                {!netoDisponible && (
+                  <p className="flex items-start gap-1 text-[#a06b00]">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-[#e4a42a]" />
+                    Falta correr la migración 318: margen calculado con IVA incluido
+                  </p>
+                )}
+              </div>
             ) : undefined
           }
         />
@@ -477,18 +510,27 @@ function CuerpoTablero({
               {costos ? 'Ventas y margen' : 'Ventas'}
             </h2>
           </div>
-          <GraficoVentasMargen serie={datos.serie} puedeVerCostos={costos} />
+          <GraficoVentasMargen
+            serie={datos.serie}
+            puedeVerCostos={costos}
+            discriminaIva={discriminaIva}
+          />
         </section>
-        <PanelTopSkus datos={datos} />
+        <PanelTopSkus datos={datos} margenNetoIva={margenNetoIva} />
       </div>
 
-      <PanelGondolas datos={datos} paramsPeriodo={paramsPeriodo} />
+      <PanelGondolas
+        datos={datos}
+        paramsPeriodo={paramsPeriodo}
+        margenNetoIva={margenNetoIva}
+      />
 
       <TablaDimensiones
         desde={datos.periodo.desde}
         hasta={datos.periodo.hasta}
         paramsPeriodo={paramsPeriodo}
         puedeVerCostos={costos}
+        discriminaIva={discriminaIva}
       />
     </>
   )
@@ -539,7 +581,14 @@ function FilaSituacion({ situacion: s }: { situacion: Situacion }) {
   )
 }
 
-function PanelTopSkus({ datos }: { datos: TableroGerencial }) {
+function PanelTopSkus({
+  datos,
+  margenNetoIva,
+}: {
+  datos: TableroGerencial
+  /** El tablero trae el margen neto (mig 318) y el comercio discrimina IVA. */
+  margenNetoIva: boolean
+}) {
   const porMargen = datos.concentracion.criterio === 'margen'
   const top = datos.top_skus
   const maximo = Math.max(1, ...top.map((s) => s.valor))
@@ -550,6 +599,9 @@ function PanelTopSkus({ datos }: { datos: TableroGerencial }) {
         <Trophy className="h-4 w-4 text-[#f9b44c]" />
         <h2 className="text-sm font-semibold text-[#391511]">
           Qué explica tu {porMargen ? 'margen' : 'venta'}
+          {porMargen && margenNetoIva && (
+            <span className="text-[11px] font-normal text-[#6f3a2a]"> (neto de IVA)</span>
+          )}
         </h2>
       </div>
       {top.length === 0 ? (
@@ -593,9 +645,12 @@ function PanelTopSkus({ datos }: { datos: TableroGerencial }) {
 function PanelGondolas({
   datos,
   paramsPeriodo,
+  margenNetoIva,
 }: {
   datos: TableroGerencial
   paramsPeriodo: string
+  /** El tablero trae el margen neto (mig 318) y el comercio discrimina IVA. */
+  margenNetoIva: boolean
 }) {
   const costos = datos.puede_ver_costos
   const gondolas = datos.gondolas
@@ -614,7 +669,7 @@ function PanelGondolas({
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <MapIcon className="h-4 w-4 text-[#f9b44c]" />
         <h2 className="text-sm font-semibold text-[#391511]">
-          Góndolas por {costos ? 'margen' : 'ventas'}
+          Góndolas por {costos ? (margenNetoIva ? 'margen neto' : 'margen') : 'ventas'}
         </h2>
         <span className="text-xs text-[#6f3a2a]">
           · {pctMapeo}% de los productos ubicados

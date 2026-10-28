@@ -260,7 +260,7 @@ export function PantallaMapa() {
           valor={formatearMontoEntero(totales.ingresos)}
           detalle={
             mapa?.puede_ver_costos && totales.margen != null
-              ? `${formatearMontoEntero(totales.margen)} de margen`
+              ? `${formatearMontoEntero(totales.margen)} de margen neto`
               : `${formatearNumero(gondolas.length)} góndolas activas`
           }
         />

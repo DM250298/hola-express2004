@@ -92,7 +92,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **293**
+## Próximo número libre: **321**
+
+(306–310 están tomadas por la rama `conteo-parcial-ciclico`, PR pendiente de abrir; 311–320 por la rama
+`margen-neto-iva`. No reusar ninguno de los dos tramos.)
 
 ---
 
@@ -405,6 +408,17 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 303 | `303_facturas_validacion.sql` | ✅ aplicada | 2026-10-18 (prueba + producción; test con rollback OK) | Portal de facturas: `facturas_compra.validada/validada_por/validada_at/diferencia_recepcion/renglones_diferentes` (backfill: lo cargado queda validado; directas copian `controlada`), `fn_validar_factura_compra(id, validar)` (finanzas o compras; guarda el cruce recibido vs. facturado y audita) y `fn_controlar_compra_directa` reemitida (controlar = validar). Probada en PGlite con `supabase/tests/test_facturas_validacion.sql` |
 | 304 | `304_facturas_validacion_historico.sql` | ✅ aplicada | 2026-10-18 (prueba + producción) | Reabre la validación de las facturas con orden que la 303 dio por validadas (backfill, `validada_por` null) y cuya deuda sigue abierta: en "A validar" salen todas las que pasaron por recepción y Finanzas no revisó. Pagadas, directas y validadas a mano no se tocan |
 | 305 | `305_facturas_validacion_revertir_304.sql` | ⏳ pendiente | — | Deshace la 304 a pedido del dueño: las facturas con orden sin validar y sin `validada_por` vuelven a validadas (a "A pagar" / "Vencida"). Queda el criterio de la 303: solo lo nuevo pasa por "A validar" |
+| 306–310 | *(rama `conteo-parcial-ciclico`)* | ⏳ pendiente | — | Conteo parcial y cíclico por clase ABC + ajuste de lotes con cantidad 0. Viven en esa rama hasta que se mergee su PR |
+| 311 | `311_iva_en_items_venta.sql` | ⏳ pendiente | — | Margen neto de IVA (1/10): `items_venta.iva_venta` congelada por `trg_items_venta_iva` + backfill en tandas; `fn_regimen_iva()`; `config_fiscal.condicion_iva` 'monotributo' → 'monotributista' (bug de PantallaFiscal vs. motor 109/125); índice `items_devolucion(item_venta_id)` |
+| 312 | `312_fn_items_neto_helpers.sql` | ⏳ pendiente | — | (2/10) `fn_items_vendidos_neto` y `fn_items_devueltos_neto(p_desde, p_hasta, p_productos[])`: LA fórmula (bruto, neto de IVA por alícuota del ítem, costo congelado; mono/exento = bruto y costo con IVA de compra). Internas, SQL puro inlineable |
+| 313 | `313_fn_ventas_diarias_v2.sql` | ⏳ pendiente | — | (3/10) por día: + `ingresos_netos`, `iva`, `devoluciones`; `costo_ventas` neto de devoluciones. Conserva los nombres viejos (la 217 sigue andando hasta la 318) |
+| 314 | `314_fn_resumen_skus_v3.sql` | ⏳ pendiente | — | (4/10) `costo_ventas`/`margen_pesos`/`margen_pct` pasan a NETO de IVA y devoluciones; nuevas al final `ingresos_netos`, `iva_ventas`, `devoluciones`. `ingresos` sigue bruto (ABC, participación) |
+| 315 | `315_fn_metricas_agrupadas_v2.sql` | ⏳ pendiente | — | (5/10) idem por dimensión; `margen_pct` sobre ventas netas |
+| 316 | `316_fn_tablero_skus_v2.sql` | ⏳ pendiente | — | (6/10) top y góndolas con `ingresos_netos`; margen % de góndola sobre neto |
+| 317 | `317_fn_tablero_estado.sql` | ⏳ pendiente | — | (7/10) solo partición: quiebres, mapeo, lotes y snapshot salen de la 217 a `fn_tablero_estado` para que la 318 sea corta de pegar |
+| 318 | `318_fn_tablero_gerencial_v3.sql` | ⏳ pendiente | — | (8/10) `margen` + `ingresos_netos`, `iva`, `devoluciones`, `anterior_ingresos_netos`, `regimen`, `version 3`; margen y margen_pct netos; serie con `ingresos_netos`/`devoluciones`. Ventas (hoy/ayer/semana/mes/período) siguen siendo lo cobrado con IVA |
+| 319 | `319_fn_mapa_nodo_skus_v2.sql` | ⏳ pendiente | — | (9/10) margen neto en el drill-down del mapa; nueva `ingresos_netos`. Probadas las diez en PGlite (`supabase/tests/test_margen_neto_iva.sql` es el mismo caso con rollback para la base real) |
+| 320 | `320_fn_mapa_semaforo_v2.sql` | ⏳ pendiente | — | (10/10) el % de margen por nodo del mapa se calcula sobre `ingresos_netos` (con la 314 el $ ya era neto y el % dividía por bruto); cada nodo trae `ingresos_netos` |
 
 ## Dos bases de Supabase (2026-09-17)
 

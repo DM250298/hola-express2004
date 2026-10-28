@@ -31,9 +31,14 @@ interface FormState {
   actividad: string
 }
 
+/**
+ * Valores guardados en config_fiscal.condicion_iva. Desde la mig 311 el
+ * monotributo se guarda como 'monotributista' (lo que leen fn_regimen_iva y
+ * el motor de precios); el valor viejo 'monotributo' se normaliza al cargar.
+ */
 const CONDICIONES_IVA = [
   { valor: 'responsable_inscripto', etiqueta: 'Responsable Inscripto' },
-  { valor: 'monotributo', etiqueta: 'Monotributo' },
+  { valor: 'monotributista', etiqueta: 'Monotributista' },
   { valor: 'exento', etiqueta: 'Exento' },
 ]
 
@@ -47,7 +52,8 @@ export function PantallaFiscal() {
     setForm({
       cuit: data.cuit,
       razon_social: data.razon_social,
-      condicion_iva: data.condicion_iva,
+      condicion_iva:
+        data.condicion_iva === 'monotributo' ? 'monotributista' : data.condicion_iva,
       iibb_jurisdiccion: data.iibb_jurisdiccion,
       iibb_alicuota: String(data.iibb_alicuota),
       iva_alicuota_general: String(data.iva_alicuota_general),
