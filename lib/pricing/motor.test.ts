@@ -16,8 +16,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   ErrorPricing,
+  calcularDesdePrecio,
   calcularPrecio,
   desglosarTransaccionMP,
+  detectarModoPrecio,
   redondearComercial,
   seleccionarPeorTasa,
 } from './motor.ts'
@@ -290,4 +292,110 @@ test('Invariante — la ganancia se reconstruye para todo input válido', () => 
   }
 
   assert.ok(casos > 4000, `deberían pasar casi todos los casos válidos (${casos}/5000)`)
+})
+
+// ── Inverso: round-trip margen → precio → margen ─────────────────────────
+// calcularDesdePrecio es el espejo de calcularPrecio: sobre el precio EXACTO
+// devuelve el mismo margen; sobre el REDONDEADO devuelve uno ≥ (el techo nunca
+// baja el margen) y el par inverso (ese margen → precio) cierra sobre el
+// redondeado. Es la base de "el margen guardado es siempre el real del par"
+// (migs 322–324).
+test('Inverso — round-trip margen → precio → margen cierra, y el redondeo solo suma', () => {
+  const config: ConfigPricing = { ...CONFIG_BASE, tasaMp: 0.0629 }
+  const regimenes: InputPrecio['regimen'][] = [
+    'responsable_inscripto',
+    'monotributista',
+  ]
+  const costos = [100, 3262.24, 10000]
+  const margenes = [0, 0.1697, 0.4, 1.2]
+  const ivas: (number | undefined)[] = [undefined, 0, 0.105, 0.21]
+  let casos = 0
+  for (const regimen of regimenes) {
+    for (const costo of costos) {
+      for (const margen of margenes) {
+        for (const ivaVenta of ivas) {
+          const input: InputPrecio = { regimen, costo, margen, ivaVenta }
+          const d = calcularPrecio(input, config)
+          const etiqueta = `${regimen} costo ${costo} margen ${margen} iva ${ivaVenta}`
+
+          const inv = calcularDesdePrecio(d.precioFinalExacto, input, config)
+          assert.ok(
+            inv.margen != null && Math.abs(inv.margen - margen) < 1e-9,
+            `round-trip exacto (${etiqueta}): ${inv.margen}`
+          )
+
+          const invR = calcularDesdePrecio(d.precioRedondeado, input, config)
+          assert.ok(
+            invR.margen != null && invR.margen >= margen - 1e-9,
+            `el techo nunca baja el margen (${etiqueta}): ${invR.margen}`
+          )
+          const vuelta = calcularPrecio({ ...input, margen: invR.margen ?? 0 }, config)
+          assert.ok(
+            Math.abs(vuelta.precioFinalExacto - d.precioRedondeado) < 1e-6,
+            `par inverso cierra (${etiqueta}): ${vuelta.precioFinalExacto} vs ${d.precioRedondeado}`
+          )
+          casos++
+        }
+      }
+    }
+  }
+  assert.equal(casos, 96)
+})
+
+// El caso que disparó las migs 322–324: Trix, precio vigente $7.400,27. Con el
+// costo nuevo ($3.262,24) deja ≈ 60,7 % neto; con el costo viejo ($4.481) el
+// mismo precio dejaba ≈ 17 %, que es el margen que había quedado guardado.
+test('Inverso — Trix: el mismo precio deja 60,7 % con el costo nuevo y 17 % con el viejo', () => {
+  // Tasas del comercio: IIBB 3 %, créd/déb 1,2 %, MP 7,61 % con IVA (6,29 % sin).
+  const config: ConfigPricing = { ...CONFIG_BASE, tasaMp: 0.0629 }
+  const base = { regimen: 'responsable_inscripto' as const, ivaVenta: 0.21 }
+  const nuevo = calcularDesdePrecio(7400.27, { ...base, costo: 3262.24 }, config)
+  assert.ok(
+    nuevo.margen != null && Math.abs(nuevo.margen - 0.607) < 0.002,
+    `margen con costo nuevo: ${nuevo.margen}`
+  )
+  const viejo = calcularDesdePrecio(7400.27, { ...base, costo: 4481 }, config)
+  assert.ok(
+    viejo.margen != null && Math.abs(viejo.margen - 0.17) < 0.002,
+    `margen con costo viejo: ${viejo.margen}`
+  )
+})
+
+// ── Modo inicial de la ficha ─────────────────────────────────────────────
+test('detectarModoPrecio — por margen si el margen reproduce el precio; por precio si no', () => {
+  const config: ConfigPricing = { ...CONFIG_BASE, tasaMp: 0.0629 }
+  const ri = { regimen: 'responsable_inscripto' as const, ivaVentaPct: 21 }
+  const precioPorMargen = calcularPrecio(
+    { regimen: 'responsable_inscripto', costo: 1000, margen: 0.3, ivaVenta: 0.21 },
+    config
+  ).precioRedondeado
+
+  // Puesto por margen: el motor reproduce el precio → "por margen".
+  assert.equal(
+    detectarModoPrecio({ ...ri, precio: precioPorMargen, costo: 1000, margenPct: 30 }, config),
+    'margen'
+  )
+  // El costo bajó a 800 y nadie tocó el margen: ya no lo reproduce → "por precio".
+  assert.equal(
+    detectarModoPrecio({ ...ri, precio: precioPorMargen, costo: 800, margenPct: 30 }, config),
+    'precio'
+  )
+  // Precio a mano (no múltiplo de $50 que salga de 16,97 %) → "por precio".
+  assert.equal(
+    detectarModoPrecio({ ...ri, precio: 7400.27, costo: 3262.24, margenPct: 16.97 }, config),
+    'precio'
+  )
+  // Sin precio no hay nada que conservar → "por margen".
+  assert.equal(
+    detectarModoPrecio({ ...ri, precio: 0, costo: 1000, margenPct: 30 }, config),
+    'margen'
+  )
+  // Config rota (cargas > 100 %): no revienta, abre con el vigente.
+  assert.equal(
+    detectarModoPrecio(
+      { ...ri, precio: 1500, costo: 1000, margenPct: 30 },
+      { ...config, iibb: 0.9 }
+    ),
+    'precio'
+  )
 })

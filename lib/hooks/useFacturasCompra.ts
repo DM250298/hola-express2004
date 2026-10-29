@@ -151,7 +151,7 @@ export function useGuardarFacturaCompra() {
             : vars.pagos.length > 1
               ? `Factura guardada y ${vars.pagos.length} pagos registrados`
               : 'Factura guardada y pago registrado'
-          : 'Factura guardada · stock, costos y precios actualizados'
+          : 'Factura guardada · stock, costos, precios y márgenes quedaron como en la tabla'
       )
     },
     onError: (error: Error) => {

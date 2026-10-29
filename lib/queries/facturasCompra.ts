@@ -141,7 +141,6 @@ export interface GuardarFacturaPayload {
   proveedor_id: number | null
   /** Fecha de EMISIÓN del comprobante (define el período fiscal). */
   fecha: string
-  afecta_precio_venta: boolean
   usuario_id: string
   lineas: LineaFacturaPayload[]
   /** Percepciones sufridas (suman al total a pagar y quedan como saldo a favor). */
@@ -441,7 +440,8 @@ export async function getFacturaCompra(
  * Guarda la factura de compra de una cuenta a pagar:
  *  · Reemplaza la factura previa (si existía) y sus items.
  *  · Actualiza el precio de costo NETO de cada producto.
- *  · Si "afecta precio de venta", actualiza el precio de venta (con IVA).
+ *  · Actualiza precio de venta (con IVA) y margen según lo que mostró la
+ *    tabla (mig 322: siempre; el renglón sin tocar conserva su precio).
  *  · Recalcula el total del pedido y el monto de la cuenta a pagar.
  */
 export async function guardarFacturaCompra(
@@ -525,7 +525,12 @@ export async function guardarFacturaCompra(
     p_pedido_id: payload.pedido_id,
     p_proveedor_id: payload.proveedor_id,
     p_fecha: payload.fecha,
-    p_afecta_precio_venta: payload.afecta_precio_venta,
+    // Mig 322: el switch "Afectar precio de venta" ya no existe. Lo que muestra
+    // la tabla es lo que queda en el producto: el renglón sin tocar viaja con
+    // el precio vigente (se conserva y el margen se actualiza al real), el
+    // tocado con su precio o margen nuevo, y el producto sin precio recibe el
+    // suyo. La columna facturas_compra.afecta_precio_venta queda como histórico.
+    p_afecta_precio_venta: true,
     p_usuario_id: payload.usuario_id,
     p_percepciones: {
       iva: payload.percepciones?.iva ?? 0,
