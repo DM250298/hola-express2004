@@ -196,7 +196,6 @@ interface PagoLinea {
  */
 interface BorradorFactura {
   v: number
-  afectaVenta: boolean
   lineas: LineaFactura[]
   cab: CabeceraState
   percepciones: { iibb: string; iva: string; otros: string }
@@ -404,7 +403,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const anular = useAnularFacturaCompra()
   const pricing = usePricing()
 
-  const [afectaVenta, setAfectaVenta] = useState(true)
   const [lineas, setLineas] = useState<LineaFactura[]>([])
   const [cab, setCab] = useState<CabeceraState>(CABECERA_DEFAULT)
   const [busqueda, setBusqueda] = useState('')
@@ -627,7 +625,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               : null)
         )
         setIntentoGuardar(false)
-        setAfectaVenta(borrador.afectaVenta)
         // Un borrador anterior a la mig 166 no trae fecha_vencimiento: sin el
         // fallback el input de la línea quedaría sin controlar.
         setLineas(
@@ -707,6 +704,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         )
         .map((g) => {
           const it = items.find((i) => i.producto_id === g.producto_id)
+          const prod: ProductoVenta | null | undefined =
+            it?.producto ?? productosMap.get(g.producto_id)
           // Ya no hay que adivinar si el precio guardado fue manual: TODA fila
           // con precio vuelve en modo precio. Manda el VIGENTE del producto
           // (respeta una corrección hecha después desde el Drawer) y el
@@ -729,10 +728,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             cantidad_pedida: it?.cantidad_pedida ?? null,
             cantidad: String(g.cantidad),
             costo: String(g.costo_sin_iva),
-            ...semillaVenta(
-              it?.producto ?? productosMap.get(g.producto_id),
-              precioGuardado
-            ),
+            ...semillaVenta(prod, precioGuardado),
+            // Si el producto sigue SIN precio (la carga anterior se guardó con
+            // el switch viejo apagado), el margen tipeado ese día manda sobre
+            // el de la ficha: re-guardar la factura lo aplica sin retipear.
+            ...(prod?.pendiente_precio === true && Number(g.margen_porcentaje) > 0
+              ? { margen: String(g.margen_porcentaje) }
+              : {}),
             // Lo que quedó GUARDADO en esta factura manda sobre la ficha del
             // producto: son los porcentajes del papel que se cargó ese día, y
             // así re-guardarla es delta 0.
@@ -786,7 +788,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     // comprobante manda). Sin factura ya quedó lista en el bloque (1), y lo que
     // se haya tipeado mientras cargaban las líneas tiene que sobrevivir.
     if (facturaGuardada) {
-      setAfectaVenta(facturaGuardada.factura.afecta_precio_venta)
       const f = facturaGuardada.factura
       // Factura vieja sin pto/número: cae al N° que pidió la recepción móvil
       // (misma precarga que el bloque 1), el dato de la factura manda si existe.
@@ -838,7 +839,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     if (!abierto || id == null || initListo !== `c${id}`) return
     const foto: BorradorFactura = {
       v: BORRADOR_V,
-      afectaVenta,
       lineas,
       cab,
       percepciones,
@@ -870,7 +870,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     abierto,
     cuenta?.id,
     initListo,
-    afectaVenta,
     lineas,
     cab,
     percepciones,
@@ -1092,8 +1091,8 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       Number(l.iva_venta) || 0
     )
     // Bonificada en modo margen: el precio sale del costo de LISTA. Solo se
-    // bloquea (aun con "Afectar precio" apagado: el par precio/margen se
-    // guarda igual en items_factura_compra) si tampoco hay costo de lista.
+    // bloquea si tampoco hay costo de lista (el par precio/margen se guarda
+    // en items_factura_compra y en el producto: mig 322).
     const bonificada = calc.costoFinal <= 0
     return {
       l,
@@ -1560,7 +1559,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         // Sin fallback a hoy (mig 155): la fecha de emisión es obligatoria y
         // ya se validó arriba (fechaEmisionError).
         fecha: cab.fecha_emision,
-        afecta_precio_venta: afectaVenta,
         usuario_id: usuario.id,
         percepciones: { iva: percIva, iibb: percIibb, otros: percOtros },
         gastos_no_debitables: gastos,
@@ -1744,17 +1742,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               la ficha del proveedor y el comprobante viven en la columna
               derecha. */}
           <p className="shrink-0 text-[11px] text-[#c8a58a]">
-            Cada renglón arranca con el <strong>precio que rige hoy</strong> en
-            el punto de venta: guardar la factura <strong>no lo mueve</strong>,
-            aunque el costo haya subido (el margen queda como quede, incluso
-            negativo). Cambialo tipeando otro <strong>precio de venta</strong>, o
-            tocá el <strong>margen</strong> para que se recalcule solo (asegura
+            <strong>Lo que ves en esta tabla es lo que queda en el producto.</strong>{' '}
+            Cada renglón arranca con el <strong>precio que rige hoy</strong> en el
+            punto de venta: si no lo tocás, ese precio se conserva y el{' '}
+            <strong>margen se actualiza al real</strong> con el costo de esta
+            factura (puede quedar negativo). Tipeá otro{' '}
+            <strong>precio de venta</strong> para cambiarlo, o tocá el{' '}
+            <strong>margen</strong> para que el precio se recalcule solo (asegura
             el margen después de IIBB, imp. créd/déb y la comisión de Mercado
             Pago —peor caso—, y redondea para arriba
             {pricing.config
               ? ` a múltiplos de $${pricing.config.redondeoMultiplo}`
               : ''}
-            ).
+            ). Los productos nuevos reciben el precio de su renglón.
           </p>
           {/* Buscador para agregar un producto a la factura */}
           <div className="relative shrink-0">
@@ -2360,7 +2360,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             l.modoVenta === 'precio'
                               ? bonificada
                                 ? 'Producto bonificado: margen medido sobre el costo de LISTA (sin descuento). Tocalo para volver al precio automático.'
-                                : 'Margen real que deja el precio fijado. Tocalo para volver al precio automático.'
+                                : 'Margen real que deja el precio fijado con el costo de esta factura: es el que queda guardado en el producto. Tocalo para recalcular el precio.'
                               : bonificada
                                 ? 'Producto bonificado: el precio se calcula sobre el costo de LISTA (sin descuento).'
                                 : undefined
@@ -2407,7 +2407,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                             precioTocado
                               ? 'Precio nuevo: al guardar reemplaza al vigente.'
                               : l.modoVenta === 'precio'
-                                ? 'Precio VIGENTE en el punto de venta. Guardar la factura no lo mueve. Tipeá otro para cambiarlo, o tocá el margen para recalcularlo.'
+                                ? 'Precio VIGENTE en el punto de venta: se conserva al guardar y el margen se actualiza al real con el costo de esta factura. Tipeá otro para cambiarlo, o tocá el margen para recalcularlo.'
                                 : 'Tipealo para fijar el precio final; el margen se deduce solo'
                           }
                           className={cn(
@@ -2578,10 +2578,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </span>
                 )}
               </div>
-              <label className="flex shrink-0 items-center gap-2 text-sm text-[#391511]">
-                <Switch checked={afectaVenta} onCheckedChange={setAfectaVenta} />
-                Afectar precio de venta
-              </label>
             </div>
 
             {avisoFicha && (
