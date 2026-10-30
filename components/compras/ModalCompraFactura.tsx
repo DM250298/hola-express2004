@@ -790,7 +790,7 @@ export function ModalCompraFactura({
                         {afectaPrecio && (
                           <th
                             className="p-2 w-28"
-                            title="El precio que va a cobrar el punto de venta. Arranca con el vigente: guardar no lo mueve salvo que tipees otro."
+                            title="El precio que va a cobrar el punto de venta. Arranca con el vigente: si no lo tocás se conserva y el margen se actualiza al real con el costo de esta compra."
                           >
                             Precio venta
                           </th>
@@ -931,13 +931,21 @@ export function ModalCompraFactura({
                 />
                 Actualizar también el precio de venta
               </label>
-              {afectaPrecio && (
-                <p className="text-[11px] text-[#c8a58a] shrink-0">
-                  Cada fila arranca con el <strong>precio que rige hoy</strong>:
-                  guardar <strong>no lo mueve</strong>. Tipeá otro precio, o
-                  tocá el margen para que se recalcule solo.
-                </p>
-              )}
+              <p className="text-[11px] text-[#c8a58a] shrink-0">
+                {afectaPrecio ? (
+                  <>
+                    Cada fila arranca con el <strong>precio que rige hoy</strong>:
+                    si no lo tocás se conserva y el margen se actualiza al real
+                    con el costo de esta compra. Tipeá otro precio, o tocá el
+                    margen para que se recalcule solo.
+                  </>
+                ) : (
+                  <>
+                    Sin el tilde el precio de venta no cambia; el margen guardado
+                    se actualiza al real con el costo de esta compra (mig 323).
+                  </>
+                )}
+              </p>
             </div>
           ) : null}
 

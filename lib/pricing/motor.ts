@@ -12,6 +12,7 @@ import type {
   DesglosePorPrecio,
   DesglosePrecio,
   InputPrecio,
+  RegimenFiscal,
 } from './tipos'
 
 /** Error de dominio del motor (divisor inválido, tasas vacías, etc.). */
@@ -263,4 +264,61 @@ export function desglosarTransaccionMP(
 /** Formatea una fracción como porcentaje legible para los mensajes de error. */
 function pct(fraccion: number): string {
   return `${(fraccion * 100).toFixed(4).replace(/\.?0+$/, '')}%`
+}
+
+/** Qué campo manda en el bloque de precio de la ficha: el margen o el precio. */
+export type ModoPrecio = 'margen' | 'precio'
+
+/** El par guardado de un producto, tal como vuelve de la base. */
+export interface ParPrecioGuardado {
+  regimen: RegimenFiscal
+  /** Precio final guardado (con IVA). ≤ 0 = el producto no tiene precio. */
+  precio: number
+  /**
+   * Costo ya ajustado al régimen (sin IVA para el RI, con IVA para el
+   * monotributista), igual que se le pasa a calcularPrecio.
+   */
+  costo: number
+  /** Margen guardado en %, como vive en productos.margen. */
+  margenPct: number
+  /** IVA de venta del producto en %; undefined = el general de la config. */
+  ivaVentaPct?: number
+}
+
+/**
+ * Con qué modo abrir la ficha de un producto ya guardado. Vive acá (y no en
+ * el componente) para poder testearlo: no hay columna de "modo" en la base,
+ * el par (precio, margen, costo) es la única fuente.
+ *
+ *  · El margen guardado REPRODUCE el precio vigente (el motor, redondeado,
+ *    cae a menos de `tolerancia` pesos) → el producto se maneja "por margen".
+ *  · No lo reproduce → el precio se fijó a mano, o el costo cambió sin que
+ *    nadie tocara el margen (hasta la mig 322 pasaba al cargar facturas con
+ *    "Afectar precio de venta" apagado) → abre "por precio" con el vigente,
+ *    que es lo que rige, y el margen que se muestra es el real de ese precio.
+ *  · Sin precio → "por margen" (no hay nada que conservar).
+ * Si el motor no puede calcular (cargas > 100 %), también "por precio".
+ */
+export function detectarModoPrecio(
+  par: ParPrecioGuardado,
+  config: ConfigPricing,
+  tolerancia = 0.5
+): ModoPrecio {
+  if (!(par.precio > 0)) return 'margen'
+  try {
+    const d = calcularPrecio(
+      {
+        regimen: par.regimen,
+        costo: par.costo,
+        margen: par.margenPct / 100,
+        ivaVenta: par.ivaVentaPct != null ? par.ivaVentaPct / 100 : undefined,
+      },
+      config
+    )
+    return Math.abs(d.precioRedondeado - par.precio) > tolerancia
+      ? 'precio'
+      : 'margen'
+  } catch {
+    return 'precio'
+  }
 }

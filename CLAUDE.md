@@ -287,6 +287,21 @@ Facturas de proveedores y Finanzas › Cuentas a pagar **redirigen** al portal
 (`?tab=` viejo → `/compras/facturas?estado=…`); `TabComprobantes` y
 `TabCuentasAPagar` quedan en el repo sin montarse hasta limpiar.
 
+**Precio y margen desde la factura (migs 322–324, oct-2026):** el switch
+"Afectar precio de venta" ya no existe: **lo que muestra la tabla de "Cargar
+factura" es lo que queda en el producto** (`guardarFacturaCompra` manda
+`p_afecta_precio_venta = true` siempre; la columna
+`facturas_compra.afecta_precio_venta` queda como histórico). Cada renglón
+arranca en modo precio con el VIGENTE del POS: sin tocarlo se conserva el
+precio y el RPC re-deduce el margen real con el costo de la factura; tocar
+el margen hace que el motor fije el precio (techo a múltiplos de $50); tipear
+un precio lo fija y deduce el margen; un producto `pendiente_precio` recibe
+el precio de su renglón (al reabrir una factura vieja, el margen tipeado ese
+día se vuelve a sembrar si el producto sigue sin precio). La compra directa
+conserva su tilde (apagado por defecto, columnas de venta ocultas) pero con
+el tilde apagado también deja el margen real (mig 323). Regla del dato en
+"Convenciones críticas" › par coherente.
+
 **Three-way match (Opción B):** la recepción crea una cuenta a pagar
 **provisoria** (`provisoria=true`, `tiene_factura=false`). Al cargar la
 factura, se ajusta al monto real y se cierra el match. Si nunca se carga
@@ -623,6 +638,19 @@ de precios y stock. Tablas: `pedidos_tienda`, `items_pedido_tienda`.
   1,21 a mano ni usar `ventas.base_gravada` para el margen (eso es solo lo
   facturado). `config_fiscal.condicion_iva` válido: `responsable_inscripto`,
   `monotributista`, `exento` (nunca `monotributo`).
+- **Precio y margen del producto = par coherente (migs 322–324)**:
+  `productos.margen` es SIEMPRE el margen real del par (`precio_venta`
+  vigente, `fn_costo`), neto de cargas (`fn_margen_desde_precio` /
+  `calcularDesdePrecio`). No hay columna de "modo": la ficha abre en "Por
+  precio" cuando el margen guardado no reproduce el precio
+  (`detectarModoPrecio` en `lib/pricing/motor.ts`, con test) y en "Por
+  margen" cuando sí; sin tocar el bloque de precio se conserva el vigente y
+  lo que muestra el modo activo es una simulación (la barra inferior y la
+  tarjeta lo dicen). Todo escritor del par guarda los dos valores juntos:
+  la factura y la compra directa re-deducen `margen` aunque el precio esté
+  protegido (`elsif` de las 322/323), la importación ya lo hacía (mig 125) y
+  la 324 corrigió el histórico. Si un RPC nuevo escribe el costo, tiene que
+  dejar el margen real o repreciar: nunca cambiar el costo solo.
 - **Posición de caja ("cuánta plata hay")**: usar SIEMPRE `getPosicionCaja()`
   de `lib/queries/posicionCaja.ts` (la consumen Tablero, Cuentas y Flujo
   proyectado). Desde el **candado** (mig 118) la cuenta "Caja Efectivo" es la
@@ -757,7 +785,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 320 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 324 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

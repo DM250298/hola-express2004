@@ -60,6 +60,7 @@ import {
 import { useCategorias } from '@/lib/hooks/useCategorias'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { usePricing } from '@/lib/hooks/usePricing'
+import { detectarModoPrecio } from '@/lib/pricing/motor'
 import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
 import { stockVirtualCombo } from '@/lib/queries/productos'
 import { TIPOS_PRODUCTO, etiquetaTipo } from '@/lib/tipos-producto'
@@ -602,13 +603,22 @@ export function DrawerProducto({
       pricing.regimen === 'monotributista'
         ? costoNeto * (1 + (producto.iva_compra ?? 21) / 100)
         : costoNeto
-    const { desglose } = pricing.calcular(
-      costoParaMotor,
-      producto.margen ?? 0,
-      producto.iva_venta ?? 21
-    )
-    const recalculado = desglose?.precioRedondeado ?? 0
-    if (Math.abs(recalculado - precioGuardado) > 0.5) {
+    // Lógica pura y testeada en lib/pricing/motor.ts. Sin config (falló la
+    // carga) no hay con qué comparar: se abre con el vigente, que es lo que rige.
+    const modo =
+      pricing.config && pricing.regimen
+        ? detectarModoPrecio(
+            {
+              regimen: pricing.regimen,
+              precio: precioGuardado,
+              costo: costoParaMotor,
+              margenPct: producto.margen ?? 0,
+              ivaVentaPct: producto.iva_venta ?? 21,
+            },
+            pricing.config
+          )
+        : 'precio'
+    if (modo === 'precio') {
       setModoPrecio('precio')
       setPrecioManual(String(precioGuardado))
     }
@@ -626,13 +636,20 @@ export function DrawerProducto({
       pricing.regimen === 'monotributista'
         ? costoNeto * (1 + (producto.iva_compra ?? 21) / 100)
         : costoNeto
-    const { desglose } = pricing.calcular(
-      costoParaMotor,
-      producto.margen_mayorista ?? 0,
-      producto.iva_venta ?? 21
-    )
-    const recalculado = desglose?.precioRedondeado ?? 0
-    if (Math.abs(recalculado - precioGuardado) > 0.5) {
+    const modo =
+      pricing.config && pricing.regimen
+        ? detectarModoPrecio(
+            {
+              regimen: pricing.regimen,
+              precio: precioGuardado,
+              costo: costoParaMotor,
+              margenPct: producto.margen_mayorista ?? 0,
+              ivaVentaPct: producto.iva_venta ?? 21,
+            },
+            pricing.config
+          )
+        : 'precio'
+    if (modo === 'precio') {
       setModoPrecioMayorista('precio')
       setPrecioManualMayorista(String(precioGuardado))
     }
@@ -722,6 +739,19 @@ export function DrawerProducto({
       margenFinal: Number(margen) || 0,
     }
   }, [adicionales, costoBase, ivaCompra, ivaVenta, margen, precioManual, modoPrecio, pricing, esCombo, costoComponentes])
+
+  // ── Qué precio se GUARDA: una sola fuente para onSubmit y la barra de abajo ──
+  // Si el usuario NO tocó el bloque de precio se conserva el vigente tal cual
+  // (recalcular repricearía el producto en silencio: el redondeo comercial y
+  // las tasas del día mueven el precio aunque solo se haya editado el nombre).
+  // Lo que muestra el modo activo es entonces una SIMULACIÓN —"Por margen" con
+  // el margen real recalcula al múltiplo de $50 de arriba— y hay que decirlo.
+  const conservarPrecio = esEdicion && producto != null && !precioTocado
+  const precioAGuardar = conservarPrecio
+    ? (producto.precio_venta ?? 0)
+    : r2(calc.precioVenta)
+  const simulaDistinto =
+    conservarPrecio && Math.abs(r2(calc.precioVenta) - precioAGuardar) > 0.009
 
   // ── Cálculo del precio MAYORISTA (mig 153): mismo motor, otro margen. ──
   // Campos vacíos = el producto no tiene lista mayorista (fallback minorista).
@@ -860,13 +890,8 @@ export function DrawerProducto({
 
     const limpiar = (v: string | undefined) => (v?.trim() ? v.trim() : null)
     // Si el usuario NO tocó el bloque de precio, se conservan los valores
-    // vigentes tal cual: recalcular acá repricearía el producto en silencio
-    // (el redondeo comercial y las tasas del día pueden mover el precio aunque
-    // solo se haya editado el nombre o el stock).
-    const conservarPrecio = esEdicion && producto != null && !precioTocado
-    const precioAGuardar = conservarPrecio
-      ? (producto.precio_venta ?? 0)
-      : r2(calc.precioVenta)
+    // vigentes tal cual (`conservarPrecio` / `precioAGuardar` se calculan junto
+    // a `calc`, así la barra de abajo muestra exactamente lo que se guarda).
     // Mayorista: si no se tocó NI el bloque mayorista NI el de costo/precio,
     // se conserva el par vigente. Tocar el costo sí lo repricea (margen
     // mayorista manda, igual que la factura v14). Campos vacíos → null/null
@@ -895,14 +920,14 @@ export function DrawerProducto({
       categoria_id: validado.categoria_id,
       proveedor_id: validado.proveedor_id,
       precio_costo: conservarPrecio
-        ? (producto.precio_costo ?? 0)
+        ? (producto?.precio_costo ?? 0)
         : r2(calc.costoNeto),
       precio_venta: precioAGuardar,
       iva_compra: Number(ivaCompra) || 0,
       iva_venta: Number(ivaVenta) || 0,
       // En modo "por precio" el margen es el DEDUCIDO del precio; en modo
       // "por margen" es el que se tipeó. calc.margenFinal unifica ambos.
-      margen: conservarPrecio ? (producto.margen ?? 0) : r2(calc.margenFinal),
+      margen: conservarPrecio ? (producto?.margen ?? 0) : r2(calc.margenFinal),
       ...mayoristaAGuardar,
       costos_adicionales: costosAdicionales,
       // Un combo no maneja stock propio: el stock sale de los componentes
@@ -1760,9 +1785,17 @@ export function DrawerProducto({
                     <div className="flex items-end justify-between rounded-lg border border-[#e4c9b0]/60 bg-white px-3 py-2">
                       <div>
                         <span className="text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                          Precio de venta (redondeado)
+                          {simulaDistinto
+                            ? 'Simulación por margen (no se guarda)'
+                            : 'Precio de venta (redondeado)'}
                         </span>
-                        <div className="font-extrabold text-[#391511] text-xl tabular-nums">
+                        <div
+                          className={
+                            simulaDistinto
+                              ? 'font-semibold text-[#6f3a2a] text-xl tabular-nums'
+                              : 'font-extrabold text-[#391511] text-xl tabular-nums'
+                          }
+                        >
                           <MontoARS monto={calc.desglose.precioRedondeado} />
                         </div>
                       </div>
@@ -2373,15 +2406,20 @@ export function DrawerProducto({
             <div className="h-8 w-px bg-[#e4c9b0]/60" />
             <div>
               <span className="block text-[10px] uppercase tracking-wider text-[#6f3a2a] font-semibold">
-                Precio de venta
+                {conservarPrecio ? 'Precio de venta (vigente)' : 'Precio de venta'}
               </span>
               <span className="font-extrabold text-[#391511] tabular-nums">
-                {calc.precioVenta > 0 ? (
-                  <MontoARS monto={calc.precioVenta} />
+                {precioAGuardar > 0 ? (
+                  <MontoARS monto={precioAGuardar} />
                 ) : (
                   <span className="text-[#c8a58a] font-medium">Sin precio</span>
                 )}
               </span>
+              {simulaDistinto && calc.precioVenta > 0 && (
+                <span className="block text-[10px] text-[#c8a58a] tabular-nums">
+                  simulación: <MontoARS monto={r2(calc.precioVenta)} />
+                </span>
+              )}
             </div>
           </div>
 
