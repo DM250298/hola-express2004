@@ -329,11 +329,19 @@ Generación e impresión de etiquetas de precio masivo.
 ### 8. **Finanzas y Tesorería (`/finanzas`) — unificado**
 Tabs:
 - **Tablero (directivo)**: centro de mando solo-lectura — resultado del
-  período (ventas − CMV − mermas − egresos − comisiones − IIBB; las
-  comisiones y el IIBB salen de `movimientos_cuenta`, no de `egresos`),
-  posición de caja, capital inmovilizado en inventario (a costo), por
-  cobrar, flujo del período, deudas corto plazo (7/15/30 días),
-  comisiones, diferencias de arqueo
+  período (ventas netas de IVA y de devoluciones − CMV − mermas − egresos −
+  comisiones − IIBB; las comisiones y el IIBB salen de `movimientos_cuenta`,
+  no de `egresos`), posición de caja, capital inmovilizado en inventario (a
+  costo), por cobrar, flujo del período, deudas corto plazo (7/15/30 días),
+  comisiones, diferencias de arqueo. **Mismo margen que `/tablero` (mig
+  321):** ventas, IVA, devoluciones y CMV salen de `fn_resultado_periodo`,
+  que suma `fn_ventas_diarias` v2 (la fórmula única de la 312); el "Margen
+  bruto neto de IVA" = `ventas_netas − cmv`. Mermas, egresos, comisiones e
+  IIBB siguen en TypeScript (`getResumenFinanciero`). Sin la 321 cae al
+  cálculo viejo (ventas con IVA − costo actual) con `neto: false` y la
+  tarjeta avisa. Siguen brutos (fuera de alcance): el snapshot
+  `fn_snapshot_metricas_diarias` (174) y `fn_metricas_sku` (ficha del
+  producto)
 - **Caja fuerte (CANDADO, migs 118+119)**: la cuenta **"Caja Efectivo" ES la
   caja fuerte** (`cuentas.es_caja_fuerte`, única, resuelta por
   `fn_cuenta_caja_fuerte()`). Flujo duro: venta → caja POS → cierre (control

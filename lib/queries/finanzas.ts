@@ -16,8 +16,30 @@ export interface PuntoSemana {
 }
 
 export interface ResumenFinanciero {
+  /** Lo cobrado en el período, con IVA (Σ ventas.total). */
   ventas_brutas: number
+  /**
+   * Ventas netas de IVA y de devoluciones (mig 321: la misma fórmula que el
+   * Tablero del dueño). Sin la 321 (`neto: false`) es igual a ventas_brutas.
+   */
+  ventas_netas: number
+  /** IVA contenido en lo vendido menos lo devuelto. 0 sin la 321. */
+  iva: number
+  /** Bruto devuelto en el período (por fecha de la devolución). 0 sin la 321. */
+  devoluciones: number
+  /**
+   * Costo de lo vendido: el congelado en cada venta, neto de devoluciones
+   * (321). Sin la 321, cantidad × costo ACTUAL del producto.
+   */
   cmv: number
+  /** Parte del CMV usa el costo actual (ventas anteriores al costo congelado). */
+  estimado: boolean
+  /**
+   * true = criterio neto (321). false = falta correr la 321: el margen está
+   * calculado con IVA incluido y costo actual, y la UI tiene que avisarlo.
+   */
+  neto: boolean
+  /** ventas_netas − cmv (sin la 321, ventas_brutas − cmv). */
   margen_bruto: number
   mermas: number
   egresos: number
@@ -31,21 +53,94 @@ export interface ResumenFinanciero {
   series_semanales: PuntoSemana[]
 }
 
+/** JSON que devuelve fn_resultado_periodo (mig 321). */
+type ResultadoPeriodoRpc = {
+  version: number
+  regimen: string
+  ventas_brutas: number
+  tickets: number
+  ingresos: number
+  ventas_netas: number
+  iva: number
+  devoluciones: number
+  cmv: number
+  estimado: boolean
+  dias: Array<{
+    dia: string
+    ventas: number
+    tickets: number
+    ventas_netas: number
+    cmv: number
+  }>
+}
+
+/** Ventas del período, vengan de la 321 o del cálculo viejo de respaldo. */
+type VentasPeriodo = Pick<
+  ResumenFinanciero,
+  | 'ventas_brutas'
+  | 'ventas_netas'
+  | 'iva'
+  | 'devoluciones'
+  | 'cmv'
+  | 'estimado'
+  | 'neto'
+  | 'cantidad_ventas'
+> & {
+  /** Ventas brutas por día LOCAL (yyyy-MM-dd), para la serie semanal. */
+  por_dia: Array<{ dia: string; ventas: number }>
+}
+
+type ClienteSupabase = ReturnType<typeof createClient>
+
 /**
- * P&L del período. Notas técnicas:
- * - El CMV se calcula con el costo ACTUAL del producto (costos_producto). Si el
- *   costo cambió desde la venta, es aproximado; precisión histórica requeriría
- *   `costo_unitario` en items_venta (cambio de schema fuera de este alcance).
- * - Las comisiones de tarjeta/MP y la retención de IIBB NO están en la tabla
- *   `egresos`: se registran como movimientos_cuenta (categorías 'comisiones' e
- *   'iibb'). Se descuentan acá para que el resultado no quede sobreestimado.
+ * Ventas, IVA, devoluciones y CMV con la fórmula única del margen neto
+ * (fn_resultado_periodo → fn_ventas_diarias v2 → fn_items_*_neto, migs
+ * 311–313 y 321). `null` = la 321 todavía no corrió (PGRST202).
  */
-export async function getResumenFinanciero(
+async function getVentasPeriodoNeto(
+  supabase: ClienteSupabase,
   desde: string,
   hasta: string
-): Promise<ResumenFinanciero> {
-  const supabase = createClient()
+): Promise<VentasPeriodo | null> {
+  // La RPC recibe fechas (días en hora de La Rioja): el rango ISO del período
+  // va a fecha local, como las columnas `date`.
+  const { data, error } = await supabase.rpc('fn_resultado_periodo', {
+    p_desde: fechaLocal(desde),
+    p_hasta: fechaLocal(hasta),
+  })
+  if (error) {
+    if (error.code === 'PGRST202') return null
+    throw new Error(error.message)
+  }
+  const r = data as unknown as ResultadoPeriodoRpc
+  const numero = (x: unknown) => Number(x) || 0
+  return {
+    ventas_brutas: numero(r.ventas_brutas),
+    ventas_netas: numero(r.ventas_netas),
+    iva: numero(r.iva),
+    devoluciones: numero(r.devoluciones),
+    cmv: numero(r.cmv),
+    estimado: r.estimado === true,
+    neto: true,
+    cantidad_ventas: numero(r.tickets),
+    por_dia: (Array.isArray(r.dias) ? r.dias : []).map((d) => ({
+      dia: d.dia,
+      ventas: numero(d.ventas),
+    })),
+  }
+}
 
+/**
+ * Criterio anterior a la 321, solo de respaldo mientras no se corra: ventas
+ * CON IVA y CMV con el costo ACTUAL del producto (costos_producto, gateado
+ * por RLS), sin restar devoluciones. Paginado: >1000 ventas en el período
+ * truncarían el P&L en silencio.
+ */
+async function getVentasPeriodoBruto(
+  supabase: ClienteSupabase,
+  desde: string,
+  hasta: string
+): Promise<VentasPeriodo> {
   type VentaCruda = {
     id: number
     total: number
@@ -55,9 +150,6 @@ export async function getResumenFinanciero(
       productos: { costos_producto: CostoEmbed } | null
     }>
   }
-
-  // 1. Ventas brutas + items con precio costo de producto (gateado por RLS).
-  // Paginado: >1000 ventas en el período truncarían el P&L en silencio.
   const ventas = await traerTodo<VentaCruda>(() =>
     supabase
       .from('ventas')
@@ -70,7 +162,6 @@ export async function getResumenFinanciero(
       .order('id')
   )
   const ventas_brutas = ventas.reduce((acc, v) => acc + Number(v.total), 0)
-  const cantidad_ventas = ventas.length
   const cmv = ventas.reduce(
     (acc, v) =>
       acc +
@@ -81,6 +172,45 @@ export async function getResumenFinanciero(
       ),
     0
   )
+  const porDia = new Map<string, number>()
+  for (const v of ventas) {
+    const dia = fechaLocal(v.fecha)
+    porDia.set(dia, (porDia.get(dia) ?? 0) + Number(v.total))
+  }
+  return {
+    ventas_brutas,
+    ventas_netas: ventas_brutas,
+    iva: 0,
+    devoluciones: 0,
+    cmv,
+    estimado: false,
+    neto: false,
+    cantidad_ventas: ventas.length,
+    por_dia: [...porDia].map(([dia, ventas]) => ({ dia, ventas })),
+  }
+}
+
+/**
+ * P&L del período (Finanzas › Tablero). Notas técnicas:
+ * - Ventas, IVA, devoluciones y CMV salen de `fn_resultado_periodo` (mig 321),
+ *   que suma `fn_ventas_diarias` v2: el MISMO criterio que el Tablero del
+ *   dueño (neto de IVA ítem por ítem con la alícuota congelada, neto de
+ *   devoluciones, costo congelado en la venta). Si la 321 no corrió se cae al
+ *   cálculo viejo (ventas con IVA − costo actual) con `neto: false`.
+ * - Las comisiones de tarjeta/MP y la retención de IIBB NO están en la tabla
+ *   `egresos`: se registran como movimientos_cuenta (categorías 'comisiones' e
+ *   'iibb'). Se descuentan acá para que el resultado no quede sobreestimado.
+ */
+export async function getResumenFinanciero(
+  desde: string,
+  hasta: string
+): Promise<ResumenFinanciero> {
+  const supabase = createClient()
+
+  // 1. Ventas del período con la fórmula única; sin la 321, el respaldo.
+  const ventas =
+    (await getVentasPeriodoNeto(supabase, desde, hasta)) ??
+    (await getVentasPeriodoBruto(supabase, desde, hasta))
 
   // 2. Mermas del período (paginado)
   type MermaCruda = {
@@ -160,10 +290,11 @@ export async function getResumenFinanciero(
     serieMap.set(k, { semana: k, ventas: 0, egresos: 0 })
   }
 
-  for (const v of ventas) {
-    const k = claveSemana(new Date(v.fecha))
+  for (const d of ventas.por_dia) {
+    // d.dia es fecha local yyyy-MM-dd: parsearla local, como los egresos.
+    const k = claveSemana(new Date(`${d.dia}T00:00:00`))
     const punto = serieMap.get(k)
-    if (punto) punto.ventas += Number(v.total)
+    if (punto) punto.ventas += d.ventas
   }
   for (const e of egresosData) {
     // e.fecha es date-only: parsearla local (new Date('yyyy-MM-dd') es UTC y
@@ -173,21 +304,30 @@ export async function getResumenFinanciero(
     if (punto) punto.egresos += Number(e.monto)
   }
 
-  const margen_bruto = ventas_brutas - cmv
+  // Margen bruto neto de IVA y de devoluciones (sin la 321, ventas_netas =
+  // ventas_brutas y queda el criterio viejo).
+  const margen_bruto = ventas.ventas_netas - ventas.cmv
   const resultado_neto = margen_bruto - mermas - egresos - comisiones - iibb
   const ticket_promedio =
-    cantidad_ventas > 0 ? ventas_brutas / cantidad_ventas : 0
+    ventas.cantidad_ventas > 0
+      ? ventas.ventas_brutas / ventas.cantidad_ventas
+      : 0
 
   return {
-    ventas_brutas,
-    cmv,
+    ventas_brutas: ventas.ventas_brutas,
+    ventas_netas: ventas.ventas_netas,
+    iva: ventas.iva,
+    devoluciones: ventas.devoluciones,
+    cmv: ventas.cmv,
+    estimado: ventas.estimado,
+    neto: ventas.neto,
     margen_bruto,
     mermas,
     egresos,
     comisiones,
     iibb,
     resultado_neto,
-    cantidad_ventas,
+    cantidad_ventas: ventas.cantidad_ventas,
     ticket_promedio,
     series_semanales: [...serieMap.values()],
   }

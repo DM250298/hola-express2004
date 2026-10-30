@@ -50,13 +50,15 @@ Las tres que estaban sin commitear. La 154 ya estaba aplicada; la 161 y la 162 s
 
 ## ⏳ Pendientes de correr
 
-**322 → 323 → 324** (rama `factura-margen-coherente`, oct-2026): el margen guardado del
-producto es siempre el real del par (precio vigente, costo actual). Correrlas en ese orden en
-las DOS bases. La 322 y la 323 son un único `create or replace` de ~600 líneas cada una (no se
-pueden partir): pegar desde el archivo y confirmar con `supabase/scripts/control_mig_322_324.sql`.
-Antes de la 324 en producción, mirar qué va a cambiar con
-`supabase/scripts/margen_desactualizado.sql` (solo lectura); después del pase correr
-`supabase/tests/test_margen_par_coherente.sql` (rollback).
+**321** (rama `finanzas-tablero-neto`, PR #27, oct-2026): `fn_resultado_periodo` para que
+Finanzas › Tablero use el mismo margen neto que `/tablero`. Correrla en las DOS bases
+(**requiere 311–313**); después `supabase/tests/test_resultado_periodo.sql` (rollback). Sin la
+321 la app cae al cálculo viejo con `neto: false` y la tarjeta avisa.
+
+Las **322 → 323 → 324** (rama `factura-margen-coherente`, PR #28) se corrieron en las dos bases
+el 2026-10-29 (ver el historial). Si algo no cierra en producción:
+`supabase/scripts/margen_desactualizado.sql` (solo lectura) debe dar 0 filas y
+`supabase/scripts/control_mig_322_324.sql` dos `true`.
 
 
 **Verificado antes de renumerar** (el riesgo real de correr una migración vieja es que pise
@@ -426,9 +428,10 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 318 | `318_fn_tablero_gerencial_v3.sql` | ⏳ pendiente | — | (8/10) `margen` + `ingresos_netos`, `iva`, `devoluciones`, `anterior_ingresos_netos`, `regimen`, `version 3`; margen y margen_pct netos; serie con `ingresos_netos`/`devoluciones`. Ventas (hoy/ayer/semana/mes/período) siguen siendo lo cobrado con IVA |
 | 319 | `319_fn_mapa_nodo_skus_v2.sql` | ⏳ pendiente | — | (9/10) margen neto en el drill-down del mapa; nueva `ingresos_netos`. Probadas las diez en PGlite (`supabase/tests/test_margen_neto_iva.sql` es el mismo caso con rollback para la base real) |
 | 320 | `320_fn_mapa_semaforo_v2.sql` | ⏳ pendiente | — | (10/10) el % de margen por nodo del mapa se calcula sobre `ingresos_netos` (con la 314 el $ ya era neto y el % dividía por bruto); cada nodo trae `ingresos_netos` |
-| 322 | `322_factura_margen_par_coherente.sql` | ⏳ pendiente | — | `fn_guardar_factura_compra` v25 (cuerpo de la 168, misma firma): con `p_afecta_precio_venta = false` (cliente viejo) el precio no se toca pero `margen` se re-deduce con `fn_margen_desde_precio` (y `margen_mayorista` conservando `precio_mayorista`). La app ya no tiene el switch: manda `true` siempre. ~630 líneas en un statement: pegar desde el archivo |
-| 323 | `323_compra_directa_margen_par_coherente.sql` | ⏳ pendiente | — | `fn_registrar_compra_directa` (cuerpo de la 169, misma firma): mismo `elsif` con el tilde apagado; `v_base_precio` = costo de la compra o el conservado. ~510 líneas en un statement |
-| 324 | `324_backfill_margen_real.sql` | ⏳ pendiente | — | Backfill idempotente: a cada producto activo (no combo) con precio y costo cuyo margen guardado no reproduce el precio vigente (±0,5) le pone el margen real; ídem par mayorista. No toca `precio_venta` (sin etiquetas). Antes: `scripts/margen_desactualizado.sql`; después: `scripts/control_mig_322_324.sql` y `tests/test_margen_par_coherente.sql` |
+| 321 | `321_fn_resultado_periodo.sql` | ⏳ pendiente | — | Finanzas › Tablero con el mismo margen neto que `/tablero`: `fn_resultado_periodo(p_desde, p_hasta)` (jsonb, definer, permiso `finanzas`) suma `fn_ventas_diarias` v2: `ventas_brutas` (con IVA), `tickets`, `ventas_netas` (neto de IVA y devoluciones), `iva`, `devoluciones`, `cmv` (congelado, neto de devoluciones), `estimado` y `dias[]`. `getResumenFinanciero` la usa y, si falta, cae al cálculo viejo con `neto: false` (la UI avisa). Probada en PGlite; `tests/test_resultado_periodo.sql` para la base real (rollback). **Requiere 311–313.** |
+| 322 | `322_factura_margen_par_coherente.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño; en prueba verificada con `scripts/paridad-precio-sql.ts` 280/280, `scripts/paridad-margen-sql.ts` 140/140 y `scripts/auditoria-precios.ts`) | `fn_guardar_factura_compra` v25 (cuerpo de la 168, misma firma): con `p_afecta_precio_venta = false` (cliente viejo) el precio no se toca pero `margen` se re-deduce con `fn_margen_desde_precio` (y `margen_mayorista` conservando `precio_mayorista`). La app ya no tiene el switch: manda `true` siempre. ~630 líneas en un statement: pegar desde el archivo |
+| 323 | `323_compra_directa_margen_par_coherente.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño) | `fn_registrar_compra_directa` (cuerpo de la 169, misma firma): mismo `elsif` con el tilde apagado; `v_base_precio` = costo de la compra o el conservado. ~510 líneas en un statement |
+| 324 | `324_backfill_margen_real.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño; en prueba la auditoría deja 1 inconsistente, id 3828 con precio 0) | Backfill idempotente: a cada producto activo (no combo) con precio y costo cuyo margen guardado no reproduce el precio vigente (±0,5) le pone el margen real; ídem par mayorista. No toca `precio_venta` (sin etiquetas). Antes: `scripts/margen_desactualizado.sql`; después: `scripts/control_mig_322_324.sql` y `tests/test_margen_par_coherente.sql` |
 
 ## Dos bases de Supabase (2026-09-17)
 

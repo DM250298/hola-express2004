@@ -6591,6 +6591,16 @@ export interface Database {
         Args: Record<string, never>
         Returns: string
       }
+      /**
+       * Finanzas › Tablero (mig 321): ventas brutas (con IVA), netas de IVA y
+       * devoluciones, IVA, devoluciones, CMV congelado y `estimado` del período,
+       * sumando fn_ventas_diarias v2 (la fórmula única del margen neto). Exige
+       * permiso `finanzas`.
+       */
+      fn_resultado_periodo: {
+        Args: { p_desde: string; p_hasta: string }
+        Returns: Json
+      }
       /** Conteo por ubicación (mig 207). p_ubicacion_id null = solo cerrar. */
       fn_guardar_conteo_ubicacion: {
         Args: {

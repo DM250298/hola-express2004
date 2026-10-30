@@ -26,6 +26,7 @@ import { useResumenFinanciero } from '@/lib/hooks/useFinanzas'
 import { useTableroDirectivo } from '@/lib/hooks/useTableroDirectivo'
 import { useSangriasEnBuzon } from '@/lib/hooks/useCajaFuerte'
 import { cn } from '@/lib/utils'
+import { formatearMontoEntero } from '@/lib/utils/formato'
 
 interface Props {
   desde: string
@@ -52,6 +53,13 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
   const cargando = cargandoResumen || cargandoTablero
   const error = errorResumen || errorTablero
   const resultado = resumen?.resultado_neto ?? 0
+  // Mig 321: ventas netas de IVA y devoluciones, costo congelado (el mismo
+  // margen que el Tablero del dueño). Sin la 321 queda el criterio viejo y
+  // se avisa en las tarjetas.
+  const neto = resumen?.neto !== false
+  const avisoNeto = neto
+    ? undefined
+    : 'Falta correr la migración 321: calculado con IVA incluido y costo actual'
 
   // "Para hacer hoy": acciones pendientes con su monto y a dónde llevan.
   const tareas: {
@@ -117,7 +125,12 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
           icono={resultado >= 0 ? TrendingUp : TrendingDown}
           etiqueta="Resultado del período"
           monto={resultado}
-          detalle="Ventas − costos − egresos − comisiones e IIBB"
+          detalle={
+            neto
+              ? 'Ventas netas de IVA − costo de lo vendido − mermas − egresos − comisiones e IIBB'
+              : 'Ventas con IVA − costo actual − mermas − egresos − comisiones e IIBB'
+          }
+          aviso={avisoNeto}
           tono={resultado >= 0 ? 'verde' : 'rojo'}
           destacado
         />
@@ -228,9 +241,19 @@ export function TabTableroDirectivo({ desde, hasta, navegar }: Props) {
         />
         <Kpi
           icono={Receipt}
-          etiqueta="Margen bruto"
+          etiqueta={neto ? 'Margen bruto neto de IVA' : 'Margen bruto'}
           monto={resumen?.margen_bruto ?? 0}
-          detalle="Ventas − costo de mercadería"
+          detalle={
+            neto
+              ? `Ventas netas ${formatearMontoEntero(resumen?.ventas_netas ?? 0)} · IVA ${formatearMontoEntero(resumen?.iva ?? 0)} · devoluciones ${formatearMontoEntero(resumen?.devoluciones ?? 0)}`
+              : 'Ventas − costo de mercadería'
+          }
+          aviso={
+            avisoNeto ??
+            (resumen?.estimado
+              ? 'Parte del período usa el costo actual (ventas anteriores al costo congelado)'
+              : undefined)
+          }
         />
         <Kpi
           icono={TrendingDown}
@@ -289,6 +312,7 @@ function Kpi({
   etiqueta,
   monto,
   detalle,
+  aviso,
   tono,
   destacado,
   onClick,
@@ -297,6 +321,8 @@ function Kpi({
   etiqueta: string
   monto: number
   detalle: string
+  /** Advertencia en ámbar debajo del detalle (migración pendiente, costo estimado). */
+  aviso?: string
   tono?: 'verde' | 'rojo'
   destacado?: boolean
   onClick?: () => void
@@ -339,6 +365,12 @@ function Kpi({
         <MontoARS monto={monto} />
       </div>
       <div className="text-[11px] text-[#6f3a2a] mt-0.5">{detalle}</div>
+      {aviso && (
+        <p className="mt-1 flex items-start gap-1 text-[10px] text-[#a06b00]">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-[#e4a42a]" />
+          {aviso}
+        </p>
+      )}
     </div>
   )
 }
