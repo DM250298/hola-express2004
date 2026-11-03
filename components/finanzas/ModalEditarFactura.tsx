@@ -59,6 +59,15 @@ import {
 import { usePricing } from '@/lib/hooks/usePricing'
 import { calcularLinea } from '@/lib/queries/facturasCompra'
 import {
+  difiereDeRecibido,
+  errorSinCargo,
+  parseSinCargo,
+  promedioConSinCargo,
+  totalesDifieren,
+  totalesUnidades,
+  unidadesRenglon,
+} from '@/lib/facturas/sinCargo'
+import {
   borrarBorrador,
   guardarBorrador,
   leerBorrador,
@@ -106,6 +115,11 @@ interface LineaFactura {
   /** Lo pedido en la OC (referencia secundaria). null = extra o dato viejo. */
   cantidad_pedida: number | null
   cantidad: string
+  /**
+   * Unidades SIN CARGO del comprobante (mig 325): entran a stock junto con
+   * `cantidad` pero no suman al neto ni cambian el costo. '' = ninguna.
+   */
+  sin_cargo: string
   costo: string
   descuento: string
   iva_compra: string
@@ -136,6 +150,7 @@ interface LineaFactura {
 
 type CampoEditable =
   | 'cantidad'
+  | 'sin_cargo'
   | 'costo'
   | 'descuento'
   | 'iva_compra'
@@ -625,13 +640,15 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
               : null)
         )
         setIntentoGuardar(false)
-        // Un borrador anterior a la mig 166 no trae fecha_vencimiento: sin el
-        // fallback el input de la línea quedaría sin controlar.
+        // Un borrador anterior a la mig 166 no trae fecha_vencimiento (ni uno
+        // anterior a la 325 sin_cargo): sin el fallback el input de la línea
+        // quedaría sin controlar.
         setLineas(
           borrador.lineas.map((l) => ({
             ...l,
             fecha_vencimiento: l.fecha_vencimiento || '',
             precioVigente: l.precioVigente ?? '',
+            sin_cargo: l.sin_cargo ?? '',
           }))
         )
         setBusqueda('')
@@ -727,6 +744,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             cantidad_recibida: it?.cantidad_recibida ?? null,
             cantidad_pedida: it?.cantidad_pedida ?? null,
             cantidad: String(g.cantidad),
+            // Sin cargo guardadas (mig 325); 0 → vacío (= ninguna).
+            sin_cargo:
+              Number(g.cantidad_sin_cargo) > 0
+                ? String(g.cantidad_sin_cargo)
+                : '',
             costo: String(g.costo_sin_iva),
             ...semillaVenta(prod, precioGuardado),
             // Si el producto sigue SIN precio (la carga anterior se guardó con
@@ -773,6 +795,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           // Baseline: si ya se facturó una vez, arranca de lo facturado (así
           // re-guardar es delta 0); si no, de lo recibido.
           cantidad: String(it.cantidad_facturada ?? it.cantidad_recibida ?? 0),
+          // Misma regla para las sin cargo (mig 325): anular las vuelve a 0.
+          sin_cargo:
+            Number(it.cantidad_sin_cargo) > 0
+              ? String(it.cantidad_sin_cargo)
+              : '',
           costo: String(it.precio_costo || 0),
           descuento: DEFAULTS.descuento,
           // El precio VIGENTE viaja dentro del pedido (embed de items_pedido),
@@ -979,6 +1006,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             : it?.cantidad_recibida
               ? String(it.cantidad_recibida)
               : '1',
+        sin_cargo:
+          it && Number(it.cantidad_sin_cargo) > 0
+            ? String(it.cantidad_sin_cargo)
+            : '',
         costo: String((it?.precio_costo ?? p.precio_costo ?? 0) || 0),
         descuento: DEFAULTS.descuento,
         // `p` viene entero del buscador (select '*'), así que trae precio,
@@ -1023,6 +1054,10 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   // Cálculo por línea (ya con el prorrateo de gastos en costo final y precio).
   const calculadas = lineas.map((l) => {
     const cantidad = Number(l.cantidad) || 0
+    // Sin cargo (mig 325): entran a stock con las pagadas; no tocan el neto,
+    // el IVA ni el costo (el costo del producto es el unitario pagado).
+    const sinCargo = parseSinCargo(l.sin_cargo)
+    const unidades = unidadesRenglon(cantidad, sinCargo)
     const calc = calcularLinea(
       {
         costo_sin_iva: Number(l.costo) || 0,
@@ -1033,6 +1068,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       },
       factorGastos
     )
+    // Promedio INFORMATIVO con las sin cargo (neto pagado ÷ total que entra
+    // a stock). Solo se muestra; no se guarda ni pricea nada.
+    const promSinCargo = promedioConSinCargo(calc.costoNeto, cantidad, sinCargo)
     // Base del lado VENTA (v22, mig 164). Una bonificada (desc 100% → costo
     // final $0) se pricea con el costo de LISTA (pre-descuento, × gastos): el
     // regalo se vende al mismo precio que sus hermanas pagadas. El descuento
@@ -1077,6 +1115,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         l,
         calc,
         cantidad,
+        sinCargo,
+        unidades,
+        promSinCargo,
         venta: null,
         precioFinal,
         margenPct,
@@ -1098,6 +1139,9 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
       l,
       calc,
       cantidad,
+      sinCargo,
+      unidades,
+      promSinCargo,
       venta,
       precioFinal: venta.desglose?.precioRedondeado ?? 0,
       margenPct: Number(l.margen) || 0,
@@ -1307,21 +1351,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     setModoPago(m)
   }
 
-  // Σ de unidades del comprobante vs. lo recibido, separando los productos por
-  // peso (venta_por_peso: la cantidad es en kg, no se mezcla con unidades).
-  const totalesCantidad = calculadas.reduce(
-    (acc, { l, cantidad }) => {
-      const porPeso = productosMap.get(l.producto_id)?.venta_por_peso ?? false
-      if (porPeso) acc.facKg += cantidad
-      else acc.facU += cantidad
-      if (l.item_pedido_id !== null && l.cantidad_recibida != null) {
-        if (porPeso) acc.recKg += l.cantidad_recibida
-        else acc.recU += l.cantidad_recibida
-      }
-      return acc
-    },
-    { facU: 0, facKg: 0, recU: 0, recKg: 0 }
+  // Σ de unidades del comprobante (pagadas y sin cargo) vs. lo recibido,
+  // separando los productos por peso (venta_por_peso: la cantidad es en kg,
+  // no se mezcla con unidades). Lógica pura en lib/facturas/sinCargo.ts.
+  const totalesCantidad = totalesUnidades(
+    calculadas.map(({ l, cantidad, sinCargo }) => ({
+      cantidad,
+      sinCargo,
+      recibida: l.item_pedido_id !== null ? l.cantidad_recibida : null,
+      porPeso: productosMap.get(l.producto_id)?.venta_por_peso ?? false,
+    }))
   )
+  // Lo que entra a stock (pagadas + sin cargo) no cierra con lo recibido.
+  const unidadesDifieren = totalesDifieren(totalesCantidad)
   const fmtCantidad = (u: number, kg: number) => {
     const partes: string[] = []
     if (u > 0 || kg <= 0)
@@ -1480,6 +1522,11 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     ...lineas
       .filter((l) => (Number(l.descuento) || 0) > 100)
       .map((l) => `«${l.nombre}»: el descuento no puede pasar del 100 %.`),
+    // Sin cargo (mig 325): vacío = ninguna; negativo o texto no se guarda.
+    ...lineas.flatMap((l) => {
+      const e = errorSinCargo(l.sin_cargo)
+      return e ? [`«${l.nombre}»: ${e}`] : []
+    }),
     ...calculadas
       .filter((c) => Math.abs(c.margenPct ?? 0) > 10000)
       .map((c) => `«${c.l.nombre}»: el margen da más de 10.000 % — revisá el costo o el precio.`),
@@ -1570,10 +1617,12 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           cae: limpio(cab.cae),
           cuit_proveedor: limpio(cab.cuit_proveedor),
         },
-        lineas: calculadas.map(({ l, cantidad, margenPct }) => ({
+        lineas: calculadas.map(({ l, cantidad, sinCargo, margenPct }) => ({
           item_pedido_id: l.item_pedido_id,
           producto_id: l.producto_id,
           cantidad,
+          // Unidades sin cargo (mig 325): el RPC las suma al stock, no al neto.
+          cantidad_sin_cargo: sinCargo,
           costo_sin_iva: Number(l.costo) || 0,
           descuento_porcentaje: Number(l.descuento) || 0,
           iva_compra_porcentaje: Number(l.iva_compra) || 0,
@@ -1807,7 +1856,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             {/* Mobile (< md): cada línea como tarjeta apilada, compra arriba y
                 venta abajo, para no tener que hacer scroll horizontal. */}
             <div className="space-y-3 md:hidden">
-              {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, precioTocado, error }) => (
+              {calculadas.map(({ l, calc, venta, cantidad, unidades, promSinCargo, precioFinal, margenPct, bonificada, precioTocado, error }) => (
                 <div
                   key={l.key}
                   className="overflow-hidden rounded-xl border border-[#e4c9b0] bg-white"
@@ -1854,18 +1903,18 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           <span
                             className={cn(
                               'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
-                              Number(l.cantidad) !== l.cantidad_recibida
+                              difiereDeRecibido(unidades, l.cantidad_recibida)
                                 ? 'bg-[#c43e2c]/12 text-[#c43e2c]'
                                 : 'bg-[#e4c9b0]/40 text-[#6f3a2a]'
                             )}
                             title={
-                              Number(l.cantidad) !== l.cantidad_recibida
-                                ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
+                              difiereDeRecibido(unidades, l.cantidad_recibida)
+                                ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado (pagadas + sin cargo) y lo recibido.'
                                 : undefined
                             }
                           >
                             Recibido {l.cantidad_recibida}
-                            {Number(l.cantidad) !== l.cantidad_recibida
+                            {difiereDeRecibido(unidades, l.cantidad_recibida)
                               ? ' · ajusta stock'
                               : ''}
                           </span>
@@ -1919,6 +1968,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         }
                       />
                       <CampoNumero
+                        label="Sin cargo"
+                        value={l.sin_cargo}
+                        onChange={(v) => setLineaCampo(l.key, 'sin_cargo', v)}
+                        min="0"
+                        step="any"
+                        placeholder="0"
+                        inputMode={
+                          productosMap.get(l.producto_id)?.venta_por_peso
+                            ? 'decimal'
+                            : 'numeric'
+                        }
+                      />
+                      <CampoNumero
                         label="Costo s/IVA"
                         value={l.costo}
                         onChange={(v) => setLineaCampo(l.key, 'costo', v)}
@@ -1957,6 +2019,17 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         <MontoARS monto={calc.costoConIva} />
                       </span>
                     </div>
+                    {promSinCargo != null && (
+                      <div
+                        className="mt-1 flex items-center justify-between text-xs"
+                        title="Promedio informativo con las unidades sin cargo: neto pagado ÷ (pagadas + sin cargo). No se guarda: el costo del producto es el unitario pagado."
+                      >
+                        <span className="text-[#9e6b15]">Promedio c/ sin cargo (info)</span>
+                        <span className="font-semibold text-[#9e6b15]">
+                          <MontoARS monto={promSinCargo} />
+                        </span>
+                      </div>
+                    )}
                     {hayGastos && (
                       <div className="mt-1.5 flex items-center justify-between rounded-md bg-[#f9b44c]/15 px-2 py-1 text-xs">
                         <span className="font-medium text-[#6f3a2a]">
@@ -2079,6 +2152,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     {fmtCantidad(totalesCantidad.facU, totalesCantidad.facKg)}
                   </span>
                 </span>
+                {(totalesCantidad.scU > 0 || totalesCantidad.scKg > 0) && (
+                  <span>
+                    Sin cargo:{' '}
+                    <span className="font-bold tabular-nums text-[#9e6b15]">
+                      {fmtCantidad(totalesCantidad.scU, totalesCantidad.scKg)}
+                    </span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -2094,7 +2175,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 con overflow es su scroll container, no la banda). Con gastos
                 no debitables aparece la columna read-only "Costo final". */}
             <div className="hidden md:block rounded-xl border border-[#e4c9b0]/60 overflow-auto max-2xl:max-h-[65vh] 2xl:flex-1 2xl:min-h-0">
-              <table className="w-full min-w-[1080px] text-xs border-separate border-spacing-0">
+              <table className="w-full min-w-[1170px] text-xs border-separate border-spacing-0">
                 <thead className="sticky top-0 z-10">
                   <tr className="bg-[#391511] text-[#f9d2a2]">
                     {/* Esquina fija: el fondo propio es obligatorio porque el
@@ -2111,6 +2192,13 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                       title="Cantidad que dice el comprobante (editable)"
                     >
                       Cant. factura ✎
+                    </th>
+                    <th
+                      className="w-[84px] p-2 whitespace-nowrap"
+                      rowSpan={2}
+                      title="Unidades sin cargo (bonificación del proveedor): entran a stock junto con las facturadas, no suman al neto ni cambian el costo del producto"
+                    >
+                      Sin cargo ✎
                     </th>
                     <th
                       className="w-[104px] p-2 whitespace-nowrap"
@@ -2171,7 +2259,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                   </tr>
                 </thead>
                 <tbody>
-                  {calculadas.map(({ l, calc, venta, cantidad, precioFinal, margenPct, bonificada, precioTocado, error }) => (
+                  {calculadas.map(({ l, calc, venta, cantidad, unidades, promSinCargo, precioFinal, margenPct, bonificada, precioTocado, error }) => (
                     <tr
                       key={l.key}
                       // border-separate: el borde va en las celdas (`*:`), el
@@ -2250,6 +2338,20 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                           className={inputCls}
                         />
                       </td>
+                      <td className="p-1 align-top">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={l.sin_cargo}
+                          onChange={(ev) =>
+                            setLineaCampo(l.key, 'sin_cargo', ev.target.value)
+                          }
+                          placeholder="0"
+                          title="Unidades sin cargo: entran a stock, no suman al neto ni cambian el costo"
+                          className={inputCls}
+                        />
+                      </td>
                       <td className="px-2 py-1 align-top text-center whitespace-nowrap">
                         {l.item_pedido_id === null ||
                         l.cantidad_recibida == null ? (
@@ -2257,22 +2359,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         ) : (
                           <div
                             title={
-                              Number(l.cantidad) !== l.cantidad_recibida
-                                ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado y lo recibido.'
+                              difiereDeRecibido(unidades, l.cantidad_recibida)
+                                ? 'Al guardar, el stock se ajusta por la diferencia entre lo facturado (pagadas + sin cargo) y lo recibido.'
                                 : undefined
                             }
                           >
                             <span
                               className={cn(
                                 'block h-8 leading-8 tabular-nums',
-                                Number(l.cantidad) !== l.cantidad_recibida
+                                difiereDeRecibido(unidades, l.cantidad_recibida)
                                   ? 'font-bold text-[#c43e2c]'
                                   : 'font-semibold text-[#391511]'
                               )}
                             >
                               {l.cantidad_recibida}
                             </span>
-                            {Number(l.cantidad) !== l.cantidad_recibida && (
+                            {difiereDeRecibido(unidades, l.cantidad_recibida) && (
                               <span className="block text-[9px] font-semibold leading-tight text-[#c43e2c]">
                                 ajusta stock
                               </span>
@@ -2302,6 +2404,14 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                         >
                           c/IVA <MontoARS monto={calc.costoConIva} />
                         </span>
+                        {promSinCargo != null && (
+                          <span
+                            className="mt-0.5 block px-1.5 text-right text-[10px] leading-tight tabular-nums text-[#9e6b15]"
+                            title="Promedio informativo con las unidades sin cargo: neto pagado ÷ (pagadas + sin cargo). No se guarda: el costo del producto es el unitario pagado."
+                          >
+                            promedio <MontoARS monto={promSinCargo} />
+                          </span>
+                        )}
                       </td>
                       <td className="p-1 align-top">
                         <Input
@@ -2463,7 +2573,22 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                     <td className="p-2 text-center tabular-nums whitespace-nowrap">
                       {fmtCantidad(totalesCantidad.facU, totalesCantidad.facKg)}
                     </td>
-                    <td className="p-2 text-center tabular-nums whitespace-nowrap">
+                    <td className="p-2 text-center tabular-nums whitespace-nowrap text-[#9e6b15]">
+                      {totalesCantidad.scU > 0 || totalesCantidad.scKg > 0
+                        ? fmtCantidad(totalesCantidad.scU, totalesCantidad.scKg)
+                        : '—'}
+                    </td>
+                    <td
+                      className={cn(
+                        'p-2 text-center tabular-nums whitespace-nowrap',
+                        unidadesDifieren && 'text-[#c43e2c]'
+                      )}
+                      title={
+                        unidadesDifieren
+                          ? 'Lo que entra a stock (facturado + sin cargo) no coincide con lo recibido.'
+                          : undefined
+                      }
+                    >
                       {fmtCantidad(totalesCantidad.recU, totalesCantidad.recKg)}
                     </td>
                     {/* Costo s/IVA · Desc. % */}

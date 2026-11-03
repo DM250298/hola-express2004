@@ -2028,6 +2028,9 @@ export type ItemPedidoRow = {
   cuenta_a_pagar_id: number | null
   /** Cantidad confirmada por la factura (three-way match; NULL = sin factura). Migración 131. */
   cantidad_facturada: number | null
+  /** Unidades SIN CARGO confirmadas por la factura vigente del renglón (mig 325).
+   *  El stock refleja cantidad_facturada + cantidad_sin_cargo; 0 sin factura. */
+  cantidad_sin_cargo: number
   /** Secuencia de escaneo en la recepción (orden del papel de la factura). Migración 137. */
   orden_recepcion: number | null
   /** Lo que sugirió el motor de cobertura al armar la orden (mig 152). NULL = carga manual. */
@@ -2046,6 +2049,7 @@ export type ItemPedidoInsert = {
   subtotal: number
   cuenta_a_pagar_id?: number | null
   cantidad_facturada?: number | null
+  cantidad_sin_cargo?: number
   orden_recepcion?: number | null
   cantidad_sugerida?: number | null
   motivo_ajuste?: string | null
@@ -2058,6 +2062,7 @@ export type ItemPedidoUpdate = {
   subtotal?: number
   cuenta_a_pagar_id?: number | null
   cantidad_facturada?: number | null
+  cantidad_sin_cargo?: number
   orden_recepcion?: number | null
   cantidad_sugerida?: number | null
   motivo_ajuste?: string | null
@@ -3449,6 +3454,10 @@ export type ItemFacturaCompraRow = {
    *  fila en items_pedido, mig 166). Los de la orden reconcilian por
    *  items_pedido.cantidad_facturada y quedan en 0. */
   cantidad_stock_aplicada: number
+  /** Unidades SIN CARGO del renglón (mig 325): entran a stock junto con
+   *  `cantidad` pero no suman al neto, al IVA ni al costo. `cantidad` sigue
+   *  siendo SOLO lo pagado. */
+  cantidad_sin_cargo: number
 }
 
 export type ItemFacturaCompraInsert = {
@@ -3466,6 +3475,7 @@ export type ItemFacturaCompraInsert = {
   precio_sin_iva?: number
   precio_con_iva?: number
   cantidad_stock_aplicada?: number
+  cantidad_sin_cargo?: number
 }
 
 export type ItemFacturaCompraUpdate = Partial<ItemFacturaCompraInsert>
@@ -6122,7 +6132,9 @@ export interface Database {
        *  fecha?, nota? }: fecha ≤ hoy paga en la misma transacción vía
        *  fn_pagar_cuenta; fecha FUTURA queda en pagos_programados sin debitar.
        *  v12 (mig 132) reconcilia el stock por delta; p_lineas puede traer
-       *  `fecha_vencimiento` para corregir el lote. */
+       *  `fecha_vencimiento` para corregir el lote.
+       *  v26 (mig 325): p_lineas acepta `cantidad_sin_cargo` (unidades que
+       *  entran a stock sin sumar al neto ni al costo; `cantidad` = pagadas). */
       fn_guardar_factura_compra: {
         Args: {
           p_cuenta_id: number

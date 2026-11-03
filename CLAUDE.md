@@ -307,6 +307,19 @@ el tilde apagado también deja el margen real (mig 323). Regla del dato en
 factura, se ajusta al monto real y se cierra el match. Si nunca se carga
 factura, la deuda queda registrada con el monto estimado de la recepción.
 
+**Unidades sin cargo (mig 325, nov-2026):** en "Cargar factura" cada renglón
+tiene, al lado de "Cant. factura", la columna **Sin cargo** para las unidades
+que el proveedor regala (compro 6, me dan 1). `items_factura_compra.cantidad`
+sigue siendo SOLO lo pagado (neto, IVA, asiento y Libro IVA no cambian);
+`cantidad_sin_cargo` (también en `items_pedido`, paralelo a
+`cantidad_facturada`) entra al stock: la reconciliación de
+`fn_guardar_factura_compra` (v26), `fn_anular_factura_compra` (v3) y
+`fn_validar_factura_compra` (v2) comparan pagadas + sin cargo contra lo
+recibido. **El costo del producto es el unitario pagado** (decisión del
+dueño: no es un descuento); el renglón muestra el promedio con las gratis
+solo como dato y un renglón con 0 pagadas no fija costo. Lógica pura en
+`lib/facturas/sinCargo.ts` (con test). Compra directa no tiene la columna.
+
 **Catálogo N:M proveedor↔producto** (`proveedor_producto`): un producto
 puede comprarse a varios proveedores con costos y códigos distintos.
 
@@ -793,7 +806,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 324 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 325 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

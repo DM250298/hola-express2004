@@ -438,6 +438,14 @@ export function DrawerFactura({
                           </span>
                           <span className="shrink-0 tabular-nums text-[#6f3a2a]">
                             {it.cantidad} × <MontoARS monto={it.costo_sin_iva} />
+                            {it.cantidad_sin_cargo > 0 && (
+                              <span
+                                className="text-[#9e6b15]"
+                                title="Unidades sin cargo: entraron a stock sin sumar al neto"
+                              >
+                                {' '}+{it.cantidad_sin_cargo} s/c
+                              </span>
+                            )}
                             <span className="text-[#c8a58a]"> + IVA {it.iva_compra_porcentaje}%</span>
                           </span>
                         </li>
