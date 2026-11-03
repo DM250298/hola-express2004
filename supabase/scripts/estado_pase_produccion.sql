@@ -172,7 +172,17 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and not has_function_privilege('anon', 'public.fn_resultado_periodo(date,date)', 'EXECUTE'),
     null
   union all
-  select 26, 'T1', 'Sin funciones duplicadas',
+  -- ── Factura: unidades sin cargo (325). ──
+  select 26, '325', 'Factura: unidades sin cargo (columnas + fn_guardar v26 / fn_anular v3 / fn_validar v2)',
+    (select count(*) from information_schema.columns
+      where table_schema = 'public' and column_name = 'cantidad_sin_cargo'
+        and table_name in ('items_pedido', 'items_factura_compra')) = 2
+    and exists (select 1 from fn where proname = 'fn_guardar_factura_compra' and prosrc like '%cantidad_sin_cargo%')
+    and exists (select 1 from fn where proname = 'fn_anular_factura_compra' and prosrc like '%cantidad_sin_cargo%')
+    and exists (select 1 from fn where proname = 'fn_validar_factura_compra' and prosrc like '%cantidad_sin_cargo%'),
+    null
+  union all
+  select 27, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

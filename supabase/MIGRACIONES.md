@@ -100,11 +100,12 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **325**
+## Próximo número libre: **326**
 
 (306–310 están tomadas por la rama `conteo-parcial-ciclico`, PR pendiente de abrir; 311–320 por la rama
-`margen-neto-iva` (mergeada); la 321 por la rama `finanzas-tablero-neto` (PR #27) y 322–324 por
-`factura-margen-coherente`. No reusar ninguno de esos tramos.)
+`margen-neto-iva` (mergeada); la 321 por la rama `finanzas-tablero-neto` (PR #27), 322–324 por
+`factura-margen-coherente` y la 325 por `free-products-stock` (unidades sin cargo). No reusar ninguno
+de esos tramos.)
 
 ---
 
@@ -432,6 +433,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 322 | `322_factura_margen_par_coherente.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño; en prueba verificada con `scripts/paridad-precio-sql.ts` 280/280, `scripts/paridad-margen-sql.ts` 140/140 y `scripts/auditoria-precios.ts`) | `fn_guardar_factura_compra` v25 (cuerpo de la 168, misma firma): con `p_afecta_precio_venta = false` (cliente viejo) el precio no se toca pero `margen` se re-deduce con `fn_margen_desde_precio` (y `margen_mayorista` conservando `precio_mayorista`). La app ya no tiene el switch: manda `true` siempre. ~630 líneas en un statement: pegar desde el archivo |
 | 323 | `323_compra_directa_margen_par_coherente.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño) | `fn_registrar_compra_directa` (cuerpo de la 169, misma firma): mismo `elsif` con el tilde apagado; `v_base_precio` = costo de la compra o el conservado. ~510 líneas en un statement |
 | 324 | `324_backfill_margen_real.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño; en prueba la auditoría deja 1 inconsistente, id 3828 con precio 0) | Backfill idempotente: a cada producto activo (no combo) con precio y costo cuyo margen guardado no reproduce el precio vigente (±0,5) le pone el margen real; ídem par mayorista. No toca `precio_venta` (sin etiquetas). Antes: `scripts/margen_desactualizado.sql`; después: `scripts/control_mig_322_324.sql` y `tests/test_margen_par_coherente.sql` |
+| 325 | `325_factura_unidades_sin_cargo.sql` | ⏳ solo prueba | 2026-11-03 (prueba: 325 + test en verde; producción pendiente) | Unidades SIN CARGO en Cargar factura (orden de compra): columnas `items_factura_compra.cantidad_sin_cargo` e `items_pedido.cantidad_sin_cargo` (numeric(12,3) ≥ 0, default 0; `cantidad` sigue siendo SOLO lo pagado: neto, IVA, asiento y Libro IVA no cambian). `fn_guardar_factura_compra` v26 (cuerpo de la 322, misma firma: clave opcional `cantidad_sin_cargo` en p_lineas; el stock refleja pagadas + sin cargo en renglones de la orden y extras; el costo del producto es el unitario PAGADO y un renglón con 0 pagadas no fija costo), `fn_anular_factura_compra` v3 (revierte pagadas + sin cargo), `fn_validar_factura_compra` v2 (compara pagadas + sin cargo vs recibido). Compra directa intacta. Correrla ANTES de deployar el front (el Drawer lee la columna nueva). `tests/test_factura_unidades_sin_cargo.sql` (rollback) |
 
 ## Dos bases de Supabase (2026-09-17)
 

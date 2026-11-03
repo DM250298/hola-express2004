@@ -96,6 +96,13 @@ export interface LineaFacturaPayload extends EntradaLinea {
    * puede estampar su 21 hardcodeado sobre un producto que está al 10,5.
    */
   aplicar_iva?: boolean
+  /**
+   * Unidades SIN CARGO del renglón (mig 325): entran a stock junto con
+   * `cantidad` pero no suman al neto, al IVA ni al costo del producto (que
+   * sigue siendo el unitario pagado). Clave opcional de p_lineas: sin la
+   * migración corrida el RPC la ignora.
+   */
+  cantidad_sin_cargo?: number
 }
 
 /** Datos formales del comprobante (cabecera AFIP). Todos opcionales. */
@@ -292,6 +299,8 @@ export interface ItemCompraDetalle {
   costo_sin_iva: number
   iva_compra_porcentaje: number
   costo_con_iva: number
+  /** Unidades sin cargo del renglón (mig 325); 0 en las facturas anteriores. */
+  cantidad_sin_cargo: number
 }
 
 /** Detalle (líneas) de una factura de compra, con el nombre del producto. */
@@ -302,7 +311,7 @@ export async function getItemsFacturaCompra(
   const { data, error } = await supabase
     .from('items_factura_compra')
     .select(
-      'producto_id, descripcion, cantidad, costo_sin_iva, iva_compra_porcentaje, costo_con_iva, productos(nombre)'
+      'producto_id, descripcion, cantidad, cantidad_sin_cargo, costo_sin_iva, iva_compra_porcentaje, costo_con_iva, productos(nombre)'
     )
     .eq('factura_id', facturaId)
     .order('id')
@@ -312,6 +321,7 @@ export async function getItemsFacturaCompra(
     producto_id: number | null
     descripcion: string | null
     cantidad: number
+    cantidad_sin_cargo: number | null
     costo_sin_iva: number
     iva_compra_porcentaje: number
     costo_con_iva: number
@@ -322,6 +332,7 @@ export async function getItemsFacturaCompra(
     producto_nombre: it.productos?.nombre ?? null,
     descripcion: it.descripcion,
     cantidad: Number(it.cantidad),
+    cantidad_sin_cargo: Number(it.cantidad_sin_cargo ?? 0),
     costo_sin_iva: Number(it.costo_sin_iva),
     iva_compra_porcentaje: Number(it.iva_compra_porcentaje),
     costo_con_iva: Number(it.costo_con_iva),
@@ -549,6 +560,9 @@ export async function guardarFacturaCompra(
       precio_venta: l.precio_venta ?? null,
       fecha_vencimiento: l.fecha_vencimiento ?? null,
       aplicar_iva: l.aplicar_iva ?? false,
+      // Sin cargo (mig 325): el RPC viejo ignora la clave; el nuevo la toma
+      // como 0 si no viene.
+      cantidad_sin_cargo: l.cantidad_sin_cargo ?? 0,
     })) as unknown as Json,
     // Solo se manda si hay gastos: así, antes de correr la migración 086, las
     // facturas sin gastos siguen resolviendo contra la firma vieja de la RPC.
