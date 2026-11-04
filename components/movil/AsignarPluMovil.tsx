@@ -7,9 +7,9 @@ import { EscanerCamara } from './EscanerCamara'
 import {
   FormularioPluBalanza,
   esPesableParaPlu,
+  type ProductoParaPlu,
 } from '@/components/productos/FormularioPluBalanza'
 import { resolverEscaneoPlu } from '@/lib/queries/productos'
-import type { ProductoConRelaciones } from '@/lib/queries/productos'
 
 interface Cargado {
   id: number
@@ -24,7 +24,7 @@ interface Cargado {
  * se limpia y el producto queda en "Cargados recién".
  */
 export function AsignarPluMovil() {
-  const [producto, setProducto] = useState<ProductoConRelaciones | null>(null)
+  const [producto, setProducto] = useState<ProductoParaPlu | null>(null)
   const [plu, setPlu] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [cargados, setCargados] = useState<Cargado[]>([])
@@ -68,7 +68,7 @@ export function AsignarPluMovil() {
     }
   }
 
-  function alGuardar(p: ProductoConRelaciones, n: number) {
+  function alGuardar(p: ProductoParaPlu, n: number) {
     setCargados((prev) => [
       { id: p.id, nombre: p.nombre, plu: n },
       ...prev.filter((c) => c.id !== p.id),

@@ -247,7 +247,9 @@ en el buscador) para elegir el pesable por nombre y guardarle el PLU; al
 guardar, `BuscadorProductoRef.escanear` re-lee la misma etiqueta y la mete al
 carrito. En el celular, "PLU de balanza" en el hub (`/movil/plu`,
 `AsignarPluMovil`): cámara arriba (etiqueta → PLU, envase → producto, vía
-`resolverEscaneoPlu`) y el mismo `FormularioPluBalanza`. `validarPluTexto`
+`resolverEscaneoPlu`) y el mismo `FormularioPluBalanza`. La ficha de
+Inventario (`DetalleProducto`) tiene "Agregar/Editar PLU" al lado del código
+de barras: el mismo modal con `producto` fijo (sin buscador). `validarPluTexto`
 en `codigoBalanza.ts` (con test).
 
 **Cobro con terminal MP Point (`ModalCobroTerminal`):** el cajero elige solo
