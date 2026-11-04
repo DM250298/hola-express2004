@@ -146,6 +146,16 @@ fallback `PERMISOS_POR_ROL_LEGACY`).
   además abre usuarios y datos fiscales); todo rol con `configuracion` lo
   tiene. La ficha `proveedores` la lee cualquier sesión y la escriben solo
   `compras`, `pedidos`, `configuracion`, `proveedores` o `finanzas` (mig 258).
+- **PLU de balanza desde el mostrador (mig 327, nov-2026)**: el permiso
+  `plu_balanza` (grupo Stock; `puedeCargarPlu()` = ese permiso o
+  `configuracion`) lo tienen encargado, cajero, fiambrero y todo rol con
+  `configuracion`. Habilita el modal del POS al escanear una etiqueta sin
+  producto y la pantalla `/movil/plu`. `productos` sigue con la policy base
+  `authenticated todo` (nunca se gateó: un cajero ya edita el código de
+  barras desde la recepción móvil), así que el gate es solo de UI y la
+  escritura va directa (`asignarPluBalanza`: valida pesable, no combo y PLU
+  libre, después `updateProducto`). `tienePermiso` no tiene atajo de admin:
+  siempre el OR.
 
 **Para agregar una ruta protegida nueva:** sumar la clave a `PERMISOS` en
 `lib/permisos.ts`, agregar el prefijo a `PERMISO_RUTA` en `middleware.ts`,
@@ -230,7 +240,15 @@ En el POS la etiqueta agrega el peso **sin abrir el modal** y, si el producto
 ya está en el carrito, **suma los kg** (`acumular` en `AGREGAR_PRODUCTO`); el
 modal manual y "editar" siguen reemplazando. El importe es precio × kg exacto
 (la etiqueta redondea a pesos; decisión del dueño). Un PLU sin producto o un
-producto con PLU sin "Venta por kg" avisan con toast y no agregan.
+producto con PLU sin "Venta por kg" avisan con toast y no agregan. Con
+`plu_balanza` (o `configuracion`, mig 327), en vez del toast el POS abre
+`ModalPluBalanza` (`components/productos/`, sin cámara: el lector USB escribe
+en el buscador) para elegir el pesable por nombre y guardarle el PLU; al
+guardar, `BuscadorProductoRef.escanear` re-lee la misma etiqueta y la mete al
+carrito. En el celular, "PLU de balanza" en el hub (`/movil/plu`,
+`AsignarPluMovil`): cámara arriba (etiqueta → PLU, envase → producto, vía
+`resolverEscaneoPlu`) y el mismo `FormularioPluBalanza`. `validarPluTexto`
+en `codigoBalanza.ts` (con test).
 
 **Cobro con terminal MP Point (`ModalCobroTerminal`):** el cajero elige solo
 el **canal** (Tarjeta/Point o QR) con un toggle; NO elige la forma de pago.
@@ -824,7 +842,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 326 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 327 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

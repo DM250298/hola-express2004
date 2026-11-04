@@ -40,6 +40,10 @@ const PERMISO_RUTA: Record<string, string[]> = {
   // mercadería, por eso 'recepcion' también habilita /compras.
   compras: ['/compras'],
   etiquetas: ['/etiquetas'],
+  // Cargar el PLU de balanza desde el celular (mig 327). Cajero, fiambrero y
+  // encargada ya abren /movil por inventario/recepcion; esta entrada es para
+  // un rol que tenga solo este permiso.
+  plu_balanza: ['/movil/plu'],
   pedidos: ['/pedidos', '/compras', '/movil'],
   recepcion: ['/recepcion', '/compras', '/movil'],
   // Proveedores (ficha y catálogo) para quien compra sin 'configuracion':

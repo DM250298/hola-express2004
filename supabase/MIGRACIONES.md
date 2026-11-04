@@ -100,12 +100,13 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **327**
+## Próximo número libre: **328**
 
 (306–310 están tomadas por la rama `conteo-parcial-ciclico`, PR pendiente de abrir; 311–320 por la rama
 `margen-neto-iva` (mergeada); la 321 por la rama `finanzas-tablero-neto` (PR #27), 322–324 por
-`factura-margen-coherente`, la 325 por `free-products-stock` (unidades sin cargo) y la 326 por
-`weighable-products-barcode-checkout` (PLU de balanza). No reusar ninguno de esos tramos.)
+`factura-margen-coherente`, la 325 por `free-products-stock` (unidades sin cargo), la 326 por
+`weighable-products-barcode-checkout` (PLU de balanza) y la 327 por `plu-balanza-personal` (PLU
+desde el mostrador). No reusar ninguno de esos tramos.)
 
 ---
 
@@ -435,6 +436,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 | 324 | `324_backfill_margen_real.sql` | ✅ aplicada | 2026-10-29 (prueba + producción, según el dueño; en prueba la auditoría deja 1 inconsistente, id 3828 con precio 0) | Backfill idempotente: a cada producto activo (no combo) con precio y costo cuyo margen guardado no reproduce el precio vigente (±0,5) le pone el margen real; ídem par mayorista. No toca `precio_venta` (sin etiquetas). Antes: `scripts/margen_desactualizado.sql`; después: `scripts/control_mig_322_324.sql` y `tests/test_margen_par_coherente.sql` |
 | 325 | `325_factura_unidades_sin_cargo.sql` | ✅ aplicada | 2026-11-03 (prueba + producción, según el dueño; en prueba `tests/test_factura_unidades_sin_cargo.sql` en verde) | Unidades SIN CARGO en Cargar factura (orden de compra): columnas `items_factura_compra.cantidad_sin_cargo` e `items_pedido.cantidad_sin_cargo` (numeric(12,3) ≥ 0, default 0; `cantidad` sigue siendo SOLO lo pagado: neto, IVA, asiento y Libro IVA no cambian). `fn_guardar_factura_compra` v26 (cuerpo de la 322, misma firma: clave opcional `cantidad_sin_cargo` en p_lineas; el stock refleja pagadas + sin cargo en renglones de la orden y extras; el costo del producto es el unitario PAGADO y un renglón con 0 pagadas no fija costo), `fn_anular_factura_compra` v3 (revierte pagadas + sin cargo), `fn_validar_factura_compra` v2 (compara pagadas + sin cargo vs recibido). Compra directa intacta. Correrla ANTES de deployar el front (el Drawer lee la columna nueva). `tests/test_factura_unidades_sin_cargo.sql` (rollback) |
 | 326 | `326_plu_balanza.sql` | ✅ aplicada | 2026-11-04 (prueba + producción, según el dueño; en prueba el POS verificado con las tres etiquetas reales) | PLU de balanza: `productos.plu_balanza` integer null (check 1..99999, índice único parcial `productos_plu_balanza_key`). El POS reconoce las etiquetas EAN-13 de la balanza ("20" + PLU 5 dígitos + gramos 5 dígitos + verificador), resuelve el producto por PLU y agrega los kg al carrito sin abrir el modal (suma si el producto ya está). El código no trae precio: cobra el `precio_venta` del sistema. Sin cambios de RPC ni RLS. Correrla ANTES de deployar el front (al escanear una etiqueta el POS filtra por la columna; la ficha solo la manda si hay valor). `tests/test_plu_balanza.sql` (rollback) |
+| 327 | `327_permiso_plu_balanza.sql` | ✅ aplicada | 2026-11-04 (prueba + producción, según el dueño) | Permiso `plu_balanza` (grupo Stock) a `encargado`, `cajero`, `fiambrero` y a todo rol con `configuracion`: cargar y corregir el PLU de balanza desde el POS (etiqueta cuyo PLU no tiene producto → modal para elegirlo; después la etiqueta entra al carrito) y desde el celular (`/movil/plu`, con cámara). Solo datos; sin RLS ni RPC (`productos` sigue con la policy `authenticated todo`, el gate es la UI). Sin ella el front solo no muestra la opción a esos roles |
 
 ## Dos bases de Supabase (2026-09-17)
 

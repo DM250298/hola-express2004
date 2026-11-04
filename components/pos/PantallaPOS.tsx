@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useTurnoActivo, useTurnoEnVivo } from '@/lib/hooks/useTurno'
 import { useCrearVenta } from '@/lib/hooks/useVentas'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { tienePermiso } from '@/lib/permisos'
+import { puedeCargarPlu, tienePermiso } from '@/lib/permisos'
 import { useShortcuts } from '@/lib/hooks/useShortcuts'
 import { contarUnidades, reducerCarrito, type ItemCarrito } from './carrito'
 import { AperturaCaja } from './AperturaCaja'
@@ -46,6 +46,8 @@ import { SelectorDeudorCtaCte } from './SelectorDeudorCtaCte'
 import { ModalCobrarCtaCte } from '@/components/finanzas/ModalCobrarCtaCte'
 import { ModalCobroTerminal } from './ModalCobroTerminal'
 import { ModalIngresoPeso } from './ModalIngresoPeso'
+import { ModalPluBalanza } from '@/components/productos/ModalPluBalanza'
+import type { EtiquetaBalanza } from '@/lib/pos/codigoBalanza'
 import { useTerminales } from '@/lib/hooks/useTerminales'
 import { useConfigVentas } from '@/lib/hooks/useConfigVentas'
 import { formatearFechaHora, formatearMonto } from '@/lib/utils/formato'
@@ -109,6 +111,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
   const puedeGasto = tienePermiso(usuario?.permisos, 'pos_gasto')
   const puedeCompra = tienePermiso(usuario?.permisos, 'compras')
   const puedeDevolver = tienePermiso(usuario?.permisos, 'devoluciones')
+  // Cargar el PLU de balanza al escanear una etiqueta sin producto (mig 327).
+  const puedeAsignarPlu = puedeCargarPlu(usuario?.permisos)
   const hayTerminalActiva = (terminales ?? []).some(
     (t) => t.activo && !!t.device_id
   )
@@ -154,6 +158,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     precio_mayorista: number | null
     stock_actual: number
     pesoActualKg?: number
+  } | null>(null)
+  /** Etiqueta de balanza cuyo PLU no tiene producto: abre el modal para asignarlo (mig 327). */
+  const [pluPendiente, setPluPendiente] = useState<{
+    etiqueta: EtiquetaBalanza
+    codigo: string
   } | null>(null)
   /** Cuando el cobro es mixto (maquinita + otros), guardamos los pagos no-
    *  maquinita acá y el monto a cobrar por la terminal. Al aprobarse, se
@@ -268,7 +277,8 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
     overlayAtajosAbierto ||
     selectorClienteAbierto ||
     modalTerminalAbierto ||
-    !!productoPeso
+    !!productoPeso ||
+    pluPendiente !== null
 
   const shortcutsPantalla = useMemo(
     () => [
@@ -800,6 +810,11 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             ref={buscadorRef}
             onSeleccionar={agregarProducto}
             permitirSinStock={permitirSinStock}
+            onPluDesconocido={
+              puedeAsignarPlu
+                ? (etiqueta, codigo) => setPluPendiente({ etiqueta, codigo })
+                : undefined
+            }
           />
           <GridProductosFrecuentes
             turnoId={turno.id}
@@ -889,6 +904,25 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
         onCambioAbierto={setModalSugerirAbierto}
         usuarioId={usuarioId}
       />
+
+      {puedeAsignarPlu && (
+        <ModalPluBalanza
+          abierto={pluPendiente !== null}
+          onCambioAbierto={(v) => {
+            if (v) return
+            setPluPendiente(null)
+            buscadorRef.current?.focus()
+          }}
+          pluInicial={pluPendiente?.etiqueta.plu ?? null}
+          onGuardado={() => {
+            // Con el PLU guardado, la misma etiqueta entra al carrito pasando
+            // por los chequeos de siempre (activo, precio, stock).
+            const codigo = pluPendiente?.codigo
+            setPluPendiente(null)
+            if (codigo) buscadorRef.current?.escanear(codigo)
+          }}
+        />
+      )}
 
       {puedeDevolver && (
         <ModalDevolucion

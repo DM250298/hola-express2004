@@ -8,8 +8,10 @@ import {
 } from '@/lib/offline/catalogo'
 import { esErrorDeRed } from '@/lib/offline/sync'
 import {
+  PLU_MAXIMO,
   elegirProductoEscaneado,
   parsearCodigoBalanza,
+  type EtiquetaBalanza,
 } from '@/lib/pos/codigoBalanza'
 import type {
   ProductoRow,
@@ -455,6 +457,73 @@ export async function asignarCodigoBarras(
     throw new Error(`Ese código ya lo tiene "${existente.nombre}".`)
   }
   return updateProducto(id, { codigo_barras: cod })
+}
+
+/**
+ * Asigna o corrige el PLU de balanza (mig 326) desde el mostrador: POS y
+ * celular (mig 327, permiso `plu_balanza`). `productos` sigue abierta a
+ * authenticated, así que el gate es la UI; acá se valida antes de escribir
+ * para no dejar que salten el check o el 23505 de Postgres.
+ */
+export async function asignarPluBalanza(
+  id: number,
+  plu: number
+): Promise<ProductoRow> {
+  if (!Number.isInteger(plu) || plu < 1 || plu > PLU_MAXIMO) {
+    throw new Error(`El PLU va de 1 a ${PLU_MAXIMO}.`)
+  }
+  const supabase = createClient()
+  const { data: prod, error } = await supabase
+    .from('productos')
+    .select('id, nombre, venta_por_peso, tipo')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw error
+  if (!prod) throw new Error('No encontré el producto.')
+  if (prod.tipo === 'combo') {
+    throw new Error(`"${prod.nombre}" es un combo: no va en la balanza.`)
+  }
+  if (!prod.venta_por_peso) {
+    throw new Error(
+      `"${prod.nombre}" no está marcado "Venta por kg". Corregilo en Configuración › Productos.`
+    )
+  }
+  const { data: otro, error: errorOtro } = await supabase
+    .from('productos')
+    .select('id, nombre')
+    .eq('plu_balanza', plu)
+    .neq('id', id)
+    .maybeSingle()
+  if (errorOtro) throw errorOtro
+  if (otro) throw new Error(`El PLU ${plu} ya lo tiene "${otro.nombre}".`)
+  return updateProducto(id, { plu_balanza: plu })
+}
+
+/** Qué se escaneó en "PLU de balanza": código fijo, etiqueta (con o sin producto) o nada. */
+export type EscaneoPlu =
+  | { tipo: 'producto'; producto: ProductoConRelaciones }
+  | {
+      tipo: 'etiqueta'
+      etiqueta: EtiquetaBalanza
+      producto: ProductoConRelaciones | null
+    }
+  | { tipo: 'nada' }
+
+/**
+ * Para la cámara de "PLU de balanza" en el celular (mig 327): el código del
+ * envase elige el producto; una etiqueta de la balanza trae el PLU y, si ya
+ * lo tiene alguien, ese producto.
+ */
+export async function resolverEscaneoPlu(codigo: string): Promise<EscaneoPlu> {
+  const etiqueta = parsearCodigoBalanza(codigo)
+  const escaneado = await buscarProductoEscaneado(codigo)
+  if (escaneado && escaneado.kg === null) {
+    return { tipo: 'producto', producto: escaneado.producto }
+  }
+  if (etiqueta) {
+    return { tipo: 'etiqueta', etiqueta, producto: escaneado?.producto ?? null }
+  }
+  return { tipo: 'nada' }
 }
 
 export async function toggleProductoActivo(

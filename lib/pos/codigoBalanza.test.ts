@@ -11,10 +11,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  PLU_MAXIMO,
   PREFIJO_BALANZA,
   elegirProductoEscaneado,
   parsearCodigoBalanza,
   validarDigitoEan13,
+  validarPluTexto,
 } from './codigoBalanza.ts'
 
 const CREMOSO_270 = '2000001002704'
@@ -101,4 +103,26 @@ test('elegirProductoEscaneado: sin candidatos o sin ese PLU es null', () => {
   assert.equal(elegirProductoEscaneado([], CREMOSO_270, etiqueta), null)
   assert.equal(elegirProductoEscaneado([pategras], CREMOSO_270, etiqueta), null)
   assert.equal(elegirProductoEscaneado([cremoso], 'HEX-000009', null), null)
+})
+
+test('validarPluTexto: enteros de 1 a 99999, con espacios y ceros a la izquierda', () => {
+  assert.deepEqual(validarPluTexto('1'), { plu: 1 })
+  assert.deepEqual(validarPluTexto(' 12 '), { plu: 12 })
+  assert.deepEqual(validarPluTexto('00004'), { plu: 4 })
+  assert.deepEqual(validarPluTexto(String(PLU_MAXIMO)), { plu: 99999 })
+  // Ida y vuelta con la etiqueta real.
+  assert.deepEqual(
+    validarPluTexto(String(parsearCodigoBalanza(CREMOSO_270)?.plu)),
+    { plu: 1 }
+  )
+})
+
+test('validarPluTexto: rechaza vacío, letras, decimales, negativos y fuera de rango', () => {
+  assert.match(validarPluTexto('').error ?? '', /Poné/)
+  assert.match(validarPluTexto('   ').error ?? '', /Poné/)
+  for (const v of ['abc', '1a', '1.5', '1,5', '-1']) {
+    assert.match(validarPluTexto(v).error ?? '', /entero/, v)
+  }
+  assert.match(validarPluTexto('0').error ?? '', /1 a 99999/)
+  assert.match(validarPluTexto('100000').error ?? '', /1 a 99999/)
 })

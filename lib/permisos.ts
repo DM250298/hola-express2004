@@ -26,6 +26,7 @@ export const PERMISOS: PermisoDef[] = [
   { clave: 'vencimientos', etiqueta: 'Ver vencimientos', grupo: 'Stock' },
   { clave: 'compras', etiqueta: 'Compras y cotizaciones', grupo: 'Stock' },
   { clave: 'etiquetas', etiqueta: 'Etiquetas de precio', grupo: 'Stock' },
+  { clave: 'plu_balanza', etiqueta: 'Cargar el PLU de balanza en productos pesables', grupo: 'Stock' },
   { clave: 'pedidos', etiqueta: 'Pedidos a proveedores', grupo: 'Stock' },
   { clave: 'proveedores', etiqueta: 'Proveedores: ficha y catálogo de productos', grupo: 'Stock' },
   { clave: 'recepcion', etiqueta: 'Recepción de mercadería', grupo: 'Stock' },
@@ -77,6 +78,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'vencimientos',
     'compras',
     'etiquetas',
+    'plu_balanza',
     'pedidos',
     'recepcion',
     'produccion',
@@ -88,7 +90,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
   // Mostrador: cajeros y fiambreros comparten el mismo set operativo (nivel
   // encargada SIN los módulos que muestran costo: compras, pedidos, reportes,
   // produccion, costos). Ven lo propio de Personal con 'mi_panel', no 'rrhh'.
-  // Mantener sincronizado con las migraciones 096 y 256.
+  // Mantener sincronizado con las migraciones 096, 256 y 327 (plu_balanza).
   cajero: [
     'dashboard',
     'proyectos',
@@ -103,6 +105,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'conteo_gestion',
     'vencimientos',
     'etiquetas',
+    'plu_balanza',
     'recepcion',
     'mi_panel',
   ],
@@ -120,6 +123,7 @@ export const PERMISOS_POR_ROL_LEGACY: Record<string, string[]> = {
     'conteo_gestion',
     'vencimientos',
     'etiquetas',
+    'plu_balanza',
     'recepcion',
     'mi_panel',
   ],
@@ -196,6 +200,19 @@ export function tienePermiso(
   clave: string
 ): boolean {
   return !!permisos && permisos.includes(clave)
+}
+
+/**
+ * ¿Puede cargar o corregir el PLU de balanza de un pesable (mig 327)? Lo abre
+ * el permiso propio o `configuracion` (que ya edita la ficha entera). Es un OR
+ * explícito porque `tienePermiso` no tiene atajo para admin: los permisos
+ * vienen de `roles.permisos` tal cual.
+ */
+export function puedeCargarPlu(permisos: string[] | undefined | null): boolean {
+  return (
+    tienePermiso(permisos, 'plu_balanza') ||
+    tienePermiso(permisos, 'configuracion')
+  )
 }
 
 export function etiquetaPermiso(clave: string): string {

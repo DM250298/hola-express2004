@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   asignarCodigoBarras,
+  asignarPluBalanza,
   getOpcionesTipoUnidad,
   getProductos,
   createProducto,
@@ -131,6 +132,31 @@ export function useAsignarCodigoBarras() {
           ? 'Ese código ya lo tiene otro producto.'
           : error.message
       )
+    },
+  })
+}
+
+/**
+ * PLU de balanza desde el mostrador (mig 327): POS y celular. Misma política
+ * de invalidación que el código de barras; el 23505 lo traduce
+ * `mensajeErrorProducto`.
+ */
+export function useAsignarPluBalanza() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, plu }: { id: number; plu: number }) =>
+      asignarPluBalanza(id, plu),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({
+        queryKey: ['producto-detalle', variables.id],
+      })
+      toast.success(`PLU ${variables.plu} guardado`)
+    },
+    onError: (error: Error) => {
+      toast.error(mensajeErrorProducto(error))
     },
   })
 }

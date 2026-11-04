@@ -190,7 +190,14 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
       where schemaname = 'public' and indexname = 'productos_plu_balanza_key'),
     null
   union all
-  select 28, 'T1', 'Sin funciones duplicadas',
+  -- ── Permiso plu_balanza en los roles del mostrador (327). ──
+  select 28, '327', 'Permiso plu_balanza en encargado, cajero y fiambrero',
+    not exists (select 1 from public.roles
+      where codigo in ('encargado', 'cajero', 'fiambrero')
+        and not ('plu_balanza' = any(permisos))),
+    null
+  union all
+  select 29, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

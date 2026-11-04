@@ -86,3 +86,26 @@ export function elegirProductoEscaneado<T extends CandidatoEscaneo>(
   const porPlu = candidatos.find((c) => c.plu_balanza === etiqueta.plu)
   return porPlu ? { producto: porPlu, kg: etiqueta.kg } : null
 }
+
+/** Tope del PLU: la etiqueta lo imprime con 5 dígitos. */
+export const PLU_MAXIMO = 99999
+
+/**
+ * Valida lo tipeado en un campo de PLU (ficha, POS, celular; mig 327). Acepta
+ * espacios alrededor y ceros a la izquierda ("00004" → 4, como lo imprime la
+ * etiqueta).
+ */
+export function validarPluTexto(
+  valor: string
+): { plu: number; error?: undefined } | { plu?: undefined; error: string } {
+  const t = valor.trim()
+  if (!t) return { error: 'Poné el número de PLU.' }
+  if (!/^\d+$/.test(t)) {
+    return { error: 'El PLU es un número entero, sin letras ni comas.' }
+  }
+  const n = Number(t)
+  if (n < 1 || n > PLU_MAXIMO) {
+    return { error: `El PLU va de 1 a ${PLU_MAXIMO}.` }
+  }
+  return { plu: n }
+}
