@@ -6,10 +6,11 @@ import {
   ChevronRight,
   ClipboardList,
   MapPin,
+  Scale,
   ScanLine,
   Truck,
 } from 'lucide-react'
-import { tienePermiso } from '@/lib/permisos'
+import { puedeCargarPlu, tienePermiso } from '@/lib/permisos'
 import { MOSTRAR_CONTEOS_ASIGNADOS } from '@/lib/config/inventario'
 import { TarjetaMisTareas } from './TarjetaMisTareas'
 import { TarjetaMiCuenta } from './TarjetaMiCuenta'
@@ -77,6 +78,9 @@ export function HubMovil({
     tienePermiso(permisos, 'recepcion') || tienePermiso(permisos, 'pedidos')
   const puedeVerVencimientos = tienePermiso(permisos, 'vencimientos')
   const puedeUbicar = tienePermiso(permisos, 'inventario')
+  // PLU de balanza (mig 327): el fiambrero carga el número sin pasar por
+  // Configuración.
+  const puedeAsignarPlu = puedeCargarPlu(permisos)
   const primerNombre = nombre.split(' ')[0]
 
   return (
@@ -268,6 +272,28 @@ export function HubMovil({
               </span>
               <span className="block text-xs text-[#6f3a2a]">
                 Parate en una góndola y escaneá lo que hay
+              </span>
+            </span>
+            <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />
+          </Link>
+        )}
+
+        {/* PLU de balanza (mig 327): escaneá la etiqueta y el envase, o buscá
+            por nombre, y guardá el número que tiene el pesable en la balanza. */}
+        {puedeAsignarPlu && (
+          <Link
+            href="/movil/plu"
+            className="group flex items-center gap-4 rounded-2xl border border-[#e4c9b0]/70 bg-white p-4 shadow-sm transition active:scale-[0.99]"
+          >
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#9e6b15]/10 text-[#9e6b15]">
+              <Scale className="h-7 w-7" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-bold text-[#391511]">
+                PLU de balanza
+              </span>
+              <span className="block text-xs text-[#6f3a2a]">
+                Cargá el número que tiene cada pesable en la balanza
               </span>
             </span>
             <ChevronRight className="h-5 w-5 shrink-0 text-[#c8a58a]" />

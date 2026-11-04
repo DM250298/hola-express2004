@@ -9,7 +9,10 @@ import { formatearCantidad } from '@/lib/utils/formato'
 import { ImagenProductoPOS } from './ImagenProductoPOS'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { buscarProductoEscaneado } from '@/lib/queries/productos'
-import { parsearCodigoBalanza } from '@/lib/pos/codigoBalanza'
+import {
+  parsearCodigoBalanza,
+  type EtiquetaBalanza,
+} from '@/lib/pos/codigoBalanza'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
@@ -22,10 +25,17 @@ interface Props {
   onSeleccionar: (p: ProductoConRelaciones, kg?: number) => void
   /** Si es true, permite seleccionar productos aunque estén sin stock. */
   permitirSinStock?: boolean
+  /**
+   * Etiqueta de balanza cuyo PLU no tiene producto (mig 327): quien puede
+   * cargar el PLU lo asigna ahí mismo. Sin esta prop solo se avisa con toast.
+   */
+  onPluDesconocido?: (etiqueta: EtiquetaBalanza, codigo: string) => void
 }
 
 export interface BuscadorProductoRef {
   focus: () => void
+  /** Procesa un código como si lo hubiera leído el scanner (re-escaneo por programa). */
+  escanear: (codigo: string) => void
 }
 
 const MAX_RESULTADOS_VISIBLES = 8
@@ -41,7 +51,10 @@ function pareceBarcode(valor: string): boolean {
 }
 
 export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
-  function BuscadorProducto({ onSeleccionar, permitirSinStock = false }, ref) {
+  function BuscadorProducto(
+    { onSeleccionar, permitirSinStock = false, onPluDesconocido },
+    ref
+  ) {
     const [busquedaInput, setBusquedaInput] = useState('')
     const [busqueda, setBusqueda] = useState('')
     const [indiceSeleccionado, setIndiceSeleccionado] = useState(0)
@@ -49,6 +62,10 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
 
     useImperativeHandle(ref, () => ({
       focus: () => inputRef.current?.focus(),
+      escanear: (codigo: string) => {
+        setBusquedaInput(codigo)
+        void procesarCodigo(codigo)
+      },
     }))
 
     // Debounce de 200ms
@@ -109,31 +126,43 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
       inputRef.current?.focus()
     }
 
-    async function handleEnter() {
-      const valor = busquedaInput.trim()
-      if (!valor) return
-
-      // 1. Si parece barcode (scanner), buscar directo en BD. Una etiqueta de
-      //    balanza ("20" + PLU + gramos) resuelve por PLU y trae los kg.
-      if (pareceBarcode(valor)) {
-        try {
-          const escaneado = await buscarProductoEscaneado(valor, true)
-          if (escaneado) {
-            agregarProducto(escaneado.producto, escaneado.kg ?? undefined)
-            return
-          }
-          const etiqueta = parsearCodigoBalanza(valor)
+    /**
+     * Lectura del scanner (o código tipeado + Enter): busca directo en BD. Una
+     * etiqueta de balanza ("20" + PLU + gramos) resuelve por PLU y trae los kg.
+     */
+    async function procesarCodigo(valor: string) {
+      try {
+        const escaneado = await buscarProductoEscaneado(valor, true)
+        if (escaneado) {
+          agregarProducto(escaneado.producto, escaneado.kg ?? undefined)
+          return
+        }
+        const etiqueta = parsearCodigoBalanza(valor)
+        if (etiqueta && onPluDesconocido) {
+          // Quien puede cargar el PLU lo asigna ahí mismo (mig 327).
+          onPluDesconocido(etiqueta, valor)
+        } else {
           toast.error(
             etiqueta
               ? `Etiqueta de balanza con PLU ${etiqueta.plu}: ningún producto tiene ese PLU. Cargalo en Configuración › Productos.`
               : `Código ${valor} no encontrado.`
           )
-        } catch {
-          toast.error('Error buscando por código.')
         }
-        // Deja el código seleccionado: el próximo escaneo lo pisa en vez de
-        // pegarse al anterior (y fallar también).
-        inputRef.current?.select()
+      } catch {
+        toast.error('Error buscando por código.')
+      }
+      // Deja el código seleccionado: el próximo escaneo lo pisa en vez de
+      // pegarse al anterior (y fallar también).
+      inputRef.current?.select()
+    }
+
+    async function handleEnter() {
+      const valor = busquedaInput.trim()
+      if (!valor) return
+
+      // 1. Si parece barcode (scanner), buscar directo en BD.
+      if (pareceBarcode(valor)) {
+        await procesarCodigo(valor)
         return
       }
 
