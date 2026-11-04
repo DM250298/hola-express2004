@@ -13,16 +13,34 @@ import {
 } from '@/lib/hooks/useProductos'
 import { parsearCodigoBalanza, validarPluTexto } from '@/lib/pos/codigoBalanza'
 import { buscarProductoEscaneado } from '@/lib/queries/productos'
-import type { ProductoConRelaciones } from '@/lib/queries/productos'
+import type { ProductoRow } from '@/types/database'
+
+/**
+ * Lo que el formulario necesita de un producto. Lo cumplen
+ * `ProductoConRelaciones` (buscador, cámara) y la fila de la ficha de
+ * Inventario (`getProductoDetalle`).
+ */
+export type ProductoParaPlu = Pick<
+  ProductoRow,
+  | 'id'
+  | 'nombre'
+  | 'plu_balanza'
+  | 'venta_por_peso'
+  | 'tipo'
+  | 'precio_venta'
+  | 'codigo_barras'
+>
 
 interface Props {
   /** Producto elegido; null = se elige acá buscando por nombre (o código). */
-  producto: ProductoConRelaciones | null
-  onCambiarProducto: (p: ProductoConRelaciones | null) => void
+  producto: ProductoParaPlu | null
+  onCambiarProducto: (p: ProductoParaPlu | null) => void
+  /** true = vino fijo de afuera (ficha de Inventario): sin "Cambiar". */
+  productoFijo?: boolean
   /** Texto del campo PLU. Controlado: el celular lo rellena con la cámara. */
   plu: string
   onCambiarPlu: (v: string) => void
-  onGuardado: (producto: ProductoConRelaciones, plu: number) => void
+  onGuardado: (producto: ProductoParaPlu, plu: number) => void
   /** Lo pasa el modal del POS; la pantalla del celular no tiene Cancelar. */
   onCancelar?: () => void
   /** En el POS sí (el cajero tipea o escanea enseguida); en el celular no,
@@ -31,7 +49,7 @@ interface Props {
 }
 
 /** Solo pesables simples: un combo o un producto por unidad no va en la balanza. */
-export function esPesableParaPlu(p: ProductoConRelaciones): boolean {
+export function esPesableParaPlu(p: ProductoParaPlu): boolean {
   return p.venta_por_peso && p.tipo !== 'combo'
 }
 
@@ -45,6 +63,7 @@ export function esPesableParaPlu(p: ProductoConRelaciones): boolean {
 export function FormularioPluBalanza({
   producto,
   onCambiarProducto,
+  productoFijo = false,
   plu,
   onCambiarPlu,
   onGuardado,
@@ -77,7 +96,7 @@ export function FormularioPluBalanza({
   const validacion = validarPluTexto(plu)
   const errorPlu = pluTocado ? validacion.error : undefined
 
-  function elegir(p: ProductoConRelaciones) {
+  function elegir(p: ProductoParaPlu) {
     onCambiarProducto(p)
     setBusqueda('')
     setBusquedaDebounced('')
@@ -164,13 +183,15 @@ export function FormularioPluBalanza({
               </span>
             </span>
           </span>
-          <button
-            type="button"
-            onClick={() => onCambiarProducto(null)}
-            className="shrink-0 text-xs font-semibold text-[#9e6b15]"
-          >
-            Cambiar
-          </button>
+          {!productoFijo && (
+            <button
+              type="button"
+              onClick={() => onCambiarProducto(null)}
+              className="shrink-0 text-xs font-semibold text-[#9e6b15]"
+            >
+              Cambiar
+            </button>
+          )}
         </div>
       ) : (
         <div>

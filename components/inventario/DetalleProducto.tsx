@@ -15,6 +15,7 @@ import {
   Package,
   Pencil,
   RefreshCcw,
+  Scale,
   ShoppingCart,
   Tag,
   Trash2,
@@ -40,7 +41,7 @@ import {
   useProductoDetalle,
 } from '@/lib/hooks/useInventario'
 import { useUsuario } from '@/lib/hooks/useUsuario'
-import { tienePermiso } from '@/lib/permisos'
+import { puedeCargarPlu, tienePermiso } from '@/lib/permisos'
 import { calcularEstadoStock } from '@/lib/queries/inventario'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import {
@@ -52,6 +53,7 @@ import {
 import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalEliminarProducto } from './ModalEliminarProducto'
 import { ModalCodigoBarras } from '@/components/movil/ModalCodigoBarras'
+import { ModalPluBalanza } from '@/components/productos/ModalPluBalanza'
 import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
 import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
@@ -133,6 +135,7 @@ export function DetalleProducto({ productoId }: Props) {
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
   const [modalEliminarAbierto, setModalEliminarAbierto] = useState(false)
   const [modalCodigoAbierto, setModalCodigoAbierto] = useState(false)
+  const [modalPluAbierto, setModalPluAbierto] = useState(false)
   const toggleActivo = useToggleProductoActivo()
 
   const { data: historial, isLoading: cargandoHist } = useHistorialMovimientos(
@@ -182,6 +185,9 @@ export function DetalleProducto({ productoId }: Props) {
   // recepción móvil): un producto con el HEX-… autogenerado no se puede
   // escanear en la caja hasta que alguien le cargue el EAN real.
   const puedeEditarCodigo = tienePermiso(usuario?.permisos, 'compras')
+  // PLU de balanza (mig 327): solo pesables; lo cargan el mostrador
+  // (`plu_balanza`) y quien edita la ficha (`configuracion`).
+  const puedeAsignarPlu = porPeso && puedeCargarPlu(usuario?.permisos)
 
   // Ganancia = MARGEN NETO ASEGURADO: el mismo `producto.margen` que muestra y
   // con el que pricea el Drawer (la ganancia LIMPIA sobre el costo, ya
@@ -245,6 +251,23 @@ export function DetalleProducto({ productoId }: Props) {
                   {esCodigoAutogenerado(producto.codigo_barras)
                     ? 'Agregar código'
                     : 'Editar'}
+                </button>
+              )}
+              {porPeso && (
+                <span className="font-mono text-[#c8a58a]">
+                  {producto.plu_balanza != null
+                    ? `PLU ${producto.plu_balanza}`
+                    : 'Sin PLU'}
+                </span>
+              )}
+              {puedeAsignarPlu && (
+                <button
+                  type="button"
+                  onClick={() => setModalPluAbierto(true)}
+                  className="inline-flex h-6 items-center gap-1 rounded-md border border-[#e4c9b0] px-1.5 text-[11px] font-semibold text-[#9e6b15] transition-colors hover:bg-[#f9d2a2]/40"
+                >
+                  <Scale className="h-3 w-3" />
+                  {producto.plu_balanza != null ? 'Editar PLU' : 'Agregar PLU'}
                 </button>
               )}
               {!producto.activo && (
@@ -566,6 +589,15 @@ export function DetalleProducto({ productoId }: Props) {
         }}
         onGuardado={() => setModalCodigoAbierto(false)}
       />
+
+      {/* PLU de balanza (mig 327): producto fijo, solo se carga el número. */}
+      {puedeAsignarPlu && (
+        <ModalPluBalanza
+          abierto={modalPluAbierto}
+          onCambioAbierto={setModalPluAbierto}
+          producto={producto}
+        />
+      )}
 
       <ModalAjusteStock
         abierto={modalAjusteAbierto}

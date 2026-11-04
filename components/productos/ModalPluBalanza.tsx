@@ -9,37 +9,60 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FormularioPluBalanza } from './FormularioPluBalanza'
-import type { ProductoConRelaciones } from '@/lib/queries/productos'
+import {
+  FormularioPluBalanza,
+  type ProductoParaPlu,
+} from './FormularioPluBalanza'
 
 interface Props {
   abierto: boolean
   onCambioAbierto: (v: boolean) => void
   /** PLU leído de una etiqueta sin producto (POS): precarga el campo. */
   pluInicial?: number | null
-  onGuardado?: (producto: ProductoConRelaciones, plu: number) => void
+  /** Producto ya elegido (ficha de Inventario): sin buscador, solo el PLU. */
+  producto?: ProductoParaPlu | null
+  onGuardado?: (producto: ProductoParaPlu, plu: number) => void
 }
 
 /**
- * Asignar el PLU de balanza desde el POS (mig 327): se abre cuando el cajero
- * escanea una etiqueta cuyo PLU no tiene producto. Sin cámara: en la PC el
- * lector USB escribe en el buscador del formulario.
+ * Asignar el PLU de balanza (mig 327). Lo abre el POS cuando el cajero
+ * escanea una etiqueta cuyo PLU no tiene producto (`pluInicial`, se elige el
+ * producto adentro) y la ficha de Inventario (`producto` fijo). Sin cámara:
+ * en la PC el lector USB escribe en el buscador del formulario.
  */
 export function ModalPluBalanza({
   abierto,
   onCambioAbierto,
   pluInicial = null,
+  producto: productoFijo = null,
   onGuardado,
 }: Props) {
-  const [producto, setProducto] = useState<ProductoConRelaciones | null>(null)
+  const [producto, setProducto] = useState<ProductoParaPlu | null>(null)
   const [plu, setPlu] = useState('')
 
-  // Cada apertura arranca limpia, con el PLU de la etiqueta si vino.
+  // Cada apertura arranca limpia: con el producto de la ficha y su PLU actual,
+  // o con el PLU de la etiqueta. Deps PRIMITIVAS a propósito: un refetch de
+  // la ficha recrea el objeto y no debe pisar lo que se está tipeando.
+  const fijoId = productoFijo?.id ?? null
+  const fijoPlu = productoFijo?.plu_balanza ?? null
   useEffect(() => {
     if (!abierto) return
-    setProducto(null)
-    setPlu(pluInicial != null ? String(pluInicial) : '')
-  }, [abierto, pluInicial])
+    setProducto(productoFijo ?? null)
+    setPlu(
+      pluInicial != null
+        ? String(pluInicial)
+        : fijoPlu != null
+          ? String(fijoPlu)
+          : ''
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierto, pluInicial, fijoId, fijoPlu])
+
+  const descripcion = productoFijo
+    ? `Poné el número que tiene "${productoFijo.nombre}" en la balanza.`
+    : pluInicial != null
+      ? `Ningún producto tiene el PLU ${pluInicial}. Elegí cuál es y queda guardado.`
+      : 'Buscá el producto por kg y poné el número que tiene en la balanza.'
 
   return (
     <Dialog open={abierto} onOpenChange={onCambioAbierto}>
@@ -50,18 +73,17 @@ export function ModalPluBalanza({
             PLU de balanza
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
-            {pluInicial != null
-              ? `Ningún producto tiene el PLU ${pluInicial}. Elegí cuál es y queda guardado.`
-              : 'Buscá el producto por kg y poné el número que tiene en la balanza.'}
+            {descripcion}
           </DialogDescription>
         </DialogHeader>
 
         <FormularioPluBalanza
           producto={producto}
           onCambiarProducto={setProducto}
+          productoFijo={productoFijo !== null}
           plu={plu}
           onCambiarPlu={setPlu}
-          autoFocusBusqueda
+          autoFocusBusqueda={productoFijo === null}
           onCancelar={() => onCambioAbierto(false)}
           onGuardado={(p, n) => {
             onGuardado?.(p, n)
