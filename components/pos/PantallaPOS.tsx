@@ -22,7 +22,7 @@ import { useCrearVenta } from '@/lib/hooks/useVentas'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
 import { useShortcuts } from '@/lib/hooks/useShortcuts'
-import { reducerCarrito, type ItemCarrito } from './carrito'
+import { contarUnidades, reducerCarrito, type ItemCarrito } from './carrito'
 import { AperturaCaja } from './AperturaCaja'
 import { CierreCaja } from './CierreCaja'
 import {
@@ -713,7 +713,9 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       <div className="px-3 sm:px-4 py-2 bg-[#fdfaf6] border-b border-[#e4c9b0]/40 flex items-center gap-1.5 overflow-x-auto shrink-0">
         {ordenes.map((o, idx) => {
           const activa = o.id === ordenActivaId
-          const cantidad = o.items.reduce((acc, it) => acc + it.cantidad, 0)
+          // Un pesable cuenta como 1 ítem (como en el encabezado del carrito);
+          // sumar los kg crudos daba "0.675 ítems".
+          const cantidad = contarUnidades(o.items)
           const total = o.items.reduce(
             (acc, it) => acc + it.precio_unitario * it.cantidad,
             0
