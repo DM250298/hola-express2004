@@ -214,6 +214,24 @@ apertura/cierre de caja con conteo de billetes, **sangrías** (retiros a caja
 fuerte que descuentan del cierre), gastos del turno, selector de cliente,
 atajos F1–F12, modo offline. La venta crea asiento contable automático.
 
+**Etiquetas de balanza (mig 326, nov-2026):** la balanza imprime un EAN-13
+por pieza pesada: `20` + PLU (5 dígitos) + gramos (5 dígitos) + verificador
+(ej. `2000001002704` = PLU 1, 0,270 kg). **El código no trae el precio**: el
+POS cobra el `precio_venta` (por kg) del producto que tiene ese
+`productos.plu_balanza` (único, 1..99999; se carga en la ficha, solo con
+"Venta por kg"); la balanza tiene que tener los mismos precios. Lógica pura
+en `lib/pos/codigoBalanza.ts` (con test): `parsearCodigoBalanza` y
+`elegirProductoEscaneado`. `buscarProductoEscaneado` (`lib/queries/productos.ts`)
+resuelve en UNA consulta código fijo o PLU y devuelve `{ producto, kg }`; un
+código fijo exacto gana siempre al PLU (`kg: null`); `getProductoByBarcode`
+delega en ella (conteo, ajustes y consulta de precio del celular también
+reconocen la etiqueta). Offline: `buscarEscaneadoLocal` sobre el snapshot.
+En el POS la etiqueta agrega el peso **sin abrir el modal** y, si el producto
+ya está en el carrito, **suma los kg** (`acumular` en `AGREGAR_PRODUCTO`); el
+modal manual y "editar" siguen reemplazando. El importe es precio × kg exacto
+(la etiqueta redondea a pesos; decisión del dueño). Un PLU sin producto o un
+producto con PLU sin "Venta por kg" avisan con toast y no agregan.
+
 **Cobro con terminal MP Point (`ModalCobroTerminal`):** el cajero elige solo
 el **canal** (Tarjeta/Point o QR) con un toggle; NO elige la forma de pago.
 Al aprobarse la orden, MP devuelve `payment_method.type/id` y el sistema
@@ -806,7 +824,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 325 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 326 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

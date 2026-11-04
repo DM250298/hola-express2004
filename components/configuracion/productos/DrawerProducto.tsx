@@ -123,6 +123,23 @@ const esquemaProducto = z.object({
     })
     .pipe(z.number().min(0, 'No puede ser negativo').nullable()),
   venta_por_peso: z.boolean().default(false),
+  // PLU en la balanza (mig 326). Vacío = no está en la balanza.
+  plu_balanza: z
+    .union([z.string(), z.number(), z.null()])
+    .optional()
+    .transform((v) => {
+      if (v == null || v === '') return null
+      const n = Number(v)
+      return Number.isFinite(n) ? n : null
+    })
+    .pipe(
+      z
+        .number()
+        .int('Solo enteros')
+        .min(1, 'Entre 1 y 99999')
+        .max(99999, 'Entre 1 y 99999')
+        .nullable()
+    ),
   visible_tienda: z.boolean().default(true),
   controlar_stock: z.boolean().default(true),
   no_ofrecer_ventas: z.boolean().default(false),
@@ -457,6 +474,7 @@ export function DrawerProducto({
       unidad: 'unidad',
       activo: true,
       venta_por_peso: false,
+      plu_balanza: '',
       visible_tienda: true,
       controlar_stock: true,
       no_ofrecer_ventas: false,
@@ -540,6 +558,8 @@ export function DrawerProducto({
       unidad: producto?.unidad ?? 'unidad',
       activo: producto?.activo ?? true,
       venta_por_peso: producto?.venta_por_peso ?? false,
+      plu_balanza:
+        producto?.plu_balanza != null ? String(producto.plu_balanza) : '',
       visible_tienda: producto?.visible_tienda ?? true,
       controlar_stock: producto?.controlar_stock ?? true,
       no_ofrecer_ventas: producto?.no_ofrecer_ventas ?? false,
@@ -973,6 +993,16 @@ export function DrawerProducto({
             stock_objetivo_manual: esComboFinal
               ? null
               : validado.stock_objetivo_manual,
+          }
+        : {}),
+      // PLU de balanza (mig 326): misma regla, solo si hay algo que guardar.
+      // Apagar "Venta por kg" o pasar a combo lo limpia.
+      ...(validado.plu_balanza != null || producto?.plu_balanza != null
+        ? {
+            plu_balanza:
+              esComboFinal || !validado.venta_por_peso
+                ? null
+                : validado.plu_balanza,
           }
         : {}),
       // Sin precio de venta cargado → queda "pendiente de precio": visible en
@@ -2370,6 +2400,38 @@ export function DrawerProducto({
                     </div>
                   ))}
                 </div>
+                {!esCombo && porPeso && (
+                  <div className="mt-1 pt-3 border-t border-[#e4c9b0]/40 space-y-1.5">
+                    <Label
+                      htmlFor="plu_balanza"
+                      className="text-[#391511] font-medium"
+                    >
+                      PLU en la balanza
+                    </Label>
+                    <Input
+                      id="plu_balanza"
+                      type="number"
+                      min="1"
+                      max="99999"
+                      step="1"
+                      inputMode="numeric"
+                      placeholder="Ej: 1"
+                      {...register('plu_balanza')}
+                      disabled={guardando}
+                      className="tabular-nums border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
+                    />
+                    <p className="text-[11px] text-[#c8a58a]">
+                      El número que tiene el producto cargado en la balanza (sale
+                      en la etiqueta como PLU). Al escanear la etiqueta, el POS
+                      reconoce el producto y agrega el peso solo.
+                    </p>
+                    {errors.plu_balanza && (
+                      <p className="text-[#c43e2c] text-xs">
+                        {errors.plu_balanza.message}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* ── Notas ── */}
