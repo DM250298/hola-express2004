@@ -1,12 +1,16 @@
 import { createClient } from '@/lib/supabase/client'
 import { traerTodo } from '@/lib/supabase/paginacion'
 import {
-  buscarPorBarcodeLocal,
+  buscarEscaneadoLocal,
   filtrarProductosLocal,
   guardarCatalogo,
   leerCatalogo,
 } from '@/lib/offline/catalogo'
 import { esErrorDeRed } from '@/lib/offline/sync'
+import {
+  elegirProductoEscaneado,
+  parsearCodigoBalanza,
+} from '@/lib/pos/codigoBalanza'
 import type {
   ProductoRow,
   ProductoInsert,
@@ -269,34 +273,65 @@ export async function getOpcionesTipoUnidad(): Promise<{
   return { tipos, unidades }
 }
 
+/** Resultado de un escaneo: el producto y, si fue etiqueta de balanza, los kg. */
+export interface ProductoEscaneado {
+  producto: ProductoConRelaciones
+  /** kg leídos de una etiqueta de balanza (mig 326); null si fue un código fijo. */
+  kg: number | null
+}
+
+/**
+ * Resuelve lo que leyó el scanner. Un código fijo se busca exacto en el
+ * principal y en el secundario (codigo_barras_2: un EAN de fábrica cargado
+ * como secundario también se escanea en el POS). Si además parece una
+ * etiqueta de balanza ("20" + PLU + gramos), en la MISMA consulta se busca
+ * por `plu_balanza`; si algún producto tiene ese código exacto como fijo,
+ * gana y no hay kg (ver `elegirProductoEscaneado`).
+ */
+export async function buscarProductoEscaneado(
+  codigo: string,
+  soloVendible = false
+): Promise<ProductoEscaneado | null> {
+  const supabase = createClient()
+  const cod = codigo.trim()
+  const etiqueta = parsearCodigoBalanza(cod)
+  try {
+    const filtros = [`codigo_barras.eq.${cod}`, `codigo_barras_2.eq.${cod}`]
+    if (etiqueta) filtros.push(`plu_balanza.eq.${etiqueta.plu}`)
+    let q = supabase
+      .from('productos')
+      .select(SELECT_PRODUCTO)
+      .or(filtros.join(','))
+    if (soloVendible) q = q.eq('no_ofrecer_ventas', false)
+    // Máximo teórico: uno por codigo_barras, uno por codigo_barras_2, uno por PLU.
+    const { data, error } = await q.limit(3)
+
+    if (error) throw error
+    const candidatos = ((data ?? []) as unknown as ProductoRaw[]).map(mapearCosto)
+    const eleccion = elegirProductoEscaneado(candidatos, cod, etiqueta)
+    if (!eleccion) return null
+    // Si es combo, calcula el stock virtual también en el escaneo directo.
+    await adjuntarComponentesCombos(supabase, [eleccion.producto])
+    return eleccion
+  } catch (error) {
+    if (esErrorDeRed(error)) {
+      return buscarEscaneadoLocal(codigo, soloVendible)
+    }
+    throw error
+  }
+}
+
+/**
+ * Solo el producto, para quien no necesita el peso (conteo, ajustes,
+ * ubicación, consulta de precio en el celular). Una etiqueta de balanza
+ * resuelve al producto de ese PLU.
+ */
 export async function getProductoByBarcode(
   codigo: string,
   soloVendible = false
 ): Promise<ProductoConRelaciones | null> {
-  const supabase = createClient()
-  const cod = codigo.trim()
-  try {
-    // Busca tanto en el código principal como en el secundario (codigo_barras_2),
-    // así un EAN de fábrica cargado como secundario también se escanea en el POS.
-    let q = supabase
-      .from('productos')
-      .select(SELECT_PRODUCTO)
-      .or(`codigo_barras.eq.${cod},codigo_barras_2.eq.${cod}`)
-    if (soloVendible) q = q.eq('no_ofrecer_ventas', false)
-    const { data, error } = await q.limit(1).maybeSingle()
-
-    if (error) throw error
-    if (!data) return null
-    const producto = mapearCosto(data as unknown as ProductoRaw)
-    // Si es combo, calcula el stock virtual también en el escaneo directo.
-    await adjuntarComponentesCombos(supabase, [producto])
-    return producto
-  } catch (error) {
-    if (esErrorDeRed(error)) {
-      return buscarPorBarcodeLocal(codigo, soloVendible)
-    }
-    throw error
-  }
+  const escaneado = await buscarProductoEscaneado(codigo, soloVendible)
+  return escaneado?.producto ?? null
 }
 
 /** Componentes de un combo, con nombre/stock/costo del producto hijo. */
@@ -411,7 +446,11 @@ export async function asignarCodigoBarras(
 ): Promise<ProductoRow> {
   const cod = codigo.trim()
   if (!cod) throw new Error('Poné el código de barras.')
-  const existente = await getProductoByBarcode(cod)
+  // Solo el match EXACTO es conflicto: una etiqueta de balanza resuelve por
+  // PLU a otro producto (kg !== null) y eso no es "ya lo tiene".
+  const escaneado = await buscarProductoEscaneado(cod)
+  const existente =
+    escaneado && escaneado.kg === null ? escaneado.producto : null
   if (existente && existente.id !== id) {
     throw new Error(`Ese código ya lo tiene "${existente.nombre}".`)
   }

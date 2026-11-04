@@ -1519,6 +1519,12 @@ export type ProductoRow = {
   costos_adicionales: CostoAdicional[]
   dias_vencimiento_minimo: number | null
   venta_por_peso: boolean
+  /**
+   * PLU del producto en la balanza (mig 326): la etiqueta EAN-13 "20" + PLU
+   * (5) + gramos (5) + verificador se resuelve por este número. Único.
+   * Solo tiene sentido con venta_por_peso. NULL = no está en la balanza.
+   */
+  plu_balanza: number | null
   visible_tienda: boolean
   controlar_stock: boolean
   no_ofrecer_ventas: boolean
@@ -1567,6 +1573,8 @@ export type ProductoInsert = {
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
   venta_por_peso?: boolean
+  /** PLU en la balanza (mig 326). */
+  plu_balanza?: number | null
   visible_tienda?: boolean
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean
@@ -1614,6 +1622,8 @@ export type ProductoUpdate = {
   costos_adicionales?: CostoAdicional[]
   dias_vencimiento_minimo?: number | null
   venta_por_peso?: boolean
+  /** PLU en la balanza (mig 326). */
+  plu_balanza?: number | null
   visible_tienda?: boolean
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean

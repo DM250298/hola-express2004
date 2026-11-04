@@ -8,13 +8,18 @@ import { MontoARS } from '@/components/shared/MontoARS'
 import { formatearCantidad } from '@/lib/utils/formato'
 import { ImagenProductoPOS } from './ImagenProductoPOS'
 import { useProductos } from '@/lib/hooks/useProductos'
-import { getProductoByBarcode } from '@/lib/queries/productos'
+import { buscarProductoEscaneado } from '@/lib/queries/productos'
+import { parsearCodigoBalanza } from '@/lib/pos/codigoBalanza'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 
 interface Props {
-  onSeleccionar: (p: ProductoConRelaciones) => void
+  /**
+   * `kg` viene solo de una etiqueta de balanza (mig 326): el POS agrega el
+   * peso directo. Sin `kg`, un producto por peso abre el modal de gramos.
+   */
+  onSeleccionar: (p: ProductoConRelaciones, kg?: number) => void
   /** Si es true, permite seleccionar productos aunque estén sin stock. */
   permitirSinStock?: boolean
 }
@@ -73,7 +78,7 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
       MAX_RESULTADOS_VISIBLES
     )
 
-    function agregarProducto(p: ProductoConRelaciones) {
+    function agregarProducto(p: ProductoConRelaciones, kg?: number) {
       if (!p.activo) {
         toast.error(`"${p.nombre}" está inactivo.`)
         return
@@ -88,11 +93,18 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
         )
         return
       }
+      if (kg != null && !p.venta_por_peso) {
+        // Cobrar 1 unidad a precio de kilo sería un error: se frena acá.
+        toast.error(
+          `"${p.nombre}" tiene PLU de balanza pero no está marcado "Venta por kg". Corregilo en Configuración › Productos.`
+        )
+        return
+      }
       if (!permitirSinStock && p.stock_actual <= 0) {
         toast.error(`"${p.nombre}" sin stock.`)
         return
       }
-      onSeleccionar(p)
+      onSeleccionar(p, kg)
       setBusquedaInput('')
       inputRef.current?.focus()
     }
@@ -101,19 +113,27 @@ export const BuscadorProducto = forwardRef<BuscadorProductoRef, Props>(
       const valor = busquedaInput.trim()
       if (!valor) return
 
-      // 1. Si parece barcode (scanner), buscar directo en BD
+      // 1. Si parece barcode (scanner), buscar directo en BD. Una etiqueta de
+      //    balanza ("20" + PLU + gramos) resuelve por PLU y trae los kg.
       if (pareceBarcode(valor)) {
         try {
-          const producto = await getProductoByBarcode(valor, true)
-          if (producto) {
-            agregarProducto(producto)
+          const escaneado = await buscarProductoEscaneado(valor, true)
+          if (escaneado) {
+            agregarProducto(escaneado.producto, escaneado.kg ?? undefined)
             return
-          } else {
-            toast.error(`Código ${valor} no encontrado.`)
           }
+          const etiqueta = parsearCodigoBalanza(valor)
+          toast.error(
+            etiqueta
+              ? `Etiqueta de balanza con PLU ${etiqueta.plu}: ningún producto tiene ese PLU. Cargalo en Configuración › Productos.`
+              : `Código ${valor} no encontrado.`
+          )
         } catch {
           toast.error('Error buscando por código.')
         }
+        // Deja el código seleccionado: el próximo escaneo lo pisa en vez de
+        // pegarse al anterior (y fallar también).
+        inputRef.current?.select()
         return
       }
 

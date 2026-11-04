@@ -14,9 +14,14 @@ import {
   metaGuardar,
   metaObtener,
 } from './db'
+import {
+  elegirProductoEscaneado,
+  parsearCodigoBalanza,
+} from '@/lib/pos/codigoBalanza'
 import type {
   FiltrosProducto,
   ProductoConRelaciones,
+  ProductoEscaneado,
 } from '@/lib/queries/productos'
 
 const META_FECHA_CATALOGO = 'catalogo_actualizado_en'
@@ -82,18 +87,26 @@ export function filtrarProductosLocal(
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
 }
 
-/** Busca un producto por código (principal o secundario) en el snapshot offline. */
-export async function buscarPorBarcodeLocal(
+/**
+ * Resuelve un escaneo en el snapshot offline: código fijo (principal o
+ * secundario) o etiqueta de balanza por PLU (mig 326), con la misma
+ * preferencia que `buscarProductoEscaneado` (el código fijo exacto gana).
+ * Un snapshot guardado antes de la 326 no tiene `plu_balanza`: la etiqueta
+ * no resuelve hasta que el POS vuelva a cachear el catálogo con conexión.
+ */
+export async function buscarEscaneadoLocal(
   codigo: string,
   soloVendible = false
-): Promise<ProductoConRelaciones | null> {
+): Promise<ProductoEscaneado | null> {
   const productos = await leerCatalogo()
   const limpio = codigo.trim()
-  return (
-    productos.find(
-      (p) =>
-        (p.codigo_barras === limpio || p.codigo_barras_2 === limpio) &&
-        (!soloVendible || !p.no_ofrecer_ventas)
-    ) ?? null
+  const etiqueta = parsearCodigoBalanza(limpio)
+  const candidatos = productos.filter(
+    (p) =>
+      (!soloVendible || !p.no_ofrecer_ventas) &&
+      (p.codigo_barras === limpio ||
+        p.codigo_barras_2 === limpio ||
+        (etiqueta !== null && p.plu_balanza === etiqueta.plu))
   )
+  return elegirProductoEscaneado(candidatos, limpio, etiqueta)
 }

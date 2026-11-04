@@ -385,7 +385,14 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
       : precioMinorista
   }
 
-  function agregarProducto(p: ProductoConRelaciones | ProductoFrecuente) {
+  /**
+   * `kg` viene solo del buscador cuando se escaneó una etiqueta de balanza
+   * (mig 326). Los frecuentes y el typeahead no lo mandan.
+   */
+  function agregarProducto(
+    p: ProductoConRelaciones | ProductoFrecuente,
+    kg?: number
+  ) {
     const datos =
       'id' in p
         ? {
@@ -406,6 +413,18 @@ export function PantallaPOS({ usuarioId, nombreUsuario }: Props) {
             stock_actual: p.stock_actual,
             venta_por_peso: p.venta_por_peso ?? false,
           }
+
+    if (kg != null && datos.venta_por_peso) {
+      // Etiqueta de balanza: el peso ya viene en el código, no se abre el
+      // modal; si el producto ya está en el carrito, se suman los kg.
+      dispatchCarrito({
+        tipo: 'AGREGAR_PRODUCTO',
+        producto: { ...datos, cantidad_kg: kg },
+        lista: listaActiva,
+        acumular: true,
+      })
+      return
+    }
 
     if (datos.venta_por_peso) {
       // Abrir modal para ingresar el peso

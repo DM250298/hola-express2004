@@ -182,7 +182,15 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and exists (select 1 from fn where proname = 'fn_validar_factura_compra' and prosrc like '%cantidad_sin_cargo%'),
     null
   union all
-  select 27, 'T1', 'Sin funciones duplicadas',
+  -- ── PLU de balanza (326). ──
+  select 27, '326', 'productos.plu_balanza (columna + índice único parcial productos_plu_balanza_key)',
+    exists (select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'productos' and column_name = 'plu_balanza')
+    and exists (select 1 from pg_indexes
+      where schemaname = 'public' and indexname = 'productos_plu_balanza_key'),
+    null
+  union all
+  select 28, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

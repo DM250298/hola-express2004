@@ -45,6 +45,19 @@ export function useOpcionesTipoUnidad() {
   })
 }
 
+/**
+ * Traduce el choque contra un índice único (23505) a algo que se entienda en
+ * la ficha: el PLU de balanza (mig 326) o un código de barras repetido. El
+ * resto de los errores van como vienen.
+ */
+function mensajeErrorProducto(error: Error): string {
+  const codigoPg = (error as { code?: string }).code
+  if (codigoPg !== '23505') return error.message
+  return error.message.includes('plu_balanza')
+    ? 'Ese PLU de balanza ya lo tiene otro producto.'
+    : 'Ese código ya lo tiene otro producto.'
+}
+
 export function useCreateProducto() {
   const queryClient = useQueryClient()
 
@@ -56,7 +69,7 @@ export function useCreateProducto() {
       toast.success('Producto creado')
     },
     onError: (error: Error) => {
-      toast.error(`No se pudo crear el producto: ${error.message}`)
+      toast.error(`No se pudo crear el producto: ${mensajeErrorProducto(error)}`)
     },
   })
 }
@@ -81,7 +94,9 @@ export function useUpdateProducto() {
       toast.success('Producto actualizado')
     },
     onError: (error: Error) => {
-      toast.error(`No se pudo actualizar el producto: ${error.message}`)
+      toast.error(
+        `No se pudo actualizar el producto: ${mensajeErrorProducto(error)}`
+      )
     },
   })
 }

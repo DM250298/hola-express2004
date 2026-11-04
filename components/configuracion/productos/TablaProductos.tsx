@@ -393,6 +393,11 @@ export function TablaProductos() {
                               {p.codigo_barras}
                             </span>
                           )}
+                          {p.venta_por_peso && p.plu_balanza != null && (
+                            <span className="text-[#6f3a2a] text-xs font-mono mt-0.5">
+                              PLU {p.plu_balanza}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-[#6f3a2a] text-sm">

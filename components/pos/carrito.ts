@@ -2,7 +2,7 @@
 // (PantallaPOS) — no necesita persistencia entre páginas porque una sesión de
 // venta se completa de inmediato.
 
-import { formatearCantidad } from '@/lib/utils/formato'
+import { formatearCantidad, redondearCantidad } from '@/lib/utils/formato'
 import type { ListaPrecio } from '@/types/database'
 
 export interface ItemCarrito {
@@ -42,6 +42,11 @@ export type AccionCarrito =
       lista: ListaPrecio
       /** Si es true, se permite agregar/superar aunque no haya stock (venta en negativo). */
       permitir_sin_stock?: boolean
+      /**
+       * Por peso: suma los kg al renglón existente (etiqueta de balanza, mig
+       * 326) en vez de reemplazarlos (re-pesar desde el modal).
+       */
+      acumular?: boolean
     }
   | {
       tipo: 'CAMBIAR_CANTIDAD'
@@ -75,7 +80,7 @@ export function reducerCarrito(
 ): ItemCarrito[] {
   switch (accion.tipo) {
     case 'AGREGAR_PRODUCTO': {
-      const { producto, lista, permitir_sin_stock } = accion
+      const { producto, lista, permitir_sin_stock, acumular } = accion
       if (!permitir_sin_stock && producto.stock_actual <= 0) return estado
 
       const existente = estado.find((it) => it.producto_id === producto.producto_id)
@@ -86,14 +91,18 @@ export function reducerCarrito(
       )
 
       if (producto.venta_por_peso) {
-        // Por peso: siempre REEMPLAZA la cantidad (re-pesar)
+        // Por peso: REEMPLAZA la cantidad (re-pesar), salvo que venga de una
+        // etiqueta de balanza (`acumular`): dos etiquetas del mismo producto
+        // se suman en el renglón. Redondeo a gramos para que 0,1 + 0,2 no
+        // deje ruido de float.
         const kg = producto.cantidad_kg ?? 0
         if (kg <= 0) return estado
         if (existente) {
+          const cantidad = acumular
+            ? redondearCantidad(existente.cantidad + kg, true)
+            : kg
           return estado.map((it) =>
-            it.producto_id === producto.producto_id
-              ? { ...it, cantidad: kg }
-              : it
+            it.producto_id === producto.producto_id ? { ...it, cantidad } : it
           )
         }
         return [
