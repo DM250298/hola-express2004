@@ -633,6 +633,7 @@ export function RecepcionMovil({ pedidoId }: Props) {
       })
       setActivoId(yaEnLista.item_id)
       toast.info(`${prod.nombre} ya estaba en la lista — actualicé la cantidad.`)
+      pedirCodigoSiFalta(prod, yaEnLista.item_id)
       return
     }
     // Si estaba dado de baja lo reactivamos: si no, el stock recibido quedaría
@@ -673,6 +674,24 @@ export function RecepcionMovil({ pedidoId }: Props) {
     })
     setActivoId(nuevoItem.id)
     toast.success(`${prod.nombre} agregado al pedido`)
+    pedirCodigoSiFalta(prod, nuevoItem.id)
+  }
+
+  /**
+   * Un producto sumado desde "Buscar o agregar" que sigue sin código (mig
+   * 328) no se va a poder confirmar: se le pide el código en el acto, con la
+   * cantidad ya cargada. Si cancelan, el aviso bloqueante de la revisión lo
+   * vuelve a señalar.
+   */
+  function pedirCodigoSiFalta(prod: ProdParaAgregar, item_id: number) {
+    if (estadoCodigo(prod) !== 'pendiente') return
+    setCargaTrasCodigo(item_id)
+    setProductoCodigo({
+      id: prod.id,
+      nombre: prod.nombre,
+      codigo_barras: prod.codigo_barras,
+      sin_codigo_barras: prod.sin_codigo_barras,
+    })
   }
 
   // ── Confirmación ──────────────────────────────────────────────────────
