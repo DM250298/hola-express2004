@@ -1,15 +1,15 @@
 'use client'
 
 import { Barcode, Plus } from 'lucide-react'
-import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
+import { estadoCodigo, etiquetaCodigo } from '@/lib/utils/codigoBarras'
 import { formatearCantidad } from '@/lib/utils/formato'
 import type { ItemEstado } from './tipos'
+import { cn } from '@/lib/utils'
 
 interface Props {
   item: ItemEstado
   /** Lo ya recibido: base + las otras facturas de esta entrega. */
   yaTotal: number
-  puedeEditarCodigo: boolean
   onCargar: () => void
   onEditarCodigo: () => void
 }
@@ -21,14 +21,8 @@ interface Props {
  * la hoja. Así la sección de abajo es una lista para buscar, no una segunda
  * pared de campos.
  */
-export function FilaPendiente({
-  item,
-  yaTotal,
-  puedeEditarCodigo,
-  onCargar,
-  onEditarCodigo,
-}: Props) {
-  const sinCodigo = esCodigoAutogenerado(item.codigo_barras)
+export function FilaPendiente({ item, yaTotal, onCargar, onEditarCodigo }: Props) {
+  const estado = estadoCodigo(item)
 
   return (
     <li className="flex items-center gap-2 rounded-xl border border-[#e4c9b0]/60 bg-white/70 p-2">
@@ -51,15 +45,22 @@ export function FilaPendiente({
             </span>
           )}
           {/* Un producto dado de alta al vuelo queda con el HEX-… autogenerado y
-              no se puede escanear: el encargado le pone el código acá mismo. */}
-          {sinCodigo && puedeEditarCodigo && (
+              desde la 328 no se puede recibir así: el que recibe le pone el
+              código acá mismo o marca que no lleva. Lo ve cualquiera que
+              reciba (no hace falta `compras`). */}
+          {estado !== 'real' && (
             <button
               type="button"
               onClick={onEditarCodigo}
-              className="flex items-center gap-1 rounded bg-[#c43e2c]/10 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#c43e2c]"
+              className={cn(
+                'flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider',
+                estado === 'pendiente'
+                  ? 'bg-[#c43e2c]/10 text-[#c43e2c]'
+                  : 'bg-[#c8a58a]/30 text-[#6f3a2a]'
+              )}
             >
               <Barcode className="h-2.5 w-2.5" />
-              Sin código
+              {etiquetaCodigo(item)}
             </button>
           )}
         </p>

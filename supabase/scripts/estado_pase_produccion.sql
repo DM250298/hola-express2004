@@ -197,7 +197,14 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
         and not ('plu_balanza' = any(permisos))),
     null
   union all
-  select 29, 'T1', 'Sin funciones duplicadas',
+  -- ── Recibir exige código de barras (328). ──
+  select 29, '328', 'productos.sin_codigo_barras + trigger trg_items_pedido_exige_codigo',
+    exists (select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'productos' and column_name = 'sin_codigo_barras')
+    and exists (select 1 from pg_trigger where tgname = 'trg_items_pedido_exige_codigo'),
+    null
+  union all
+  select 30, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

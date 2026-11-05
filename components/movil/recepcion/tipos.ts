@@ -14,6 +14,11 @@ export interface ItemEstado {
   producto_id: number
   nombre: string
   codigo_barras: string | null
+  /** "No tiene código de barras", marcado a mano (mig 328). */
+  sin_codigo_barras: boolean
+  /** Pesable con PLU de balanza (mig 326): se identifica por la etiqueta. */
+  plu_balanza: number | null
+  codigo_barras_2: string | null
   cantidad_pedida: number
   /** Lo ya recibido en entregas anteriores (acumulado en la base). */
   ya_recibido: number
@@ -29,6 +34,9 @@ export interface ProdParaAgregar {
   id: number
   nombre: string
   codigo_barras: string | null
+  sin_codigo_barras: boolean
+  plu_balanza: number | null
+  codigo_barras_2: string | null
   activo: boolean
   dias_vencimiento_minimo: number | null
   venta_por_peso: boolean
@@ -39,6 +47,10 @@ export function aProdParaAgregar(p: {
   id: number
   nombre: string
   codigo_barras: string | null
+  /** Opcionales: una fila anterior a la 328 viene sin ellos (= no marcado). */
+  sin_codigo_barras?: boolean | null
+  plu_balanza?: number | null
+  codigo_barras_2?: string | null
   activo: boolean
   dias_vencimiento_minimo: number | null
   venta_por_peso?: boolean
@@ -47,6 +59,9 @@ export function aProdParaAgregar(p: {
     id: p.id,
     nombre: p.nombre,
     codigo_barras: p.codigo_barras,
+    sin_codigo_barras: p.sin_codigo_barras ?? false,
+    plu_balanza: p.plu_balanza ?? null,
+    codigo_barras_2: p.codigo_barras_2 ?? null,
     activo: p.activo,
     dias_vencimiento_minimo: p.dias_vencimiento_minimo,
     venta_por_peso: p.venta_por_peso ?? false,
@@ -114,6 +129,7 @@ export interface Advertencia {
     | 'sin_numero'
     | 'numero_repetido'
     | 'sin_cantidad'
+    | 'codigo_pendiente'
     | 'sin_fecha'
     | 'vencimiento_corto'
     | 'faltantes'

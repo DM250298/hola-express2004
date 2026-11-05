@@ -18,6 +18,12 @@ export interface ItemPedidoConProducto extends ItemPedidoRow {
     id: number
     nombre: string
     codigo_barras: string | null
+    /** "No tiene código de barras", marcado a mano (mig 328). */
+    sin_codigo_barras: boolean
+    /** PLU de balanza (mig 326) y EAN secundario: con cualquiera el producto
+     *  se identifica aunque siga con el HEX-… (no está "pendiente"). */
+    plu_balanza: number | null
+    codigo_barras_2: string | null
     stock_actual: number
     dias_vencimiento_minimo: number | null
     /** true = se recibe por peso (kg); la cantidad recibida es un peso, no unidades. */
@@ -113,7 +119,7 @@ export async function getPedidoDetalle(
   const { data: items, error: errItems } = await supabase
     .from('items_pedido')
     .select(
-      '*, productos(id, nombre, codigo_barras, stock_actual, dias_vencimiento_minimo, venta_por_peso, precio_venta, margen, iva_venta, iva_compra, pendiente_precio)'
+      '*, productos(id, nombre, codigo_barras, sin_codigo_barras, plu_balanza, codigo_barras_2, stock_actual, dias_vencimiento_minimo, venta_por_peso, precio_venta, margen, iva_venta, iva_compra, pendiente_precio)'
     )
     .eq('pedido_id', id)
     .order('id', { ascending: true })
@@ -125,6 +131,9 @@ export async function getPedidoDetalle(
       id: number
       nombre: string
       codigo_barras: string | null
+      sin_codigo_barras: boolean
+      plu_balanza: number | null
+      codigo_barras_2: string | null
       stock_actual: number
       dias_vencimiento_minimo: number | null
       venta_por_peso: boolean

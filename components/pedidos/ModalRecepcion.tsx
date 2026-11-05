@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Barcode,
   Calendar,
   Loader2,
   PackageCheck,
@@ -28,6 +29,8 @@ import { ModalClaveSupervisor } from '@/components/compras/ModalClaveSupervisor'
 import { CampoFechaVencimiento } from '@/components/shared/CampoFechaVencimiento'
 import { GaleriaComprobantes } from '@/components/compras/GaleriaComprobantes'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
+import { ModalCodigoBarras } from '@/components/movil/ModalCodigoBarras'
+import { estadoCodigo, etiquetaCodigo } from '@/lib/utils/codigoBarras'
 import { useRecibirPedido } from '@/lib/hooks/usePedidos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { tienePermiso } from '@/lib/permisos'
@@ -51,6 +54,10 @@ interface ItemEstado {
   producto_id: number
   nombre: string
   codigo_barras: string | null
+  /** "No tiene código de barras", marcado a mano (mig 328). */
+  sin_codigo_barras: boolean
+  plu_balanza: number | null
+  codigo_barras_2: string | null
   cantidad_pedida: number
   /** Lo ya recibido en entregas anteriores (acumulado en la DB). */
   ya_recibido: number
@@ -86,6 +93,14 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   // Alta al vuelo de un producto que llegó y no estaba en la orden.
   const [nuevoProductoAbierto, setNuevoProductoAbierto] = useState(false)
   const [agregandoNoPedido, setAgregandoNoPedido] = useState(false)
+  // Renglón al que se le carga el código de barras (mig 328): sin él la base
+  // no deja recibirlo.
+  const [productoCodigo, setProductoCodigo] = useState<{
+    id: number
+    nombre: string
+    codigo_barras: string | null
+    sin_codigo_barras: boolean
+  } | null>(null)
 
   const [aceptaPorDebajoMin, setAceptaPorDebajoMin] = useState(false)
 
@@ -115,6 +130,9 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
             producto_id: it.producto_id,
             nombre: it.producto?.nombre ?? 'Producto eliminado',
             codigo_barras: it.producto?.codigo_barras ?? null,
+            sin_codigo_barras: it.producto?.sin_codigo_barras ?? false,
+            plu_balanza: it.producto?.plu_balanza ?? null,
+            codigo_barras_2: it.producto?.codigo_barras_2 ?? null,
             cantidad_pedida: it.cantidad_pedida,
             ya_recibido: yaRecibido,
             precio_costo: it.precio_costo,
@@ -210,6 +228,9 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
           producto_id: prod.id,
           nombre: prod.nombre,
           codigo_barras: prod.codigo_barras,
+          sin_codigo_barras: prod.sin_codigo_barras ?? false,
+          plu_balanza: prod.plu_balanza ?? null,
+          codigo_barras_2: prod.codigo_barras_2 ?? null,
           cantidad_pedida: Number(nuevoItem.cantidad_pedida) || 1,
           ya_recibido: 0,
           precio_costo: prod.precio_costo ?? 0,
@@ -325,9 +346,27 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
   const hayPorDebajoMinimo = itemsPorDebajoMinimo.length > 0
   const requiereAceptacion = hayPorDebajoMinimo && !aceptaPorDebajoMin
 
+  /**
+   * Renglones con cantidad cuyo producto sigue con el HEX-… (mig 328): la base
+   * rechaza la recepción entera, así que se frena acá con el nombre.
+   */
+  const itemsCodigoPendiente = useMemo(
+    () =>
+      itemsEstado.filter(
+        (it) =>
+          (Number(it.cantidad_recibida) || 0) > 0 &&
+          estadoCodigo(it) === 'pendiente'
+      ),
+    [itemsEstado]
+  )
+
   const procesando = recibir.isPending
   const accionDeshabilitada =
-    procesando || hayErrores || !hayAlgoRecibido || requiereAceptacion
+    procesando ||
+    hayErrores ||
+    !hayAlgoRecibido ||
+    requiereAceptacion ||
+    itemsCodigoPendiente.length > 0
 
   function confirmar() {
     if (!usuario || hayErrores) return
@@ -588,6 +627,32 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                             Extra (no pedido)
                           </span>
                         )}
+                        {/* Sin código real (mig 328): se carga acá mismo, con el
+                            lector USB o tipeando. */}
+                        {estadoCodigo(it) !== 'real' && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProductoCodigo({
+                                id: it.producto_id,
+                                nombre: it.nombre,
+                                codigo_barras: it.codigo_barras,
+                                sin_codigo_barras: it.sin_codigo_barras,
+                              })
+                            }
+                            disabled={recibir.isPending}
+                            className={
+                              estadoCodigo(it) === 'pendiente'
+                                ? 'inline-flex items-center gap-1 rounded-full bg-[#c43e2c]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#c43e2c] transition-colors hover:bg-[#c43e2c]/20'
+                                : 'inline-flex items-center gap-1 rounded-full bg-[#c8a58a]/30 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[#6f3a2a] transition-colors hover:bg-[#c8a58a]/50'
+                            }
+                          >
+                            <Barcode className="h-3 w-3" />
+                            {estadoCodigo(it) === 'pendiente'
+                              ? 'Sin código · cargar'
+                              : etiquetaCodigo(it)}
+                          </button>
+                        )}
                       </div>
                       <div className="text-xs text-[#6f3a2a] mt-0.5">
                         {it.no_pedido ? (
@@ -826,6 +891,15 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
                 orden y se recibe completa.
               </p>
             )}
+            {itemsCodigoPendiente.length > 0 && (
+              <p className="text-[11px] text-[#c43e2c] font-semibold mt-0.5 max-w-md">
+                {itemsCodigoPendiente.length} producto
+                {itemsCodigoPendiente.length === 1 ? '' : 's'} sin código de
+                barras ({itemsCodigoPendiente.map((it) => it.nombre).join(', ')}
+                ): cargalo desde «Sin código» en el renglón, o marcá que no
+                lleva, antes de confirmar.
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button
@@ -860,12 +934,40 @@ export function ModalRecepcion({ abierto, onCambioAbierto, pedido }: Props) {
         </DialogFooter>
       </DialogContent>
 
+      {/* Alta desde la recepción: el producto está en la mano, así que exige
+          el código del envase o el tilde "No tiene código de barras". */}
       <DrawerProducto
         abierto={nuevoProductoAbierto}
         onCambioAbierto={setNuevoProductoAbierto}
         producto={null}
         proveedorIdInicial={pedido.proveedor?.id ?? null}
+        codigoObligatorio
         onCreado={agregarProductoNoPedido}
+      />
+
+      {/* Cargar el código de un renglón que sigue con el HEX-… (mig 328): sin
+          cámara, el lector USB escribe en el campo y Enter guarda. */}
+      <ModalCodigoBarras
+        abierto={productoCodigo != null}
+        onCambioAbierto={(v) => {
+          if (!v) setProductoCodigo(null)
+        }}
+        producto={productoCodigo}
+        sinCamara
+        motivo="Para recibirlo hace falta el código del envase, o marcar que no tiene."
+        onGuardado={(productoId, cambio) =>
+          setItemsEstado((prev) =>
+            prev.map((it) =>
+              it.producto_id === productoId
+                ? {
+                    ...it,
+                    codigo_barras: cambio.codigo_barras ?? it.codigo_barras,
+                    sin_codigo_barras: cambio.sin_codigo_barras,
+                  }
+                : it
+            )
+          )
+        }
       />
 
       <ModalImprimirEtiquetas

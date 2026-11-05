@@ -12,7 +12,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { CampoFechaVencimiento } from '@/components/shared/CampoFechaVencimiento'
-import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
+import { estadoCodigo, etiquetaCodigo } from '@/lib/utils/codigoBarras'
 import {
   formatearCantidad,
   formatearNumero,
@@ -31,7 +31,6 @@ interface Props {
   yaTotal: number
   /** Fecha del renglón anterior de esta factura, para "Igual que el anterior". */
   fechaAnterior: string | null
-  puedeEditarCodigo: boolean
   onCambio: (carga: CargaRenglon) => void
   onCerrar: () => void
   onQuitar: () => void
@@ -62,7 +61,6 @@ export function HojaCargaRenglon({
   renglon,
   yaTotal,
   fechaAnterior,
-  puedeEditarCodigo,
   onCambio,
   onCerrar,
   onQuitar,
@@ -70,6 +68,7 @@ export function HojaCargaRenglon({
 }: Props) {
   if (!item) return null
 
+  const estadoCod = estadoCodigo(item)
   const cantNum = Number(carga.cantidad) || 0
   const diferencia = yaTotal + cantNum - item.cantidad_pedida
   const esGramos = item.venta_por_peso && cantNum > 0 && pareceGramosEnKg(carga.cantidad)
@@ -114,18 +113,21 @@ export function HojaCargaRenglon({
                 · ya recibido {formatearCantidad(yaTotal, item.venta_por_peso)}
               </span>
             )}
-            {puedeEditarCodigo && (
-              <button
-                type="button"
-                onClick={onEditarCodigo}
-                className="flex items-center gap-1 rounded border border-[#e4c9b0] px-1.5 py-0.5 text-[10px] font-semibold text-[#9e6b15]"
-              >
-                <Barcode className="h-3 w-3" />
-                {esCodigoAutogenerado(item.codigo_barras)
-                  ? 'Sin código'
-                  : item.codigo_barras}
-              </button>
-            )}
+            {/* Siempre visible: quien recibe tiene que poder cargar el código
+                (mig 328: sin él la base no deja recibir el renglón). */}
+            <button
+              type="button"
+              onClick={onEditarCodigo}
+              className={cn(
+                'flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold',
+                estadoCod === 'pendiente'
+                  ? 'border-[#c43e2c]/50 bg-[#c43e2c]/10 text-[#c43e2c]'
+                  : 'border-[#e4c9b0] text-[#9e6b15]'
+              )}
+            >
+              <Barcode className="h-3 w-3" />
+              {estadoCod === 'pendiente' ? 'Sin código · cargalo' : etiquetaCodigo(item)}
+            </button>
           </SheetDescription>
         </SheetHeader>
 

@@ -358,6 +358,28 @@ dueño: no es un descuento); el renglón muestra el promedio con las gratis
 solo como dato y un renglón con 0 pagadas no fija costo. Lógica pura en
 `lib/facturas/sinCargo.ts` (con test). Compra directa no tiene la columna.
 
+**Recibir exige código de barras (mig 328, nov-2026):** un producto con el
+`HEX-…` de la 065 está "pendiente de código" y **no se puede recibir** (celular
+ni escritorio) hasta cargarle el código del envase o tildar "No tiene código de
+barras" (`productos.sin_codigo_barras`, decisión explícita, disponible para
+cualquiera que reciba: pan, verdura suelta, producción propia). Estados en
+`lib/utils/codigoBarras.ts` (`estadoCodigo`, con test): `real`, `pendiente`,
+`no_lleva` (tilde, pesable con PLU de balanza o EAN secundario). En el celular
+"+ Cargar" sobre un pendiente abre primero `ModalCodigoBarras` (con el tilde) y
+sigue a la hoja; si se escaneó un código desconocido y en "Buscar o agregar" se
+elige un producto pendiente, ese código se le guarda; "Cargalo nuevo" exige
+código o tilde; "Revisar y confirmar" bloquea con la advertencia
+`codigo_pendiente` (cubre borradores viejos). En escritorio: badge "Sin código ·
+cargar" (`ModalCodigoBarras` con `sinCamara`: el lector USB escribe en el campo)
+y "Confirmar recepción" bloqueado; `DrawerProducto` desde la recepción va con
+`codigoObligatorio`. Guard en la base: `trg_items_pedido_exige_codigo` (before
+insert/update of `cantidad_recibida`) corta con `CODIGO_PENDIENTE: <nombre>`
+cuando lo recibido sube; `useRecibirPedido` lo traduce. El default `HEX-` de la
+065 queda: Nueva orden, Sugerencias, Configuración e importación siguen creando
+"pendientes" (el código no se tiene hasta que llega). El botón "Escanear" de la
+ficha (13 dígitos al azar) se eliminó. En edición, un código vacío ya no manda
+`null` (violaba el `not null`): se omite la key y el producto conserva su HEX-.
+
 **Catálogo N:M proveedor↔producto** (`proveedor_producto`): un producto
 puede comprarse a varios proveedores con costos y códigos distintos.
 
@@ -844,7 +866,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 327 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 328 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,
