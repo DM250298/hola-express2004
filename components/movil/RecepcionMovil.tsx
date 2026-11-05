@@ -60,13 +60,13 @@ import {
   type FacturaEntrega,
 } from '@/lib/recepcion/borrador'
 import { leerBorrador, purgarBorradoresVencidos } from '@/lib/utils/borradores'
+import { estadoCodigo } from '@/lib/utils/codigoBarras'
 import { diasHasta } from '@/lib/utils/fechaCorta'
 import {
   formatearCantidad,
   formatearFechaCorta,
   formatearNumero,
 } from '@/lib/utils/formato'
-import { tienePermiso } from '@/lib/permisos'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -157,9 +157,12 @@ export function RecepcionMovil({ pedidoId }: Props) {
     id: number
     nombre: string
     codigo_barras: string | null
+    sin_codigo_barras: boolean
   } | null>(null)
+  // Renglón que se quiso cargar y seguía sin código (mig 328): al guardar el
+  // código (o el tilde "no tiene") se sigue derecho a su hoja de carga.
+  const [cargaTrasCodigo, setCargaTrasCodigo] = useState<number | null>(null)
 
-  const puedeEditarCodigo = tienePermiso(usuario?.permisos, 'compras')
   const procesando = recibir.isPending
 
   // ── Inicialización: una por pedido, con restauración del borrador ─────
@@ -179,6 +182,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
       producto_id: it.producto_id,
       nombre: it.producto?.nombre ?? 'Producto eliminado',
       codigo_barras: it.producto?.codigo_barras ?? null,
+      sin_codigo_barras: it.producto?.sin_codigo_barras ?? false,
+      plu_balanza: it.producto?.plu_balanza ?? null,
+      codigo_barras_2: it.producto?.codigo_barras_2 ?? null,
       cantidad_pedida: it.cantidad_pedida,
       ya_recibido: it.cantidad_recibida ?? 0,
       precio_costo: it.precio_costo,
@@ -377,6 +383,21 @@ export function RecepcionMovil({ pedidoId }: Props) {
     [facturas]
   )
 
+  /**
+   * Renglones cargados cuyo producto sigue sin código (mig 328): la base los
+   * rechaza al confirmar, así que se frena acá. Cubre un borrador anterior al
+   * deploy, que pudo cargar el renglón sin pasar por el modal del código.
+   */
+  const itemsCodigoPendiente = useMemo(
+    () =>
+      itemsEstado.flatMap((it) => {
+        if (estadoCodigo(it) !== 'pendiente') return []
+        const facturaIdx = facturas.findIndex((f) => cantidadDe(f, it.item_id) > 0)
+        return facturaIdx < 0 ? [] : [{ ...it, facturaIdx }]
+      }),
+    [itemsEstado, facturas]
+  )
+
   const advertencias = useMemo<Advertencia[]>(() => {
     const lista: Advertencia[] = []
 
@@ -413,6 +434,16 @@ export function RecepcionMovil({ pedidoId }: Props) {
         bloqueante: true,
         texto: `${sinCantidad.length} renglón${sinCantidad.length === 1 ? '' : 'es'} en la factura sin cantidad. Cargala o sacalo del papel.`,
         facturaIdx: sinCantidad[0].facturaIdx,
+      })
+    }
+
+    if (itemsCodigoPendiente.length > 0) {
+      const n = itemsCodigoPendiente.length
+      lista.push({
+        clave: 'codigo_pendiente',
+        bloqueante: true,
+        texto: `${n} producto${n === 1 ? '' : 's'} sin código de barras: ${itemsCodigoPendiente.map((it) => it.nombre).join(', ')}. Tocá el renglón y cargale el código, o marcá que no lleva.`,
+        facturaIdx: itemsCodigoPendiente[0].facturaIdx,
       })
     }
 
@@ -454,7 +485,14 @@ export function RecepcionMovil({ pedidoId }: Props) {
     }
 
     return lista
-  }, [facturas, sinCantidad, itemsFaltantes, unidadesFaltantes, itemsConExceso])
+  }, [
+    facturas,
+    sinCantidad,
+    itemsCodigoPendiente,
+    itemsFaltantes,
+    unidadesFaltantes,
+    itemsConExceso,
+  ])
 
   const confirmarDeshabilitado =
     procesando || requiereAceptacion || totalEntrega <= 0
@@ -469,11 +507,25 @@ export function RecepcionMovil({ pedidoId }: Props) {
 
   const abrirCarga = useCallback(
     (item_id: number) => {
+      // Desde la 328 un renglón sin código no se puede recibir: primero el
+      // código del envase (o el tilde "No tiene código de barras") y recién
+      // después la hoja de carga. Cancelar lo deja en "Falta controlar".
+      const it = porId.get(item_id)
+      if (it && estadoCodigo(it) === 'pendiente') {
+        setCargaTrasCodigo(item_id)
+        setProductoCodigo({
+          id: it.producto_id,
+          nombre: it.nombre,
+          codigo_barras: it.codigo_barras,
+          sin_codigo_barras: it.sin_codigo_barras,
+        })
+        return
+      }
       editarActiva((f) => conRenglonEnFactura(f, item_id))
       setActivoId(item_id)
       setEditandoId(item_id)
     },
-    [editarActiva]
+    [editarActiva, porId]
   )
 
   function guardarCarga(item_id: number, carga: CargaRenglon) {
@@ -562,6 +614,19 @@ export function RecepcionMovil({ pedidoId }: Props) {
   ) {
     const yaEnLista = itemsEstado.find((it) => it.producto_id === prod.id)
     if (yaEnLista) {
+      // Si en el modal se le guardó el código escaneado, el renglón lo refleja
+      // (y deja de estar "pendiente" para la hoja y el confirmar).
+      setItemsEstado((prev) =>
+        prev.map((it) =>
+          it.producto_id === prod.id
+            ? {
+                ...it,
+                codigo_barras: prod.codigo_barras,
+                sin_codigo_barras: prod.sin_codigo_barras,
+              }
+            : it
+        )
+      )
       guardarCarga(yaEnLista.item_id, {
         cantidad: String(cant),
         fecha_vencimiento: venc,
@@ -592,6 +657,9 @@ export function RecepcionMovil({ pedidoId }: Props) {
         producto_id: prod.id,
         nombre: prod.nombre,
         codigo_barras: prod.codigo_barras,
+        sin_codigo_barras: prod.sin_codigo_barras,
+        plu_balanza: prod.plu_balanza,
+        codigo_barras_2: prod.codigo_barras_2,
         cantidad_pedida: cant,
         ya_recibido: 0,
         precio_costo: 0,
@@ -906,13 +974,13 @@ export function RecepcionMovil({ pedidoId }: Props) {
                     key={it.item_id}
                     item={it}
                     yaTotal={it.ya_recibido + (recibidoOtras.get(it.item_id) ?? 0)}
-                    puedeEditarCodigo={puedeEditarCodigo}
                     onCargar={() => abrirCarga(it.item_id)}
                     onEditarCodigo={() =>
                       setProductoCodigo({
                         id: it.producto_id,
                         nombre: it.nombre,
                         codigo_barras: it.codigo_barras,
+                        sin_codigo_barras: it.sin_codigo_barras,
                       })
                     }
                   />
@@ -1000,7 +1068,6 @@ export function RecepcionMovil({ pedidoId }: Props) {
             : 0
         }
         fechaAnterior={fechaAnterior}
-        puedeEditarCodigo={puedeEditarCodigo}
         onCambio={(c) => {
           if (editandoId != null) guardarCarga(editandoId, c)
         }}
@@ -1011,11 +1078,15 @@ export function RecepcionMovil({ pedidoId }: Props) {
         onEditarCodigo={() => {
           const it = editandoId != null ? porId.get(editandoId) : null
           if (!it) return
+          // La hoja se cierra mientras se carga el código (la cámara es una
+          // sola) y se vuelve a abrir sola al guardar.
           setEditandoId(null)
+          setCargaTrasCodigo(it.item_id)
           setProductoCodigo({
             id: it.producto_id,
             nombre: it.nombre,
             codigo_barras: it.codigo_barras,
+            sin_codigo_barras: it.sin_codigo_barras,
           })
         }}
       />
@@ -1047,16 +1118,38 @@ export function RecepcionMovil({ pedidoId }: Props) {
       <ModalCodigoBarras
         abierto={productoCodigo != null}
         onCambioAbierto={(v) => {
-          if (!v) setProductoCodigo(null)
+          if (!v) {
+            setProductoCodigo(null)
+            setCargaTrasCodigo(null)
+          }
         }}
         producto={productoCodigo}
-        onGuardado={(productoId, codigo) =>
+        motivo={
+          cargaTrasCodigo != null
+            ? 'Para recibirlo hace falta el código del envase, o marcar que no tiene.'
+            : undefined
+        }
+        onGuardado={(productoId, cambio) => {
           setItemsEstado((prev) =>
             prev.map((it) =>
-              it.producto_id === productoId ? { ...it, codigo_barras: codigo } : it
+              it.producto_id === productoId
+                ? {
+                    ...it,
+                    codigo_barras: cambio.codigo_barras ?? it.codigo_barras,
+                    sin_codigo_barras: cambio.sin_codigo_barras,
+                  }
+                : it
             )
           )
-        }
+          // Venía de "+ Cargar" (o de la hoja): ahora sí entra al papel.
+          const seguir = cargaTrasCodigo
+          setCargaTrasCodigo(null)
+          if (seguir != null) {
+            editarActiva((f) => conRenglonEnFactura(f, seguir))
+            setActivoId(seguir)
+            setEditandoId(seguir)
+          }
+        }}
       />
 
       <ModalClaveSupervisor

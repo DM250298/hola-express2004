@@ -14,6 +14,7 @@ import {
   productoEliminable,
   getComponentesCombo,
   guardarComponentesCombo,
+  marcarSinCodigoBarras,
   type FiltrosProducto,
 } from '@/lib/queries/productos'
 import type { ProductoInsert, ProductoUpdate } from '@/types/database'
@@ -98,6 +99,36 @@ export function useUpdateProducto() {
       toast.error(
         `No se pudo actualizar el producto: ${mensajeErrorProducto(error)}`
       )
+    },
+  })
+}
+
+/**
+ * Marca "No tiene código de barras" (mig 328): el producto se queda con su
+ * HEX-… pero la recepción deja de pedirle el código. Misma política que
+ * `useAsignarCodigoBarras`: NO invalida `['pedido-detalle', …]` para no
+ * borrarle lo tipeado a la recepción móvil.
+ */
+export function useMarcarSinCodigoBarras() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, valor = true }: { id: number; valor?: boolean }) =>
+      marcarSinCodigoBarras(id, valor),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: PRODUCTOS_KEY })
+      queryClient.invalidateQueries({ queryKey: ['inventario'] })
+      queryClient.invalidateQueries({
+        queryKey: ['producto-detalle', variables.id],
+      })
+      toast.success(
+        variables.valor === false
+          ? 'Listo: vuelve a pedir el código de barras'
+          : 'Guardado: no lleva código de barras'
+      )
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo guardar: ${error.message}`)
     },
   })
 }

@@ -1525,6 +1525,12 @@ export type ProductoRow = {
    * Solo tiene sentido con venta_por_peso. NULL = no está en la balanza.
    */
   plu_balanza: number | null
+  /**
+   * "No tiene código de barras", marcado a mano (mig 328). Con false y un
+   * codigo_barras HEX-… el producto está "pendiente de código" y la
+   * recepción no lo deja recibir.
+   */
+  sin_codigo_barras: boolean
   visible_tienda: boolean
   controlar_stock: boolean
   no_ofrecer_ventas: boolean
@@ -1575,6 +1581,8 @@ export type ProductoInsert = {
   venta_por_peso?: boolean
   /** PLU en la balanza (mig 326). */
   plu_balanza?: number | null
+  /** "No tiene código de barras", marcado a mano (mig 328). */
+  sin_codigo_barras?: boolean
   visible_tienda?: boolean
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean
@@ -1624,6 +1632,8 @@ export type ProductoUpdate = {
   venta_por_peso?: boolean
   /** PLU en la balanza (mig 326). */
   plu_balanza?: number | null
+  /** "No tiene código de barras", marcado a mano (mig 328). */
+  sin_codigo_barras?: boolean
   visible_tienda?: boolean
   controlar_stock?: boolean
   no_ofrecer_ventas?: boolean

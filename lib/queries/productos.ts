@@ -456,7 +456,22 @@ export async function asignarCodigoBarras(
   if (existente && existente.id !== id) {
     throw new Error(`Ese código ya lo tiene "${existente.nombre}".`)
   }
-  return updateProducto(id, { codigo_barras: cod })
+  // Un "no lleva código" al que después le aparece el envase con código
+  // queda limpio: el código real manda (mig 328).
+  return updateProducto(id, { codigo_barras: cod, sin_codigo_barras: false })
+}
+
+/**
+ * Marca (o desmarca) "No tiene código de barras" (mig 328). El producto se
+ * queda con su `HEX-…`, pero deja de estar "pendiente de código": la recepción
+ * lo recibe buscándolo por nombre. `productos` sigue abierta a authenticated,
+ * así que el gate es la UI (quien recibe tiene que poder marcarlo).
+ */
+export async function marcarSinCodigoBarras(
+  id: number,
+  valor = true
+): Promise<ProductoRow> {
+  return updateProducto(id, { sin_codigo_barras: valor })
 }
 
 /**

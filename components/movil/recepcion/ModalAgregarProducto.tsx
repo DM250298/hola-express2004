@@ -16,13 +16,17 @@ import {
 } from '@/components/ui/dialog'
 import { CampoFechaVencimiento } from '@/components/shared/CampoFechaVencimiento'
 import { useCategorias } from '@/lib/hooks/useCategorias'
+import { parsearCodigoBalanza } from '@/lib/pos/codigoBalanza'
 import {
+  asignarCodigoBarras,
   createProducto,
   getProductoByBarcode,
   getProductos,
 } from '@/lib/queries/productos'
+import { estadoCodigo } from '@/lib/utils/codigoBarras'
 import { formatearCantidad } from '@/lib/utils/formato'
 import { aProdParaAgregar, type ProdParaAgregar } from './tipos'
+import { cn } from '@/lib/utils'
 
 interface Props {
   abierto: boolean
@@ -51,6 +55,7 @@ export function ModalAgregarProducto({
   const [busquedaDebounced, setBusquedaDebounced] = useState('')
   const [seleccionado, setSeleccionado] = useState<ProdParaAgregar | null>(null)
   const [codigo, setCodigo] = useState('')
+  const [sinCodigo, setSinCodigo] = useState(false)
   const [nombre, setNombre] = useState('')
   const [precio, setPrecio] = useState('')
   const [categoria, setCategoria] = useState('')
@@ -63,6 +68,7 @@ export function ModalAgregarProducto({
     if (!abierto) return
     setBusqueda(codigoInicial)
     setCodigo(codigoInicial)
+    setSinCodigo(false)
     setSeleccionado(null)
     setNombre('')
     setPrecio('')
@@ -103,6 +109,12 @@ export function ModalAgregarProducto({
           toast.error('Buscá el producto, o poné el nombre para crearlo.')
           return
         }
+        // Desde la 328 un producto nuevo no se recibe sin código: o viene el
+        // del envase (escaneado o tipeado) o se marca a mano que no tiene.
+        if (!codigo.trim() && !sinCodigo) {
+          toast.error('Escaneá o escribí el código de barras, o marcá que no tiene.')
+          return
+        }
         const p = Number(precio)
         if (!Number.isFinite(p) || p <= 0) {
           toast.error('Poné el precio de venta para crear el producto.')
@@ -111,10 +123,13 @@ export function ModalAgregarProducto({
         const creado = await createProducto({
           nombre: nombre.trim(),
           precio_venta: p,
-          codigo_barras: codigo.trim() || null,
+          codigo_barras: sinCodigo ? null : codigo.trim(),
+          sin_codigo_barras: sinCodigo,
           categoria_id: categoria ? Number(categoria) : null,
         })
         prod = aProdParaAgregar(creado)
+      } else if (seleccionado) {
+        prod = await conCodigoEscaneado(seleccionado)
       }
       await onAgregar(prod, cant, venc)
       onCerrar()
@@ -123,6 +138,31 @@ export function ModalAgregarProducto({
     } finally {
       setGuardando(false)
     }
+  }
+
+  /**
+   * El empleado escaneó un código que no estaba en el pedido y eligió del
+   * catálogo un producto que sigue sin código: ese código es el del envase,
+   * así que se le guarda (mig 328) y el renglón queda recibible y escaneable.
+   * Una etiqueta de balanza no es un código de envase, y a un producto que ya
+   * tiene otro código real no se le pisa.
+   */
+  async function conCodigoEscaneado(
+    prod: ProdParaAgregar
+  ): Promise<ProdParaAgregar> {
+    const escaneado = codigoInicial.trim()
+    if (!escaneado || parsearCodigoBalanza(escaneado)) return prod
+    if (estadoCodigo(prod) === 'real') {
+      if (prod.codigo_barras !== escaneado) {
+        toast.info(
+          `Ojo: ${prod.nombre} tiene el código ${prod.codigo_barras}, no el que escaneaste.`
+        )
+      }
+      return prod
+    }
+    const actualizado = await asignarCodigoBarras(prod.id, escaneado)
+    toast.success(`Le guardé el código ${escaneado} a ${prod.nombre}`)
+    return aProdParaAgregar(actualizado)
   }
 
   return (
@@ -135,7 +175,8 @@ export function ModalAgregarProducto({
           </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
             Buscalo en el catálogo para sumarlo como recibido, aunque no sea de
-            este proveedor ni esté en el pedido. Si no existe, cargalo nuevo.
+            este proveedor ni esté en el pedido. Si no existe, cargalo nuevo:
+            necesita el código del envase, salvo que no tenga.
           </DialogDescription>
         </DialogHeader>
 
@@ -244,13 +285,17 @@ export function ModalAgregarProducto({
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs text-[#6f3a2a]">Código (opc.)</Label>
+                  <Label className="text-xs text-[#6f3a2a]">
+                    Código de barras{' '}
+                    {!sinCodigo && <span className="text-[#c43e2c]">*</span>}
+                  </Label>
                   <Input
                     inputMode="numeric"
                     value={codigo}
                     onChange={(e) => setCodigo(e.target.value)}
-                    placeholder="Código de barras"
-                    className="h-11 border-[#e4c9b0] font-mono focus-visible:ring-[#f9b44c]"
+                    disabled={sinCodigo}
+                    placeholder={sinCodigo ? 'No lleva' : 'Escaneá el envase'}
+                    className="h-11 border-[#e4c9b0] font-mono focus-visible:ring-[#f9b44c] disabled:opacity-50"
                   />
                 </div>
                 <div>
@@ -269,6 +314,31 @@ export function ModalAgregarProducto({
                   />
                 </div>
               </div>
+              <label
+                className={cn(
+                  'flex items-start gap-2 rounded-lg border p-2 text-xs',
+                  sinCodigo
+                    ? 'border-[#2f7d4f]/40 bg-[#2f7d4f]/10'
+                    : 'border-[#e4c9b0] bg-white'
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={sinCodigo}
+                  onChange={(e) => {
+                    setSinCodigo(e.target.checked)
+                    if (e.target.checked) setCodigo('')
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[#2f7d4f]"
+                />
+                <span className="font-medium text-[#391511]">
+                  No tiene código de barras
+                  <span className="mt-0.5 block text-[10px] font-normal text-[#6f3a2a]">
+                    Pan, verdura suelta, producción propia. Se guarda sin código
+                    y la recepción no lo vuelve a pedir.
+                  </span>
+                </span>
+              </label>
               <div>
                 <Label className="text-xs text-[#6f3a2a]">Categoría (opc.)</Label>
                 <select

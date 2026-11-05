@@ -54,7 +54,7 @@ import { ModalAjusteStock } from './ModalAjusteStock'
 import { ModalEliminarProducto } from './ModalEliminarProducto'
 import { ModalCodigoBarras } from '@/components/movil/ModalCodigoBarras'
 import { ModalPluBalanza } from '@/components/productos/ModalPluBalanza'
-import { esCodigoAutogenerado } from '@/lib/utils/codigoBarras'
+import { estadoCodigo } from '@/lib/utils/codigoBarras'
 import { useToggleProductoActivo } from '@/lib/hooks/useProductos'
 import { DrawerProducto } from '@/components/configuracion/productos/DrawerProducto'
 import { GraficoEvolucionStock } from './GraficoEvolucionStock'
@@ -181,10 +181,13 @@ export function DetalleProducto({ productoId }: Props) {
   // permiso (cajero, fiambrero, roles nuevos) no ve el costo.
   const puedeVerCosto = tienePermiso(usuario?.permisos, 'costos')
   const puedeEditar = tienePermiso(usuario?.permisos, 'configuracion')
-  // El código de barras lo corrige también el encargado (mismo gate que en la
-  // recepción móvil): un producto con el HEX-… autogenerado no se puede
-  // escanear en la caja hasta que alguien le cargue el EAN real.
-  const puedeEditarCodigo = tienePermiso(usuario?.permisos, 'compras')
+  // El código de barras lo corrige también quien compra o recibe: un producto
+  // con el HEX-… autogenerado no se puede escanear en la caja ni recibir
+  // (mig 328) hasta que alguien le cargue el EAN real o marque que no lleva.
+  const puedeEditarCodigo =
+    tienePermiso(usuario?.permisos, 'compras') ||
+    tienePermiso(usuario?.permisos, 'recepcion')
+  const estadoCod = estadoCodigo(producto)
   // PLU de balanza (mig 327): solo pesables; lo cargan el mostrador
   // (`plu_balanza`) y quien edita la ficha (`configuracion`).
   const puedeAsignarPlu = porPeso && puedeCargarPlu(usuario?.permisos)
@@ -232,13 +235,20 @@ export function DetalleProducto({ productoId }: Props) {
               {producto.nombre}
             </h1>
             <div className="flex items-center gap-3 mt-1 text-sm text-[#6f3a2a]">
-              {esCodigoAutogenerado(producto.codigo_barras) ? (
+              {estadoCod === 'real' ? (
+                <span className="font-mono text-[#c8a58a]">
+                  {producto.codigo_barras}
+                </span>
+              ) : estadoCod === 'pendiente' ? (
                 <span className="rounded bg-[#c43e2c]/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#c43e2c]">
                   Sin código
                 </span>
               ) : (
-                <span className="font-mono text-[#c8a58a]">
-                  {producto.codigo_barras}
+                <span
+                  title="Marcado a mano: pan, verdura suelta, producción propia. La recepción no le pide código."
+                  className="rounded bg-[#c8a58a]/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#6f3a2a]"
+                >
+                  No lleva código
                 </span>
               )}
               {puedeEditarCodigo && (
@@ -248,9 +258,7 @@ export function DetalleProducto({ productoId }: Props) {
                   className="inline-flex h-6 items-center gap-1 rounded-md border border-[#e4c9b0] px-1.5 text-[11px] font-semibold text-[#9e6b15] transition-colors hover:bg-[#f9d2a2]/40"
                 >
                   <Barcode className="h-3 w-3" />
-                  {esCodigoAutogenerado(producto.codigo_barras)
-                    ? 'Agregar código'
-                    : 'Editar'}
+                  {estadoCod === 'real' ? 'Editar' : 'Agregar código'}
                 </button>
               )}
               {porPeso && (
@@ -576,9 +584,9 @@ export function DetalleProducto({ productoId }: Props) {
         )}
       </div>
 
-      {/* Editar / asignar código de barras (permiso `compras`; también sirve
-          con lector USB o tipeando — la cámara es opcional). El refetch lo
-          hace la invalidación del hook. */}
+      {/* Editar / asignar código de barras (permiso `compras` o `recepcion`;
+          también sirve con lector USB o tipeando — la cámara es opcional).
+          El refetch lo hace la invalidación del hook. */}
       <ModalCodigoBarras
         abierto={modalCodigoAbierto}
         onCambioAbierto={setModalCodigoAbierto}
@@ -586,6 +594,7 @@ export function DetalleProducto({ productoId }: Props) {
           id: producto.id,
           nombre: producto.nombre,
           codigo_barras: producto.codigo_barras,
+          sin_codigo_barras: producto.sin_codigo_barras,
         }}
         onGuardado={() => setModalCodigoAbierto(false)}
       />

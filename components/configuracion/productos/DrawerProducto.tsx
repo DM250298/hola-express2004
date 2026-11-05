@@ -14,7 +14,6 @@ import {
   Package,
   Plus,
   Receipt,
-  ScanLine,
   Search,
   Settings2,
   StickyNote,
@@ -64,6 +63,7 @@ import { detectarModoPrecio } from '@/lib/pricing/motor'
 import { SubirImagenProducto } from '@/components/productos/SubirImagenProducto'
 import { stockVirtualCombo } from '@/lib/queries/productos'
 import { TIPOS_PRODUCTO, etiquetaTipo } from '@/lib/tipos-producto'
+import { esCodigoAutogenerado, estadoCodigo } from '@/lib/utils/codigoBarras'
 import type { ProductoConRelaciones } from '@/lib/queries/productos'
 import type { CostoAdicional, ProductoRow } from '@/types/database'
 
@@ -85,6 +85,8 @@ const esquemaProducto = z.object({
     .or(z.literal('')),
   codigo_barras_2: z.string().trim().max(50).optional().or(z.literal('')),
   codigo_interno: z.string().trim().max(50).optional().or(z.literal('')),
+  /** "No tiene código de barras", decisión explícita (mig 328). */
+  sin_codigo_barras: z.boolean().default(false),
   marca: z.string().trim().max(100).optional().or(z.literal('')),
   subcategoria: z.string().trim().max(100).optional().or(z.literal('')),
   ubicacion: z.string().trim().max(100).optional().or(z.literal('')),
@@ -216,6 +218,35 @@ const esquemaProducto = z.object({
     }
   })
 
+/**
+ * Regla del código de barras (mig 328). Siempre: el tilde "No tiene código de
+ * barras" no convive con un código cargado. Con `codigoObligatorio` (alta
+ * desde la recepción, con el producto en la mano) además hace falta el código
+ * del envase o el tilde. Sin la prop (Configuración, Nueva orden, Sugerencias)
+ * el código sigue opcional: el producto nace "pendiente de código" y es la
+ * recepción la que obliga a resolverlo cuando llega.
+ */
+function crearEsquemaProducto(codigoObligatorio: boolean) {
+  return esquemaProducto.superRefine((d, ctx) => {
+    const sinCodigoReal = esCodigoAutogenerado(d.codigo_barras || null)
+    if (d.sin_codigo_barras && !sinCodigoReal) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['sin_codigo_barras'],
+        message:
+          'Tiene un código cargado: borralo o destildá «No tiene código de barras».',
+      })
+    }
+    if (codigoObligatorio && !d.sin_codigo_barras && sinCodigoReal) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['codigo_barras'],
+        message: 'Escaneá el código del envase o marcá «No tiene código de barras».',
+      })
+    }
+  })
+}
+
 type EntradaFormulario = z.input<typeof esquemaProducto>
 
 interface Props {
@@ -228,6 +259,12 @@ interface Props {
   proveedorIdInicial?: number | null
   /** Se llama con el producto recién creado (para vincularlo a la sugerencia). */
   onCreado?: (producto: ProductoRow) => void
+  /**
+   * Alta desde la recepción (mig 328): el producto está en la mano, así que
+   * exige el código del envase o el tilde "No tiene código de barras". Sin la
+   * prop el código sigue opcional y el alta queda "pendiente de código".
+   */
+  codigoObligatorio?: boolean
 }
 
 interface AdicionalState {
@@ -283,14 +320,6 @@ const OPCIONES_VENTA: {
     descripcion: 'Los inactivos no aparecen en el POS.',
   },
 ]
-
-function generarCodigoBarrasSimulado(): string {
-  let codigo = ''
-  for (let i = 0; i < 13; i++) {
-    codigo += Math.floor(Math.random() * 10).toString()
-  }
-  return codigo
-}
 
 /** Componente elegido para el combo (cantidad editable como string). */
 interface ComponenteSel {
@@ -404,6 +433,7 @@ export function DrawerProducto({
   nombreInicial,
   proveedorIdInicial,
   onCreado,
+  codigoObligatorio,
 }: Props) {
   const esEdicion = producto !== null
   const crear = useCreateProducto()
@@ -412,7 +442,12 @@ export function DrawerProducto({
   const { data: categorias } = useCategorias()
   const { data: proveedores } = useProveedores()
   const pricing = usePricing()
-  const refCodigoBarras = useRef<HTMLInputElement | null>(null)
+  // La prop es fija por pantalla (la recepción siempre la pasa, el resto
+  // nunca), así que el resolver no necesita re-engancharse.
+  const esquema = useMemo(
+    () => crearEsquemaProducto(!!codigoObligatorio),
+    [codigoObligatorio]
+  )
 
   // ── Bloque de costo / precio (estado propio, fuera de react-hook-form) ──
   const [ivaCompra, setIvaCompra] = useState('21')
@@ -455,11 +490,12 @@ export function DrawerProducto({
     setValue,
     formState: { errors },
   } = useForm<EntradaFormulario>({
-    resolver: zodResolver(esquemaProducto),
+    resolver: zodResolver(esquema),
     defaultValues: {
       codigo_barras: '',
       codigo_barras_2: '',
       codigo_interno: '',
+      sin_codigo_barras: false,
       marca: '',
       subcategoria: '',
       ubicacion: '',
@@ -532,6 +568,7 @@ export function DrawerProducto({
       codigo_barras: producto?.codigo_barras ?? '',
       codigo_barras_2: producto?.codigo_barras_2 ?? '',
       codigo_interno: producto?.codigo_interno ?? '',
+      sin_codigo_barras: producto?.sin_codigo_barras ?? false,
       marca: producto?.marca ?? '',
       subcategoria: producto?.subcategoria ?? '',
       ubicacion: producto?.ubicacion ?? '',
@@ -831,12 +868,6 @@ export function DrawerProducto({
     }
   }, [adicionales, costoBase, ivaCompra, ivaVenta, margenMayorista, precioManualMayorista, modoPrecioMayorista, pricing, esCombo, costoComponentes])
 
-  function simularEscaneo() {
-    const codigo = generarCodigoBarrasSimulado()
-    setValue('codigo_barras', codigo, { shouldValidate: true, shouldDirty: true })
-    refCodigoBarras.current?.focus()
-  }
-
   function agregarAdicional() {
     setAdicionales((prev) => [...prev, { descripcion: '', monto: '' }])
   }
@@ -929,8 +960,18 @@ export function DrawerProducto({
             margen_mayorista: r2(calcMayorista.margenFinal),
           }
         : { precio_mayorista: null, margen_mayorista: null }
+    // Código de barras (mig 328): con el tilde va null (en el alta
+    // createProducto borra la key vacía y la base pone el HEX-). En EDICIÓN
+    // con el campo vacío se OMITE la key: mandar null violaba el not null de
+    // la 065 y el producto conserva su HEX- hasta que alguien le cargue uno.
+    const codigoLimpio = validado.sin_codigo_barras
+      ? null
+      : limpiar(validado.codigo_barras)
     const payload = {
-      codigo_barras: limpiar(validado.codigo_barras),
+      ...(codigoLimpio != null || !esEdicion
+        ? { codigo_barras: codigoLimpio }
+        : {}),
+      sin_codigo_barras: validado.sin_codigo_barras,
       codigo_barras_2: limpiar(validado.codigo_barras_2),
       codigo_interno: limpiar(validado.codigo_interno),
       marca: limpiar(validado.marca),
@@ -1040,6 +1081,9 @@ export function DrawerProducto({
   }
 
   const codigoBarrasReg = register('codigo_barras')
+  const sinCodigoBarras = !!useWatch({ control, name: 'sin_codigo_barras' })
+  const codigoPendiente =
+    esEdicion && producto != null && estadoCodigo(producto) === 'pendiente'
 
   return (
     <Sheet open={abierto} onOpenChange={onCambioAbierto}>
@@ -1223,38 +1267,82 @@ export function DrawerProducto({
                   Datos principales
                 </h3>
 
-                {/* Código de barras + escáner */}
+                {/* Código de barras: el lector USB escribe en el campo (el
+                    botón "Escanear" de antes inventaba 13 dígitos al azar, un
+                    código falso que burlaba la regla de la 328). */}
                 <div className="space-y-1.5">
                   <Label htmlFor="codigo_barras" className="text-[#391511] font-medium">
-                    Código de barras
+                    Código de barras{' '}
+                    {codigoObligatorio && !sinCodigoBarras && (
+                      <span className="text-[#c43e2c]">*</span>
+                    )}
                   </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="codigo_barras"
-                      {...codigoBarrasReg}
-                      ref={(el) => {
-                        codigoBarrasReg.ref(el)
-                        refCodigoBarras.current = el
-                      }}
-                      placeholder="Escaneá o ingresá manualmente"
-                      disabled={guardando}
-                      className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c]"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={simularEscaneo}
-                      disabled={guardando}
-                      title="Simular escaneo"
-                      className="border-[#e4c9b0] text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511] gap-1.5 shrink-0"
-                    >
-                      <ScanLine className="h-4 w-4" />
-                      <span className="hidden sm:inline">Escanear</span>
-                    </Button>
-                  </div>
+                  <Input
+                    id="codigo_barras"
+                    {...codigoBarrasReg}
+                    placeholder={
+                      sinCodigoBarras
+                        ? 'No lleva'
+                        : 'Escaneá con el lector o escribilo'
+                    }
+                    disabled={guardando || sinCodigoBarras}
+                    className="font-mono border-[#e4c9b0] focus-visible:ring-[#f9b44c] disabled:opacity-50"
+                  />
                   {errors.codigo_barras && (
                     <p className="text-[#c43e2c] text-xs mt-1">
                       {errors.codigo_barras.message}
+                    </p>
+                  )}
+                  {codigoPendiente && !sinCodigoBarras && !errors.codigo_barras && (
+                    <p className="text-[#9e6b15] text-xs mt-1">
+                      Todavía sin código real ({producto?.codigo_barras}): escaneá
+                      el envase o marcá que no tiene. Hasta entonces no se puede
+                      recibir.
+                    </p>
+                  )}
+                  {/* Mig 328: el tilde deja constancia de que no lleva código
+                      (pan, verdura suelta, producción propia) y la recepción
+                      no lo pide. Sin tilde y sin código, el producto queda
+                      "pendiente de código" y se frena al recibirlo. */}
+                  <Controller
+                    control={control}
+                    name="sin_codigo_barras"
+                    render={({ field }) => (
+                      <label
+                        className={
+                          field.value
+                            ? 'flex items-start gap-2 rounded-lg border border-[#2f7d4f]/40 bg-[#2f7d4f]/10 p-2.5 text-sm cursor-pointer'
+                            : 'flex items-start gap-2 rounded-lg border border-[#e4c9b0] bg-white p-2.5 text-sm cursor-pointer'
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!field.value}
+                          onChange={(e) => {
+                            field.onChange(e.target.checked)
+                            if (e.target.checked) {
+                              setValue('codigo_barras', '', {
+                                shouldValidate: true,
+                                shouldDirty: true,
+                              })
+                            }
+                          }}
+                          disabled={guardando}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-[#2f7d4f]"
+                        />
+                        <span className="font-medium text-[#391511]">
+                          No tiene código de barras
+                          <span className="mt-0.5 block text-xs font-normal text-[#6f3a2a]">
+                            Pan, verdura suelta, producción propia. Se guarda
+                            sin código y la recepción no lo pide.
+                          </span>
+                        </span>
+                      </label>
+                    )}
+                  />
+                  {errors.sin_codigo_barras && (
+                    <p className="text-[#c43e2c] text-xs mt-1">
+                      {errors.sin_codigo_barras.message}
                     </p>
                   )}
                 </div>

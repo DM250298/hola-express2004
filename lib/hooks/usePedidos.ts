@@ -17,6 +17,7 @@ import {
   type NuevoPedidoPayload,
   type RecibirPedidoPayload,
 } from '@/lib/queries/pedidos'
+import { traducirErrorCodigoPendiente } from '@/lib/utils/codigoBarras'
 import type { EstadoPedido } from '@/types/database'
 
 export const PEDIDOS_KEY = ['pedidos'] as const
@@ -133,6 +134,14 @@ export function useRecibirPedido() {
       }
     },
     onError: (error: Error) => {
+      // El trigger de la 328 corta la recepción entera si un renglón sigue
+      // sin código: el mensaje va traducido al mostrador (cubre al cliente
+      // viejo que no tiene la traba en pantalla).
+      const sinCodigo = traducirErrorCodigoPendiente(error.message)
+      if (sinCodigo) {
+        toast.error(sinCodigo, { duration: 8000 })
+        return
+      }
       toast.error(`No se pudo registrar la recepción: ${error.message}`)
     },
   })
