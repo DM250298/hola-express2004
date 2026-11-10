@@ -125,19 +125,19 @@ export function ReporteVentas({ desde, hasta }: Props) {
       [
         [
           'Mañana',
-          '06–12',
+          '07–15',
           data.por_franja.manana.cantidad,
           formatearMonto(data.por_franja.manana.total),
         ],
         [
           'Tarde',
-          '12–19',
+          '15–23',
           data.por_franja.tarde.cantidad,
           formatearMonto(data.por_franja.tarde.total),
         ],
         [
           'Noche',
-          '19–06',
+          '23–07',
           data.por_franja.noche.cantidad,
           formatearMonto(data.por_franja.noche.total),
         ],
@@ -277,19 +277,19 @@ export function ReporteVentas({ desde, hasta }: Props) {
               total={data.total}
               filas={[
                 {
-                  etiqueta: 'Mañana (6–12)',
+                  etiqueta: 'Mañana (7–15)',
                   icono: Sun,
                   monto: data.por_franja.manana.total,
                   cantidad: data.por_franja.manana.cantidad,
                 },
                 {
-                  etiqueta: 'Tarde (12–19)',
+                  etiqueta: 'Tarde (15–23)',
                   icono: Sunset,
                   monto: data.por_franja.tarde.total,
                   cantidad: data.por_franja.tarde.cantidad,
                 },
                 {
-                  etiqueta: 'Noche (19–6)',
+                  etiqueta: 'Noche (23–7)',
                   icono: Moon,
                   monto: data.por_franja.noche.total,
                   cantidad: data.por_franja.noche.cantidad,
