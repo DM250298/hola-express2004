@@ -8,10 +8,11 @@ import type { MedioPago } from '@/types/database'
 
 export type FranjaHoraria = 'manana' | 'tarde' | 'noche'
 
+// Las franjas son los turnos del local: mañana 07–15, tarde 15–23, noche 23–07.
 export function clasificarFranja(fecha: string): FranjaHoraria {
   const h = new Date(fecha).getHours()
-  if (h >= 6 && h < 12) return 'manana'
-  if (h >= 12 && h < 19) return 'tarde'
+  if (h >= 7 && h < 15) return 'manana'
+  if (h >= 15 && h < 23) return 'tarde'
   return 'noche'
 }
 
