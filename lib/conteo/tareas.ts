@@ -21,6 +21,43 @@ export interface TareaBorrador {
   responsables: string[]
   /** null = zona libre (sin lista). */
   criterios: CriteriosConteo | null
+  /**
+   * Cuántos productos cuenta cada responsable (mig 329), por id de usuario.
+   * Quien no figura no tiene número: se lleva lo que sobra.
+   */
+  cantidades?: Record<string, number>
+  /** true = entran también los contados en los últimos DIAS_CONTEO_RECIENTE. */
+  incluirRecientes?: boolean
+}
+
+/**
+ * Ventana de "ya contado" (mig 329): por defecto una tarea deja afuera lo que
+ * se contó en un Conteo físico en estos días. Decisión del dueño (2026-11-16).
+ */
+export const DIAS_CONTEO_RECIENTE = 15
+
+/** Texto de un campo de cantidad → entero positivo, o null si no hay número. */
+export function leerCantidad(texto: string): number | null {
+  const limpio = texto.trim()
+  if (!/^\d{1,6}$/.test(limpio)) return null
+  const n = Number(limpio)
+  return n > 0 ? n : null
+}
+
+/**
+ * Las cantidades en el orden de los responsables, como las espera la base.
+ * undefined cuando nadie tiene número (reparto en partes iguales).
+ */
+export function cantidadesEnOrden(
+  responsables: string[],
+  cantidades: Record<string, number> | undefined
+): (number | null)[] | undefined {
+  if (!cantidades) return undefined
+  const lista = responsables.map((r) => {
+    const n = cantidades[r]
+    return Number.isInteger(n) && n > 0 ? n : null
+  })
+  return lista.some((n) => n !== null) ? lista : undefined
 }
 
 export const CLASES_CONTEO: { clave: ClaseConteo; etiqueta: string; ayuda: string }[] = [
@@ -152,13 +189,20 @@ export function nombreSugerido(
 }
 
 export function aTareasNuevas(borradores: TareaBorrador[]): TareaNueva[] {
-  return borradores.map((b) => ({
-    nombre: b.nombre.trim(),
-    responsables: b.responsables,
-    criterios: criteriosVacios(b.criterios)
-      ? null
-      : limpiarCriterios(b.criterios ?? {}),
-  }))
+  return borradores.map((b) => {
+    const libre = criteriosVacios(b.criterios)
+    const tarea: TareaNueva = {
+      nombre: b.nombre.trim(),
+      responsables: b.responsables,
+      criterios: libre ? null : limpiarCriterios(b.criterios ?? {}),
+    }
+    // Una zona libre no tiene lista: ni cantidades ni ventana.
+    if (libre) return tarea
+    const cantidades = cantidadesEnOrden(b.responsables, b.cantidades)
+    if (cantidades) tarea.cantidades = cantidades
+    tarea.excluir_dias = b.incluirRecientes ? 0 : DIAS_CONTEO_RECIENTE
+    return tarea
+  })
 }
 
 let contador = 0

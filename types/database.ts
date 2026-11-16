@@ -3903,6 +3903,13 @@ export type ConteoTareaResultado = {
   productos: number
   /** Los que ya son de otra tarea de la sesión. */
   ya_asignados: number
+  /**
+   * Mig 329. Los que quedaron afuera por haberse contado hace poco
+   * (`excluir_dias`). Ausente en una base sin la 329.
+   */
+  recientes?: number
+  /** Mig 329. Los que quedaron afuera por la cantidad pedida por persona. */
+  sin_asignar?: number
   /** De los que quedan, cuántos viven también fuera del área de la tarea. */
   con_otros_lugares: number
   /** En cuántas tareas se reparte (una por persona). 0 = quedó sin productos. */

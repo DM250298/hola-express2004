@@ -288,6 +288,19 @@ ABM + historial de compras.
   tarjeta "Conteos por aprobar": se cuenta con el Conteo físico por zonas
   (`/inventario/conteo`). Las tablas quedan; el Conteo rápido del celular no
   cambia
+- **Conteo físico** (`/inventario/conteo`, migs 222–228 + 329): las tareas se
+  arman por criterio (área, proveedor, categoría, marca, clase ABC, alerta, sin
+  ubicar) en `ConstructorTareas`; **las cantidades las calcula la base**
+  (`fn_conteo_crear_tareas`; la vista previa corre la misma función y la
+  deshace). Desde la 329 (nov-2026) cada tarea puede llevar `cantidades` (un
+  número por persona: tramos seguidos del recorrido del tamaño exacto, entran
+  primero los productos más atrasados, quien no tiene número se lleva el resto
+  y lo que no entra queda "sin asignar") y `excluir_dias` (el front manda
+  `DIAS_CONTEO_RECIENTE = 15` salvo que se tilde "Incluir los ya contados").
+  "Ya contado" = renglón original en `conteo_detalle` de OTRA sesión; el Conteo
+  rápido del celular y los ajustes no cuentan (solo dejan rastro con
+  diferencia). Sin cantidades rige el reparto parejo de la 224 (sin partir un
+  estante). Lógica pura del payload en `lib/conteo/tareas.ts` (con test)
 - **Clasificación ABC** (`/inventario/clasificacion-abc`): análisis Pareto
   por ingresos
 - ABM de productos vive en `/configuracion/productos` — no es parte
@@ -866,7 +879,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 328 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 329 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

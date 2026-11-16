@@ -303,6 +303,102 @@ begin
   end if;
   raise notice 'OK · reparto: tramos seguidos y el corte cae entre estantes';
 
+  raise notice '━━ 2b · CANTIDAD POR PERSONA Y LO CONTADO HACE POCO (mig 329) ━━';
+  -- Sin las claves nuevas la salida trae los contadores en cero.
+  if (v_res->'tareas'->0->>'recientes')::integer <> 0
+     or (v_res->'tareas'->0->>'sin_asignar')::integer <> 0 then
+    raise exception 'TEST FALLÓ: sin claves nuevas, recientes y sin_asignar debían dar 0: %', v_res->'tareas'->0;
+  end if;
+
+  -- Cantidades [2, 1] sobre 6: tramos exactos y sobran 3.
+  v_res := public.fn_conteo_previsualizar_tareas(jsonb_build_array(
+    jsonb_build_object('nombre', 'TEST C', 'responsables', jsonb_build_array(v_emp1, v_emp2),
+      'cantidades', jsonb_build_array(2, 1),
+      'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c)))))->'tareas'->0;
+  if v_res->'por_parte' is distinct from '[2, 1]'::jsonb
+     or (v_res->>'productos')::integer <> 3 or (v_res->>'sin_asignar')::integer <> 3 then
+    raise exception 'TEST FALLÓ: cantidades [2,1] sobre 6 debían dar partes [2,1] y 3 sin asignar, dio %', v_res;
+  end if;
+  -- Uno con número y otro sin: el segundo se lleva el resto.
+  v_res := public.fn_conteo_previsualizar_tareas(jsonb_build_array(
+    jsonb_build_object('nombre', 'TEST C', 'responsables', jsonb_build_array(v_emp1, v_emp2),
+      'cantidades', jsonb_build_array(1, null),
+      'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c)))))->'tareas'->0;
+  if v_res->'por_parte' is distinct from '[1, 5]'::jsonb
+     or (v_res->>'sin_asignar')::integer <> 0 then
+    raise exception 'TEST FALLÓ: cantidades [1, sin número] debían dar [1,5] sin sobrante, dio %', v_res;
+  end if;
+  -- Piden más de lo que hay: el primero se lleva lo suyo, el último lo que queda.
+  v_res := public.fn_conteo_previsualizar_tareas(jsonb_build_array(
+    jsonb_build_object('nombre', 'TEST C', 'responsables', jsonb_build_array(v_emp1, v_emp2, v_emp3),
+      'cantidades', jsonb_build_array(4, 5, 5),
+      'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c)))))->'tareas'->0;
+  if v_res->'por_parte' is distinct from '[4, 2]'::jsonb
+     or (v_res->>'partes')::integer <> 2 or (v_res->>'sin_asignar')::integer <> 0 then
+    raise exception 'TEST FALLÓ: cantidades [4,5,5] sobre 6 debían dar [4,2] en 2 partes, dio %', v_res;
+  end if;
+  raise notice 'OK · cantidades: tramos exactos, resto para el que no tiene número, sobrante informado';
+
+  -- Una sesión anterior, ya cerrada: Q1 y Q2 contados hace 5 días, Q3 hace 20.
+  insert into public.conteo_sesiones (nombre, estado, abierta_por, cerrada_por, ts_apertura, ts_cierre)
+  values ('TEST Sesión vieja', 'cerrada', v_admin, v_admin, now() - interval '21 days', now() - interval '4 days')
+  returning id into v_n;
+  insert into public.conteo_zonas (sesion_id, nombre, estado, orden)
+  values (v_n, 'TEST Zona vieja', 'cerrada', 0) returning id into v_c;
+  insert into public.conteo_detalle (zona_id, producto_id, cantidad_contada, contado_por, ts) values
+    (v_c, v_q[1], 10, v_admin, now() - interval '5 days'),
+    (v_c, v_q[2], 10, v_admin, now() - interval '5 days'),
+    (v_c, v_q[3], 10, v_admin, now() - interval '20 days');
+
+  v_res := public.fn_conteo_previsualizar_tareas(jsonb_build_array(
+    jsonb_build_object('nombre', 'TEST C', 'excluir_dias', 15,
+      'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c)))))->'tareas'->0;
+  if (v_res->>'productos')::integer <> 4 or (v_res->>'recientes')::integer <> 2
+     or (v_res->>'ya_asignados')::integer <> 0 or (v_res->>'en_criterio')::integer <> 6 then
+    raise exception 'TEST FALLÓ: con la ventana de 15 días debían quedar 4 y 2 recientes (el de hace 20 días entra), dio %', v_res;
+  end if;
+  v_res := public.fn_conteo_previsualizar_tareas(jsonb_build_array(
+    jsonb_build_object('nombre', 'TEST C',
+      'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c)))))->'tareas'->0;
+  if (v_res->>'productos')::integer <> 6 or (v_res->>'recientes')::integer <> 0 then
+    raise exception 'TEST FALLÓ: sin excluir_dias debían entrar los 6, dio %', v_res;
+  end if;
+  raise notice 'OK · ventana: lo contado hace poco queda afuera solo si se pide';
+
+  -- Los más atrasados primero: con 3 lugares entran Q4, Q5, Q6 (nunca
+  -- contados); con 4 se suma Q3 (hace 20 días) antes que Q1 y Q2 (hace 5).
+  begin
+    select * into v_sesion from public.fn_abrir_sesion_conteo('TEST Cupos', 5000, jsonb_build_array(
+      jsonb_build_object('nombre', 'TEST Atrasados', 'responsables', jsonb_build_array(v_emp1, v_emp2),
+        'cantidades', jsonb_build_array(1, 3),
+        'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c)))));
+    select id into v_a1 from public.conteo_zonas where sesion_id = v_sesion.id and nombre = 'TEST Atrasados (1/2)';
+    select id into v_a2 from public.conteo_zonas where sesion_id = v_sesion.id and nombre = 'TEST Atrasados (2/2)';
+    if pg_temp.lista(v_a1) is distinct from array[v_q[3]]::text
+       or pg_temp.lista(v_a2) is distinct from array[v_q[4], v_q[5], v_q[6]]::text then
+      raise exception 'TEST FALLÓ: con cantidades [1,3] debían entrar Q3 | Q4,Q5,Q6 (los más atrasados, en orden de recorrido), dio % y %',
+        pg_temp.lista(v_a1), pg_temp.lista(v_a2);
+    end if;
+    if (select responsable_user_id from public.conteo_zonas where id = v_a2) <> v_emp2 then
+      raise exception 'TEST FALLÓ: la segunda parte debía ser de emp2';
+    end if;
+    -- Todo contado hace poco y se pide excluir: la apertura lo explica.
+    begin
+      perform public.fn_agregar_tareas_conteo(v_sesion.id, jsonb_build_array(
+        jsonb_build_object('nombre', 'TEST Recientes', 'excluir_dias', 15,
+          'criterios', jsonb_build_object('proveedor_ids', jsonb_build_array(v_prov_c),
+                                          'ubicacion_ids', jsonb_build_array(v_x)))));
+      raise exception 'TEST FALLÓ: se creó una tarea con todo contado hace poco';
+    exception when others then
+      if sqlerrm like 'TEST FALLÓ%' then raise; end if;
+      if sqlerrm not like '%ya se contaron en los últimos 15 días%' then raise; end if;
+    end;
+    raise exception using errcode = 'TCUP0', message = 'deshacer';
+  exception when sqlstate 'TCUP0' then
+    null;  -- la sesión de prueba de cupos se deshace: la sección 3 abre la suya
+  end;
+  raise notice 'OK · con cantidades entran primero los más atrasados, en orden de recorrido';
+
   v_zonas := jsonb_build_array(
     -- emp1 repetido y un ancla que no corresponde a una lista: se ignoran.
     jsonb_build_object('nombre', 'TEST Prov A', 'ubicacion_id', v_dep,
