@@ -218,6 +218,17 @@ export interface TareaNueva {
    * cerrarla, lo contado se ubica ahí. Las tareas por área se anclan solas.
    */
   ubicacion_id?: number | null
+  /**
+   * Mig 329. Cuántos productos cuenta cada responsable, en su mismo orden
+   * (null = sin número: se lleva lo que sobra). Con cantidades entran primero
+   * los más atrasados y lo que no entra queda sin asignar.
+   */
+  cantidades?: (number | null)[]
+  /**
+   * Mig 329. No entran los productos contados en un Conteo físico en los
+   * últimos N días. 0 o ausente = entran todos.
+   */
+  excluir_dias?: number
 }
 
 export interface AbrirSesionPayload {
@@ -239,6 +250,9 @@ function aPayloadZonas(zonas: TareaNueva[]): Json {
     criterios: z.criterios,
     ubicacion_id: z.ubicacion_id ?? null,
     orden: i,
+    // Mig 329: una base sin ella ignora las dos claves.
+    ...(z.cantidades ? { cantidades: z.cantidades } : {}),
+    ...(z.excluir_dias ? { excluir_dias: z.excluir_dias } : {}),
   })) as unknown as Json
 }
 

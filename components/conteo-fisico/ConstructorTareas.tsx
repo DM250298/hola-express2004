@@ -35,11 +35,13 @@ import type { TareaNueva } from '@/lib/queries/conteoFisico'
 import {
   AYUDA_TIPO_TAREA,
   CLASES_CONTEO,
+  DIAS_CONTEO_RECIENTE,
   ETIQUETA_TIPO_TAREA,
   REGLAS_ALERTA_STOCK,
   aTareasNuevas,
   criteriosVacios,
   etiquetasCriterios,
+  leerCantidad,
   limpiarCriterios,
   nombreSugerido,
   nuevaClave,
@@ -118,13 +120,17 @@ function ResumenTarea({
       <p className="text-xs text-[#6f3a2a]">{AYUDA_TIPO_TAREA.libre}</p>
     )
   }
+  const recientes = resultado.recientes ?? 0
+  const sinAsignar = resultado.sin_asignar ?? 0
   if (resultado.productos === 0) {
     return (
       <p className="flex items-start gap-1 text-xs font-semibold text-[#c43e2c]">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         {resultado.en_criterio === 0
           ? 'Ningún producto cumple este criterio.'
-          : `Sus ${plural(resultado.en_criterio, 'producto ya es', 'productos ya son')} de otra tarea: quitala o cambiá el criterio.`}
+          : recientes > 0
+            ? `${plural(recientes, 'producto ya se contó', 'productos ya se contaron')} en los últimos ${DIAS_CONTEO_RECIENTE} días y no queda ninguno por contar: tildá “Incluir los ya contados” o cambiá el criterio.`
+            : `Sus ${plural(resultado.en_criterio, 'producto ya es', 'productos ya son')} de otra tarea: quitala o cambiá el criterio.`}
       </p>
     )
   }
@@ -139,6 +145,18 @@ function ResumenTarea({
         {resultado.ya_asignados > 0 &&
           ` · ${plural(resultado.ya_asignados, 'ya es', 'ya son')} de otra tarea`}
       </p>
+      {recientes > 0 && (
+        <p>
+          {plural(recientes, 'no entra: ya se contó', 'no entran: ya se contaron')}{' '}
+          en los últimos {DIAS_CONTEO_RECIENTE} días.
+        </p>
+      )}
+      {sinAsignar > 0 && (
+        <p>
+          {plural(sinAsignar, 'queda', 'quedan')} sin asignar para otra sesión
+          (entran primero los que hace más que no se cuentan).
+        </p>
+      )}
       {personas > resultado.partes && resultado.partes > 0 && (
         <p>
           Alcanza para {plural(resultado.partes, 'persona', 'personas')}: al
@@ -182,6 +200,9 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
   const [clases, setClases] = useState<ClaseConteo[]>([])
   const [reglas, setReglas] = useState<string[]>([])
   const [personas, setPersonas] = useState<string[]>([])
+  /** Cantidad a contar por persona, como se tipeó (vacío = sin número). */
+  const [cantidadesTxt, setCantidadesTxt] = useState<Record<string, string>>({})
+  const [incluirRecientes, setIncluirRecientes] = useState(false)
   const [nombre, setNombre] = useState('')
 
   // Zona libre (sin lista).
@@ -255,6 +276,19 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
   )
   const separadas = unaPorArea && areasActivas.length > 1
 
+  // Solo las cantidades de quienes siguen elegidos.
+  const cantidades = useMemo(() => {
+    const limpias: Record<string, number> = {}
+    for (const id of personas) {
+      const n = leerCantidad(cantidadesTxt[id] ?? '')
+      if (n !== null) limpias[id] = n
+    }
+    return limpias
+  }, [personas, cantidadesTxt])
+  const hayCantidades = Object.keys(cantidades).length > 0
+  const todosConCantidad =
+    personas.length > 0 && Object.keys(cantidades).length === personas.length
+
   // Las tareas que saldrían del formulario tal como está.
   const delFormulario: TareaBorrador[] = useMemo(() => {
     /** Sin nadie elegido, cada área va para su responsable del mapa. */
@@ -280,10 +314,23 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
               : nombreSugerido(criterios, nombres),
           responsables: responsablesDe(ids),
           criterios,
+          cantidades,
+          incluirRecientes,
         }
       })
       .filter((t) => !criteriosVacios(t.criterios))
-  }, [areasActivas, separadas, base, nombre, nombres, personas, arbol, nombrePersona])
+  }, [
+    areasActivas,
+    separadas,
+    base,
+    nombre,
+    nombres,
+    personas,
+    arbol,
+    nombrePersona,
+    cantidades,
+    incluirRecientes,
+  ])
 
   // Una sola consulta para todo: lo armado primero, el formulario después.
   // Así el formulario ya sabe qué le dejaron las tareas de arriba.
@@ -334,6 +381,8 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
     setClases([])
     setReglas([])
     setPersonas([])
+    setCantidadesTxt({})
+    setIncluirRecientes(false)
     setNombre('')
   }
 
@@ -454,9 +503,18 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
                         {b.responsables.length === 0
                           ? 'la toma quien la inicie'
                           : b.responsables
-                              .map((r) => nombrePersona.get(r) ?? 'Asignada')
+                              .map((r) => {
+                                const quien = nombrePersona.get(r) ?? 'Asignada'
+                                const n = b.cantidades?.[r]
+                                return n ? `${quien} (${formatearNumero(n)})` : quien
+                              })
                               .join(', ')}
                       </span>
+                      {b.criterios !== null && b.incluirRecientes && (
+                        <span className="rounded-md bg-[#391511]/8 px-1.5 py-0.5 text-[11px] text-[#391511]">
+                          Incluye lo ya contado
+                        </span>
+                      )}
                     </div>
                     {!faltanMigraciones && (
                       <ResumenTarea
@@ -696,8 +754,59 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
                   seleccionadas={personas}
                   onCambio={setPersonas}
                 />
+                {personas.length > 0 && (
+                  <div className="space-y-1 rounded-xl bg-white p-2.5">
+                    <p className="text-xs font-semibold text-[#391511]">
+                      ¿Cuántos productos cuenta cada uno?{' '}
+                      <span className="font-normal text-[#6f3a2a]">(opcional)</span>
+                    </p>
+                    {personas.map((id, i) => (
+                      <label key={id} className="flex items-center gap-2 text-sm text-[#391511]">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#391511] text-[10px] font-bold text-white">
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">
+                          {nombrePersona.get(id) ?? 'Asignada'}
+                        </span>
+                        <Input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          step={1}
+                          value={cantidadesTxt[id] ?? ''}
+                          onChange={(e) =>
+                            setCantidadesTxt((prev) => ({ ...prev, [id]: e.target.value }))
+                          }
+                          placeholder={hayCantidades ? 'El resto' : 'Partes iguales'}
+                          aria-label={`Cantidad de productos para ${nombrePersona.get(id) ?? 'esta persona'}`}
+                          className="h-8 w-32 border-[#e4c9b0] text-right"
+                        />
+                      </label>
+                    ))}
+                    {hayCantidades && (
+                      <p className="text-[11px] text-[#6f3a2a]">
+                        Entran primero los productos que hace más que no se
+                        cuentan.{' '}
+                        {todosConCantidad
+                          ? 'Lo que no entra queda sin asignar para otra sesión.'
+                          : 'Quien no tiene número se lleva lo que sobra.'}
+                        {separadas && ' La cantidad vale para cada área.'}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-[#6f3a2a]">
+                  <Switch
+                    checked={incluirRecientes}
+                    onCheckedChange={setIncluirRecientes}
+                    size="sm"
+                  />
+                  Incluir los ya contados en los últimos {DIAS_CONTEO_RECIENTE} días
+                </label>
                 <p className="text-[11px] text-[#6f3a2a]">
-                  {personas.length > 1
+                  {hayCantidades
+                    ? 'A cada uno le toca un tramo seguido del recorrido con la cantidad pedida.'
+                    : personas.length > 1
                     ? separadas
                       ? 'Cada área se reparte entre las personas elegidas, por tramos seguidos del recorrido.'
                       : 'La lista se reparte en partes iguales por tramos seguidos del recorrido, sin partir un estante.'
