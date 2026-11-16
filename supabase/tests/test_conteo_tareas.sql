@@ -344,7 +344,9 @@ begin
   values ('TEST Sesión vieja', 'cerrada', v_admin, v_admin, now() - interval '21 days', now() - interval '4 days')
   returning id into v_n;
   insert into public.conteo_zonas (sesion_id, nombre, estado, orden)
-  values (v_n, 'TEST Zona vieja', 'cerrada', 0) returning id into v_c;
+  -- El nombre NO empieza con "TEST ": el chequeo de "la vista previa no deja
+  -- tareas guardadas" (más abajo) busca zonas con ese prefijo.
+  values (v_n, 'Zona vieja (prueba)', 'cerrada', 0) returning id into v_c;
   insert into public.conteo_detalle (zona_id, producto_id, cantidad_contada, contado_por, ts) values
     (v_c, v_q[1], 10, v_admin, now() - interval '5 days'),
     (v_c, v_q[2], 10, v_admin, now() - interval '5 days'),
