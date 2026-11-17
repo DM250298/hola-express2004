@@ -1,8 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useQueryClient } from '@tanstack/react-query'
 import {
+  CalendarClock,
   ChevronRight,
   ClipboardList,
   ListChecks,
@@ -26,10 +28,12 @@ import { tienePermiso } from '@/lib/permisos'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { useUsuariosActivos } from '@/lib/hooks/useConteos'
 import {
+  CONTEO_SESION_ACTIVA_KEY,
   useAvanceConteo,
   useCoberturaConteo,
   useItemsPorZona,
   usePasarARevision,
+  useProgramacionesConteo,
   useQuitarTareaConteo,
   useReabrirSesionConteo,
   useSesionConteoActiva,
@@ -48,6 +52,7 @@ import type {
   TipoConteoZona,
 } from '@/types/database'
 import { WizardNuevaSesion } from './WizardNuevaSesion'
+import { ProgramacionesConteo } from './ProgramacionesConteo'
 import { DialogoAgregarTareas } from './DialogoAgregarTareas'
 import { DialogoReasignarTarea } from './DialogoReasignarTarea'
 import { AvisoCobertura } from './AvisoCobertura'
@@ -207,10 +212,26 @@ export function PantallaConteoFisico() {
   const { data: avance } = useAvanceConteo(sesionId)
   const { data: cobertura } = useCoberturaConteo(sesionId, esGestor)
   const { data: sesiones } = useSesionesConteo(esGestor)
+  const { data: programaciones } = useProgramacionesConteo(esGestor)
   const { data: usuarios } = useUsuariosActivos()
   const pasar = usePasarARevision()
   const reabrir = useReabrirSesionConteo()
   const quitar = useQuitarTareaConteo()
+  const qc = useQueryClient()
+
+  // Cuando el proceso de la base abre una programada, la sesión activa cambia
+  // sin que nadie toque nada: al ver una "abierta" nueva se vuelve a pedir.
+  const abiertaNueva = (programaciones ?? []).some(
+    (p) =>
+      p.estado === 'abierta' &&
+      p.sesion_id !== null &&
+      p.sesion_id !== sesionActiva?.id &&
+      (!sesionActiva ||
+        Date.parse(p.abierta_at ?? '') > Date.parse(sesionActiva.ts_apertura))
+  )
+  useEffect(() => {
+    if (abiertaNueva) qc.invalidateQueries({ queryKey: CONTEO_SESION_ACTIVA_KEY })
+  }, [abiertaNueva, qc])
 
   const nombrePorUsuario = useMemo(() => {
     const mapa: Record<string, string> = {}
@@ -267,13 +288,17 @@ export function PantallaConteoFisico() {
             automática por ventas.
           </p>
         </div>
-        {esGestor && !sesionActiva && (
+        {esGestor && (
           <Button
             onClick={() => setWizardAbierto(true)}
             className="shrink-0 bg-[#f9b44c] font-semibold text-[#391511] hover:bg-[#e4a42a]"
           >
-            <Plus className="mr-1.5 h-4 w-4" />
-            Nueva sesión
+            {sesionActiva ? (
+              <CalendarClock className="mr-1.5 h-4 w-4" />
+            ) : (
+              <Plus className="mr-1.5 h-4 w-4" />
+            )}
+            {sesionActiva ? 'Programar sesión' : 'Nueva sesión'}
           </Button>
         )}
       </div>
@@ -283,7 +308,7 @@ export function PantallaConteoFisico() {
           <p className="font-semibold text-[#391511]">No hay conteo en curso</p>
           <p className="mt-1 text-sm text-[#6f3a2a]">
             {esGestor
-              ? 'Abrí una sesión nueva para arrancar: se define el nombre, qué se cuenta y quién cuenta cada parte.'
+              ? 'Abrí una sesión nueva para arrancar, o dejala programada con fecha y hora: se define el nombre, qué se cuenta y quién cuenta cada parte.'
               : 'Cuando un encargado abra una sesión y te asigne una tarea, la vas a ver acá.'}
           </p>
         </div>
@@ -431,6 +456,14 @@ export function PantallaConteoFisico() {
         </div>
       )}
 
+      {esGestor && programaciones && programaciones.length > 0 && (
+        <ProgramacionesConteo
+          programaciones={programaciones}
+          nombrePorUsuario={nombrePorUsuario}
+          ahoraMs={Date.now()}
+        />
+      )}
+
       {esGestor && (sesiones ?? []).filter((s) => s.estado === 'cerrada').length > 0 && (
         <div className="space-y-2">
           <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-[#6f3a2a]">
@@ -459,6 +492,7 @@ export function PantallaConteoFisico() {
       <WizardNuevaSesion
         abierto={wizardAbierto}
         onCambioAbierto={setWizardAbierto}
+        haySesionActiva={!!sesionActiva}
       />
 
       {sesionActiva && (

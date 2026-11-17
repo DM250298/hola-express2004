@@ -88,6 +88,11 @@ interface Props {
    * productos le tocan a cada una y ninguna quedó vacía.
    */
   onValidez: (valido: boolean) => void
+  /**
+   * true = la vista previa simula una sesión NUEVA aunque hoy haya una viva
+   * (mig 333): para programar la próxima mientras corre la actual.
+   */
+  simularSesionNueva?: boolean
 }
 
 /** Devuelve el valor recién cuando dejó de cambiar por `ms`. */
@@ -183,7 +188,12 @@ function ResumenTarea({
  * filtran a la vez), se elige quién cuenta y la tarea pasa a la lista. Las
  * cantidades las calcula la base con las reglas reales de la creación.
  */
-export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
+export function ConstructorTareas({
+  borradores,
+  onCambio,
+  onValidez,
+  simularSesionNueva = false,
+}: Props) {
   const { data: arbol } = useArbolUbicaciones()
   const { data: proveedores } = useProveedores()
   const { data: categorias } = useCategorias()
@@ -348,7 +358,7 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
     () => JSON.parse(claveQuieta) as TareaNueva[],
     [claveQuieta]
   )
-  const vista = useVistaPreviaTareas(pedidoQuieto)
+  const vista = useVistaPreviaTareas(pedidoQuieto, true, simularSesionNueva)
 
   const faltanMigraciones = vista.data === null
   const alDia =
@@ -458,6 +468,13 @@ export function ConstructorTareas({ borradores, onCambio, onValidez }: Props) {
           {vista.error instanceof Error
             ? vista.error.message
             : 'No se pudo calcular la vista previa.'}
+        </p>
+      )}
+
+      {simularSesionNueva && !faltanMigraciones && (
+        <p className="text-xs text-[#6f3a2a]">
+          Números con el stock de hoy, como si la sesión se abriera ahora: las
+          listas definitivas se arman cuando se abre.
         </p>
       )}
 
