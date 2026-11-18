@@ -204,7 +204,24 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and exists (select 1 from pg_trigger where tgname = 'trg_items_pedido_exige_codigo'),
     null
   union all
-  select 30, 'T1', 'Sin funciones duplicadas',
+  -- ── Sesiones de conteo programadas (330, 331 y 333). ──
+  select 30, '330-331, 333', 'conteo_programaciones + RPC programar/reprogramar/cancelar/abrir ahora + previsualizar v2',
+    to_regclass('public.conteo_programaciones') is not null
+    and (select count(distinct proname) from fn
+          where proname in ('fn_conteo_programar_sesion', 'fn_conteo_reprogramar_sesion',
+                            'fn_conteo_cancelar_programacion', 'fn_conteo_abrir_programada')) = 4
+    and to_regprocedure('public.fn_conteo_previsualizar_tareas(jsonb,boolean)') is not null
+    and to_regprocedure('public.fn_conteo_previsualizar_tareas(jsonb)') is null,
+    null
+  union all
+  -- ── Apertura automática (332): función solo sistema + proceso de pg_cron. ──
+  select 31, '332', 'fn_conteo_abrir_programadas (no ejecutable desde la app) + cron.job hex-conteo-programado activo',
+    to_regprocedure('public.fn_conteo_abrir_programadas()') is not null
+    and not has_function_privilege('authenticated', 'public.fn_conteo_abrir_programadas()', 'EXECUTE')
+    and exists (select 1 from cron.job where jobname = 'hex-conteo-programado' and active),
+    null
+  union all
+  select 32, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

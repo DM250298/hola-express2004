@@ -301,6 +301,23 @@ ABM + historial de compras.
   rápido del celular y los ajustes no cuentan (solo dejan rastro con
   diferencia). Sin cantidades rige el reparto parejo de la 224 (sin partir un
   estante). Lógica pura del payload en `lib/conteo/tareas.ts` (con test)
+- **Sesiones programadas (migs 330–333, nov-2026)**: el wizard tiene "¿Cuándo
+  se abre?" = Abrir ahora / Programar (fecha + hora). Una programada vive en
+  `conteo_programaciones` (receta: nombre, umbral, notas y el `p_zonas` tal
+  cual), **no** es un estado de `conteo_sesiones`: la foto del stock y las
+  listas se arman recién al abrirse. pg_cron `hex-conteo-programado` corre
+  `fn_conteo_abrir_programadas()` cada minuto (solo sistema): por cada vencida
+  **impersona a quien programó** (`set_config('request.jwt.claims', …)`) y
+  llama la `fn_abrir_sesion_conteo` de siempre, así el permiso se re-evalúa y
+  `abierta_por`/auditoría quedan a su nombre; con otra sesión viva espera hasta
+  60 min reintentando y después queda `fallida` con motivo. Gestión por RPC
+  (`fn_conteo_programar_sesion`, `_reprogramar_sesion`,
+  `_cancelar_programacion`, `_abrir_programada` = "Abrir ahora"); solo se
+  reprograma fecha/hora o se cancela (decisión del dueño). La vista previa
+  acepta `p_nueva` (333) para simular una sesión nueva aunque la viva esté en
+  revisión (`simularSesionNueva` en `ConstructorTareas`). Sección "Programadas"
+  en el hub (`ProgramacionesConteo`, estado derivado en cliente); lógica pura en
+  `lib/conteo/programacion.ts` (con test). El celular no cambia
 - **Clasificación ABC** (`/inventario/clasificacion-abc`): análisis Pareto
   por ingresos
 - ABM de productos vive en `/configuracion/productos` — no es parte
@@ -879,7 +896,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 329 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 333 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

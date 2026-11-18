@@ -3783,6 +3783,69 @@ export type ConteoSesionUpdate = {
   notas?: string | null
 }
 
+/** Sesión de conteo programada con fecha y hora (migs 330 a 333). */
+export type EstadoConteoProgramacion = 'programada' | 'abierta' | 'cancelada' | 'fallida'
+
+export type ConteoProgramacionRow = {
+  id: number
+  nombre: string
+  umbral_pesos: number
+  notas: string | null
+  /** Las tareas tal cual las mandó el wizard (el p_zonas de fn_abrir_sesion_conteo). */
+  zonas: Json
+  programada_para: string
+  programada_por: string
+  estado: EstadoConteoProgramacion
+  sesion_id: number | null
+  intentos: number
+  ultimo_intento_at: string | null
+  /** Por qué no se abrió (o por qué está esperando). */
+  ultimo_error: string | null
+  abierta_at: string | null
+  /** null = la abrió el sistema a la hora; con valor = "Abrir ahora" de ese gestor. */
+  abierta_por: string | null
+  cancelada_at: string | null
+  cancelada_por: string | null
+  created_at: string
+}
+
+export type ConteoProgramacionInsert = {
+  id?: number
+  nombre: string
+  umbral_pesos?: number
+  notas?: string | null
+  zonas: Json
+  programada_para: string
+  programada_por: string
+  estado?: EstadoConteoProgramacion
+  sesion_id?: number | null
+  intentos?: number
+  ultimo_intento_at?: string | null
+  ultimo_error?: string | null
+  abierta_at?: string | null
+  abierta_por?: string | null
+  cancelada_at?: string | null
+  cancelada_por?: string | null
+  created_at?: string
+}
+
+export type ConteoProgramacionUpdate = {
+  nombre?: string
+  umbral_pesos?: number
+  notas?: string | null
+  zonas?: Json
+  programada_para?: string
+  estado?: EstadoConteoProgramacion
+  sesion_id?: number | null
+  intentos?: number
+  ultimo_intento_at?: string | null
+  ultimo_error?: string | null
+  abierta_at?: string | null
+  abierta_por?: string | null
+  cancelada_at?: string | null
+  cancelada_por?: string | null
+}
+
 export type ConteoSnapshotRow = {
   sesion_id: number
   producto_id: number
@@ -5194,6 +5257,19 @@ export interface Database {
         Update: ConteoSesionUpdate
         Relationships: []
       }
+      conteo_programaciones: {
+        Row: ConteoProgramacionRow
+        Insert: ConteoProgramacionInsert
+        Update: ConteoProgramacionUpdate
+        Relationships: [
+          {
+            foreignKeyName: 'conteo_programaciones_sesion_id_fkey'
+            columns: ['sesion_id']
+            referencedRelation: 'conteo_sesiones'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       conteo_snapshot: {
         Row: ConteoSnapshotRow
         Insert: ConteoSnapshotInsert
@@ -6281,8 +6357,32 @@ export interface Database {
         Returns: ConteoAlcanceRow[]
       }
       fn_conteo_previsualizar_tareas: {
-        Args: { p_zonas: Json }
+        /** `p_nueva` (mig 333): simular una sesión nueva aunque haya una viva. */
+        Args: { p_zonas: Json; p_nueva?: boolean }
         Returns: Json
+      }
+      /** Sesiones programadas (migs 330 a 333). */
+      fn_conteo_programar_sesion: {
+        Args: {
+          p_nombre: string
+          p_umbral: number
+          p_zonas: Json
+          p_notas: string | null
+          p_programada_para: string
+        }
+        Returns: ConteoProgramacionRow
+      }
+      fn_conteo_reprogramar_sesion: {
+        Args: { p_id: number; p_programada_para: string }
+        Returns: ConteoProgramacionRow
+      }
+      fn_conteo_cancelar_programacion: {
+        Args: { p_id: number }
+        Returns: ConteoProgramacionRow
+      }
+      fn_conteo_abrir_programada: {
+        Args: { p_id: number }
+        Returns: ConteoSesionRow
       }
       fn_agregar_tareas_conteo: {
         Args: { p_sesion_id: number; p_zonas: Json }

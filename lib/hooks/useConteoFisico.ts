@@ -2,9 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { formatearFechaHora } from '@/lib/utils/formato'
 import {
+  abrirProgramadaConteo,
   abrirSesionConteo,
   agregarTareasConteo,
+  cancelarProgramacionConteo,
   cerrarSesionConteo,
   cerrarZona,
   getAvanceConteo,
@@ -13,6 +16,7 @@ import {
   getDiferenciasConteo,
   getItemsPorZona,
   getListaTarea,
+  getProgramacionesConteo,
   getSesionConteo,
   getSesionConteoActiva,
   getSesionesConteo,
@@ -21,12 +25,15 @@ import {
   iniciarZona,
   pasarARevision,
   previsualizarTareas,
+  programarSesionConteo,
   quitarTareaConteo,
   reabrirSesionConteo,
   reasignarTareaConteo,
   registrarConteo,
+  reprogramarSesionConteo,
   solicitarReconteo,
   type AbrirSesionPayload,
+  type ProgramarSesionPayload,
   type RegistrarConteoPayload,
   type SolicitarReconteoPayload,
   type TareaNueva,
@@ -34,6 +41,7 @@ import {
 
 export const CONTEO_SESIONES_KEY = ['conteo-sesiones'] as const
 export const CONTEO_SESION_ACTIVA_KEY = ['conteo-sesion-activa'] as const
+export const CONTEO_PROGRAMACIONES_KEY = ['conteo-programaciones'] as const
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +59,21 @@ export function useSesionConteoActiva() {
     queryKey: CONTEO_SESION_ACTIVA_KEY,
     queryFn: getSesionConteoActiva,
     staleTime: 60 * 1000,
+  })
+}
+
+/**
+ * Sesiones programadas (migs 330 a 333). `data === null` = migración
+ * pendiente. Se refresca sola cada minuto: el proceso de la base las abre a
+ * la hora y la pantalla tiene que enterarse sin recargar.
+ */
+export function useProgramacionesConteo(habilitado = true) {
+  return useQuery({
+    queryKey: CONTEO_PROGRAMACIONES_KEY,
+    queryFn: getProgramacionesConteo,
+    enabled: habilitado,
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
   })
 }
 
@@ -173,10 +196,15 @@ export function useListaTarea(zonaId: number | null) {
  * `data === null` = migraciones 222+ pendientes. Conserva el resultado
  * anterior mientras recalcula, para que los números no parpadeen al tipear.
  */
-export function useVistaPreviaTareas(zonas: TareaNueva[], habilitado = true) {
+export function useVistaPreviaTareas(
+  zonas: TareaNueva[],
+  habilitado = true,
+  /** Mig 333: números de una sesión NUEVA aunque hoy haya una viva (programar). */
+  nueva = false
+) {
   return useQuery({
-    queryKey: ['conteo-vista-previa', zonas],
-    queryFn: () => previsualizarTareas(zonas),
+    queryKey: ['conteo-vista-previa', nueva, zonas],
+    queryFn: () => previsualizarTareas(zonas, nueva),
     enabled: habilitado,
     staleTime: 20 * 1000,
     placeholderData: (previo) => previo,
@@ -195,6 +223,70 @@ function invalidarSesiones(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ['conteo-avance'] })
   qc.invalidateQueries({ queryKey: ['conteo-cobertura'] })
   qc.invalidateQueries({ queryKey: ['conteo-vista-previa'] })
+  qc.invalidateQueries({ queryKey: CONTEO_PROGRAMACIONES_KEY })
+}
+
+// ─── Sesiones programadas (migs 330 a 333) ───────────────────────────────────
+
+export function useProgramarSesionConteo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ProgramarSesionPayload) => programarSesionConteo(payload),
+    onSuccess: (prog) => {
+      qc.invalidateQueries({ queryKey: CONTEO_PROGRAMACIONES_KEY })
+      toast.success(
+        `Sesión "${prog.nombre}" programada para el ${formatearFechaHora(prog.programada_para)}`
+      )
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo programar la sesión: ${error.message}`)
+    },
+  })
+}
+
+export function useReprogramarSesionConteo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { id: number; programada_para: string }) =>
+      reprogramarSesionConteo(payload),
+    onSuccess: (prog) => {
+      qc.invalidateQueries({ queryKey: CONTEO_PROGRAMACIONES_KEY })
+      toast.success(
+        `"${prog.nombre}" reprogramada para el ${formatearFechaHora(prog.programada_para)}`
+      )
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo reprogramar: ${error.message}`)
+    },
+  })
+}
+
+export function useCancelarProgramacionConteo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => cancelarProgramacionConteo(id),
+    onSuccess: (prog) => {
+      qc.invalidateQueries({ queryKey: CONTEO_PROGRAMACIONES_KEY })
+      toast.success(`Programación "${prog.nombre}" cancelada`)
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo cancelar: ${error.message}`)
+    },
+  })
+}
+
+export function useAbrirProgramadaConteo() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) => abrirProgramadaConteo(id),
+    onSuccess: (sesion) => {
+      invalidarSesiones(qc)
+      toast.success(`Sesión "${sesion.nombre}" abierta — snapshot del stock tomado`)
+    },
+    onError: (error: Error) => {
+      toast.error(`No se pudo abrir la sesión: ${error.message}`)
+    },
+  })
 }
 
 export function useAgregarTareasConteo() {

@@ -5,6 +5,7 @@ import type {
   ConteoCoberturaRow,
   ConteoDetalleRow,
   ConteoDiferenciaRow,
+  ConteoProgramacionRow,
   ConteoSesionRow,
   ConteoTareaResultado,
   ConteoVistaPrevia,
@@ -284,17 +285,95 @@ function faltaMigracion(error: { code?: string } | null | undefined): boolean {
   )
 }
 
+// ─── Sesiones programadas (migs 330 a 333) ───────────────────────────────────
+// La programación guarda la receta (nombre, umbral, notas y las tareas) y el
+// proceso de la base la abre a la hora con fn_abrir_sesion_conteo: la foto del
+// stock y las listas se arman recién en ese momento.
+
+export interface ProgramarSesionPayload extends AbrirSesionPayload {
+  /** Fecha y hora de apertura, ISO con zona (ver `combinarFechaHora`). */
+  programada_para: string
+}
+
+/**
+ * Programaciones pendientes, las que no se pudieron abrir y las abiertas
+ * recientes (las canceladas no vuelven). La pantalla decide cuáles mostrar.
+ * `null` = la migración 330 todavía no corrió.
+ */
+export async function getProgramacionesConteo(): Promise<ConteoProgramacionRow[] | null> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('conteo_programaciones')
+    .select('*')
+    .neq('estado', 'cancelada')
+    .order('programada_para', { ascending: false })
+    .limit(30)
+  if (error) {
+    if (faltaMigracion(error)) return null
+    throw error
+  }
+  return data ?? []
+}
+
+export async function programarSesionConteo(
+  payload: ProgramarSesionPayload
+): Promise<ConteoProgramacionRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteo_programar_sesion', {
+    p_nombre: payload.nombre,
+    p_umbral: payload.umbral,
+    p_zonas: aPayloadZonas(payload.zonas),
+    p_notas: payload.notas ?? null,
+    p_programada_para: payload.programada_para,
+  })
+  if (error) throw error
+  return data as ConteoProgramacionRow
+}
+
+export async function reprogramarSesionConteo(payload: {
+  id: number
+  programada_para: string
+}): Promise<ConteoProgramacionRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteo_reprogramar_sesion', {
+    p_id: payload.id,
+    p_programada_para: payload.programada_para,
+  })
+  if (error) throw error
+  return data as ConteoProgramacionRow
+}
+
+export async function cancelarProgramacionConteo(id: number): Promise<ConteoProgramacionRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteo_cancelar_programacion', { p_id: id })
+  if (error) throw error
+  return data as ConteoProgramacionRow
+}
+
+/** "Abrir ahora": adelanta una futura o reintenta una fallida, a nombre de quien aprieta. */
+export async function abrirProgramadaConteo(id: number): Promise<ConteoSesionRow> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_conteo_abrir_programada', { p_id: id })
+  if (error) throw error
+  return data as ConteoSesionRow
+}
+
 /**
  * Cuántos productos le tocan a cada tarea, antes de crearlas. La cuenta la
  * hace la base con las mismas reglas que la creación (lo que ya es de otra
  * tarea no entra), así el número es exactamente el que se va a crear.
  */
 export async function previsualizarTareas(
-  zonas: TareaNueva[]
+  zonas: TareaNueva[],
+  /** Mig 333: simular una sesión NUEVA aunque hoy haya una viva (programar). */
+  nueva = false
 ): Promise<ConteoVistaPrevia | null> {
   const supabase = createClient()
   const { data, error } = await supabase.rpc('fn_conteo_previsualizar_tareas', {
     p_zonas: aPayloadZonas(zonas),
+    // Solo se manda cuando hace falta: una base sin la 333 sigue respondiendo
+    // a la llamada de siempre.
+    ...(nueva ? { p_nueva: true } : {}),
   })
   if (error) {
     if (faltaMigracion(error)) return null
