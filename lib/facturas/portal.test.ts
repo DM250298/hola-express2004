@@ -5,13 +5,14 @@
 // ║    npm test                                                            ║
 // ║                                                                        ║
 // ║  Un estado mal derivado manda una factura a la bandeja equivocada:     ║
-// ║  se cubren las cinco bandejas, las marcas y el orden de la lista.      ║
+// ║  se cubren las cuatro bandejas, las marcas y el orden de la lista.     ║
 // ╚══════════════════════════════════════════════════════════════════════╝
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   armarFilasPortal,
+  diasEntre,
   estadoFactura,
   filtrarFilas,
   marcasDe,
@@ -74,21 +75,22 @@ function factura(p: Partial<ComprobanteCargado> = {}): ComprobanteCargado {
   }
 }
 
-test('las cinco bandejas', () => {
+test('las cuatro bandejas: una factura cargada va directo a pagar (sin "a validar")', () => {
   assert.equal(estadoFactura(cuenta(), null), 'sin_factura')
-  assert.equal(estadoFactura(cuenta({ tiene_factura: true }), factura()), 'a_validar')
+  // `validada` ya no decide nada: con o sin validar, es "a pagar".
+  assert.equal(estadoFactura(cuenta({ tiene_factura: true }), factura()), 'a_pagar')
   assert.equal(
     estadoFactura(cuenta({ tiene_factura: true }), factura({ validada: true })),
     'a_pagar'
   )
   assert.equal(
-    estadoFactura(cuenta({ tiene_factura: true, estado: 'vencida' }), factura({ validada: true })),
+    estadoFactura(cuenta({ tiene_factura: true, estado: 'vencida' }), factura()),
     'vencida'
   )
   assert.equal(
     estadoFactura(
       cuenta({ tiene_factura: true, estado: 'pagada', saldo_pendiente: 0, monto_pagado: 1000 }),
-      factura({ validada: true })
+      factura()
     ),
     'pagada'
   )
@@ -100,20 +102,23 @@ test('una deuda pagada sin factura sigue en Sin factura, marcada', () => {
   assert.deepEqual(marcasDe(c, null, 'sin_factura'), ['pagada_sin_factura'])
 })
 
-test('una factura sin validar manda sobre el estado de la deuda, incluso vencida o pagada', () => {
-  assert.equal(estadoFactura(cuenta({ tiene_factura: true, estado: 'vencida' }), factura()), 'a_validar')
-  assert.equal(estadoFactura(cuenta({ tiene_factura: true, estado: 'pagada' }), factura()), 'a_validar')
-})
-
-test('deuda con tiene_factura pero sin comprobante (histórico): no hay nada que validar', () => {
+test('deuda con tiene_factura pero sin comprobante (histórico): a pagar', () => {
   assert.equal(estadoFactura(cuenta({ tiene_factura: true }), null), 'a_pagar')
 })
 
-test('compra directa pagada en el acto: a validar hasta que se controla, después pagada', () => {
+test('compra directa pagada en el acto: pagada, aunque no esté controlada', () => {
   const directa = factura({ cuenta_id: null, pedido_id: null, es_directa: true })
-  assert.equal(estadoFactura(null, directa), 'a_validar')
-  assert.equal(estadoFactura(null, { ...directa, validada: true }), 'pagada')
-  assert.deepEqual(marcasDe(null, directa, 'a_validar'), ['pago_inmediato'])
+  assert.equal(estadoFactura(null, directa), 'pagada')
+  assert.deepEqual(marcasDe(null, directa, 'pagada'), ['pago_inmediato'])
+})
+
+test('el proveedor debe la factura: marca solo mientras no hay factura', () => {
+  assert.deepEqual(marcasDe(cuenta(), null, 'sin_factura', true), ['proveedor_debe'])
+  assert.deepEqual(marcasDe(cuenta(), null, 'sin_factura', false), [])
+  assert.deepEqual(marcasDe(cuenta({ tiene_factura: true }), factura(), 'a_pagar', true), [])
+  assert.equal(diasEntre('2026-11-03', '2026-11-26'), 23)
+  assert.equal(diasEntre('2026-10-30', '2026-11-02'), 3)
+  assert.equal(diasEntre('2026-11-26', '2026-11-20'), 0)
 })
 
 test('marcas: parcial, cuotas, con diferencias y sin datos fiscales', () => {
@@ -132,9 +137,9 @@ test('marcas: parcial, cuotas, con diferencias y sin datos fiscales', () => {
   // Pagada: "parcial" ya no tiene sentido.
   assert.deepEqual(marcasDe({ ...c, estado: 'pagada' }, f, 'pagada'), ['cuotas', 'con_diferencias'])
   // Sin datos fiscales, salvo tipo X.
-  assert.deepEqual(marcasDe(cuenta({ tiene_factura: true }), factura({ cuit_proveedor: null }), 'a_validar'), ['sin_datos_fiscales'])
+  assert.deepEqual(marcasDe(cuenta({ tiene_factura: true }), factura({ cuit_proveedor: null }), 'a_pagar'), ['sin_datos_fiscales'])
   assert.deepEqual(
-    marcasDe(cuenta({ tiene_factura: true }), factura({ tipo_comprobante: 'X', cuit_proveedor: null, punto_venta: null, numero_comprobante: null }), 'a_validar'),
+    marcasDe(cuenta({ tiene_factura: true }), factura({ tipo_comprobante: 'X', cuit_proveedor: null, punto_venta: null, numero_comprobante: null }), 'a_pagar'),
     []
   )
 })
@@ -150,7 +155,7 @@ const nombres = new Map<number, string>([[7, 'ARCOR'], [8, 'ngb']])
 function escenario() {
   const cuentas: CuentaAPagarConProveedor[] = [
     cuenta({ id: 1, fecha_vencimiento: '2026-10-19', monto: 471500 }), // sin factura
-    cuenta({ id: 2, tiene_factura: true, fecha_vencimiento: '2026-10-24' }), // a validar
+    cuenta({ id: 2, tiene_factura: true, fecha_vencimiento: '2026-10-24' }), // factura sin validar: a pagar igual
     cuenta({ id: 3, tiene_factura: true, estado: 'vencida', fecha_vencimiento: '2026-10-14', saldo_pendiente: 288285.32, monto_pagado: 300000, parcial: true, monto: 588285.32 }),
     cuenta({ id: 4, tiene_factura: true, fecha_vencimiento: '2026-10-28', monto: 62277.46, saldo_pendiente: 62277.46 }),
     cuenta({ id: 5, tiene_factura: true, estado: 'pagada', fecha_pago: '2026-10-11', saldo_pendiente: 0, monto_pagado: 29380.14, monto: 29380.14, proveedor_nombre: 'la super fiambreria', proveedor_id: 9 }),
@@ -162,10 +167,15 @@ function escenario() {
     factura({ id: 40, cuenta_id: 4, validada: true, total: 62277.46 }),
     factura({ id: 50, cuenta_id: 5, validada: true, total: 29380.14, proveedor_id: 9 }),
     factura({ id: 60, cuenta_id: 6, validada: true, total: 100 }),
-    // Directa del POS, sin controlar, pagada en efectivo: a validar
+    // Directa del POS, sin controlar, pagada en efectivo: pagada
     factura({ id: 70, cuenta_id: null, pedido_id: null, es_directa: true, proveedor_id: 8, total: 69339.82, cuit_proveedor: null, fecha: '2026-10-17' }),
   ]
-  return armarFilasPortal(cuentas, facturas, nombres)
+  // La marca sobre la deuda 2 (ya tiene factura) no cuenta.
+  const adeudadas = new Map([
+    [1, { desde: '2026-10-13T10:00:00Z', nota: 'la trae el lunes' }],
+    [2, { desde: '2026-10-01T10:00:00Z', nota: null }],
+  ])
+  return armarFilasPortal(cuentas, facturas, nombres, adeudadas)
 }
 
 test('armarFilasPortal: una fila por deuda más las directas sin deuda, ordenadas por urgencia', () => {
@@ -175,17 +185,22 @@ test('armarFilasPortal: una fila por deuda más las directas sin deuda, ordenada
     [
       ['c-3', 'vencida'],
       ['c-1', 'sin_factura'],
-      ['c-2', 'a_validar'],
+      ['c-2', 'a_pagar'],
       ['c-4', 'a_pagar'],
-      ['f-70', 'a_validar'], // sin vencimiento: al final de lo abierto
-      ['c-5', 'pagada'], // pagadas: la más reciente primero
+      ['f-70', 'pagada'], // pagadas: la más reciente primero
+      ['c-5', 'pagada'],
       ['c-6', 'pagada'],
     ]
   )
   const directa = filas.find((f) => f.clave === 'f-70')!
   assert.equal(directa.proveedor_nombre, 'ngb')
   assert.deepEqual(directa.marcas, ['pago_inmediato', 'sin_datos_fiscales'])
-  assert.equal(directa.accion, 'validar')
+  assert.equal(directa.accion, 'ver')
+  const sinFactura = filas.find((f) => f.clave === 'c-1')!
+  assert.deepEqual(sinFactura.marcas, ['proveedor_debe'])
+  assert.equal(sinFactura.adeudada_desde, '2026-10-13')
+  assert.equal(sinFactura.adeudada_nota, 'la trae el lunes')
+  assert.equal(filas.find((f) => f.clave === 'c-2')!.adeudada_desde, null)
   // El total de una deuda sin factura es el estimado de la recepción.
   assert.equal(filas.find((f) => f.clave === 'c-1')!.total, 471500)
   assert.equal(filas.find((f) => f.clave === 'c-2')!.total, 270776.72)
@@ -212,7 +227,9 @@ test('filtrar: estado, proveedor, texto y período (que solo acota las pagadas)'
   const base = { estado: 'todas' as const, texto: '', proveedorId: null, desde: '2026-10-01', hasta: '2026-10-31' }
   // La pagada de septiembre queda afuera; lo abierto se ve siempre.
   assert.deepEqual(filtrarFilas(filas, base).map((f) => f.clave), ['c-3', 'c-1', 'c-2', 'c-4', 'f-70', 'c-5'])
-  assert.deepEqual(filtrarFilas(filas, { ...base, estado: 'a_validar' }).map((f) => f.clave), ['c-2', 'f-70'])
+  assert.deepEqual(filtrarFilas(filas, { ...base, estado: 'a_pagar' }).map((f) => f.clave), ['c-2', 'c-4'])
+  assert.deepEqual(filtrarFilas(filas, { ...base, soloProveedorDebe: true }).map((f) => f.clave), ['c-1'])
+  assert.deepEqual(filtrarFilas(filas, { ...base, texto: 'lunes' }).map((f) => f.clave), ['c-1'])
   assert.deepEqual(filtrarFilas(filas, { ...base, proveedorId: 9 }).map((f) => f.clave), ['c-5'])
   assert.deepEqual(filtrarFilas(filas, { ...base, texto: 'fiambre' }).map((f) => f.clave), ['c-5'])
   assert.deepEqual(filtrarFilas(filas, { ...base, texto: '45812' }).map((f) => f.clave), ['c-3', 'c-2', 'c-4', 'f-70', 'c-5'])
@@ -224,11 +241,12 @@ test('filtrar: estado, proveedor, texto y período (que solo acota las pagadas)'
 test('resumen: cuatro tarjetas y conteo por pestaña', () => {
   const r = resumirPortal(escenario(), { desde: '2026-10-01', hasta: '2026-10-31', proveedorId: null })
   assert.deepEqual(r.sin_factura, { cantidad: 1, estimado: 471500 })
-  assert.deepEqual(r.a_validar, { cantidad: 2, total: 270776.72 + 69339.82, con_diferencias: 0 })
-  assert.equal(r.a_pagar.cantidad, 2)
-  assert.equal(Math.round(r.a_pagar.saldo * 100) / 100, 350562.78)
+  assert.deepEqual(r.proveedor_debe, { cantidad: 1, estimado: 471500, mas_vieja: '2026-10-13' })
+  assert.equal(r.a_pagar.cantidad, 3)
+  assert.equal(Math.round(r.a_pagar.saldo * 100) / 100, 351562.78)
   assert.equal(r.a_pagar.vencidas, 1)
   assert.equal(r.a_pagar.saldo_vencido, 288285.32)
-  assert.deepEqual(r.pagadas, { cantidad: 1, total: 29380.14, sin_factura: 0 })
-  assert.deepEqual(r.porEstado, { todas: 6, sin_factura: 1, a_validar: 2, a_pagar: 1, vencida: 1, pagada: 1 })
+  assert.equal(r.pagadas.cantidad, 2)
+  assert.equal(Math.round(r.pagadas.total * 100) / 100, 98719.96)
+  assert.deepEqual(r.porEstado, { todas: 6, sin_factura: 1, a_pagar: 2, vencida: 1, pagada: 2 })
 })

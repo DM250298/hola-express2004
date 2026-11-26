@@ -5,11 +5,16 @@ import { toast } from 'sonner'
 import {
   anularFacturaCompra,
   controlarCompraDirecta,
+  eliminarFacturaCompra,
   getComprobantesCargados,
   getFacturaCompra,
+  getFacturasAdeudadas,
   getItemsFacturaCompra,
   guardarFacturaCompra,
+  marcarFacturaAdeudada,
+  previsualizarEliminarFactura,
   validarFacturaCompra,
+  type ClaveEliminarFactura,
   type GuardarFacturaPayload,
 } from '@/lib/queries/facturasCompra'
 import { anularCompraDirecta } from '@/lib/queries/comprasDirectas'
@@ -71,8 +76,8 @@ export function useControlarCompraDirecta() {
 }
 
 /**
- * Valida (o reabre) una factura: paso "A validar" → "A pagar" del portal
- * (mig 303). El toast va acá, no en el componente.
+ * Valida (o reabre) una factura (mig 303). El paso "A validar" del portal se
+ * quitó en nov-2026; el hook queda para recalcular el cruce con la recepción.
  */
 export function useValidarFactura() {
   const qc = useQueryClient()
@@ -85,8 +90,8 @@ export function useValidarFactura() {
       qc.invalidateQueries({ queryKey: ['factura-compra'] })
       toast.success(
         vars.validar === false
-          ? 'Factura reabierta: vuelve a "A validar"'
-          : 'Factura validada · pasa a "A pagar"'
+          ? 'Cruce con la recepción borrado'
+          : 'Cruce con la recepción actualizado'
       )
     },
     onError: (e: Error) => toast.error(`No se pudo validar: ${e.message}`),
@@ -192,5 +197,109 @@ export function useAnularFacturaCompra() {
     onError: (error: Error) => {
       toast.error(`No se pudo anular la factura: ${error.message}`)
     },
+  })
+}
+
+/** Marcas "el proveedor debe la factura" por id de deuda (mig 343). */
+export function useFacturasAdeudadas() {
+  return useQuery({
+    queryKey: ['facturas-adeudadas'],
+    queryFn: getFacturasAdeudadas,
+    staleTime: 30 * 1000,
+  })
+}
+
+export function useMarcarFacturaAdeudada() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      cuentaId,
+      adeudada,
+      nota,
+    }: {
+      cuentaId: number
+      adeudada: boolean
+      nota?: string | null
+    }) => marcarFacturaAdeudada(cuentaId, adeudada, nota ?? null),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['facturas-adeudadas'] })
+      toast.success(
+        vars.adeudada
+          ? 'Marcada: el proveedor debe la factura'
+          : 'Listo: ya no figura como adeudada por el proveedor'
+      )
+    },
+    onError: (e: Error) => toast.error(`No se pudo marcar: ${e.message}`),
+  })
+}
+
+/** Qué revertiría eliminar la factura (para el diálogo de confirmación). */
+export function usePrevisualizarEliminarFactura(
+  clave: ClaveEliminarFactura | null
+) {
+  return useQuery({
+    queryKey: [
+      'eliminar-factura-previa',
+      clave?.cuentaId ?? null,
+      clave?.facturaId ?? null,
+    ],
+    queryFn: () => previsualizarEliminarFactura(clave as ClaveEliminarFactura),
+    enabled: clave !== null,
+    staleTime: 0,
+    gcTime: 0,
+    retry: false,
+  })
+}
+
+const CLAVES_TRAS_ELIMINAR = [
+  'factura-compra',
+  'comprobantes-cargados',
+  'facturas-adeudadas',
+  'cuentas-a-pagar',
+  'pagos-cuenta',
+  'pagos-programados',
+  'resumen-fiscal',
+  'resumen-financiero',
+  'pedidos',
+  'pedido-detalle',
+  'productos',
+  'inventario',
+  'alertas-stock',
+  'lotes-activos',
+  'vencimientos',
+  'historial-costos',
+  'cuentas',
+  'movimientos-cuenta',
+  'egresos',
+  'caja-fuerte',
+  'tablero-directivo',
+  'asientos',
+  'flujo-proyectado',
+] as const
+
+/**
+ * Elimina una factura y revierte todo lo que generó: pagos, costos, precios,
+ * stock, la recepción, la deuda y los asientos (mig 342).
+ */
+export function useEliminarFactura() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (clave: ClaveEliminarFactura) => eliminarFacturaCompra(clave),
+    onSuccess: (r) => {
+      for (const clave of CLAVES_TRAS_ELIMINAR) {
+        qc.invalidateQueries({ queryKey: [clave] })
+      }
+      const negativos = r.productos_negativos.length
+      toast.success('Factura eliminada · se revirtió todo lo que había generado', {
+        description:
+          negativos > 0
+            ? negativos === 1
+              ? '1 producto quedó con stock negativo: corregilo con un ajuste.'
+              : `${negativos} productos quedaron con stock negativo: corregilos con un ajuste.`
+            : undefined,
+      })
+    },
+    onError: (e: Error) =>
+      toast.error(`No se pudo eliminar la factura: ${e.message}`),
   })
 }

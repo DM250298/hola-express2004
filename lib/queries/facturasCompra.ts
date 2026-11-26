@@ -211,7 +211,7 @@ export interface ComprobanteCargado {
   es_directa: boolean
   /** Compra directa ya revisada por el administrativo. */
   controlada: boolean
-  /** Validada por administración: pasa de "A validar" a "A pagar" (mig 303). */
+  /** Histórico (mig 303): ya no decide el estado del portal (nov-2026). */
   validada: boolean
   validada_at: string | null
   /** Neto facturado − neto recibido, calculado al validar (null sin orden o sin validar). */
@@ -275,9 +275,9 @@ export async function getComprobantesCargados(): Promise<ComprobanteCargado[]> {
 }
 
 /**
- * Marca una factura como validada (o la reabre con `validar=false`): paso
- * "A validar" → "A pagar" del portal. El RPC guarda el cruce recibido vs.
- * facturado y audita (mig 303).
+ * Marca una factura como validada (o la reabre con `validar=false`). El paso
+ * "A validar" del portal se quitó en nov-2026: hoy sirve para que el RPC
+ * guarde el cruce recibido vs. facturado (mig 303) al guardar la factura.
  */
 export async function validarFacturaCompra(
   facturaId: number,
@@ -642,6 +642,151 @@ export async function guardarFacturaCompra(
       // La ficha se completa a mano desde Configuración › Proveedores.
     }
   }
+
+  // 5. Cruce recibido vs. facturado (nov-2026): ya no hay paso "A validar",
+  //    pero el RPC de validar es el que calcula y guarda la diferencia con la
+  //    recepción (marca "con diferencias" del portal). Best-effort: sin el
+  //    cruce la factura queda igual de bien guardada.
+  try {
+    const { data: fac } = await supabase
+      .from('facturas_compra')
+      .select('id')
+      .eq('cuenta_id', payload.cuenta_id)
+      .maybeSingle()
+    if (fac) {
+      await supabase.rpc('fn_validar_factura_compra', {
+        p_factura_id: fac.id,
+        p_validar: true,
+      })
+    }
+  } catch {
+    // Solo se pierde la marca informativa.
+  }
+}
+
+/** Lo que revierte (o revertiría) eliminar una factura. */
+export interface ResultadoEliminarFactura {
+  /** Motivo por el que NO se puede eliminar (mes cerrado). null = se puede. */
+  bloqueo: string | null
+  total: number
+  pagos_revertidos: {
+    monto: number
+    fecha: string
+    cuenta: string
+    forma_pago: string | null
+  }[]
+  productos_stock: number
+  productos_negativos: {
+    producto_id: number
+    nombre: string
+    stock_actual: number
+    stock_final: number
+  }[]
+  costos_restaurados: number
+  costos_no_restaurados: { producto_id: number; nombre: string }[]
+  recepcion_revertida: boolean
+}
+
+export type ClaveEliminarFactura = {
+  cuentaId: number | null
+  facturaId: number | null
+}
+
+async function llamarEliminarFactura(
+  clave: ClaveEliminarFactura,
+  previsualizar: boolean
+): Promise<ResultadoEliminarFactura> {
+  const supabase = createClient()
+  const { data, error } = await supabase.rpc('fn_eliminar_factura_compra', {
+    p_cuenta_id: clave.cuentaId,
+    p_factura_id: clave.cuentaId == null ? clave.facturaId : null,
+    p_previsualizar: previsualizar,
+  })
+  if (error) throw error
+  const r = (data ?? {}) as unknown as Partial<ResultadoEliminarFactura>
+  return {
+    bloqueo: r.bloqueo ?? null,
+    total: Number(r.total ?? 0),
+    pagos_revertidos: (r.pagos_revertidos ?? []).map((p) => ({
+      ...p,
+      monto: Number(p.monto),
+    })),
+    productos_stock: Number(r.productos_stock ?? 0),
+    productos_negativos: (r.productos_negativos ?? []).map((p) => ({
+      ...p,
+      stock_actual: Number(p.stock_actual),
+      stock_final: Number(p.stock_final),
+    })),
+    costos_restaurados: Number(r.costos_restaurados ?? 0),
+    costos_no_restaurados: r.costos_no_restaurados ?? [],
+    recepcion_revertida: r.recepcion_revertida ?? false,
+  }
+}
+
+/**
+ * Qué pasaría al eliminar la factura (no escribe nada): pagos que vuelven,
+ * productos que quedarían en negativo, costos que no se pueden restaurar.
+ */
+export function previsualizarEliminarFactura(
+  clave: ClaveEliminarFactura
+): Promise<ResultadoEliminarFactura> {
+  return llamarEliminarFactura(clave, true)
+}
+
+/**
+ * Elimina una factura de proveedor y revierte TODO lo que generó (mig 342):
+ * pagos, costo y precio, stock (aunque quede negativo), la recepción, la
+ * deuda y los asientos. Con orden se pasa la deuda; una compra directa sin
+ * deuda, la factura.
+ */
+export function eliminarFacturaCompra(
+  clave: ClaveEliminarFactura
+): Promise<ResultadoEliminarFactura> {
+  return llamarEliminarFactura(clave, false)
+}
+
+/**
+ * Marca (o desmarca) una deuda sin factura como "el proveedor la debe"
+ * (mig 343).
+ */
+export async function marcarFacturaAdeudada(
+  cuentaId: number,
+  adeudada: boolean,
+  nota: string | null = null
+): Promise<void> {
+  const supabase = createClient()
+  const { error } = await supabase.rpc('fn_marcar_factura_adeudada', {
+    p_cuenta_id: cuentaId,
+    p_adeudada: adeudada,
+    p_nota: nota,
+  })
+  if (error) throw error
+}
+
+/**
+ * Deudas marcadas "el proveedor debe la factura", por id de deuda. Va en una
+ * consulta aparte de `getCuentasAPagar` a propósito: si la mig 343 todavía
+ * no corrió, esto devuelve vacío y el resto de Finanzas sigue andando.
+ */
+export async function getFacturasAdeudadas(): Promise<
+  Map<number, { desde: string; nota: string | null }>
+> {
+  const supabase = createClient()
+  const { data, error } = await supabase
+    .from('cuentas_a_pagar')
+    .select('id, factura_adeudada_desde, factura_adeudada_nota')
+    .not('factura_adeudada_desde', 'is', null)
+  const mapa = new Map<number, { desde: string; nota: string | null }>()
+  if (error) return mapa
+  for (const f of data ?? []) {
+    if (f.factura_adeudada_desde) {
+      mapa.set(f.id, {
+        desde: f.factura_adeudada_desde,
+        nota: f.factura_adeudada_nota,
+      })
+    }
+  }
+  return mapa
 }
 
 /**

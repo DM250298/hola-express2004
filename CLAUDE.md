@@ -322,21 +322,51 @@ Hub con 4 tabs según permisos:
 Facturas de Compras y la ruta `/compras/facturas` (entrada del menú, pilar
 Compras, permiso `finanzas`) muestran `PortalFacturas` (`components/facturas/`):
 una fila por deuda o factura con un estado explícito derivado en cliente
-(`lib/facturas/portal.ts`, con test): `sin_factura` → `a_validar` →
-`a_pagar` / `vencida` → `pagada`, más marcas (parcial, cuotas, con
-diferencias, sin datos fiscales, pagada sin factura). Cuatro tarjetas que
-filtran, búsqueda, proveedor, período (acota solo las pagadas), panel de
-detalle (`DrawerFactura`: pasos, importes, recibido vs. facturado, pago,
-renglones, fotos, y el cuerpo de la deuda reusado de `DrawerCuentaPagar`).
-Backfill: la 303 dio por validado el histórico; la 304 lo reabrió para
-las deudas abiertas y la 305 lo deshizo a pedido del dueño: solo las
-facturas nuevas pasan por "A validar".
-Validar = `fn_validar_factura_compra` (guarda `validada`,
-`diferencia_recepcion`, `renglones_diferentes`; editar la factura la vuelve a
-"a validar" porque `fn_guardar_factura_compra` la reinserta). Finanzas ›
+(`lib/facturas/portal.ts`, con test): `sin_factura` → `a_pagar` / `vencida`
+→ `pagada`, más marcas (parcial, cuotas, con diferencias, sin datos
+fiscales, pagada sin factura, el proveedor debe la factura). Cuatro tarjetas
+que filtran (Sin factura, Las debe el proveedor, A pagar, Pagadas), búsqueda,
+proveedor, período (acota solo las pagadas), panel de detalle
+(`DrawerFactura`: pasos, importes, recibido vs. facturado, pago, renglones,
+fotos, y el cuerpo de la deuda reusado de `DrawerCuentaPagar`). Finanzas ›
 Facturas de proveedores y Finanzas › Cuentas a pagar **redirigen** al portal
 (`?tab=` viejo → `/compras/facturas?estado=…`); `TabComprobantes` y
 `TabCuentasAPagar` quedan en el repo sin montarse hasta limpiar.
+
+**Sin "A validar" (nov-2026):** el paso se quitó a pedido del dueño (doble
+trabajo): una factura cargada va directo a "A pagar" y
+`facturas_compra.validada` ya no decide ningún estado (queda como
+histórico). `guardarFacturaCompra` llama a `fn_validar_factura_compra` al
+final, best-effort, solo para que queden `diferencia_recepcion` y
+`renglones_diferentes` (marca "con diferencias").
+
+**Eliminar factura (migs 337–342, nov-2026):** botón "Eliminar factura" en
+`DrawerFactura` y "Eliminar" en `ModalEditarFactura` (solo `finanzas` o
+admin), con `DialogoEliminarFactura`: primero previsualiza
+(`fn_eliminar_factura_compra(..., p_previsualizar => true)`) y muestra qué
+se deshace. Decisiones del dueño (2026-11-26): revierte **también los
+pagos** (la plata vuelve a la cuenta de origen; no existía forma de anular
+un pago), **deshace la recepción** (la orden vuelve a "Por recibir", o a
+recepción parcial si tiene otras facturas; la deuda desaparece), **fuerza el
+stock aunque quede negativo** si la mercadería ya se vendió (lo avisa antes)
+y **vuelve costo y precio** a la foto previa (`factura_compra_previos`, mig
+337, trigger before insert en `items_factura_compra`; la primera foto
+sobrevive a las re-ediciones) salvo que otra compra posterior ya los haya
+cambiado. Rechaza con el mes cerrado (de la factura o de un pago). Sirve
+también para compras directas (`p_factura_id`). Los helpers `fn_int_*`
+(338–340) no tienen `execute` para `authenticated`: solo los llama la
+principal. `fn_anular_factura_compra` (vuelve a "sin factura", la usa
+`fn_cancelar_pedido`) y `fn_anular_compra_directa` no cambian.
+
+**"El proveedor debe la factura" (mig 343, nov-2026):** marca manual sobre
+una deuda sin factura (`cuentas_a_pagar.factura_adeudada_desde/por/nota`,
+por RPC `fn_marcar_factura_adeudada`, permiso `finanzas` o `compras`).
+Separa lo que está en papel sin cargar de lo que el proveedor no entregó:
+tarjeta y pestaña "Las debe el proveedor", días de atraso y nota
+(`DialogoFacturaAdeudada`). Las marcas se leen en una consulta aparte
+(`getFacturasAdeudadas`, tolerante a que la 343 no haya corrido) y NO en
+`SELECT_CUENTAS`, para no romper Finanzas si el front sale antes que la
+migración.
 
 **Precio y margen desde la factura (migs 322–324, oct-2026):** el switch
 "Afectar precio de venta" ya no existe: **lo que muestra la tabla de "Cargar
@@ -879,7 +909,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 329 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 343 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

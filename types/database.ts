@@ -2495,6 +2495,12 @@ export type CuentaAPagarRow = {
   tiene_factura: boolean
   numero_factura: string | null
   nota: string | null
+  /** Desde cuándo el proveedor debe la factura de esta recepción (marca
+   *  manual, mig 343). null = no marcada. Se escribe por
+   *  fn_marcar_factura_adeudada. */
+  factura_adeudada_desde: string | null
+  factura_adeudada_por: string | null
+  factura_adeudada_nota: string | null
   created_at: string
 }
 
@@ -6419,6 +6425,22 @@ export interface Database {
       }
       fn_validar_factura_compra: {
         Args: { p_factura_id: number; p_validar?: boolean }
+        Returns: undefined
+      }
+      /** Elimina una factura de proveedor y revierte todo lo que generó (mig
+       *  342): pagos, costo/precio, stock (aunque quede negativo), recepción,
+       *  deuda y asientos. Con p_previsualizar no escribe: devuelve qué haría. */
+      fn_eliminar_factura_compra: {
+        Args: {
+          p_cuenta_id?: number | null
+          p_factura_id?: number | null
+          p_previsualizar?: boolean
+        }
+        Returns: Json
+      }
+      /** Marca o desmarca "el proveedor debe la factura" (mig 343). */
+      fn_marcar_factura_adeudada: {
+        Args: { p_cuenta_id: number; p_adeudada: boolean; p_nota?: string | null }
         Returns: undefined
       }
       fn_controlar_compra_directa: {

@@ -17,12 +17,16 @@ import { ModalControlarCompra } from '@/components/compras/ModalControlarCompra'
 import { ModalEditarFactura } from '@/components/finanzas/ModalEditarFactura'
 import { ModalPagarCuenta } from '@/components/finanzas/ModalPagarCuenta'
 import { useCuentasAPagar } from '@/lib/hooks/useFinanzas'
-import { useComprobantesCargados } from '@/lib/hooks/useFacturasCompra'
+import {
+  useComprobantesCargados,
+  useFacturasAdeudadas,
+} from '@/lib/hooks/useFacturasCompra'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
 import { cn } from '@/lib/utils'
 import {
   fechaLocal,
+  hoyIso,
   rangoPredefinido,
   type ClavePeriodo,
 } from '@/lib/utils/periodos'
@@ -31,6 +35,7 @@ import {
   ETIQUETA_ESTADO,
   ETIQUETA_ORDEN,
   armarFilasPortal,
+  diasEntre,
   filtrarFilas,
   ordenarFilas,
   resumirPortal,
@@ -40,14 +45,29 @@ import {
 } from '@/lib/facturas/portal'
 import type { CuentaAPagarConProveedor } from '@/lib/queries/finanzas'
 import type { ComprobanteCargado } from '@/lib/queries/facturasCompra'
-import { COLOR_ESTADO } from './ChipEstadoFactura'
+import { COLOR_ESTADO, COLOR_PROVEEDOR_DEBE } from './ChipEstadoFactura'
 import { TablaFacturas } from './TablaFacturas'
 import { DrawerFactura } from './DrawerFactura'
+import { DialogoFacturaAdeudada } from './DialogoFacturaAdeudada'
 import { SeccionPagosProgramados } from './SeccionPagosProgramados'
 
 const TODOS_PROV = '__todos__'
 
-type FiltroEstado = EstadoFactura | 'todas'
+/** 'proveedor_debe' = las sin factura que el proveedor todavía no entregó. */
+type FiltroEstado = EstadoFactura | 'todas' | 'proveedor_debe'
+
+const PESTANAS: FiltroEstado[] = [
+  'todas',
+  'sin_factura',
+  'proveedor_debe',
+  ...ESTADOS_FACTURA.filter((e) => e !== 'sin_factura'),
+]
+
+function etiquetaFiltro(e: FiltroEstado): string {
+  if (e === 'todas') return 'Todas'
+  if (e === 'proveedor_debe') return 'Las debe el proveedor'
+  return ETIQUETA_ESTADO[e]
+}
 
 const ITEMS_PERIODO: Record<string, string> = {
   mes_actual: 'Este mes',
@@ -57,7 +77,7 @@ const ITEMS_PERIODO: Record<string, string> = {
 }
 type PeriodoPortal = Exclude<ClavePeriodo, 'hoy' | 'personalizado'> | 'todo'
 
-export const ESTADOS_URL: readonly string[] = ['todas', ...ESTADOS_FACTURA]
+export const ESTADOS_URL: readonly string[] = PESTANAS
 
 interface Props {
   /** Pestaña de estado inicial (viene de ?estado= en la URL). */
@@ -67,8 +87,8 @@ interface Props {
 }
 
 /**
- * Portal único de facturas de proveedores: lo que falta facturar, lo que
- * falta validar y lo que falta pagar, en una sola bandeja con un estado
+ * Portal único de facturas de proveedores: lo que falta facturar (y cuáles
+ * debe el proveedor) y lo que falta pagar, en una sola bandeja con un estado
  * explícito por factura. Reemplaza a Finanzas › Facturas de proveedores y
  * Finanzas › Cuentas a pagar (que redirigen acá).
  */
@@ -77,6 +97,7 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
     useCuentasAPagar(null)
   const { data: comprobantes, isLoading: cargandoComp, isError: errorComp, refetch: refetchComp } =
     useComprobantesCargados()
+  const { data: adeudadas } = useFacturasAdeudadas()
   const { data: proveedores } = useProveedores()
   const { data: usuario } = useUsuario()
 
@@ -96,6 +117,7 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
   const [cuentaPago, setCuentaPago] = useState<CuentaAPagarConProveedor | null>(null)
   const [compraControlar, setCompraControlar] = useState<ComprobanteCargado | null>(null)
   const [modalCompra, setModalCompra] = useState(false)
+  const [filaAdeudada, setFilaAdeudada] = useState<FilaPortal | null>(null)
 
   const nombresProveedor = useMemo(() => {
     const m = new Map<number, string>()
@@ -104,8 +126,8 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
   }, [proveedores])
 
   const filas = useMemo(
-    () => armarFilasPortal(cuentas ?? [], comprobantes ?? [], nombresProveedor),
-    [cuentas, comprobantes, nombresProveedor]
+    () => armarFilasPortal(cuentas ?? [], comprobantes ?? [], nombresProveedor, adeudadas),
+    [cuentas, comprobantes, nombresProveedor, adeudadas]
   )
 
   const rango = useMemo(() => {
@@ -120,7 +142,17 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
     [filas, rango, proveedorId]
   )
   const filasVisibles = useMemo(
-    () => ordenarFilas(filtrarFilas(filas, { estado, texto, proveedorId, ...rango }), orden),
+    () =>
+      ordenarFilas(
+        filtrarFilas(filas, {
+          estado: estado === 'proveedor_debe' ? 'sin_factura' : estado,
+          soloProveedorDebe: estado === 'proveedor_debe',
+          texto,
+          proveedorId,
+          ...rango,
+        }),
+        orden
+      ),
     [filas, estado, texto, proveedorId, rango, orden]
   )
 
@@ -139,10 +171,13 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
     return r
   }, [filas])
 
-  // Objetos VIVOS: la copia del click queda vieja después de pagar/validar;
+  // Objetos VIVOS: la copia del click queda vieja después de pagar o marcar;
   // se re-resuelve contra la query fresca en cada render.
   const filaDetalleViva = filaDetalle
     ? (filas.find((f) => f.clave === filaDetalle.clave) ?? filaDetalle)
+    : null
+  const filaAdeudadaViva = filaAdeudada
+    ? (filas.find((f) => f.clave === filaAdeudada.clave) ?? filaAdeudada)
     : null
   const resolverCuenta = (c: CuentaAPagarConProveedor | null) =>
     c ? ((cuentas ?? []).find((x) => x.id === c.id) ?? c) : null
@@ -151,10 +186,6 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
     switch (f.accion) {
       case 'cargar_factura':
         if (f.cuenta) setCuentaEditar(f.cuenta)
-        return
-      case 'validar':
-        // Validar se confirma desde el detalle, donde se ve el cruce y el papel.
-        setFilaDetalle(f)
         return
       case 'pagar':
         if (f.cuenta) setCuentaPago(f.cuenta)
@@ -174,7 +205,9 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
         : 'No hay facturas ni deudas cargadas.'
       : estado === 'pagada'
         ? 'No hay facturas pagadas en el período elegido.'
-        : `No hay facturas en "${ETIQUETA_ESTADO[estado]}".`
+        : estado === 'proveedor_debe'
+          ? 'Ningún proveedor te debe una factura. Marcalas desde "Sin factura".'
+          : `No hay facturas en "${ETIQUETA_ESTADO[estado]}".`
 
   return (
     <div className={cn('space-y-5', !embebido && 'p-4 sm:p-6')}>
@@ -184,8 +217,8 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
             <h1 className="text-[#391511] text-2xl font-bold">Facturas de proveedores</h1>
           )}
           <p className="text-[#6f3a2a] text-sm mt-1 max-w-2xl">
-            Una sola bandeja: lo que falta facturar, lo que falta validar y lo que
-            falta pagar. Tocá una fila para ver el detalle completo.
+            Una sola bandeja: lo que falta facturar, las facturas que te debe el
+            proveedor y lo que falta pagar. Tocá una fila para ver el detalle completo.
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -230,18 +263,20 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
           }
         />
         <TarjetaResumen
-          estado="a_validar"
-          activa={estado === 'a_validar'}
-          onClick={() => setEstado((e) => (e === 'a_validar' ? 'todas' : 'a_validar'))}
-          valor={String(resumen.a_validar.cantidad)}
+          estado="sin_factura"
+          color={COLOR_PROVEEDOR_DEBE}
+          etiqueta="Las debe el proveedor"
+          activa={estado === 'proveedor_debe'}
+          onClick={() => setEstado((e) => (e === 'proveedor_debe' ? 'todas' : 'proveedor_debe'))}
+          valor={String(resumen.proveedor_debe.cantidad)}
           detalle={
-            resumen.a_validar.cantidad === 0 ? (
-              'nada pendiente de revisar'
+            resumen.proveedor_debe.cantidad === 0 ? (
+              'ninguna marcada como adeudada'
             ) : (
               <>
-                <MontoARS monto={resumen.a_validar.total} />
-                {resumen.a_validar.con_diferencias > 0 &&
-                  ` · ${resumen.a_validar.con_diferencias} con diferencias`}
+                <MontoARS monto={resumen.proveedor_debe.estimado} /> estimado
+                {resumen.proveedor_debe.mas_vieja &&
+                  ` · la más vieja, ${diasEntre(resumen.proveedor_debe.mas_vieja, hoyIso())} días`}
               </>
             )
           }
@@ -293,8 +328,9 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
       {/* Filtros */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="inline-flex flex-wrap gap-0.5 rounded-lg border border-[#e4c9b0]/60 bg-white p-1">
-          {(['todas', ...ESTADOS_FACTURA] as FiltroEstado[]).map((e) => {
-            const n = resumen.porEstado[e]
+          {PESTANAS.map((e) => {
+            const n =
+              e === 'proveedor_debe' ? resumen.proveedor_debe.cantidad : resumen.porEstado[e]
             return (
               <button
                 key={e}
@@ -307,7 +343,7 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
                     : 'text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]'
                 )}
               >
-                {e === 'todas' ? 'Todas' : ETIQUETA_ESTADO[e]}
+                {etiquetaFiltro(e)}
                 <span className={cn('ml-1 text-xs', estado === e ? 'text-[#6f3a2a]' : 'text-[#c8a58a]')}>
                   {n}
                 </span>
@@ -392,6 +428,7 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
         }}
         onVer={setFilaDetalle}
         onAccion={accionDeFila}
+        onMarcarAdeudada={setFilaAdeudada}
         vacio={vacio}
       />
       <p className="text-[10px] text-[#c8a58a]">
@@ -411,6 +448,12 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
         onPagar={(f) => {
           if (f.cuenta) setCuentaPago(f.cuenta)
         }}
+        onMarcarAdeudada={setFilaAdeudada}
+      />
+
+      <DialogoFacturaAdeudada
+        fila={filaAdeudadaViva}
+        onCerrar={() => setFilaAdeudada(null)}
       />
 
       <ModalEditarFactura
@@ -453,6 +496,7 @@ export function PortalFacturas({ estadoInicial, embebido }: Props) {
 function TarjetaResumen({
   estado,
   etiqueta,
+  color,
   valor,
   detalle,
   activa,
@@ -460,6 +504,8 @@ function TarjetaResumen({
 }: {
   estado: EstadoFactura
   etiqueta?: string
+  /** Color del borde cuando la tarjeta no es un estado (ej. "las debe el proveedor"). */
+  color?: string
   valor: React.ReactNode
   detalle: React.ReactNode
   activa: boolean
@@ -470,7 +516,7 @@ function TarjetaResumen({
       type="button"
       onClick={onClick}
       aria-pressed={activa}
-      style={{ borderLeftColor: COLOR_ESTADO[estado] }}
+      style={{ borderLeftColor: color ?? COLOR_ESTADO[estado] }}
       className={cn(
         'text-left rounded-2xl border border-l-4 bg-white p-4 shadow-sm transition-colors',
         activa

@@ -5,10 +5,9 @@ import Link from 'next/link'
 import {
   Check,
   ExternalLink,
+  FileClock,
   FileText,
   ListChecks,
-  Loader2,
-  ShieldCheck,
   Trash2,
   Wallet,
 } from 'lucide-react'
@@ -29,16 +28,13 @@ import {
   formatearFechaCortaISO,
   formatearFechaHora,
 } from '@/lib/utils/formato'
-import {
-  useAnularCompraDirecta,
-  useAnularFacturaCompra,
-  useItemsFacturaCompra,
-  useValidarFactura,
-} from '@/lib/hooks/useFacturasCompra'
+import { useItemsFacturaCompra } from '@/lib/hooks/useFacturasCompra'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { tienePermiso } from '@/lib/permisos'
 import { cn } from '@/lib/utils'
 import { nroComprobante, type FilaPortal } from '@/lib/facturas/portal'
 import { ChipEstadoFactura, marcaEsAlerta, textoMarca } from './ChipEstadoFactura'
+import { DialogoEliminarFactura } from './DialogoEliminarFactura'
 
 interface Props {
   fila: FilaPortal | null
@@ -50,6 +46,8 @@ interface Props {
   onRevisarDirecta: (fila: FilaPortal) => void
   /** Abre el modal de pago. */
   onPagar: (fila: FilaPortal) => void
+  /** Abre "¿el proveedor debe la factura?" para una fila sin factura. */
+  onMarcarAdeudada: (fila: FilaPortal) => void
 }
 
 /**
@@ -64,12 +62,11 @@ export function DrawerFactura({
   onEditarFactura,
   onRevisarDirecta,
   onPagar,
+  onMarcarAdeudada,
 }: Props) {
   const { data: usuario } = useUsuario()
-  const validar = useValidarFactura()
-  const anularFactura = useAnularFacturaCompra()
-  const anularDirecta = useAnularCompraDirecta()
   const [verRenglones, setVerRenglones] = useState(false)
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const { data: items, isLoading: cargandoItems } = useItemsFacturaCompra(
     abierto && verRenglones ? (fila?.factura?.id ?? null) : null
   )
@@ -77,7 +74,9 @@ export function DrawerFactura({
   if (!fila) return null
   const { cuenta, factura, estado } = fila
   const nro = nroComprobante(factura)
-  const ocupado = validar.isPending || anularFactura.isPending || anularDirecta.isPending
+  // Eliminar revierte pagos y stock: solo el administrativo (permiso finanzas).
+  const puedeEliminar =
+    usuario?.rol === 'admin' || tienePermiso(usuario?.permisos, 'finanzas')
 
   // Pasos de la línea: hecho / actual / pendiente.
   const pasos: { etiqueta: string; detalle?: string; hecho: boolean; omitido?: boolean }[] = [
@@ -97,11 +96,6 @@ export function DrawerFactura({
       hecho: !!factura || (cuenta?.tiene_factura ?? false),
     },
     {
-      etiqueta: 'Validada',
-      detalle: factura?.validada_at ? formatearFechaCorta(factura.validada_at) : undefined,
-      hecho: !!factura?.validada || (!factura && (cuenta?.tiene_factura ?? false)),
-    },
-    {
       etiqueta: 'Pagada',
       detalle:
         estado === 'pagada'
@@ -115,35 +109,6 @@ export function DrawerFactura({
     },
   ]
   const indiceActual = pasos.findIndex((p) => !p.hecho)
-
-  function handleValidar(valor: boolean) {
-    if (!factura) return
-    validar.mutate({ facturaId: factura.id, validar: valor })
-  }
-
-  function handleAnular() {
-    if (!usuario || !factura) return
-    if (factura.es_directa) {
-      const ok = window.confirm(
-        'Anular esta compra directa: repone el stock, revierte el pago y borra el comprobante. ¿Seguir?'
-      )
-      if (!ok) return
-      anularDirecta.mutate(
-        { facturaId: factura.id, usuarioId: usuario.id },
-        { onSuccess: () => onCambioAbierto(false) }
-      )
-      return
-    }
-    if (!cuenta) return
-    const ok = window.confirm(
-      'Anular la factura: la deuda vuelve al estimado de la recepción y se revierte el stock que ajustó la factura. ¿Seguir?'
-    )
-    if (!ok) return
-    anularFactura.mutate(
-      { cuentaId: cuenta.id, usuarioId: usuario.id },
-      { onSuccess: () => onCambioAbierto(false) }
-    )
-  }
 
   return (
     <Sheet open={abierto} onOpenChange={onCambioAbierto}>
@@ -266,10 +231,9 @@ export function DrawerFactura({
                 <p className="text-[11px] text-[#6f3a2a]">
                   Compra directa: no hay orden ni recepción contra la cual cruzar.
                 </p>
-              ) : !factura.validada ? (
+              ) : factura.renglones_diferentes == null ? (
                 <p className="text-[11px] text-[#6f3a2a]">
-                  El cruce se guarda al validar. Abrí la factura para ver cada renglón
-                  (recibido / facturado).
+                  Abrí la factura para ver cada renglón (recibido / facturado).
                 </p>
               ) : (
                 <>
@@ -341,18 +305,17 @@ export function DrawerFactura({
                 Cargar factura
               </Button>
             )}
-            {estado === 'a_validar' && factura && (
+            {estado === 'sin_factura' && cuenta && (
               <Button
-                onClick={() => handleValidar(true)}
-                disabled={ocupado}
-                className="bg-[#7f77dd] hover:bg-[#6a62c9] text-white font-bold"
-              >
-                {validar.isPending ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="mr-1.5 h-4 w-4" />
+                variant="outline"
+                onClick={() => onMarcarAdeudada(fila)}
+                className={cn(
+                  'border-[#e4c9b0] text-[#6f3a2a]',
+                  fila.adeudada_desde && 'border-[#7f77dd]/50 bg-[#7f77dd]/10 text-[#3c3489]'
                 )}
-                {cuenta ? 'Validar y pasar a pagar' : 'Validar'}
+              >
+                <FileClock className="mr-1.5 h-4 w-4" />
+                {fila.adeudada_desde ? 'El proveedor la debe · editar' : 'El proveedor la debe'}
               </Button>
             )}
             {(estado === 'a_pagar' || estado === 'vencida') && cuenta && (
@@ -371,7 +334,7 @@ export function DrawerFactura({
                 className="border-[#e4c9b0] text-[#6f3a2a]"
               >
                 <FileText className="mr-1.5 h-4 w-4" />
-                {estado === 'a_validar' ? 'Abrir factura' : 'Editar factura'}
+                Editar factura
               </Button>
             )}
             {factura?.es_directa && (
@@ -384,28 +347,23 @@ export function DrawerFactura({
                 Datos del comprobante
               </Button>
             )}
-            {factura?.validada && estado !== 'pagada' && (
+            {factura && puedeEliminar && (
               <Button
                 variant="ghost"
-                onClick={() => handleValidar(false)}
-                disabled={ocupado}
-                className="text-[#6f3a2a] hover:bg-[#f9d2a2]/40"
-              >
-                Reabrir validación
-              </Button>
-            )}
-            {factura && (
-              <Button
-                variant="ghost"
-                onClick={handleAnular}
-                disabled={ocupado || !usuario}
+                onClick={() => setConfirmarEliminar(true)}
                 className="ml-auto text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#9e2f25]"
               >
                 <Trash2 className="mr-1.5 h-4 w-4" />
-                Anular
+                Eliminar factura
               </Button>
             )}
           </div>
+          {fila.adeudada_nota && (
+            <p className="text-xs text-[#6f3a2a]">
+              <span className="font-semibold text-[#391511]">Nota del reclamo:</span>{' '}
+              {fila.adeudada_nota}
+            </p>
+          )}
 
           {/* Renglones de la factura */}
           {factura && (
@@ -482,6 +440,16 @@ export function DrawerFactura({
           )}
         </div>
       </SheetContent>
+      {factura && (
+        <DialogoEliminarFactura
+          abierto={confirmarEliminar}
+          onCambioAbierto={setConfirmarEliminar}
+          cuentaId={cuenta?.id ?? null}
+          facturaId={factura.id}
+          descripcion={nro ? `${fila.proveedor_nombre} · ${nro}` : fila.proveedor_nombre}
+          onEliminada={() => onCambioAbierto(false)}
+        />
+      )}
     </Sheet>
   )
 }
