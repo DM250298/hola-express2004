@@ -7,10 +7,12 @@
  * (`facturas_compra`) si ya se cargó, o una compra directa pagada en el acto
  * (factura sin deuda). Sobre esa fila se deriva UN estado explícito:
  *
- *   sin_factura → a_validar → a_pagar / vencida → pagada
+ *   sin_factura → a_pagar / vencida → pagada
  *
  * y marcas secundarias (parcial, cuotas, con diferencias, sin datos
- * fiscales, pagada sin factura). "vencida" y "parcial" ya vienen derivados
+ * fiscales, pagada sin factura, el proveedor debe la factura). El paso
+ * "a validar" se quitó en nov-2026 (doble trabajo): una factura cargada va
+ * directo a pagar; `facturas_compra.validada` ya no decide el estado. "vencida" y "parcial" ya vienen derivados
  * de `mapearCuenta` (lib/queries/finanzas.ts): acá no se recalculan.
  */
 
@@ -19,14 +21,12 @@ import type { ComprobanteCargado } from '@/lib/queries/facturasCompra'
 
 export type EstadoFactura =
   | 'sin_factura'
-  | 'a_validar'
   | 'a_pagar'
   | 'vencida'
   | 'pagada'
 
 export const ESTADOS_FACTURA: EstadoFactura[] = [
   'sin_factura',
-  'a_validar',
   'a_pagar',
   'vencida',
   'pagada',
@@ -34,7 +34,6 @@ export const ESTADOS_FACTURA: EstadoFactura[] = [
 
 export const ETIQUETA_ESTADO: Record<EstadoFactura, string> = {
   sin_factura: 'Sin factura',
-  a_validar: 'A validar',
   a_pagar: 'A pagar',
   vencida: 'Vencida',
   pagada: 'Pagada',
@@ -47,8 +46,10 @@ export type MarcaFactura =
   | 'sin_datos_fiscales'
   | 'pagada_sin_factura'
   | 'pago_inmediato'
+  /** Recepción sin factura que el proveedor todavía no entregó (mig 343). */
+  | 'proveedor_debe'
 
-export type AccionFactura = 'cargar_factura' | 'validar' | 'pagar' | 'ver'
+export type AccionFactura = 'cargar_factura' | 'pagar' | 'ver'
 
 export interface FilaPortal {
   /** 'c-<cuenta_id>' o 'f-<factura_id>' (directa sin deuda). */
@@ -77,6 +78,18 @@ export interface FilaPortal {
    * todavía no hay factura, el día en que se registró la deuda (la recepción).
    */
   fecha_comprobante: string
+  /**
+   * Desde cuándo el proveedor debe la factura (yyyy-MM-dd); null si no está
+   * marcada o si la factura ya se cargó.
+   */
+  adeudada_desde: string | null
+  adeudada_nota: string | null
+}
+
+/** Marca "el proveedor debe la factura" de una deuda (cuentas_a_pagar, mig 343). */
+export interface FacturaAdeudada {
+  desde: string
+  nota: string | null
 }
 
 /** Cómo se ordena la lista. */
@@ -96,6 +109,8 @@ export interface FiltrosPortal {
   /** Rango (yyyy-MM-dd, inclusive) que acota SOLO las pagadas. */
   desde: string
   hasta: string
+  /** Solo las recepciones sin factura marcadas "el proveedor la debe". */
+  soloProveedorDebe?: boolean
 }
 
 /**
@@ -117,10 +132,9 @@ export function estadoFactura(
     if (!cuenta) return 'pagada'
     if (!cuenta.tiene_factura) return 'sin_factura'
     // Deuda marcada con factura pero sin comprobante en facturas_compra
-    // (flujos previos a la mig 086): no hay nada que validar.
+    // (flujos previos a la mig 086).
     return estadoDeuda(cuenta)
   }
-  if (!factura.validada) return 'a_validar'
   if (!cuenta) return 'pagada'
   return estadoDeuda(cuenta)
 }
@@ -135,8 +149,6 @@ export function accionDe(estado: EstadoFactura): AccionFactura {
   switch (estado) {
     case 'sin_factura':
       return 'cargar_factura'
-    case 'a_validar':
-      return 'validar'
     case 'a_pagar':
     case 'vencida':
       return 'pagar'
@@ -148,7 +160,8 @@ export function accionDe(estado: EstadoFactura): AccionFactura {
 export function marcasDe(
   cuenta: CuentaAPagarConProveedor | null,
   factura: ComprobanteCargado | null,
-  estado: EstadoFactura
+  estado: EstadoFactura,
+  proveedorDebe = false
 ): MarcaFactura[] {
   const m: MarcaFactura[] = []
   if (cuenta) {
@@ -156,6 +169,9 @@ export function marcasDe(
     if (cuenta.cuotas.length > 0) m.push('cuotas')
     if (!cuenta.tiene_factura && cuenta.estado === 'pagada') {
       m.push('pagada_sin_factura')
+    }
+    if (estado === 'sin_factura' && proveedorDebe) {
+      m.push('proveedor_debe')
     }
   } else if (factura) {
     m.push('pago_inmediato')
@@ -172,11 +188,13 @@ export function marcasDe(
  * Una deuda puede no tener factura (provisoria) y una factura directa puede
  * no tener deuda (pagada en el acto). `nombresProveedor` resuelve el nombre
  * de las facturas directas (facturas_compra.proveedor_id no tiene FK).
+ * `adeudadas` (por id de deuda) trae las marcas "el proveedor la debe".
  */
 export function armarFilasPortal(
   cuentas: readonly CuentaAPagarConProveedor[],
   facturas: readonly ComprobanteCargado[],
-  nombresProveedor: ReadonlyMap<number, string>
+  nombresProveedor: ReadonlyMap<number, string>,
+  adeudadas: ReadonlyMap<number, FacturaAdeudada> = new Map()
 ): FilaPortal[] {
   const facturaPorCuenta = new Map<number, ComprobanteCargado>()
   const sinCuenta: ComprobanteCargado[] = []
@@ -189,6 +207,7 @@ export function armarFilasPortal(
   for (const c of cuentas) {
     const f = facturaPorCuenta.get(c.id) ?? null
     const estado = estadoFactura(c, f)
+    const adeudada = estado === 'sin_factura' ? (adeudadas.get(c.id) ?? null) : null
     filas.push({
       clave: `c-${c.id}`,
       cuenta: c,
@@ -199,7 +218,7 @@ export function armarFilasPortal(
         nombresProveedor.get(c.proveedor_id) ??
         'Proveedor',
       estado,
-      marcas: marcasDe(c, f, estado),
+      marcas: marcasDe(c, f, estado, adeudada !== null),
       accion: accionDe(estado),
       total: f ? f.total : c.monto,
       pagado: c.monto_pagado,
@@ -209,6 +228,8 @@ export function armarFilasPortal(
       pedido_id: c.pedido_id ?? f?.pedido_id ?? null,
       fecha_referencia: (c.fecha_pago ?? f?.fecha ?? c.fecha_vencimiento).slice(0, 10),
       fecha_comprobante: (f?.fecha ?? c.created_at ?? c.fecha_vencimiento).slice(0, 10),
+      adeudada_desde: adeudada ? adeudada.desde.slice(0, 10) : null,
+      adeudada_nota: adeudada?.nota ?? null,
     })
   }
   for (const f of sinCuenta) {
@@ -232,6 +253,8 @@ export function armarFilasPortal(
       pedido_id: f.pedido_id,
       fecha_referencia: f.fecha.slice(0, 10),
       fecha_comprobante: f.fecha.slice(0, 10),
+      adeudada_desde: null,
+      adeudada_nota: null,
     })
   }
   return filas.sort(ordenPortal)
@@ -299,6 +322,7 @@ export function filtrarFilas(
   const soloDigitos = texto.replace(/\D/g, '')
   return filas.filter((f) => {
     if (filtros.estado !== 'todas' && f.estado !== filtros.estado) return false
+    if (filtros.soloProveedorDebe && !f.marcas.includes('proveedor_debe')) return false
     if (filtros.proveedorId != null && f.proveedor_id !== filtros.proveedorId) {
       return false
     }
@@ -327,13 +351,15 @@ export function filtrarFilas(
       return true
     }
     if (f.cuenta?.nota && normalizar(f.cuenta.nota).includes(texto)) return true
+    if (f.adeudada_nota && normalizar(f.adeudada_nota).includes(texto)) return true
     return false
   })
 }
 
 export interface ResumenPortal {
   sin_factura: { cantidad: number; estimado: number }
-  a_validar: { cantidad: number; total: number; con_diferencias: number }
+  /** De las sin factura, las que el proveedor todavía debe entregar. */
+  proveedor_debe: { cantidad: number; estimado: number; mas_vieja: string | null }
   a_pagar: { cantidad: number; saldo: number; vencidas: number; saldo_vencido: number }
   pagadas: { cantidad: number; total: number; sin_factura: number }
   /** Cantidad por estado para las pestañas (las pagadas, dentro del período). */
@@ -357,10 +383,10 @@ export function resumirPortal(
   })
   const r: ResumenPortal = {
     sin_factura: { cantidad: 0, estimado: 0 },
-    a_validar: { cantidad: 0, total: 0, con_diferencias: 0 },
+    proveedor_debe: { cantidad: 0, estimado: 0, mas_vieja: null },
     a_pagar: { cantidad: 0, saldo: 0, vencidas: 0, saldo_vencido: 0 },
     pagadas: { cantidad: 0, total: 0, sin_factura: 0 },
-    porEstado: { todas: base.length, sin_factura: 0, a_validar: 0, a_pagar: 0, vencida: 0, pagada: 0 },
+    porEstado: { todas: base.length, sin_factura: 0, a_pagar: 0, vencida: 0, pagada: 0 },
   }
   for (const f of base) {
     r.porEstado[f.estado] += 1
@@ -368,11 +394,13 @@ export function resumirPortal(
       case 'sin_factura':
         r.sin_factura.cantidad += 1
         r.sin_factura.estimado += f.total
-        break
-      case 'a_validar':
-        r.a_validar.cantidad += 1
-        r.a_validar.total += f.total
-        if (f.marcas.includes('con_diferencias')) r.a_validar.con_diferencias += 1
+        if (f.adeudada_desde) {
+          r.proveedor_debe.cantidad += 1
+          r.proveedor_debe.estimado += f.total
+          if (!r.proveedor_debe.mas_vieja || f.adeudada_desde < r.proveedor_debe.mas_vieja) {
+            r.proveedor_debe.mas_vieja = f.adeudada_desde
+          }
+        }
         break
       case 'a_pagar':
       case 'vencida':
@@ -391,4 +419,11 @@ export function resumirPortal(
     }
   }
   return r
+}
+
+/** Días corridos entre dos fechas yyyy-MM-dd (0 si `hasta` es anterior). */
+export function diasEntre(desde: string, hasta: string): number {
+  const a = Date.UTC(+desde.slice(0, 4), +desde.slice(5, 7) - 1, +desde.slice(8, 10))
+  const b = Date.UTC(+hasta.slice(0, 4), +hasta.slice(5, 7) - 1, +hasta.slice(8, 10))
+  return Math.max(0, Math.round((b - a) / 86_400_000))
 }

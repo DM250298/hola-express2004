@@ -3,11 +3,12 @@ import {
   Check,
   Clock,
   FileQuestion,
-  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { hoyIso } from '@/lib/utils/periodos'
 import {
   ETIQUETA_ESTADO,
+  diasEntre,
   type EstadoFactura,
   type FilaPortal,
   type MarcaFactura,
@@ -20,10 +21,6 @@ const ESTILO: Record<
   sin_factura: {
     clase: 'bg-[#f9b44c]/20 text-[#7a4a0b] border-[#f9b44c]/50',
     icono: FileQuestion,
-  },
-  a_validar: {
-    clase: 'bg-[#7f77dd]/15 text-[#3c3489] border-[#7f77dd]/40',
-    icono: ShieldCheck,
   },
   a_pagar: {
     clase: 'bg-[#378add]/15 text-[#0c447c] border-[#378add]/40',
@@ -42,7 +39,6 @@ const ESTILO: Record<
 /** Color de acento del estado (borde de las tarjetas de arriba). */
 export const COLOR_ESTADO: Record<EstadoFactura, string> = {
   sin_factura: '#e4a42a',
-  a_validar: '#7f77dd',
   a_pagar: '#378add',
   vencida: '#c43e2c',
   pagada: '#2f8f4e',
@@ -93,10 +89,28 @@ export function textoMarca(marca: MarcaFactura, fila: FilaPortal): string {
       return 'pagada · falta la factura'
     case 'pago_inmediato':
       return 'pagada en el acto'
+    case 'proveedor_debe':
+      return `el proveedor debe la factura${textoDiasAdeudada(fila)}`
   }
 }
 
+/** " · hace 12 días" desde que se marcó que el proveedor debe la factura. */
+export function textoDiasAdeudada(fila: FilaPortal): string {
+  if (!fila.adeudada_desde) return ''
+  const dias = diasEntre(fila.adeudada_desde, hoyIso())
+  if (dias === 0) return ' · desde hoy'
+  return dias === 1 ? ' · hace 1 día' : ` · hace ${dias} días`
+}
+
+/** Color de la tarjeta "Las debe el proveedor". */
+export const COLOR_PROVEEDOR_DEBE = '#7f77dd'
+
 /** ¿La marca es un problema a resolver (se pinta en rojo)? */
 export function marcaEsAlerta(marca: MarcaFactura): boolean {
-  return marca === 'con_diferencias' || marca === 'sin_datos_fiscales' || marca === 'pagada_sin_factura'
+  return (
+    marca === 'con_diferencias' ||
+    marca === 'sin_datos_fiscales' ||
+    marca === 'pagada_sin_factura' ||
+    marca === 'proveedor_debe'
+  )
 }

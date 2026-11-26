@@ -49,10 +49,10 @@ import { usePedidoDetalle } from '@/lib/hooks/usePedidos'
 import { useProductos } from '@/lib/hooks/useProductos'
 import { useProveedores } from '@/lib/hooks/useProveedores'
 import { useUsuario } from '@/lib/hooks/useUsuario'
+import { DialogoEliminarFactura } from '@/components/facturas/DialogoEliminarFactura'
 import { useCuentas } from '@/lib/hooks/useCuentas'
 import { useConfigFiscal } from '@/lib/hooks/useFiscal'
 import {
-  useAnularFacturaCompra,
   useFacturaCompra,
   useGuardarFacturaCompra,
 } from '@/lib/hooks/useFacturasCompra'
@@ -415,7 +415,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
   const { data: facturaGuardada, isLoading: cargandoFactura } =
     useFacturaCompra(cuenta?.id ?? null)
   const guardar = useGuardarFacturaCompra()
-  const anular = useAnularFacturaCompra()
+  const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const pricing = usePricing()
 
   const [lineas, setLineas] = useState<LineaFactura[]>([])
@@ -1694,24 +1694,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
     )
   }
 
-  function handleAnular() {
-    if (!cuenta || !usuario || anular.isPending || guardar.isPending) return
-    const ok = window.confirm(
-      'Anular esta factura?\n\nSe revierte el stock que ingresó (vuelve a lo recibido), ' +
-        'la deuda vuelve a provisoria y se borra el asiento contable. No se puede deshacer.'
-    )
-    if (!ok) return
-    anular.mutate(
-      { cuentaId: cuenta.id, usuarioId: usuario.id },
-      {
-        onSuccess: () => {
-          limpiarBorrador()
-          onCambioAbierto(false)
-        },
-      }
-    )
-  }
-
   // `md:text-xs` pisa el `md:text-sm` del Input base (twMerge solo reemplaza
   // con el MISMO modificador): así el input mide lo mismo que la tabla. Las
   // flechitas del type=number se ocultan (patrón CarritoVenta) para no
@@ -1731,7 +1713,6 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
         if (
           !v &&
           (guardar.isPending ||
-            anular.isPending ||
             detalles.reason === 'escape-key' ||
             detalles.reason === 'outside-press')
         ) {
@@ -2746,7 +2727,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#9e6b15]" />
                 <span>
                   Esta factura se guardó sin todos los datos del comprobante:
-                  completalos para poder guardar cambios (anular sigue
+                  completalos para poder guardar cambios (eliminar sigue
                   disponible).
                 </span>
               </div>
@@ -3565,22 +3546,18 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             {facturaGuardada && (
               <Button
                 variant="outline"
-                onClick={handleAnular}
-                disabled={anular.isPending || guardar.isPending}
+                onClick={() => setConfirmarEliminar(true)}
+                disabled={guardar.isPending}
                 className="border-[#c43e2c]/40 text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#c43e2c]"
               >
-                {anular.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="mr-2 h-4 w-4" />
-                )}
-                Anular
+                <Trash2 className="mr-2 h-4 w-4" />
+                Eliminar
               </Button>
             )}
             <Button
               variant="outline"
               onClick={() => onCambioAbierto(false)}
-              disabled={guardar.isPending || anular.isPending}
+              disabled={guardar.isPending}
               className="flex-1 border-[#e4c9b0] text-[#6f3a2a]"
             >
               Cancelar
@@ -3588,7 +3565,7 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
             <Button
               onClick={handleGuardar}
               disabled={
-                guardar.isPending || anular.isPending || lineas.length === 0
+                guardar.isPending || lineas.length === 0
               }
               className="flex-[2] bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-bold disabled:opacity-50"
             >
@@ -3612,6 +3589,19 @@ export function ModalEditarFactura({ abierto, onCambioAbierto, cuenta }: Props) 
           </div>
         </div>
       </DialogContent>
+      {cuenta && (
+        <DialogoEliminarFactura
+          abierto={confirmarEliminar}
+          onCambioAbierto={setConfirmarEliminar}
+          cuentaId={cuenta.id}
+          facturaId={null}
+          descripcion={cuenta.proveedor_nombre ?? 'Factura de proveedor'}
+          onEliminada={() => {
+            limpiarBorrador()
+            onCambioAbierto(false)
+          }}
+        />
+      )}
     </Dialog>
 
     {/* Editor completo del producto (corregir nombre, código, precio, etc.).

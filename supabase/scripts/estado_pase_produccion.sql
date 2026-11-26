@@ -204,7 +204,40 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and exists (select 1 from pg_trigger where tgname = 'trg_items_pedido_exige_codigo'),
     null
   union all
-  select 30, 'T1', 'Sin funciones duplicadas',
+  -- ── Eliminar factura + "el proveedor debe la factura" (337–343). ──
+  select 30, '337', 'Foto de costo/precio previo (factura_compra_previos + trg_factura_previos)',
+    exists (select 1 from information_schema.tables
+      where table_schema = 'public' and table_name = 'factura_compra_previos')
+    and exists (select 1 from pg_trigger where tgname = 'trg_factura_previos'),
+    null
+  union all
+  select 31, '338-340', 'Helpers internos de eliminar factura (3 funciones, sin acceso para authenticated)',
+    (select count(*) from fn where proname in ('fn_int_revertir_pagos_cuenta',
+       'fn_int_revertir_stock_factura', 'fn_int_restaurar_costos_factura')) = 3
+    and not has_function_privilege('authenticated',
+       'public.fn_int_revertir_pagos_cuenta(integer,uuid,boolean)', 'EXECUTE'),
+    (select string_agg(proname, ', ') from fn where proname like 'fn\_int\_%')
+  union all
+  select 32, '341', 'La orden puede volver de recibido a recepcion_parcial (trigger de transición)',
+    exists (select 1 from fn where proname = 'fn_validar_transicion_pedido'
+      and prosrc like '%recepcion_parcial'')%' and prosrc like '%mig 342%'),
+    null
+  union all
+  select 33, '342', 'fn_eliminar_factura_compra (completa: llega hasta la auditoría)',
+    exists (select 1 from fn where proname = 'fn_eliminar_factura_compra'
+      and prosrc like '%eliminar_factura_compra%' and prosrc like '%fn_int_revertir_stock_factura%')
+    and has_function_privilege('authenticated',
+      'public.fn_eliminar_factura_compra(integer,integer,boolean)', 'EXECUTE'),
+    null
+  union all
+  select 34, '343', 'cuentas_a_pagar.factura_adeudada_* + fn_marcar_factura_adeudada',
+    (select count(*) from information_schema.columns
+      where table_schema = 'public' and table_name = 'cuentas_a_pagar'
+        and column_name like 'factura_adeudada%') = 3
+    and exists (select 1 from fn where proname = 'fn_marcar_factura_adeudada'),
+    null
+  union all
+  select 35, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)

@@ -20,7 +20,6 @@ import { ChipEstadoFactura, marcaEsAlerta, textoMarca } from './ChipEstadoFactur
 
 const ETIQUETA_ACCION: Record<AccionFactura, string> = {
   cargar_factura: 'Cargar factura',
-  validar: 'Validar',
   pagar: 'Pagar',
   ver: 'Ver',
 }
@@ -34,6 +33,8 @@ interface Props {
   onVer: (fila: FilaPortal) => void
   /** Click en el botón de la fila: la acción que corresponde al estado. */
   onAccion: (fila: FilaPortal) => void
+  /** "El proveedor la debe" en una fila sin factura. */
+  onMarcarAdeudada: (fila: FilaPortal) => void
   /** Mensaje del estado vacío (depende del filtro). */
   vacio: string
 }
@@ -49,6 +50,7 @@ export function TablaFacturas({
   onReintentar,
   onVer,
   onAccion,
+  onMarcarAdeudada,
   vacio,
 }: Props) {
   return (
@@ -133,7 +135,8 @@ export function TablaFacturas({
                         <div className="text-[#391511]">Orden #{f.pedido_id}</div>
                         {f.cuenta?.provisoria && !f.factura && (
                           <div className="text-[11px] text-[#6f3a2a]">
-                            recibida {formatearFechaCortaISO(f.fecha_comprobante)} · a la espera del papel
+                            recibida {formatearFechaCortaISO(f.fecha_comprobante)} ·{' '}
+                            {f.adeudada_desde ? 'el proveedor debe la factura' : 'falta cargar la factura'}
                           </div>
                         )}
                       </>
@@ -205,13 +208,23 @@ export function TablaFacturas({
                         'h-8 text-xs',
                         f.accion === 'ver'
                           ? 'text-[#6f3a2a] hover:bg-[#f9d2a2]/40 hover:text-[#391511]'
-                          : f.accion === 'validar'
-                            ? 'bg-[#7f77dd] hover:bg-[#6a62c9] text-white font-semibold'
-                            : 'bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold'
+                          : 'bg-[#f9b44c] hover:bg-[#e4a42a] text-[#391511] font-semibold'
                       )}
                     >
                       {ETIQUETA_ACCION[f.accion]}
                     </Button>
+                    {f.estado === 'sin_factura' && f.cuenta && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onMarcarAdeudada(f)
+                        }}
+                        className="mt-1 block w-full text-right text-[11px] text-[#6f3a2a] underline-offset-2 hover:text-[#391511] hover:underline"
+                      >
+                        {f.adeudada_desde ? 'editar reclamo' : 'la debe el proveedor'}
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               )
