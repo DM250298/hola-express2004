@@ -685,11 +685,15 @@ export interface ResultadoEliminarFactura {
   costos_restaurados: number
   costos_no_restaurados: { producto_id: number; nombre: string }[]
   recepcion_revertida: boolean
+  /** true = se eliminó una recepción que todavía no tenía factura (mig 345). */
+  sin_factura: boolean
 }
 
 export type ClaveEliminarFactura = {
   cuentaId: number | null
   facturaId: number | null
+  /** La fila es una recepción "Sin factura": se elimina la recepción (mig 345). */
+  sinFactura?: boolean
 }
 
 async function llamarEliminarFactura(
@@ -697,11 +701,17 @@ async function llamarEliminarFactura(
   previsualizar: boolean
 ): Promise<ResultadoEliminarFactura> {
   const supabase = createClient()
-  const { data, error } = await supabase.rpc('fn_eliminar_factura_compra', {
-    p_cuenta_id: clave.cuentaId,
-    p_factura_id: clave.cuentaId == null ? clave.facturaId : null,
-    p_previsualizar: previsualizar,
-  })
+  const { data, error } =
+    clave.sinFactura && clave.cuentaId != null
+      ? await supabase.rpc('fn_eliminar_recepcion_sin_factura', {
+          p_cuenta_id: clave.cuentaId,
+          p_previsualizar: previsualizar,
+        })
+      : await supabase.rpc('fn_eliminar_factura_compra', {
+          p_cuenta_id: clave.cuentaId,
+          p_factura_id: clave.cuentaId == null ? clave.facturaId : null,
+          p_previsualizar: previsualizar,
+        })
   if (error) throw error
   const r = (data ?? {}) as unknown as Partial<ResultadoEliminarFactura>
   return {
@@ -720,6 +730,7 @@ async function llamarEliminarFactura(
     costos_restaurados: Number(r.costos_restaurados ?? 0),
     costos_no_restaurados: r.costos_no_restaurados ?? [],
     recepcion_revertida: r.recepcion_revertida ?? false,
+    sin_factura: r.sin_factura ?? false,
   }
 }
 

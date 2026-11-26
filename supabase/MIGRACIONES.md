@@ -100,7 +100,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 
 ---
 
-## Próximo número libre: **344**
+## Próximo número libre: **346**
 
 (306–310 están tomadas por la rama `conteo-parcial-ciclico`, PR pendiente de abrir; 311–320 por la rama
 `margen-neto-iva` (mergeada); la 321 por la rama `finanzas-tablero-neto` (PR #27), 322–324 por
@@ -108,7 +108,7 @@ reescribiría historia real y rompería la correspondencia con los mensajes de c
 `weighable-products-barcode-checkout` (PLU de balanza) y la 327 por `plu-balanza-personal` (PLU
 desde el mostrador). 329–333 son de conteo (PR #39 y #41), 334–335 quedan reservadas para
 `liquidacion-fiado-al-confirmar`, la 336 es `lotes_cantidad_inicial_cero` (misma rama) y 337–343 son de
-`facturas-eliminar-y-proveedor-debe`. No reusar ninguno de esos tramos.)
+`facturas-eliminar-y-proveedor-debe` y 344–345 de `facturas-eliminar-recepcion`. No reusar ninguno de esos tramos.)
 
 ---
 
@@ -448,6 +448,8 @@ desde el mostrador). 329–333 son de conteo (PR #39 y #41), 334–335 quedan re
 | 341 | `341_pedido_transicion_recepcion_parcial.sql` | ✅ aplicada | 2026-11-26 (prueba + producción, según el dueño) | Reemite `fn_validar_transicion_pedido` (base 135, todas sus ramas) sumando `recibido → recepcion_parcial` bajo el flag `hola.revertir_recepcion`: eliminar una factura de una orden con varias |
 | 342 | `342_fn_eliminar_factura_compra.sql` | ✅ aplicada | 2026-11-26 (prueba + producción, según el dueño) | `fn_eliminar_factura_compra(p_cuenta_id, p_factura_id, p_previsualizar)`: elimina una factura (con orden o directa) y revierte TODO — pagos, costo/precio, stock, recepción (la orden vuelve a "Por recibir"), deuda, cuotas, agendados y asientos — con auditoría. Permiso `finanzas`; rechaza con el mes cerrado (de la factura o de un pago). Con `p_previsualizar` no escribe. REQUIERE 337–341. Son 182 líneas: después de pegarla, correr `scripts/estado_pase_produccion.sql` (paso 342). `tests/test_eliminar_factura.sql` (rollback) |
 | 343 | `343_factura_adeudada_proveedor.sql` | ✅ aplicada | 2026-11-26 (prueba + producción, según el dueño) | "El proveedor me debe la factura": `cuentas_a_pagar.factura_adeudada_desde/por/nota` + `fn_marcar_factura_adeudada` (permiso `finanzas` o `compras`, solo sin factura, auditada). Sin ella el portal anda igual y solo no muestra la marca |
+| 344 | `344_fn_int_revertir_stock_factura_v2.sql` | ⏳ pendiente | — | Reemite el helper interno de la 339 (misma firma): cuando no hay factura toma la orden de la deuda, para vaciar lotes y dejar los renglones "sin recibir" también en una recepción sin factura; el movimiento dice "Recepción eliminada". Con factura no cambia nada |
+| 345 | `345_fn_eliminar_recepcion_sin_factura.sql` | ⏳ pendiente | — | `fn_eliminar_recepcion_sin_factura(p_cuenta_id, p_previsualizar)`: elimina una recepción que todavía no tiene factura (filas "Sin factura" del portal) con el criterio de la 342 — revierte los pagos, saca la mercadería del stock aunque quede negativo, borra la deuda y la orden vuelve a "Por recibir" (o recepción parcial). No toca costos. Permiso `finanzas`; rechaza con pagos en un mes cerrado; se niega si la deuda ya tiene factura. REQUIERE 338, 341 y 344. Sin ella el botón "Eliminar recepción" da error. `tests/test_eliminar_factura.sql` (bloque 6) |
 
 ## Dos bases de Supabase (2026-09-17)
 

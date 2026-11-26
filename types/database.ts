@@ -6438,6 +6438,12 @@ export interface Database {
         }
         Returns: Json
       }
+      /** Elimina una recepción que todavía no tiene factura (mig 345): revierte
+       *  pagos y stock, borra la deuda y la orden vuelve a "Por recibir". */
+      fn_eliminar_recepcion_sin_factura: {
+        Args: { p_cuenta_id: number; p_previsualizar?: boolean }
+        Returns: Json
+      }
       /** Marca o desmarca "el proveedor debe la factura" (mig 343). */
       fn_marcar_factura_adeudada: {
         Args: { p_cuenta_id: number; p_adeudada: boolean; p_nota?: string | null }

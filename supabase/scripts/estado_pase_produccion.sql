@@ -237,7 +237,18 @@ chequeos (orden, paso, que_revisa, ok, detalle) as (
     and exists (select 1 from fn where proname = 'fn_marcar_factura_adeudada'),
     null
   union all
-  select 35, 'T1', 'Sin funciones duplicadas',
+  -- ── Eliminar recepción sin factura (344–345). ──
+  select 35, '344', 'fn_int_revertir_stock_factura v2 (toma la orden de la deuda)',
+    exists (select 1 from fn where proname = 'fn_int_revertir_stock_factura'
+      and prosrc like '%Recepción eliminada%'),
+    null
+  union all
+  select 36, '345', 'fn_eliminar_recepcion_sin_factura',
+    exists (select 1 from fn where proname = 'fn_eliminar_recepcion_sin_factura'
+      and prosrc like '%eliminar_recepcion%'),
+    null
+  union all
+  select 37, 'T1', 'Sin funciones duplicadas',
     not exists (select 1 from fn where proname like 'fn_%' group by proname having count(*) > 1),
     (select string_agg(proname, ', ') from (select proname from fn where proname like 'fn_%'
        group by proname having count(*) > 1) d)
