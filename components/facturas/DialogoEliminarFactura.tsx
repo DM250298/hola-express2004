@@ -26,6 +26,8 @@ interface Props {
   facturaId: number | null
   /** "ARCOR · A 0003-00045812", para el título. */
   descripcion: string
+  /** La fila no tiene factura: se elimina la recepción y su deuda estimada. */
+  sinFactura?: boolean
   /** Se llama después de eliminar (para cerrar el panel o el editor). */
   onEliminada?: () => void
 }
@@ -41,9 +43,13 @@ export function DialogoEliminarFactura({
   cuentaId,
   facturaId,
   descripcion,
+  sinFactura = false,
   onEliminada,
 }: Props) {
-  const clave = abierto && (cuentaId != null || facturaId != null) ? { cuentaId, facturaId } : null
+  const clave =
+    abierto && (cuentaId != null || facturaId != null)
+      ? { cuentaId, facturaId, sinFactura }
+      : null
   const previa = usePrevisualizarEliminarFactura(clave)
   const eliminar = useEliminarFactura()
   const r = previa.data
@@ -64,7 +70,9 @@ export function DialogoEliminarFactura({
     <Dialog open={abierto} onOpenChange={(v) => !procesando && onCambioAbierto(v)}>
       <DialogContent className="sm:max-w-lg" showCloseButton={!procesando}>
         <DialogHeader>
-          <DialogTitle className="text-[#391511]">Eliminar la factura</DialogTitle>
+          <DialogTitle className="text-[#391511]">
+            {sinFactura ? 'Eliminar la recepción' : 'Eliminar la factura'}
+          </DialogTitle>
           <DialogDescription className="text-[#6f3a2a]">
             {descripcion}. Se deshace todo lo que generó; no se puede recuperar.
           </DialogDescription>
@@ -77,7 +85,7 @@ export function DialogoEliminarFactura({
           </div>
         ) : previa.isError ? (
           <Aviso icono="error">
-            No se pudo revisar la factura: {(previa.error as Error).message}
+            No se pudo revisar: {(previa.error as Error).message}
           </Aviso>
         ) : r?.bloqueo ? (
           <Aviso icono="candado">{r.bloqueo}</Aviso>
@@ -118,16 +126,25 @@ export function DialogoEliminarFactura({
                   </li>
                 )
               )}
-              <li>
-                <span className="font-semibold">Costos y precios</span>:{' '}
-                {r.costos_restaurados > 0
-                  ? `${r.costos_restaurados} ${r.costos_restaurados === 1 ? 'producto vuelve' : 'productos vuelven'} al costo y precio que tenían antes.`
-                  : 'esta factura no dejó cambios para volver atrás.'}
-              </li>
-              <li>
-                Se borran el comprobante, sus cuotas, los pagos agendados y los
-                asientos contables. Queda registrado en Auditoría.
-              </li>
+              {sinFactura ? (
+                <li>
+                  Costos y precios no cambian: la recepción no los había tocado.
+                  Queda registrado en Auditoría.
+                </li>
+              ) : (
+                <>
+                  <li>
+                    <span className="font-semibold">Costos y precios</span>:{' '}
+                    {r.costos_restaurados > 0
+                      ? `${r.costos_restaurados} ${r.costos_restaurados === 1 ? 'producto vuelve' : 'productos vuelven'} al costo y precio que tenían antes.`
+                      : 'esta factura no dejó cambios para volver atrás.'}
+                  </li>
+                  <li>
+                    Se borran el comprobante, sus cuotas, los pagos agendados y los
+                    asientos contables. Queda registrado en Auditoría.
+                  </li>
+                </>
+              )}
             </ul>
 
             {r.productos_negativos.length > 0 && (

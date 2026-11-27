@@ -1,7 +1,7 @@
 -- ╔══════════════════════════════════════════════════════════════════════╗
--- ║  Test · migs 337–343 · Eliminar factura y "el proveedor la debe"       ║
+-- ║  Test · migs 337–345 · Eliminar factura y "el proveedor la debe"       ║
 -- ║                                                                        ║
--- ║  Correr en el SQL Editor DESPUÉS de la 343. Todo dentro de una         ║
+-- ║  Correr en el SQL Editor DESPUÉS de la 345. Todo dentro de una         ║
 -- ║  transacción que se deshace: no deja datos. Si algo falla, aborta con  ║
 -- ║  el mensaje del assert.                                                ║
 -- ║                                                                        ║
@@ -16,6 +16,7 @@
 -- ║   3) Mes cerrado → no se puede eliminar.                               ║
 -- ║   4) Compra directa pagada desde una cuenta.                           ║
 -- ║   5) Marca "el proveedor debe la factura".                             ║
+-- ║   6) Recepción sin factura (pagada en parte, mercadería vendida).      ║
 -- ╚══════════════════════════════════════════════════════════════════════╝
 
 begin;
@@ -283,7 +284,60 @@ begin
   end;
   assert v_fallo, '5) con la factura cargada no se puede marcar';
 
-  raise notice 'OK · test_eliminar_factura: los 5 bloques pasaron.';
+  -- ── 6) Recepción SIN factura, pagada en parte y con mercadería vendida ──
+  --     (migs 344–345). Con factura cargada la función se niega.
+  insert into public.productos (nombre, precio_venta, margen, iva_venta, iva_compra, stock_actual)
+    values ('T342 E', 300, 30, 21, 21, 6) returning id into v_a;
+  perform public.fn_set_costo(v_a, 150);
+  insert into public.pedidos (proveedor_id, usuario_id, estado, total)
+    values (v_prov, v_uid, 'recibido', 900) returning id into v_pedido;
+  insert into public.cuentas_a_pagar (pedido_id, proveedor_id, monto, fecha_vencimiento, provisoria, tiene_factura)
+    values (v_pedido, v_prov, 900, current_date + 7, true, false) returning id into v_cuenta;
+  insert into public.items_pedido (pedido_id, producto_id, cantidad_pedida, cantidad_recibida, precio_costo, subtotal, cuenta_a_pagar_id)
+    values (v_pedido, v_a, 6, 6, 150, 900, v_cuenta) returning id into v_item_a;
+  insert into public.lotes (producto_id, fecha_vencimiento, cantidad_inicial, cantidad_actual, estado, pedido_origen_id)
+    values (v_a, current_date + 90, 6, 6, 'activo', v_pedido);
+  perform public.fn_pagar_cuenta(v_cuenta, v_uid, v_banco, 400, current_date, null, 'efectivo', null);
+  update public.productos set stock_actual = 1 where id = v_a;   -- se vendieron 5
+
+  v_res := public.fn_eliminar_recepcion_sin_factura(v_cuenta, true);
+  assert (v_res->>'sin_factura')::boolean and jsonb_array_length(v_res->'pagos_revertidos') = 1
+     and (v_res->'productos_negativos'->0->>'stock_final')::numeric = -5,
+    '6) previsualiza 1 pago y E en -5';
+  assert exists (select 1 from public.cuentas_a_pagar where id = v_cuenta), '6) previsualizar no borra';
+
+  v_res := public.fn_eliminar_recepcion_sin_factura(v_cuenta);
+  select saldo_actual into v_num from public.cuentas where id = v_banco;
+  assert v_num = 100000, '6) el pago vuelve al banco (100000), dio ' || v_num;
+  assert not exists (select 1 from public.cuentas_a_pagar where id = v_cuenta), '6) la deuda desaparece';
+  select stock_actual into v_num from public.productos where id = v_a;
+  assert v_num = -5, '6) E queda en -5, dio ' || v_num;
+  assert public.fn_costo(v_a) = 150, '6) el costo no se toca';
+  select * into ip from public.items_pedido where id = v_item_a;
+  assert ip.cantidad_recibida is null and ip.cuenta_a_pagar_id is null, '6) el renglón vuelve a sin recibir';
+  select estado::text, total into v_txt, v_num from public.pedidos where id = v_pedido;
+  assert v_txt = 'enviado' and v_num = 900, '6) la orden vuelve a Por recibir con su total, dio ' || v_txt || ' / ' || v_num;
+  assert not exists (select 1 from public.lotes where pedido_origen_id = v_pedido), '6) el lote se borra';
+  assert exists (select 1 from public.movimientos_stock
+                  where producto_id = v_a and nota like 'Recepción eliminada%'), '6) movimiento de salida';
+  assert exists (select 1 from public.auditoria where accion = 'eliminar_recepcion' and entidad_id = v_cuenta),
+    '6) queda en auditoría';
+
+  -- Con factura cargada: se niega (para eso está fn_eliminar_factura_compra).
+  insert into public.pedidos (proveedor_id, usuario_id, estado, total)
+    values (v_prov, v_uid, 'recibido', 0) returning id into v_pedido;
+  insert into public.cuentas_a_pagar (pedido_id, proveedor_id, monto, fecha_vencimiento, provisoria, tiene_factura)
+    values (v_pedido, v_prov, 100, current_date + 7, false, true) returning id into v_cuenta;
+  insert into public.facturas_compra (cuenta_id, pedido_id, proveedor_id, fecha, neto, iva_total, total)
+    values (v_cuenta, v_pedido, v_prov, current_date, 100, 0, 100);
+  v_fallo := false;
+  begin
+    perform public.fn_eliminar_recepcion_sin_factura(v_cuenta);
+  exception when others then v_fallo := true;
+  end;
+  assert v_fallo, '6) con factura cargada no elimina la recepción';
+
+  raise notice 'OK · test_eliminar_factura: los 6 bloques pasaron.';
 end $$;
 
 rollback;

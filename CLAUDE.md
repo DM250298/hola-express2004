@@ -358,6 +358,14 @@ también para compras directas (`p_factura_id`). Los helpers `fn_int_*`
 principal. `fn_anular_factura_compra` (vuelve a "sin factura", la usa
 `fn_cancelar_pedido`) y `fn_anular_compra_directa` no cambian.
 
+**Eliminar recepción sin factura (migs 344–345, nov-2026):** las filas "Sin
+factura" que vienen de una orden tienen "Eliminar recepción" en el panel
+(mismo diálogo, `sinFactura`): `fn_eliminar_recepcion_sin_factura` revierte
+los pagos, saca la mercadería aunque quede negativo, borra la deuda y la
+orden vuelve a "Por recibir". No toca costos (la recepción no los cambia,
+mig 167). Es la versión sin guardas de `fn_revertir_recepcion` (130), que
+sigue igual en Compras › Órdenes.
+
 **"El proveedor debe la factura" (mig 343, nov-2026):** marca manual sobre
 una deuda sin factura (`cuentas_a_pagar.factura_adeudada_desde/por/nota`,
 por RPC `fn_marcar_factura_adeudada`, permiso `finanzas` o `compras`).
@@ -909,7 +917,7 @@ explícitamente. Siempre crear commits nuevos en lugar de hacer `--amend`.
 
 ## Estado del proyecto
 
-Migraciones numeradas hasta la 343 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
+Migraciones numeradas hasta la 345 (ver `supabase/MIGRACIONES.md`), deploy en Vercel:
 `hola-express2004.vercel.app`.
 
 Módulos completos: POS (con offline + **devoluciones**), Ventas, Clientes,

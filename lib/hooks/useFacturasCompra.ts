@@ -242,11 +242,13 @@ export function usePrevisualizarEliminarFactura(
       'eliminar-factura-previa',
       clave?.cuentaId ?? null,
       clave?.facturaId ?? null,
+      clave?.sinFactura ?? false,
     ],
     queryFn: () => previsualizarEliminarFactura(clave as ClaveEliminarFactura),
     enabled: clave !== null,
     staleTime: 0,
     gcTime: 0,
+    refetchOnWindowFocus: false,
     retry: false,
   })
 }
@@ -290,16 +292,21 @@ export function useEliminarFactura() {
         qc.invalidateQueries({ queryKey: [clave] })
       }
       const negativos = r.productos_negativos.length
-      toast.success('Factura eliminada · se revirtió todo lo que había generado', {
+      toast.success(
+        r.sin_factura
+          ? 'Recepción eliminada · la orden volvió a "Por recibir"'
+          : 'Factura eliminada · se revirtió todo lo que había generado',
+        {
         description:
           negativos > 0
             ? negativos === 1
               ? '1 producto quedó con stock negativo: corregilo con un ajuste.'
               : `${negativos} productos quedaron con stock negativo: corregilos con un ajuste.`
             : undefined,
-      })
+        }
+      )
     },
     onError: (e: Error) =>
-      toast.error(`No se pudo eliminar la factura: ${e.message}`),
+      toast.error(`No se pudo eliminar: ${e.message}`),
   })
 }

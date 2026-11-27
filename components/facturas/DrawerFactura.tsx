@@ -77,6 +77,9 @@ export function DrawerFactura({
   // Eliminar revierte pagos y stock: solo el administrativo (permiso finanzas).
   const puedeEliminar =
     usuario?.rol === 'admin' || tienePermiso(usuario?.permisos, 'finanzas')
+  // Fila "Sin factura" que viene de una orden: se elimina la recepción (mig 345).
+  const recepcionSinFactura =
+    !factura && !!cuenta && !cuenta.tiene_factura && cuenta.pedido_id != null
 
   // Pasos de la línea: hecho / actual / pendiente.
   const pasos: { etiqueta: string; detalle?: string; hecho: boolean; omitido?: boolean }[] = [
@@ -347,14 +350,14 @@ export function DrawerFactura({
                 Datos del comprobante
               </Button>
             )}
-            {factura && puedeEliminar && (
+            {(factura || recepcionSinFactura) && puedeEliminar && (
               <Button
                 variant="ghost"
                 onClick={() => setConfirmarEliminar(true)}
                 className="ml-auto text-[#c43e2c] hover:bg-[#c43e2c]/10 hover:text-[#9e2f25]"
               >
                 <Trash2 className="mr-1.5 h-4 w-4" />
-                Eliminar factura
+                {factura ? 'Eliminar factura' : 'Eliminar recepción'}
               </Button>
             )}
           </div>
@@ -440,13 +443,20 @@ export function DrawerFactura({
           )}
         </div>
       </SheetContent>
-      {factura && (
+      {(factura || recepcionSinFactura) && (
         <DialogoEliminarFactura
           abierto={confirmarEliminar}
           onCambioAbierto={setConfirmarEliminar}
           cuentaId={cuenta?.id ?? null}
-          facturaId={factura.id}
-          descripcion={nro ? `${fila.proveedor_nombre} · ${nro}` : fila.proveedor_nombre}
+          facturaId={factura?.id ?? null}
+          sinFactura={!factura}
+          descripcion={
+            nro
+              ? `${fila.proveedor_nombre} · ${nro}`
+              : fila.pedido_id != null
+                ? `${fila.proveedor_nombre} · orden #${fila.pedido_id}`
+                : fila.proveedor_nombre
+          }
           onEliminada={() => onCambioAbierto(false)}
         />
       )}
